@@ -29,8 +29,9 @@ export const CallStepDesign: Story = {
         sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
           step: 'call',
           address: '14 Oak Street, London, SW1A 1AA',
-          slotIso: [null, null, null],
           bookedSlotIso: null,
+          emailSubject: '',
+          emailBody: '',
         }));
         const origFetch = window.fetch;
         window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -61,8 +62,9 @@ export const MobileOnly: Story = {
         sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
           step: 'call',
           address: '14 Oak Street, London, SW1A 1AA',
-          slotIso: [null, null, null],
           bookedSlotIso: null,
+          emailSubject: '',
+          emailBody: '',
         }));
         const origFetch = window.fetch;
         window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -93,8 +95,9 @@ export const BothNumbers: Story = {
         sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
           step: 'call',
           address: '14 Oak Street, London, SW1A 1AA',
-          slotIso: [null, null, null],
           bookedSlotIso: null,
+          emailSubject: '',
+          emailBody: '',
         }));
         const origFetch = window.fetch;
         window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -125,8 +128,9 @@ export const CallStepSurvey: Story = {
         sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
           step: 'call',
           address: '14 Oak Street, London, SW1A 1AA',
-          slotIso: [null, null, null],
           bookedSlotIso: null,
+          emailSubject: '',
+          emailBody: '',
         }));
       }
       return <Story />;
@@ -144,8 +148,9 @@ export const CallStepSurvey: Story = {
       sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
         step: 'call',
         address: '8 Maple Avenue, Manchester, M1 4LN',
-        slotIso: [null, null, null],
         bookedSlotIso: null,
+        emailSubject: '',
+        emailBody: '',
       }));
     }
     return <ArrangeVisitModal {...args} />;
@@ -159,28 +164,30 @@ export const BookedSubstep: Story = {
       sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
         step: 'booked',
         address: '14 Oak Street, London, SW1A 1AA',
-        slotIso: [null, null, null],
         bookedSlotIso: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        emailSubject: '',
+        emailBody: '',
       }));
     }
     return <ArrangeVisitModal {...args} />;
   },
 };
 
-export const EmailSlotsStep: Story = {
-  name: 'Email slots step',
+export const EmailStep: Story = {
+  name: 'Email — ask for availability',
   render: (args) => {
-    const futureBase = Date.now() + 3 * 24 * 60 * 60 * 1000;
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
         step: 'email',
         address: '14 Oak Street, London, SW1A 1AA',
-        slotIso: [
-          new Date(futureBase).toISOString(),
-          new Date(futureBase + 2 * 24 * 60 * 60 * 1000).toISOString(),
-          null,
-        ],
         bookedSlotIso: null,
+        emailSubject: 'Booking your design visit — getting in touch',
+        emailBody:
+          'Hi Jane,\n\n' +
+          'Thanks for your interest in booking a design visit with us. I tried to give you a call but wasn\'t able to reach you.\n\n' +
+          'Could you let us know your availability over the next week? If you can share which days and evenings work best for you, we can either call you back at a convenient time or lock in a date for your design visit.\n\n' +
+          'Just reply to this email and we\'ll get it arranged.\n\n' +
+          'Best regards',
       }));
     }
     return <ArrangeVisitModal {...args} />;
@@ -190,17 +197,18 @@ export const EmailSlotsStep: Story = {
 export const SendingState: Story = {
   name: 'Email step — sending',
   render: (args) => {
-    const futureBase = Date.now() + 3 * 24 * 60 * 60 * 1000;
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
         step: 'email',
         address: '14 Oak Street, London, SW1A 1AA',
-        slotIso: [
-          new Date(futureBase).toISOString(),
-          null,
-          null,
-        ],
         bookedSlotIso: null,
+        emailSubject: 'Booking your design visit — getting in touch',
+        emailBody:
+          'Hi Jane,\n\n' +
+          'Thanks for your interest in booking a design visit with us. I tried to give you a call but wasn\'t able to reach you.\n\n' +
+          'Could you let us know your availability over the next week? If you can share which days and evenings work best for you, we can either call you back at a convenient time or lock in a date for your design visit.\n\n' +
+          'Just reply to this email and we\'ll get it arranged.\n\n' +
+          'Best regards',
       }));
     }
     return <ArrangeVisitModal {...args} />;

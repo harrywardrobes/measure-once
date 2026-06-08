@@ -131,7 +131,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     'Clicking the action on a card guides the team member through a call-first visit booking flow.\n' +
     '• Step 1 — Call: shows the customer\'s name and phone number with a contextual prompt (design vs. survey). Four outcome buttons: Booked, No answer, Call back later, Not proceeding.\n' +
     '• Booked: opens a date/time picker pre-filled with the customer\'s address. On save, updates HubSpot lead status to DSSC_AGREED (design) or SRSC_AGREED (survey) and opens the calendar scheduling modal.\n' +
-    '• No answer — Email: collects up to three proposed date/time slots, then sends a pre-filled email via Gmail (POST /api/emails/send) asking the customer to pick a slot. On send, updates HubSpot lead status to DSSC_SUGGESTED (design) or SRSC_SUGGESTED (survey).\n' +
+    '• No answer — Email: shows an editable email preview asking the customer to share their day/evening availability for the next week. Staff can edit the subject and body before sending via Gmail (POST /api/emails/send). On send, updates HubSpot lead status to DSSC_SUGGESTED (design) or SRSC_SUGGESTED (survey).\n' +
     '• Call back later: closes the modal immediately — no HubSpot change.\n' +
     '• Not proceeding: updates HubSpot lead status to not_suitable and closes the modal.\n' +
     '• Visit type (design vs. survey) is resolved automatically from the contact\'s current hs_lead_status — awaiting_deposit → survey, everything else → design.\n' +

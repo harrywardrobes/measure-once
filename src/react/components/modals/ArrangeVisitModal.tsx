@@ -49,8 +49,9 @@ interface ContactInfo {
 interface DraftState {
   step: Step;
   address: string;
-  slotIso: (string | null)[];
   bookedSlotIso: string | null;
+  emailSubject: string;
+  emailBody: string;
 }
 
 function draftKey(contactId: string): string {
@@ -104,11 +105,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : null,
   );
 
-  const initSlots = (): Array<Dayjs | null> => {
-    const raw = draft.slotIso ?? [null, null, null];
-    return raw.map(s => (s ? dayjs(s) : null));
-  };
-  const [slots, setSlots] = useState<Array<Dayjs | null>>(initSlots);
+  const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
+  const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
 
   useEffect(() => {
     if (!open) return;
@@ -121,7 +119,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       setStep(draft.step as Step);
       if (draft.address) setAddress(draft.address);
       if (draft.bookedSlotIso) setBookedSlot(dayjs(draft.bookedSlotIso));
-      if (draft.slotIso) setSlots(draft.slotIso.map(s => (s ? dayjs(s) : null)));
+      if (draft.emailSubject) setEmailSubject(draft.emailSubject);
+      if (draft.emailBody) setEmailBody(draft.emailBody);
       // Fall through: still fetch contactInfo in the background so phone
       // numbers are populated even when restoring from a saved draft.
     } else {
@@ -138,7 +137,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
           // never clobbers a step that has already advanced past 'loading'.
           setAddress(d.contactAddress || '');
           setStep(prev => prev === 'loading' ? 'call' : prev);
-          saveDraft(key, { step: 'call', address: d.contactAddress || '', slotIso: [null, null, null], bookedSlotIso: null });
+          saveDraft(key, { step: 'call', address: d.contactAddress || '', bookedSlotIso: null, emailSubject: '', emailBody: '' });
         }
       })
       .catch((e: Error) => {
@@ -158,10 +157,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     saveDraft(key, {
       step,
       address,
-      slotIso: slots.map(s => s?.toISOString() ?? null),
       bookedSlotIso: bookedSlot?.toISOString() ?? null,
+      emailSubject,
+      emailBody,
     });
-  }, [key, step, address, slots, bookedSlot]);
+  }, [key, step, address, bookedSlot, emailSubject, emailBody]);
 
   function handleClose() {
     setActionError('');
@@ -254,36 +254,33 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     }
   }
 
+  function buildNoAnswerEmail(name: string, vLabel: string): { subject: string; body: string } {
+    const firstName = name.split(' ')[0] || 'there';
+    const subject = `Booking your ${vLabel} — getting in touch`;
+    const body =
+      `Hi ${firstName},\n\n` +
+      `Thanks for your interest in booking a ${vLabel} with us. I tried to give you a call but wasn't able to reach you.\n\n` +
+      `Could you let us know your availability over the next week? If you can share which days and evenings work best for you, we can either call you back at a convenient time or lock in a date for your ${vLabel}.\n\n` +
+      `Just reply to this email and we'll get it arranged.\n\n` +
+      `Best regards`;
+    return { subject, body };
+  }
+
   async function handleEmailSent() {
-    const validSlots = slots.filter((s): s is Dayjs => s !== null && s.isValid());
-    if (validSlots.length === 0) {
-      setActionError('Please add at least one proposed time slot.');
+    if (!emailBody.trim()) {
+      setActionError('Email body cannot be empty.');
       return;
     }
 
     const visitType = contactInfo?.visitType ?? 'design';
-    const label = visitLabel(visitType);
-    const name = contactInfo?.contactName || ctx.contactName || 'there';
-    const firstName = name.split(' ')[0];
-    const slotList = validSlots
-      .map((s, i) => `  Option ${i + 1}: ${s.format('dddd D MMMM YYYY [at] h:mm A')}`)
-      .join('\n');
-
-    const subject = `Booking your ${label} — proposed times`;
-    const body =
-      `Hi ${firstName},\n\n` +
-      `Thanks for your interest — I tried to call to book your ${label} but couldn't reach you.\n\n` +
-      `Here are a few times that work for us:\n\n${slotList}\n\n` +
-      `Please reply with which option suits you best, or let us know if none of these work and we'll find another time.\n\n` +
-      `Best regards`;
 
     setSubmitting(true);
     setActionError('');
     try {
       await POST('/api/emails/send', {
         to: contactInfo?.contactEmail || ctx.contactEmail,
-        subject,
-        body,
+        subject: emailSubject,
+        body: emailBody,
       });
       await POST('/api/card-actions/arrange-visit/outcome', {
         contactId: ctx.contactId,
@@ -303,14 +300,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function updateSlot(index: number, value: Dayjs | null) {
-    setSlots(prev => {
-      const next = [...prev];
-      next[index] = value;
-      return next;
-    });
   }
 
   const visitType = contactInfo?.visitType ?? 'design';
@@ -390,7 +379,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
               </Button>
               <Button
                 disabled={submitting}
-                onClick={() => { setActionError(''); setStep('email'); }}
+                onClick={() => {
+                  setActionError('');
+                  if (!emailSubject && !emailBody) {
+                    const name = contactInfo?.contactName || ctx.contactName || 'there';
+                    const vLabel = visitLabel(contactInfo?.visitType ?? 'design');
+                    const { subject, body } = buildNoAnswerEmail(name, vLabel);
+                    setEmailSubject(subject);
+                    setEmailBody(body);
+                  }
+                  setStep('email');
+                }}
                 variant="outlined"
                 data-testid="av-outcome-no-answer"
               >
@@ -465,27 +464,30 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
         {step === 'email' && (
           <>
-            <DialogTitle>Propose times to {displayName}</DialogTitle>
+            <DialogTitle>Ask {displayName} for availability</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Add up to three proposed times. We'll send {displayName} an email asking them to pick a slot.
+                  We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
                 </Typography>
-                {([0, 1, 2] as const).map(i => (
-                  <DateTimePicker
-                    key={i}
-                    label={`Option ${i + 1}${i === 0 ? ' (required)' : ' (optional)'}`}
-                    value={slots[i] ?? null}
-                    onChange={(v: Dayjs | null) => updateSlot(i, v)}
-                    slotProps={{
-                      textField: {
-                        id: `av-email-slot-${i}`,
-                        fullWidth: true,
-                        size: 'small',
-                      },
-                    }}
-                  />
-                ))}
+                <TextField
+                  id="av-email-subject"
+                  label="Subject"
+                  value={emailSubject}
+                  onChange={e => setEmailSubject(e.target.value)}
+                  fullWidth
+                  size="small"
+                />
+                <TextField
+                  id="av-email-body"
+                  label="Email body"
+                  value={emailBody}
+                  onChange={e => setEmailBody(e.target.value)}
+                  fullWidth
+                  multiline
+                  minRows={8}
+                  size="small"
+                />
                 {actionError && (
                   actionError === 'GOOGLE_AUTH'
                     ? <GoogleAuthAlert />
