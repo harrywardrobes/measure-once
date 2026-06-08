@@ -22,6 +22,7 @@ import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../hooks/useOfflineFailures';
 import { useToast } from '../contexts/ToastContext';
 import type { QueueCounts, QueueEntry, OfflineArea } from '../lib/offlineQueue';
+import { explainSyncError } from '../lib/syncErrorMessages';
 
 // ── Pending-sync indicator ───────────────────────────────────────────────────────
 // Shows whenever the offline write queue has entries: queued edits waiting to
@@ -86,13 +87,36 @@ function FailedCard({
         </Box>
       </Stack>
 
-      <Typography
-        variant="body2"
-        data-testid="failed-sync-error"
-        sx={{ color: 'error.main', mt: 1, wordBreak: 'break-word' }}
-      >
-        {entry.lastError || 'This change could not be synced after several attempts.'}
-      </Typography>
+      {(() => {
+        const explained = explainSyncError(entry.lastError);
+        return (
+          <Box sx={{ mt: 1 }}>
+            <Typography
+              variant="body2"
+              data-testid="failed-sync-error"
+              sx={{ color: 'error.main', wordBreak: 'break-word' }}
+            >
+              {explained.summary}
+            </Typography>
+            {explained.mapped && explained.raw && (
+              <Tooltip title={explained.raw}>
+                <Typography
+                  variant="caption"
+                  data-testid="failed-sync-error-detail"
+                  sx={{
+                    color: 'text.secondary',
+                    display: 'block',
+                    mt: 0.25,
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  Details: {explained.raw}
+                </Typography>
+              </Tooltip>
+            )}
+          </Box>
+        );
+      })()}
 
       <Stack direction="row" sx={{ gap: 1, mt: 1.5, justifyContent: 'flex-end' }}>
         <Button

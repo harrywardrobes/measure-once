@@ -42,6 +42,30 @@ const SAMPLE_FAILURES: QueueEntry[] = [
   },
 ];
 
+/** One entry per mapped failure category, to preview the plain-language reasons. */
+const VARIED_FAILURES: QueueEntry[] = [
+  { reason: 'Failed to fetch', label: 'Customer details — Jane Doe', area: 'customer' },
+  { reason: 'Unauthorized (401)', label: 'Design visit — 5 Elm Court', area: 'visit' },
+  { reason: 'Not Found (404)', label: 'Design visit — 9 Birch Way', area: 'visit' },
+  { reason: 'Conflict (409) — version mismatch', label: 'Customer details — Acme Ltd', area: 'customer' },
+  { reason: 'Validation failed: postcode is required', label: 'Customer details — Bob Smith', area: 'customer' },
+  { reason: 'Upload rejected (413) — the image was too large.', label: 'Room photo — Bathroom', area: 'photo' },
+  { reason: 'Server error 500 — the visit could not be saved.', label: 'Design visit — 2 Cedar Rise', area: 'visit' },
+  { reason: 'Something completely unexpected happened', label: 'Customer details — Unknown', area: 'customer' },
+].map((f, i) => ({
+  id: i + 10,
+  area: f.area as QueueEntry['area'],
+  label: f.label,
+  method: 'PUT',
+  url: '/api/example',
+  status: 'failed',
+  attempts: 5,
+  createdAt: now - 1000 * 60 * 60,
+  updatedAt: now - 1000 * 60 * (i + 1),
+  nextAttemptAt: now,
+  lastError: f.reason,
+}));
+
 const FAILED_COUNTS: QueueCounts = { total: 2, pending: 0, syncing: 0, failed: 2 };
 const PENDING_COUNTS: QueueCounts = { total: 3, pending: 3, syncing: 0, failed: 0 };
 const SYNCING_COUNTS: QueueCounts = { total: 2, pending: 1, syncing: 1, failed: 0 };
@@ -113,6 +137,31 @@ export const Syncing: Story = {
       <SyncPill counts={SYNCING_COUNTS} failures={[]} />
     </Box>
   ),
+};
+
+export const VariedReasons: Story = {
+  name: 'Failed (plain-language reasons)',
+  render: () => {
+    function Many() {
+      const [failures, setFailures] = useState<QueueEntry[]>(VARIED_FAILURES);
+      const remove = (id: number) => setFailures((fs) => fs.filter((f) => f.id !== id));
+      const clearAll = () => setFailures([]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <SyncPill
+            counts={{ total: failures.length, pending: 0, syncing: 0, failed: failures.length }}
+            failures={failures}
+            defaultOpen
+            onRetry={remove}
+            onDiscard={remove}
+            onRetryAll={clearAll}
+            onDiscardAll={clearAll}
+          />
+        </Box>
+      );
+    }
+    return <Many />;
+  },
 };
 
 export const SingleFailure: Story = {

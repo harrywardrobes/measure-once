@@ -33,6 +33,7 @@ import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../../hooks/useOfflineFailures';
 import type { ConflictEntry } from '../../lib/offlineQueue';
 import { FEATURE_AREAS, type CapabilityLevel } from '../../lib/offlineCapabilities';
+import { explainSyncError } from '../../lib/syncErrorMessages';
 
 /**
  * Admin → Offline support tab (#tab-offline).
@@ -384,13 +385,31 @@ export function OfflineSupportPage() {
                       <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
                         {entry.label || entry.recordKey || 'Change'}
                       </Typography>
-                      <Typography
-                        variant="caption"
-                        data-testid="failed-sync-error"
-                        sx={{ color: 'error.main', display: 'block', wordBreak: 'break-word' }}
-                      >
-                        {entry.lastError || 'This change could not be synced after several attempts.'}
-                      </Typography>
+                      {(() => {
+                        const explained = explainSyncError(entry.lastError);
+                        return (
+                          <>
+                            <Typography
+                              variant="caption"
+                              data-testid="failed-sync-error"
+                              sx={{ color: 'error.main', display: 'block', wordBreak: 'break-word' }}
+                            >
+                              {explained.summary}
+                            </Typography>
+                            {explained.mapped && explained.raw && (
+                              <Tooltip title={explained.raw}>
+                                <Typography
+                                  variant="caption"
+                                  data-testid="failed-sync-error-detail"
+                                  sx={{ color: 'text.secondary', display: 'block', wordBreak: 'break-word' }}
+                                >
+                                  Details: {explained.raw}
+                                </Typography>
+                              </Tooltip>
+                            )}
+                          </>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
