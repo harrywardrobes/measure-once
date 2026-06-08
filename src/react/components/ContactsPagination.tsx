@@ -38,8 +38,17 @@ export function ContactsPagination({
 }: ContactsPaginationProps): React.ReactElement | null {
   if (total === 0) return null;
   return (
-    <Stack direction="row" sx={{ pt: 1, alignItems: 'center', justifyContent: 'space-between' }}>
-      <Typography variant="body2" color="text.secondary">
+    <Stack
+      direction="row"
+      data-testid="contacts-pagination"
+      sx={{ pt: 1, alignItems: 'center', justifyContent: 'space-between' }}
+    >
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        data-testid="contacts-pagination-info"
+        sx={{ '@media (max-width: 420px)': { display: 'none' } }}
+      >
         {buildPaginationLabel(page, pageLimit, visibleCount, total, totalPages)}
       </Typography>
       {totalPages > 1 ? (

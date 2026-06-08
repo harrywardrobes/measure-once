@@ -1146,6 +1146,36 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
   }
 });
 
+// ── HubSpot credential management ────────────────────────────────────────────
+// GET /api/admin/hubspot-credentials — returns which credential keys are
+// configured (values are never returned; only presence is indicated).
+app.get('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, (req, res) => {
+  res.json({
+    configured: {
+      access_token: !!process.env.HUBSPOT_ACCESS_TOKEN,
+    },
+  });
+});
+
+// PATCH /api/admin/hubspot-credentials — update a credential key/value pair.
+app.patch('/api/admin/hubspot-credentials', isAuthenticated, requireAdmin, (req, res) => {
+  const { key } = req.body || {};
+  const ALLOWED_KEYS = ['access_token'];
+  if (!key || !ALLOWED_KEYS.includes(key)) {
+    return res.status(400).json({ error: `key must be one of: ${ALLOWED_KEYS.join(', ')}` });
+  }
+  return res.status(501).json({ error: 'Credential updates via UI are not yet implemented. Set HUBSPOT_ACCESS_TOKEN in the environment.' });
+});
+
+// DELETE /api/admin/hubspot-credentials/:key — clear a stored credential.
+app.delete('/api/admin/hubspot-credentials/:key', isAuthenticated, requireAdmin, (req, res) => {
+  const ALLOWED_KEYS = ['access_token'];
+  if (!ALLOWED_KEYS.includes(req.params.key)) {
+    return res.status(400).json({ error: 'Unknown credential key.' });
+  }
+  return res.status(501).json({ error: 'Credential deletion via UI is not yet implemented.' });
+});
+
 // ── HubSpot: Account ──────────────────────────────────────────────────────────
 app.get('/api/account', async (req, res) => {
   try {
