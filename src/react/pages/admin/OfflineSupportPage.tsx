@@ -33,7 +33,7 @@ import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../../hooks/useOfflineFailures';
 import type { ConflictEntry } from '../../lib/offlineQueue';
 import { FEATURE_AREAS, type CapabilityLevel } from '../../lib/offlineCapabilities';
-import { explainSyncError } from '../../lib/syncErrorMessages';
+import { explainSyncError, explainConflict } from '../../lib/syncErrorMessages';
 
 /**
  * Admin → Offline support tab (#tab-offline).
@@ -488,12 +488,34 @@ export function OfflineSupportPage() {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{c.label}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {c.recordKey ? `${c.recordKey} · ` : ''}applied (last-write-wins)
-                        {c.serverVersion != null && c.baseVersion != null
-                          ? ` · server v${c.serverVersion} vs yours v${c.baseVersion}`
-                          : ''}
-                      </Typography>
+                      {(() => {
+                        const explained = explainConflict({
+                          resolution: c.resolution,
+                          serverVersion: c.serverVersion,
+                          baseVersion: c.baseVersion,
+                        });
+                        const technical = `${c.recordKey ? `${c.recordKey} · ` : ''}applied (last-write-wins)${
+                          c.serverVersion != null && c.baseVersion != null
+                            ? ` · server v${c.serverVersion} vs yours v${c.baseVersion}`
+                            : ''
+                        }`;
+                        return (
+                          <>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              {explained.summary}
+                            </Typography>
+                            <Tooltip title={technical}>
+                              <Typography
+                                variant="caption"
+                                color="text.disabled"
+                                sx={{ display: 'block', wordBreak: 'break-word' }}
+                              >
+                                {technical}
+                              </Typography>
+                            </Tooltip>
+                          </>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">

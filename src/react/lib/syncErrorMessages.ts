@@ -146,3 +146,62 @@ export function explainSyncError(lastError?: string | null): SyncErrorExplanatio
   // ── Unmapped: show the raw error as-is so nothing is hidden. ──
   return { summary: raw, mapped: false, raw };
 }
+
+/**
+ * A stale-write conflict isn't an error — the change synced, but the record had
+ * also changed on the server in the meantime. The admin Offline support tab
+ * surfaces these for review with a terse technical caption (e.g. "applied
+ * (last-write-wins) · server v3 vs yours v2"). `explainConflict` turns that into
+ * the same plain-language, actionable treatment `explainSyncError` gives
+ * failures, so a non-technical admin can tell what happened and what to do.
+ */
+export interface ConflictExplanationInput {
+  /** How the engine handled it: applied anyway, or held for manual review. */
+  resolution?: 'last_write_wins' | 'flagged' | null;
+  /** Version the server record was on when the conflict was detected. */
+  serverVersion?: number | null;
+  /** Version your queued edit was based on. */
+  baseVersion?: number | null;
+}
+
+export interface ConflictExplanation {
+  /** Short, plain-language, actionable summary safe to show prominently. */
+  summary: string;
+  /**
+   * The terse technical detail (version numbers, resolution), when available —
+   * keep it available as a secondary line for admins who want specifics.
+   */
+  detail?: string;
+}
+
+/**
+ * Map a conflict's resolution + version data to a plain-language explanation.
+ *
+ * `last_write_wins` (the common case) means the queued edit was applied on top
+ * of the newer server record, so the admin should double-check nothing useful
+ * was overwritten. `flagged` means the edit was held back for manual review, so
+ * nothing was overwritten yet but a decision is needed.
+ */
+export function explainConflict(input: ConflictExplanationInput): ConflictExplanation {
+  const { resolution, serverVersion, baseVersion } = input;
+
+  const haveVersions = serverVersion != null && baseVersion != null;
+  const detail = haveVersions
+    ? `Server was on v${serverVersion}; your edit was based on v${baseVersion}.`
+    : undefined;
+
+  if (resolution === 'flagged') {
+    return {
+      summary:
+        'Someone else changed this record on the server while your edit was waiting to sync. Your edit was held back so nothing was overwritten — review the latest server version and re-enter your change if it is still needed.',
+      detail,
+    };
+  }
+
+  // Default to the last-write-wins explanation (the engine's usual behaviour).
+  return {
+    summary:
+      'Someone else changed this record on the server while your edit was waiting to sync. Your edit was saved on top of theirs, so please double-check the record still looks right and re-apply their change if anything important was lost.',
+    detail,
+  };
+}
