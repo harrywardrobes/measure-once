@@ -183,14 +183,22 @@ function ResendButton({
 
 type ConflictTarget = 'copy' | 'open';
 
-function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded }: {
+function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded, autoExpand }: {
   sub: Submission;
   contactId: string;
   canResend: boolean;
   onResendSuccess: () => void;
   isSuperseded?: boolean;
+  autoExpand?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+
+  // Deep-link support: when a `#customer-info-<id>` fragment targets this card,
+  // the rail flags it via `autoExpand` so it opens on mount. The user can still
+  // collapse it afterwards — we only force it open when the flag turns on.
+  useEffect(() => {
+    if (autoExpand) setOpen(true);
+  }, [autoExpand]);
   const isPending = !sub.submitted_at;
   const isExpired = isPending && new Date(sub.expires_at) < new Date();
   const isActive  = isPending && !isExpired;
@@ -310,6 +318,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
 
   return (
     <Box
+      id={`customer-info-${sub.id}`}
       data-testid={`submission-card-${sub.id}`}
       sx={{
         border: '1px solid',
@@ -571,6 +580,14 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
 
 // ── Rail ──────────────────────────────────────────────────────────────────────
 
+/** Parse a `#customer-info-<id>` deep-link fragment into a numeric submission id. */
+function submissionIdFromHash(hash: string): number | null {
+  const m = hash.match(/^#customer-info-(\d+)$/);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isFinite(id) ? id : null;
+}
+
 interface Props {
   contactId: string;
 }
@@ -580,6 +597,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [open, setOpen]               = useState(true);
+  const [deepLinkId, setDeepLinkId]   = useState<number | null>(null);
   const { isViewer }                  = usePrivilege();
 
   const loadSubmissions = useCallback(() => {
@@ -610,6 +628,24 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
     window.addEventListener('customer-info-link-generated', handleLinkGenerated);
     return () => window.removeEventListener('customer-info-link-generated', handleLinkGenerated);
   }, [contactId, loadSubmissions]);
+
+  // Deep-link support: a photo conflict's "Open record" link can carry a
+  // `#customer-info-<id>` fragment so this rail auto-expands and scrolls to the
+  // exact submission. Acts once per fragment, only when the target submission is
+  // actually present, so the user can still collapse it afterwards.
+  const deepLinkedRef = useRef<number | null>(null);
+  useEffect(() => {
+    const targetId = submissionIdFromHash(window.location.hash);
+    if (targetId == null || deepLinkedRef.current === targetId) return;
+    if (!submissions.some(s => s.id === targetId)) return;
+    deepLinkedRef.current = targetId;
+    setOpen(true);
+    setDeepLinkId(targetId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`customer-info-${targetId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [submissions]);
 
   // Filter out expired-pending cards — staff only need to see active and submitted entries
   const visibleSubmissions = submissions.filter(sub => {
@@ -683,6 +719,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
                 canResend={!isViewer}
                 onResendSuccess={loadSubmissions}
                 isSuperseded={activeIds.has(sub.id) && index > 0}
+                autoExpand={sub.id === deepLinkId}
               />
             ))}
           </Stack>

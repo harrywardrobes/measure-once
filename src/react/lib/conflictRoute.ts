@@ -85,9 +85,43 @@ function visitIdFor(conflict: ConflictEntry): string | null {
 }
 
 /**
+ * Best-effort lookup of the customer-info submission id a *photo* conflict
+ * touched, checked across the record key (`customer-info:<id>` /
+ * `submission:<id>` / `photo:<id>`), the attempted write body
+ * (`submissionId` / `submission_id`), the server snapshot, and finally the
+ * request URL (e.g. `/api/customer-info/submissions/<id>`). Returns `null`
+ * when none can be derived.
+ */
+function submissionIdFor(conflict: ConflictEntry): string | null {
+  const parts = recordKeyParts(conflict.recordKey);
+  if (parts && (parts.type === 'customer-info' || parts.type === 'submission' || parts.type === 'photo')) {
+    const id = asId(parts.id);
+    if (id) return id;
+  }
+
+  const body = (conflict.attemptedBody ?? null) as Record<string, unknown> | null;
+  const fromBody = asId(body?.submissionId ?? body?.submission_id);
+  if (fromBody) return fromBody;
+
+  const server = (conflict.serverData ?? null) as Record<string, unknown> | null;
+  const fromServer = asId(server?.submissionId ?? server?.submission_id ?? server?.id);
+  if (fromServer) return fromServer;
+
+  const m = conflict.url.match(/\/api\/customer-info\/submissions\/([^/?#]+)/);
+  if (m) {
+    try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+  }
+  return null;
+}
+
+/**
  * Resolve a conflict to an in-app deep link, or `null` when none can be derived.
  *
- * - **customer** / **photo** edits → the customer detail page `/customers/:id`.
+ * - **customer** edits → the customer detail page `/customers/:id`.
+ * - **photo** edits → the owning customer page. When the specific customer-info
+ *   submission id is known, a `#customer-info-<submissionId>` fragment is
+ *   appended so the customer page can auto-expand and scroll to that exact
+ *   submission.
  * - **visit** edits → the owning customer page, where design visits are reviewed
  *   (there is no standalone per-visit route). The contact id is read from the
  *   attempted body / server snapshot, since a `dv:<visitId>` key alone is not a
@@ -103,8 +137,11 @@ export function resolveConflictRoute(conflict: ConflictEntry): string | null {
 
   switch (conflict.area) {
     case 'customer':
-    case 'photo':
       return base;
+    case 'photo': {
+      const submissionId = submissionIdFor(conflict);
+      return submissionId ? `${base}#customer-info-${encodeURIComponent(submissionId)}` : base;
+    }
     case 'visit': {
       const visitId = visitIdFor(conflict);
       return visitId ? `${base}#design-visit-${encodeURIComponent(visitId)}` : base;
