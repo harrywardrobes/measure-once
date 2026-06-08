@@ -104,6 +104,16 @@ export function explainSyncError(lastError?: string | null): SyncErrorExplanatio
     };
   }
 
+  // ── Lead status removed ──
+  if (/lead.?status.*removed|has been removed.*admin|lead_status_removed/.test(lower)) {
+    return {
+      summary:
+        'This pipeline status has been removed. Contact an admin to re-add it before saving.',
+      mapped: true,
+      raw,
+    };
+  }
+
   // ── Validation / bad request ──
   if (status === 400 || status === 422 || /validation|invalid|required field|bad request|must be/.test(lower)) {
     return {

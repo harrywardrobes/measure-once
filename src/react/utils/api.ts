@@ -79,6 +79,19 @@ export function isGoogleAuthError(e: unknown): boolean {
 }
 
 /**
+ * The canonical user-facing message shown when a 422 LEAD_STATUS_REMOVED
+ * response is received. Use this constant everywhere rather than hard-coding
+ * the string so all surfaces stay consistent.
+ */
+export const LEAD_STATUS_REMOVED_MESSAGE =
+  'This pipeline status has been removed. Contact an admin to re-add it before saving.';
+
+/** Returns true when an error (or a raw sendOrQueue data object) carries the LEAD_STATUS_REMOVED code. */
+export function isLeadStatusRemovedError(e: unknown): boolean {
+  return (e as { code?: string })?.code === 'LEAD_STATUS_REMOVED';
+}
+
+/**
  * Build a user-facing message for a failed Google Calendar write. Scheduling
  * now writes directly to the shared calendar with no local fallback, so the
  * caller surfaces this in-modal and keeps the form open for a retry.

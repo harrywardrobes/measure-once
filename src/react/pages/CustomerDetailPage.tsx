@@ -24,6 +24,7 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
 import Alert from '@mui/material/Alert';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
+import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -525,6 +526,8 @@ export function CustomerDetailPage() {
       if (clearSub) body.hw_lead_substatus = '';
       // Offline-aware: when offline / on a network error this is queued and
       // replayed on reconnect. Optimistic UI above already reflects the change.
+      // A genuine LEAD_STATUS_REMOVED rejection rolls back the optimistic update
+      // and shows a toast so the user knows to contact an admin.
       void sendOrQueue({
         area: 'customer',
         label: `Lead status → ${String(newStatus)}`,
@@ -532,6 +535,18 @@ export function CustomerDetailPage() {
         url: `/api/contacts/${encodeURIComponent(id)}`,
         body,
         dedupeKey: `contact:${id}:lead-status`,
+      }).then(res => {
+        if (!res.queued && !res.ok) {
+          const d = res.data as { code?: string } | undefined;
+          if (d?.code === 'LEAD_STATUS_REMOVED') {
+            setContact(c as Contact);
+            contactRef.current = c as Contact;
+            const st2 = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
+            if (st2) st2.selectedContact = c;
+            const w = window as unknown as Record<string, unknown>;
+            if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
+          }
+        }
       }).catch(() => { /* noop — optimistic UI already applied */ });
     };
 
@@ -564,6 +579,18 @@ export function CustomerDetailPage() {
         url: `/api/contacts/${encodeURIComponent(id)}`,
         body: { hs_lead_status: String(statusKey), hw_lead_substatus: newHw },
         dedupeKey: `contact:${id}:lead-status`,
+      }).then(res => {
+        if (!res.queued && !res.ok) {
+          const d = res.data as { code?: string } | undefined;
+          if (d?.code === 'LEAD_STATUS_REMOVED') {
+            setContact(c as Contact);
+            contactRef.current = c as Contact;
+            const st2 = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
+            if (st2) st2.selectedContact = c;
+            const w = window as unknown as Record<string, unknown>;
+            if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
+          }
+        }
       }).catch(() => { /* noop — optimistic UI already applied */ });
     };
 
@@ -627,7 +654,13 @@ export function CustomerDetailPage() {
     // Roll back optimistic UI only on a genuine server rejection; a queued write
     // will replay later and should keep the optimistic value.
     if (!res.queued && !res.ok) {
-      notifyApiError('hubspot', new Error((res.data as { error?: string })?.error || 'Failed to update'));
+      const d = res.data as { error?: string; code?: string } | undefined;
+      if (d?.code === 'LEAD_STATUS_REMOVED') {
+        const w = window as unknown as Record<string, unknown>;
+        if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
+      } else {
+        notifyApiError('hubspot', new Error(d?.error || 'Failed to update'));
+      }
       setContact(contact);
     }
   }, [contact, contactId, notifyApiError]);
