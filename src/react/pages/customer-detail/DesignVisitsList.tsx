@@ -3,6 +3,7 @@ import { DesignVisit, DesignVisitRoom, fmtDesignVisitWhen, fmtGbp } from './type
 import { DesignVisitStatusPill } from './DesignVisitStatusPill';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineVisitEntries, type PendingVisitEntry } from '../../hooks/useOfflineVisitEntries';
+import { useToast } from '../../contexts/ToastContext';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
@@ -106,6 +107,103 @@ export function PendingEditActions({ entry }: { entry: PendingVisitEntry }) {
         onClick={handleDiscard}
       >
         Discard
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Bulk **Retry all** / **Discard all** controls for the design-visits section.
+ * Renders only when 2+ queued design-visit writes for this contact are
+ * `failed`, so a field user recovering from a long offline stint can act on the
+ * whole backlog at once instead of one card at a time.
+ *
+ * - **Retry all** re-queues every failed entry (`retryEntry`) with no extra
+ *   confirmation — the periodic flush picks them up.
+ * - **Discard all** first offers the same PDF safety-net download used by the
+ *   SyncPill failed-sync dialog (built from the real outbox entries), confirms
+ *   via the existing toast, then gates the permanent removal behind
+ *   `window.showBottomConfirm` before calling `removeEntry` for each.
+ */
+export function BulkVisitActions({ entries }: { entries: PendingVisitEntry[] }) {
+  const [busy, setBusy] = useState(false);
+  const showToast = useToast();
+  const failed = entries.filter(e => e.status === 'failed');
+
+  const handleRetryAll = useCallback(async () => {
+    if (busy) return;
+    const ids = failed.map(e => e.id);
+    if (!ids.length) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await Promise.all(ids.map(id => engine.retryEntry(id)));
+    } catch {
+      /* best-effort — the periodic flush will pick them up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, failed]);
+
+  const handleDiscardAll = useCallback(async () => {
+    if (busy) return;
+    const ids = failed.map(e => e.id);
+    if (!ids.length) return;
+
+    // 1. Offer the PDF safety-net first, built from the real outbox entries
+    //    (the queue rows, not the summarised view) so the export carries every
+    //    captured field. Best-effort: a PDF failure must not block the discard.
+    try {
+      const queueMod = await import('../../lib/offlineQueue');
+      const idSet = new Set(ids);
+      const toExport = (await queueMod.getEntries()).filter(e => idSet.has(e.id));
+      if (toExport.length) {
+        const generatedAt = Date.now();
+        const pdfMod = await import('../../lib/failuresPdf');
+        pdfMod.downloadFailuresPdf(toExport, generatedAt);
+        showToast(`Saved ${pdfMod.failuresPdfFilename(generatedAt)} — your changes are safe to discard.`);
+      }
+    } catch {
+      /* best-effort — still let the user discard even if the PDF export failed */
+    }
+
+    // 2. Gate the permanent removal behind an explicit confirmation.
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await Promise.all(ids.map(id => mod.removeEntry(id)));
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      `Discard all ${ids.length} unsynced visit changes? New visits captured offline will be permanently lost; queued edits drop their unsynced changes and keep each visit's last synced copy on the server.`,
+      doDiscard,
+    );
+  }, [busy, failed, showToast]);
+
+  if (failed.length < 2) return null;
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <button
+        data-testid="dv-retry-all"
+        style={sxSecondaryBtn}
+        disabled={busy}
+        onClick={handleRetryAll}
+      >
+        Retry all
+      </button>
+      <button
+        data-testid="dv-discard-all"
+        style={{ ...sxSecondaryBtn, color: 'var(--error)' }}
+        disabled={busy}
+        onClick={handleDiscardAll}
+      >
+        Discard all
       </button>
     </div>
   );
@@ -436,6 +534,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     <div id="design-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
         <span style={sxHeaderLabel}>Design visits</span>
+        <BulkVisitActions entries={pendingEntries} />
       </div>
       {actionError && (
         <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>{actionError}</p>
