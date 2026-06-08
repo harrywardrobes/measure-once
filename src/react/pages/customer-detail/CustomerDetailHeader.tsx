@@ -52,7 +52,7 @@ export function CustomerDetailHeader({
   const props      = contact.properties;
   const name       = contactName(contact);
   const email      = props.email || '';
-  const phone      = props.phone || '';
+  const bestPhone  = props.phone || props.mobilephone || props.hs_whatsapp_phone_number || '';
   const address    = props.address || '';
   const city       = props.city   || '';
   const zip        = props.zip    || '';
@@ -125,7 +125,7 @@ export function CustomerDetailHeader({
               </div>
             )}
 
-            {(email || phone) && (
+            {(email || bestPhone) && (
               <div className="mt-3 space-y-1">
                 {email && (
                   <div>
@@ -134,9 +134,9 @@ export function CustomerDetailHeader({
                     </a>
                   </div>
                 )}
-                {phone && (
+                {bestPhone && (
                   <div className="text-sm flex items-center gap-1.5" style={{ color: 'var(--ink-4)' }}>
-                    <span>{phone}</span>
+                    <a href={`tel:${bestPhone}`} className="hover:underline" style={{ color: 'inherit' }}>{bestPhone}</a>
                     {whatsappEnabled && !isViewer && onOpenWhatsApp && (
                       <button
                         onClick={onOpenWhatsApp}
