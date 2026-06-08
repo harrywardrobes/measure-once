@@ -49,15 +49,54 @@ function SyncStatePill({ status }: { status: PendingVisitEntry['status'] }) {
 }
 
 /** A design visit captured offline that has not yet reached the server. */
-function PendingVisitCard({ entry }: { entry: PendingVisitEntry }) {
+export function PendingVisitCard({ entry }: { entry: PendingVisitEntry }) {
   const when = fmtDesignVisitWhen(entry.visitDate || new Date(entry.createdAt).toISOString());
   const totalGbp = fmtGbp(entry.estimateTotalPence || 0);
+  const [busy, setBusy] = useState(false);
+  const isFailed = entry.status === 'failed';
+
+  // Re-queue a permanently-failed entry (reset to `pending`) and kick a flush.
+  // The queue's pub/sub refreshes useOfflineVisitEntries once the status flips.
+  const handleRetry = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await engine.retryEntry(entry.id);
+    } catch {
+      /* best-effort — the periodic flush will pick it up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, entry.id]);
+
+  // Discard a failed entry for good — the captured visit data is lost, so this
+  // is gated behind a confirmation.
+  const handleDiscard = useCallback(() => {
+    if (busy) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await mod.removeEntry(entry.id);
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      'Discard this failed design visit? The captured visit data will be permanently lost.',
+      doDiscard,
+    );
+  }, [busy, entry.id]);
+
   return (
     <div
       data-testid="dv-pending-card"
       style={{
         ...sxItem, marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 6,
-        borderStyle: 'dashed', opacity: entry.status === 'failed' ? 1 : 0.95,
+        borderStyle: 'dashed', opacity: isFailed ? 1 : 0.95,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
@@ -69,10 +108,30 @@ function PendingVisitCard({ entry }: { entry: PendingVisitEntry }) {
             <span style={sxDate}>Estimate: £{totalGbp}</span>
           </div>
         </div>
+        {isFailed && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              data-testid="dv-pending-retry"
+              style={sxSecondaryBtn}
+              disabled={busy}
+              onClick={handleRetry}
+            >
+              Retry
+            </button>
+            <button
+              data-testid="dv-pending-discard"
+              style={{ ...sxSecondaryBtn, color: 'var(--error)' }}
+              disabled={busy}
+              onClick={handleDiscard}
+            >
+              Discard
+            </button>
+          </div>
+        )}
       </div>
       <p style={{ fontSize: '0.78rem', color: 'var(--ink-3)', margin: 0 }}>
-        {entry.status === 'failed'
-          ? `Couldn't sync this visit${entry.lastError ? ` — ${entry.lastError}` : ''}. It needs attention before it can upload.`
+        {isFailed
+          ? `Couldn't sync this visit${entry.lastError ? ` — ${entry.lastError}` : ''}. Retry to upload it again, or discard it.`
           : "Saved on this device — it'll upload and send the sign-off email when you're back online."}
       </p>
     </div>
