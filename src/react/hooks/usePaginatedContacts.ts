@@ -12,6 +12,8 @@ export type PaginatedContact = {
     hw_lead_substatus?: string;
     customer_number?: string;
     createdate?: string;
+    /** JSON-encoded workflow rooms; used for offline stage filtering. */
+    measure_once_rooms?: string;
   };
 };
 
@@ -54,6 +56,100 @@ export type UsePaginatedContactsOptions = {
 };
 
 export const PAGINATED_CONTACTS_PAGE_LIMIT = 25;
+
+type OfflineFilterParams = {
+  leadStatus: string;
+  stage: string;
+  sortBy: string;
+  search: string;
+  showArchived: boolean;
+  page: number;
+  limit: number;
+};
+
+function offlineComparator(sort: string): (a: PaginatedContact, b: PaginatedContact) => number {
+  switch (sort) {
+    case 'oldest':
+      return (a, b) => (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
+    case 'name-asc':
+      return (a, b) => (a.properties?.lastname || '').localeCompare(b.properties?.lastname || '');
+    case 'name-desc':
+      return (a, b) => (b.properties?.lastname || '').localeCompare(a.properties?.lastname || '');
+    case 'newest':
+    default:
+      return (a, b) => (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+  }
+}
+
+function matchesOfflineStage(c: PaginatedContact, stage: string, showArchived: boolean): boolean {
+  const roomsJson = c.properties?.measure_once_rooms;
+  if (!roomsJson) return false;
+  try {
+    const rooms = JSON.parse(roomsJson) as Array<{ stageKey?: string; roomStatus?: string }>;
+    if (!Array.isArray(rooms)) return false;
+    const inStage = rooms.filter((r) => (r?.stageKey || 'sales') === stage);
+    if (inStage.length === 0) return false;
+    if (!showArchived) return inStage.some((r) => (r?.roomStatus || 'active') === 'active');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Apply the active search box, lead-status / stage filters, sort order, and
+ * pagination to a set of cached customer records client-side. Mirrors the
+ * server-side logic in `/api/contacts-all` so the offline experience matches
+ * the online one. (Dev-mode / excluded-from-sales / staleness filters are
+ * server-only concerns and intentionally omitted here.)
+ */
+export function filterSortPaginateCachedContacts(
+  cached: PaginatedContact[],
+  params: OfflineFilterParams,
+): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
+  const { leadStatus, stage, sortBy, search, showArchived, limit } = params;
+  let list = cached;
+
+  if (leadStatus) {
+    if (leadStatus === '__no_status__') {
+      list = list.filter((c) => !c.properties?.hs_lead_status);
+    } else {
+      list = list.filter((c) => c.properties?.hs_lead_status === leadStatus);
+    }
+  }
+
+  if (stage) {
+    list = list.filter((c) => matchesOfflineStage(c, stage, showArchived));
+  }
+
+  const q = (search || '').trim().toLowerCase();
+  if (q) {
+    list = list.filter((c) => {
+      const first = (c.properties?.firstname || '').toLowerCase();
+      const last = (c.properties?.lastname || '').toLowerCase();
+      const email = (c.properties?.email || '').toLowerCase();
+      const phone = (c.properties?.phone || '').toLowerCase();
+      return (
+        `${first} ${last}`.includes(q) ||
+        first.includes(q) ||
+        last.includes(q) ||
+        email.includes(q) ||
+        phone.includes(q)
+      );
+    });
+  }
+
+  list = [...list].sort(offlineComparator(sortBy));
+
+  const total = list.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  // Clamp the requested page to the available range so navigating offline never
+  // strands the user on an empty page beyond the filtered set.
+  const page = Math.min(Math.max(1, params.page), totalPages);
+  const offset = (page - 1) * limit;
+  const results = list.slice(offset, offset + limit);
+  return { results, total, totalPages, page };
+}
 
 function humaniseError(e: Error & { code?: string }): string {
   if (e.code === 'HUBSPOT_AUTH') return 'Could not connect to HubSpot — the API token is invalid or expired.';
@@ -194,9 +290,23 @@ export function usePaginatedContacts(
         const cached = await readRecords<PaginatedContact>('customers');
         if (cancelled) return;
         if (cached.length > 0) {
-          setContacts(cached);
-          setTotal(cached.length);
-          setTotalPages(1);
+          // Apply the active search box, lead-status / stage filters, sort
+          // order, and pagination client-side so the offline experience feels
+          // consistent with the online one.
+          const { results, total: filteredTotal, totalPages: filteredPages, page: clampedPage } =
+            filterSortPaginateCachedContacts(cached, {
+              leadStatus,
+              stage,
+              sortBy,
+              search,
+              showArchived,
+              page: effectivePage,
+              limit,
+            });
+          setContacts(results);
+          setTotal(filteredTotal);
+          setTotalPages(filteredPages);
+          if (clampedPage !== effectivePage) setPage(clampedPage);
           setFromCache(true);
           setError(null);
           if (document.hidden) {
