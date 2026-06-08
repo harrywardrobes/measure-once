@@ -2059,6 +2059,25 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
   }
 });
 
+// POST /api/design-visits/sign-image-urls — authenticated (member+). Takes a
+// list of opaque storage keys and returns freshly signed, short-lived view URLs
+// keyed by storage key. Used when resuming a queued (unsynced) design-visit edit
+// whose photos were uploaded while online: the queued payload preserves the real
+// `storageKey` but not the expired signed `viewUrl`, so on resume the client
+// re-derives a working thumbnail URL here. Non-opaque keys (offline data: URIs,
+// legacy URLs) are skipped — they render directly without signing.
+router.post('/api/design-visits/sign-image-urls', isAuthenticated, requirePrivilege('member'), express.json({ limit: '256kb' }), async (req, res) => {
+  const keys = Array.isArray(req.body?.storageKeys) ? req.body.storageKeys : null;
+  if (!keys) return res.status(400).json({ error: 'storageKeys array is required' });
+  const urls = {};
+  for (const k of keys) {
+    if (typeof k === 'string' && dvUploads.isOpaqueKey(k)) {
+      urls[k] = dvUploads.signImageUrl(k);
+    }
+  }
+  return res.json({ urls });
+});
+
 // DELETE /api/design-visits/uploads/:storageKey — authenticated (member+).
 // Removes an opaque cloud-storage key that was minted by the POST endpoint
 // above. Called fire-and-forget from the wizard when a user removes a photo

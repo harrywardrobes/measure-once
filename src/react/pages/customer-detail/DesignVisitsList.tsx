@@ -367,8 +367,66 @@ function queuedBodyToExistingVisit(
         ? (r.images as Array<Record<string, unknown>>).map(i => ({
             storageKey: typeof i.storageKey === 'string' ? i.storageKey : '',
             mimeType:   typeof i.mimeType === 'string' ? i.mimeType : undefined,
+            // Offline-captured photos keep a data: URI in storageKey and render
+            // directly; online uploads keep an opaque key whose short-lived
+            // viewUrl is re-derived on resume (see openWizardForEdit).
+            viewUrl:    typeof i.viewUrl === 'string' ? i.viewUrl : undefined,
           }))
         : [],
+    })),
+  };
+}
+
+/**
+ * Re-derive short-lived signed view URLs for a resumed visit's room photos.
+ *
+ * A queued (unsynced) edit preserves each photo's `storageKey` but not the
+ * expired signed `viewUrl`. Offline-captured photos keep a `data:` URI in
+ * `storageKey` and render directly, so they need no signing. Online uploads keep
+ * an opaque `obj:…` key whose thumbnail must be re-signed via the server.
+ *
+ * Best-effort: if the request fails (e.g. resuming while offline) the visit is
+ * returned unchanged — the underlying image data still re-submits correctly,
+ * only the preview thumbnail is missing.
+ */
+async function resignResumedImages(visit: ExistingVisit): Promise<ExistingVisit> {
+  const rooms = visit.rooms || [];
+  const opaqueKeys = new Set<string>();
+  for (const r of rooms) {
+    for (const img of r.images || []) {
+      const key = img.storageKey || '';
+      if (key.startsWith('obj:') && !img.viewUrl) opaqueKeys.add(key);
+    }
+  }
+  if (opaqueKeys.size === 0) return visit;
+
+  let urls: Record<string, string> = {};
+  try {
+    const r = await fetch('/api/design-visits/sign-image-urls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storageKeys: Array.from(opaqueKeys) }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data && typeof data.urls === 'object' && data.urls) {
+        for (const [k, val] of Object.entries(data.urls as Record<string, unknown>)) {
+          if (typeof val === 'string') urls[k] = val;
+        }
+      }
+    }
+  } catch {
+    return visit; // offline or server error — keep storageKey-only previews
+  }
+
+  return {
+    ...visit,
+    rooms: rooms.map(r => ({
+      ...r,
+      images: (r.images || []).map(img => {
+        const key = img.storageKey || '';
+        return urls[key] ? { ...img, viewUrl: urls[key] } : img;
+      }),
     })),
   };
 }
@@ -488,7 +546,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
-  const openWizardForEdit = useCallback((id: number) => {
+  const openWizardForEdit = useCallback(async (id: number) => {
     const v = visits.find(x => x.id === id);
     if (!v || !['submitted', 'revision_requested', 'draft'].includes(v.status)) return;
     const detail = details[id]?.data || v;
@@ -509,7 +567,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
       const resumed = queuedBodyToExistingVisit(
         pending.queuedBody, id, pending.baseVersion, pending.baseUpdatedAt,
       );
-      if (resumed) existingVisit = resumed;
+      if (resumed) existingVisit = await resignResumedImages(resumed);
     }
 
     setEditingId(id);
