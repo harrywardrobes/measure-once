@@ -815,6 +815,9 @@ export function CustomerDetailPage() {
             if (st) st.selectedContact = updated;
             // Silent background re-fetch so the header reflects HubSpot's
             // normalised values (e.g. phone formatting) without a page reload.
+            // fetchContact also rewrites cp_recent_customers, so the global
+            // search / recent-contacts dropdown shows the updated name as soon
+            // as the re-fetch resolves — no extra API call needed.
             void fetchContact().then((c) => { if (c) setContact(c); }).catch(() => { /* best-effort */ });
           }}
         />
