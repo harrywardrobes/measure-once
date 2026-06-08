@@ -32,6 +32,9 @@ interface Submission {
   submittedAt: string | null;
   emailSkippedCount: number;
   photoUrls: string[];
+  /** Sync-readiness fields used to conflict-check an offline-queued review. */
+  version?: number | null;
+  updatedAt?: string | null;
 }
 
 type Step = 'loading' | 'no_submission' | 'review' | 'not_suitable' | 'rough_estimate' | 'done';
@@ -217,20 +220,41 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
     setSubmitting(true);
     try {
-      const r = await fetch('/api/card-actions/review-customer-photos', {
+      // Offline-aware write: sent immediately when online, otherwise parked in
+      // the offline queue (area 'photo') and replayed on reconnect. The queued
+      // entry carries `submissionId`/`contactId` in the body and a
+      // `customer-info:<id>` recordKey so a resulting conflict's "Open record"
+      // link resolves to the right submission. A `conflictCheckUrl` + base
+      // version/updated_at let the sync engine flag the case where the
+      // submission changed on the server before this review replayed.
+      const { sendOrQueue } = await import('../../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'photo',
+        label: outcome === 'not_suitable'
+          ? `Photo review → not suitable (${contactDisplay})`
+          : `Photo review → rough estimate (${contactDisplay})`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        url: '/api/card-actions/review-customer-photos',
+        body: {
           contactId:    ctx.contactId,
           submissionId: submission!.id,
           outcome,
           priceRange:   priceRange.trim() || undefined,
           emailSubject: emailSubject.trim(),
           emailBody:    emailBody.trim(),
-        }),
+        },
+        recordKey: `customer-info:${submission!.id}`,
+        conflictCheckUrl: `/api/card-actions/review-customer-photos/${encodeURIComponent(ctx.contactId)}`,
+        baseVersion: submission!.version ?? null,
+        baseUpdatedAt: submission!.updatedAt ?? null,
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || d.message || 'Failed');
+
+      // Surface only genuine server rejections (4xx). A queued write is success
+      // from the user's perspective — it will replay on reconnect.
+      if (!res.queued && !res.ok) {
+        const d = res.data as { error?: string; message?: string } | undefined;
+        throw new Error(d?.error || d?.message || 'Failed');
+      }
 
       setStep('done');
 

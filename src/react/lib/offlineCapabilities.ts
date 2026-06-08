@@ -104,6 +104,13 @@ export const FEATURE_AREAS: FeatureArea[] = [
       "The 'not proceeding' and 'booked' outcomes are queued offline (the calendar event is created once you're back online). The 'email a time slot' outcome needs a live email session.",
   },
   {
+    name: 'Customer photo review',
+    capability: 'full',
+    backedBy: ['photo'],
+    detail:
+      "Reviewing a customer's submitted photos and sending the 'not suitable' or 'rough estimate' outcome is queued offline and replayed on reconnect (the email and lead-status update happen when the write syncs).",
+  },
+  {
     name: 'Customer-info forms',
     capability: 'online',
     detail:

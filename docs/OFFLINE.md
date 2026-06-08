@@ -166,6 +166,7 @@ without a `conflictCheckUrl` skip the check gracefully.
 | Customer detail <!-- offline-areas: customer --> | Lead-status change, sub-status quick-set & change, rooms/notes localdata edits |
 | Design-visit wizard <!-- offline-areas: visit --> | Submit (create and edit; edits carry a `conflictCheckUrl`); **room photos captured offline** ride along inline (see below) |
 | Arrange-visit modal <!-- offline-areas: visit --> | `not_proceeding` outcome, and `booked` outcome (calendar event dispatched only when the write is sent now, not when queued) |
+| Review customer photos <!-- offline-areas: photo --> | `not_suitable` and `rough_estimate_sent` outcomes (queued; the outcome email and HubSpot lead-status update happen when the write replays on reconnect). Carries a `conflictCheckUrl` + base version so a submission that changed before replay is flagged as a conflict |
 
 ### Per-visit pending/synced state
 

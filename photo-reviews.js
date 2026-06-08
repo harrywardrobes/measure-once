@@ -240,6 +240,11 @@ router.get('/api/card-actions/review-customer-photos/:contactId',
           submittedAt:       row.submitted_at,
           emailSkippedCount: row.email_skipped_count ?? 0,
           photoUrls,
+          // Sync-readiness fields so an offline-queued review can be conflict-
+          // checked: if the submission changes on the server before the queued
+          // outcome replays, the sync engine records a conflict.
+          version:           row.version ?? null,
+          updatedAt:         row.updated_at ?? null,
         },
       });
     } catch (err) {
