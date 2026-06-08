@@ -72,8 +72,37 @@ type Contact = {
     hw_lead_substatus?: string;
     customer_number?: string;
     createdate?: string;
+    /** JSON-encoded workflow rooms; used to derive stage pills offline. */
+    measure_once_rooms?: string;
   };
 };
+
+/**
+ * Parse a contact's own cached `measure_once_rooms` property into Room pills.
+ * Mirrors the shape produced server-side by `/api/localdata/all` so cards can
+ * show correct stage labels offline (when that endpoint's fetch fails and the
+ * `roomsByContact` map is empty). Returns [] if the property is missing or
+ * unparseable.
+ */
+function parseContactRooms(contact: Contact): Room[] {
+  const roomsJson = contact.properties?.measure_once_rooms;
+  if (!roomsJson) return [];
+  try {
+    const rooms = JSON.parse(roomsJson) as Array<{
+      room?: string;
+      stageKey?: string;
+      roomStatus?: string;
+    }>;
+    if (!Array.isArray(rooms)) return [];
+    return rooms.map((r) => ({
+      room: r.room || 'Main',
+      stageKey: r.stageKey || 'sales',
+      roomStatus: r.roomStatus || 'active',
+    }));
+  } catch {
+    return [];
+  }
+}
 
 type ContactsResponse = {
   results?: Contact[];
@@ -1196,19 +1225,28 @@ export function CustomersPage(): React.ReactElement {
   // to a synthetic "Main" room is retained for the no-stage (All) view where
   // archived-only contacts can still appear.
   const resolveRooms = React.useCallback(
-    (contactId: string): Room[] => {
-      const cached = roomsByContact[contactId];
-      if (cached && cached.length > 0) {
-        const filtered = cached
+    (contact: Contact): Room[] => {
+      const filterRooms = (rooms: Room[]): Room[] =>
+        rooms
           .filter(r => showArchived || (r.roomStatus || 'active') === 'active')
           .map(r => ({
             room: r.room || 'Main',
             stageKey: r.stageKey || 'sales',
             roomStatus: r.roomStatus || 'active',
           }));
-        return filtered.length > 0
-          ? filtered
-          : [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
+
+      const cached = roomsByContact[contact.id];
+      if (cached && cached.length > 0) {
+        const filtered = filterRooms(cached);
+        if (filtered.length > 0) return filtered;
+      }
+      // Offline fallback: the /api/localdata/all map is unavailable (its fetch
+      // failed), so derive the room pills from the contact's own cached
+      // measure_once_rooms property instead of showing a synthetic "Sales" room.
+      const parsed = parseContactRooms(contact);
+      if (parsed.length > 0) {
+        const filtered = filterRooms(parsed);
+        if (filtered.length > 0) return filtered;
       }
       return [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
     },
@@ -1225,7 +1263,7 @@ export function CustomersPage(): React.ReactElement {
         const v = String(c.properties?.hw_lead_substatus || '').toUpperCase();
         if (v !== substatus.toUpperCase()) continue;
       }
-      out.push({ contact: c, rooms: resolveRooms(c.id) });
+      out.push({ contact: c, rooms: resolveRooms(c) });
     }
     return out;
   }, [contacts, substatus, resolveRooms]);
