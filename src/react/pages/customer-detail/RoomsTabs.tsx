@@ -104,7 +104,23 @@ export function RoomsTabs({
   }, [rooms, notes, onSave]);
 
   if (!rooms.length) {
-    return <div className="mb-5" />;
+    return (
+      <div className="mb-5">
+        <Box
+          sx={{
+            py: 2.5,
+            px: 3,
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--stone)',
+            background: 'var(--paper)',
+            color: 'var(--ink-4)',
+            fontSize: '0.875rem',
+          }}
+        >
+          No rooms yet — rooms are added during a design visit.
+        </Box>
+      </div>
+    );
   }
 
   const stageEntries = workflow?.stages

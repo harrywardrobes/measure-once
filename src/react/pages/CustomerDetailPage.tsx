@@ -255,7 +255,7 @@ export function CustomerDetailPage() {
         initRooms = normaliseRooms(ldo.rooms);
         initNotes = ldo.notes || '';
       } else {
-        initRooms = [{ room: 'Main', stageKey: 'sales', completedStatuses: {}, comments: [], stageDates: { sales: todayISO() } }];
+        initRooms = [];
       }
       setRooms(initRooms);
       setNotes(initNotes);
