@@ -32,6 +32,7 @@ import {
   type OfflineArea,
   type QueueMethod,
 } from './offlineQueue';
+import { detectConflict, type ConflictDecision } from './conflictDetection';
 
 // ── Tunables ────────────────────────────────────────────────────────────────────
 
@@ -78,62 +79,12 @@ export function classifyStatus(status: number): FailureKind {
 }
 
 // ── Conflict detection ───────────────────────────────────────────────────────────
+// The pure comparison helpers live in `conflictDetection.ts` so the
+// conflict-resolution path in `offlineQueue.ts` can reuse them without a
+// circular import. Re-exported here for callers/tests that import them from the
+// sync engine.
 
-/** Pull a numeric `version` from a server payload, checking nested records. */
-function extractVersion(data: unknown): number | null {
-  if (!data || typeof data !== 'object') return null;
-  const obj = data as Record<string, unknown>;
-  const candidates = [obj.version, (obj.visit as Record<string, unknown>)?.version,
-    (obj.designVisit as Record<string, unknown>)?.version,
-    (obj.submission as Record<string, unknown>)?.version];
-  for (const c of candidates) {
-    if (typeof c === 'number' && Number.isFinite(c)) return c;
-  }
-  return null;
-}
-
-/** Pull an `updated_at`/`updatedAt` timestamp (ms) from a server payload. */
-function extractUpdatedAt(data: unknown): number | null {
-  if (!data || typeof data !== 'object') return null;
-  const obj = data as Record<string, unknown>;
-  const nested = [obj, obj.visit, obj.designVisit, obj.submission].filter(
-    (o): o is Record<string, unknown> => !!o && typeof o === 'object',
-  );
-  for (const o of nested) {
-    const raw = o.updated_at ?? o.updatedAt;
-    if (typeof raw === 'string') {
-      const ms = Date.parse(raw);
-      if (!Number.isNaN(ms)) return ms;
-    }
-  }
-  return null;
-}
-
-export interface ConflictDecision {
-  conflicted: boolean;
-  serverVersion: number | null;
-  serverUpdatedAt: number | null;
-}
-
-/** Pure comparison: did the server copy advance past the cached base? */
-export function detectConflict(
-  base: { version?: number | null; updatedAt?: string | null },
-  serverData: unknown,
-): ConflictDecision {
-  const serverVersion = extractVersion(serverData);
-  const serverUpdatedAt = extractUpdatedAt(serverData);
-  let conflicted = false;
-  if (base.version != null && serverVersion != null && serverVersion > base.version) {
-    conflicted = true;
-  }
-  if (base.updatedAt) {
-    const baseMs = Date.parse(base.updatedAt);
-    if (!Number.isNaN(baseMs) && serverUpdatedAt != null && serverUpdatedAt > baseMs) {
-      conflicted = true;
-    }
-  }
-  return { conflicted, serverVersion, serverUpdatedAt };
-}
+export { detectConflict, type ConflictDecision };
 
 // ── User-facing surfacing ────────────────────────────────────────────────────────
 
@@ -252,14 +203,17 @@ async function processEntry(entry: QueueEntry): Promise<void> {
         snap.data,
       );
       if (decision.conflicted) {
-        // Last-write-wins-with-warning: persist the conflict for review, then
-        // proceed with the queued write below.
+        // An `abortOnConflict` entry (a "Restore server copy" replay) must NOT
+        // overwrite a server change that landed after its conflict was detected.
+        // Re-flag a fresh conflict and drop the entry instead of replaying it,
+        // so the restore can never clobber the newer server state.
         await recordConflict({
           area: entry.area,
           label: entry.label,
           url: entry.url,
           method: entry.method,
           recordKey: entry.recordKey,
+          conflictCheckUrl: entry.conflictCheckUrl,
           attemptedBody: entry.body,
           baseVersion: entry.baseVersion ?? null,
           baseUpdatedAt: entry.baseUpdatedAt ?? null,
@@ -267,9 +221,17 @@ async function processEntry(entry: QueueEntry): Promise<void> {
           serverUpdatedAt: decision.serverUpdatedAt != null
             ? new Date(decision.serverUpdatedAt).toISOString() : null,
           serverData: snap.data,
-          resolution: 'last_write_wins',
+          resolution: entry.abortOnConflict ? 'flagged' : 'last_write_wins',
         });
         surfaceConflict(entry);
+        if (entry.abortOnConflict) {
+          await removeEntry(entry.id);
+          log('warn', 'sync_restore_aborted', {
+            area: entry.area, label: entry.label, recordKey: entry.recordKey,
+          });
+          return;
+        }
+        // Otherwise (a normal edit) fall through to last-write-wins below.
       }
     }
     // A 4xx/5xx on the check URL (e.g. 404 — record deleted) falls through to the

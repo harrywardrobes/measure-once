@@ -35,6 +35,7 @@ import {
 } from './offlineDb';
 import type { CacheStore } from './offlineDb';
 import { resolveConflictRoute } from './conflictRoute';
+import { detectConflict } from './conflictDetection';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,13 @@ export interface QueueEntry {
   baseUpdatedAt?: string | null;
   /** Stable record key (e.g. `dv:123`) — links the entry to a conflict row. */
   recordKey?: string;
+  /**
+   * When true, a conflict detected at replay time **aborts** the write instead
+   * of applying it last-write-wins. Used by "Restore server copy": a restore
+   * must never overwrite a server change that landed after the conflict was
+   * detected — the sync engine re-flags a fresh conflict and drops the entry.
+   */
+  abortOnConflict?: boolean;
 
   // ── Lifecycle bookkeeping ──
   status: QueueStatus;
@@ -113,6 +121,7 @@ export interface EnqueueInput {
   baseVersion?: number | null;
   baseUpdatedAt?: string | null;
   recordKey?: string;
+  abortOnConflict?: boolean;
   dedupeKey?: string;
 }
 
@@ -123,6 +132,8 @@ export interface ConflictEntry {
   url: string;
   method: QueueMethod;
   recordKey?: string;
+  /** GET URL used to re-read the current server record (e.g. before a restore). */
+  conflictCheckUrl?: string;
   attemptedBody?: unknown;
   baseVersion?: number | null;
   baseUpdatedAt?: string | null;
@@ -196,6 +207,7 @@ export async function enqueue(input: EnqueueInput): Promise<QueueEntry | null> {
     baseVersion: input.baseVersion ?? null,
     baseUpdatedAt: input.baseUpdatedAt ?? null,
     recordKey: input.recordKey,
+    abortOnConflict: input.abortOnConflict,
     status: 'pending' as QueueStatus,
     attempts: 0,
     createdAt: now,
@@ -413,6 +425,23 @@ export interface ResolveConflictResult {
   queued: boolean;
   /** Status code (0 when queued offline / on a network error). */
   status: number;
+  /**
+   * True when the restore was **abandoned** because the server advanced again
+   * since the conflict was detected — applying it would have clobbered that
+   * newer change. A fresh conflict has been re-flagged for the user to review.
+   */
+  reconflicted?: boolean;
+}
+
+/** Fetch the current server record as JSON. Mirrors the sync-engine helper. */
+async function fetchServerSnapshot(url: string): Promise<{ ok: boolean; data: unknown }> {
+  try {
+    const r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, data };
+  } catch {
+    return { ok: false, data: null };
+  }
 }
 
 /**
@@ -468,6 +497,16 @@ function cacheTargetForConflict(conflict: ConflictEntry): { store: CacheStore; i
  * conflict). Pass a body object to restore server values: it is replayed with
  * the conflict's original `method`/`url`, and the conflict is cleared once the
  * write succeeds or is queued offline.
+ *
+ * **Guard against clobbering a newer server change.** A conflict captures the
+ * server snapshot at *detection* time; the user may click "Restore server copy"
+ * much later. Before applying the restore we re-read the live record (when
+ * online and a `conflictCheckUrl` is known) and compare it to that captured
+ * snapshot. If the server has advanced *again*, we do not write — instead we
+ * re-flag a fresh conflict (with the newer server state) and return
+ * `reconflicted: true`, so the restore can't silently overwrite the newer
+ * change. The restore write also carries the conflict-check inputs so the
+ * offline-replay path re-checks at sync time too.
  */
 export async function resolveConflict(
   conflict: ConflictEntry,
@@ -477,6 +516,49 @@ export async function resolveConflict(
     await clearConflict(conflict.id);
     return { ok: true, queued: false, status: 0 };
   }
+
+  // The snapshot the user is restoring was the server state at detection time.
+  const restoreBase = {
+    version: conflict.serverVersion ?? null,
+    updatedAt: conflict.serverUpdatedAt ?? null,
+  };
+  const hasBase = restoreBase.version != null || !!restoreBase.updatedAt;
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+  // Online re-check: if the server advanced past the snapshot we're restoring,
+  // abandon the restore and re-flag rather than overwrite the newer change.
+  if (!offline && conflict.conflictCheckUrl && hasBase) {
+    const snap = await fetchServerSnapshot(conflict.conflictCheckUrl);
+    if (snap.ok) {
+      const decision = detectConflict(restoreBase, snap.data);
+      if (decision.conflicted) {
+        await recordConflict({
+          area: conflict.area,
+          label: conflict.label,
+          url: conflict.url,
+          method: conflict.method,
+          recordKey: conflict.recordKey,
+          conflictCheckUrl: conflict.conflictCheckUrl,
+          attemptedBody: conflict.attemptedBody,
+          baseVersion: restoreBase.version,
+          baseUpdatedAt: restoreBase.updatedAt,
+          serverVersion: decision.serverVersion,
+          serverUpdatedAt: decision.serverUpdatedAt != null
+            ? new Date(decision.serverUpdatedAt).toISOString() : null,
+          serverData: snap.data,
+          resolution: 'flagged',
+        });
+        await clearConflict(conflict.id);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mo:offline-sync-conflict', {
+            detail: { area: conflict.area, label: conflict.label, reason: 'record changed on the server again' },
+          }));
+        }
+        return { ok: false, queued: false, status: 0, reconflicted: true };
+      }
+    }
+  }
+
   const res = await sendOrQueue({
     area: conflict.area,
     label: conflict.label,
@@ -484,6 +566,15 @@ export async function resolveConflict(
     url: conflict.url,
     body: resolvedBody,
     recordKey: conflict.recordKey,
+    // Re-check at replay time too: if queued offline, the sync engine compares
+    // the live record against the snapshot being restored and re-flags a stale
+    // restore instead of clobbering a newer server change. `abortOnConflict`
+    // makes that replay-time check *not* apply the write (unlike a normal
+    // last-write-wins edit) so a restore can never overwrite a newer change.
+    conflictCheckUrl: hasBase ? conflict.conflictCheckUrl : undefined,
+    baseVersion: hasBase ? restoreBase.version : undefined,
+    baseUpdatedAt: hasBase ? restoreBase.updatedAt : undefined,
+    abortOnConflict: hasBase ? true : undefined,
   });
   if (res.ok || res.queued) {
     await clearConflict(conflict.id);

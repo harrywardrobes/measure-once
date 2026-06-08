@@ -114,6 +114,34 @@ export const DialogOpen: Story = {
   render: () => <Interactive open />,
 };
 
+/**
+ * The server advanced *again* between conflict detection and the user clicking
+ * "Restore server copy". The restore is abandoned (nothing is overwritten) and a
+ * dialog-level notice explains why, while a refreshed conflict stays in the list.
+ */
+export const ReconflictOnRestore: Story = {
+  name: 'Restore re-flagged (server changed again)',
+  render: () => {
+    function Reconflict() {
+      const [conflicts] = useState<ConflictEntry[]>([SAMPLE[0]]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (_conflict, body) => {
+              // A restore (body !== null) finds the server has moved on again.
+              if (body !== null) return { ok: false, queued: false, status: 0, reconflicted: true };
+              return { ok: true, queued: false, status: 200 };
+            }}
+          />
+        </Box>
+      );
+    }
+    return <Reconflict />;
+  },
+};
+
 export const SingleConflict: Story = {
   name: 'Single conflict',
   render: () => {

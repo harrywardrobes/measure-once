@@ -352,9 +352,11 @@ function VersionRow({ label, base, server }: { label: string; base: React.ReactN
 function ConflictCard({
   conflict,
   onResolve,
+  onReconflicted,
 }: {
   conflict: ConflictEntry;
   onResolve: (conflict: ConflictEntry, resolvedBody: Record<string, unknown> | null) => Promise<ResolveConflictResult>;
+  onReconflicted?: () => void;
 }) {
   const hasVersions = conflict.baseVersion != null || conflict.serverVersion != null;
   const hasTimestamps = !!conflict.baseUpdatedAt || !!conflict.serverUpdatedAt;
@@ -383,6 +385,13 @@ function ConflictCard({
     try {
       const body = buildRestoreBody(conflict.attemptedBody, conflict.serverData, restoreKeys);
       const res = await onResolve(conflict, body);
+      // The server changed again since this conflict was detected — the restore
+      // was abandoned and a fresh conflict re-flagged. This card unmounts and a
+      // refreshed one appears; let the dialog explain why.
+      if (body !== null && res.reconflicted) {
+        onReconflicted?.();
+        return;
+      }
       // A genuine server rejection (4xx) leaves the conflict in place; surface it.
       if (body !== null && !res.ok && !res.queued) {
         setError('Could not restore the server copy. Please try again.');
@@ -537,6 +546,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
   const resolve = props.onResolve ?? live.resolve;
 
   const [open, setOpen] = useState(!!props.defaultOpen);
+  const [reconflictNotice, setReconflictNotice] = useState(false);
 
   const count = conflicts.length;
   if (count === 0) return null;
@@ -595,9 +605,32 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
             Your edits were kept (last edit wins). For each conflict, keep your edit or restore the
             server copy — expand the field comparison to choose value by value.
           </Typography>
+          {reconflictNotice && (
+            <Box
+              data-testid="conflict-reconflict-notice"
+              role="status"
+              sx={{
+                mb: 2,
+                p: 1.5,
+                borderRadius: 1,
+                border: '1px solid rgba(253,186,116,0.5)',
+                bgcolor: 'rgba(249,115,22,0.12)',
+              }}
+            >
+              <Typography variant="body2" sx={{ color: '#fdba74', fontWeight: 600 }}>
+                The server copy changed again before your restore could be applied. Nothing was
+                overwritten — please review the refreshed conflict below.
+              </Typography>
+            </Box>
+          )}
           <Stack spacing={2}>
             {conflicts.map((c) => (
-              <ConflictCard key={c.id} conflict={c} onResolve={resolve} />
+              <ConflictCard
+                key={c.id}
+                conflict={c}
+                onResolve={resolve}
+                onReconflicted={() => setReconflictNotice(true)}
+              />
             ))}
           </Stack>
         </DialogContent>
