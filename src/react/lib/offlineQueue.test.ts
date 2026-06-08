@@ -120,6 +120,24 @@ describe('isServerEquivalent', () => {
   it('returns false when resolved is array but server is not', () => {
     expect(isServerEquivalent([{ id: 1 }], { id: 1 })).toBe(false);
   });
+
+  it('server replaced one room with another (same net length): returns false because one element has no server match', () => {
+    // Server removed id:2 and added id:3 — net same length as resolved.
+    // id:2 is looked up by id in the server array, finds nothing, falls back to
+    // the index-matched server element (id:3) which has a different id → false.
+    const resolved = [{ id: 1, doorStyle: 'Shaker' }, { id: 2, doorStyle: 'Flat' }];
+    const server   = [{ id: 1, door_style: 'Shaker' }, { id: 3, door_style: 'Walnut' }];
+    expect(isServerEquivalent(resolved, server)).toBe(false);
+  });
+
+  it('server reordered AND swapped one room (same net length): only the matched rooms pass', () => {
+    // Server moved id:1 to index 1 and replaced id:2 with id:99 at index 0.
+    // id:1 is found by id-lookup → equivalent; id:2 is not found → index fallback
+    // to sArr[1] = id:1 → not equivalent → overall false.
+    const resolved = [{ id: 1, doorStyle: 'Shaker' }, { id: 2, doorStyle: 'Flat' }];
+    const server   = [{ id: 99, door_style: 'Slab' }, { id: 1, door_style: 'Shaker' }];
+    expect(isServerEquivalent(resolved, server)).toBe(false);
+  });
 });
 
 // ── reconcileForCache ────────────────────────────────────────────────────────
@@ -321,5 +339,87 @@ describe('buildRestoredCachePatch', () => {
 
     const patchMine = buildRestoredCachePatch(conflict, { address: { street: '456 Elm St', city: 'Springfield' } });
     expect(patchMine!.address).toEqual({ street: '456 Elm St', city: 'Springfield' });
+  });
+
+  it('server added one room and removed another (net same length): matched rooms use server object, unmatched room is snake-cased', () => {
+    // Server removed id:2 and added id:3 — net same length as resolved.
+    // The length guard in isServerEquivalent lets the id-based path run:
+    //   id:1 is found in server → equivalent → server object used verbatim.
+    //   id:2 is not found in server → falls back to sArr[1] = id:3 → not equivalent.
+    // Overall isServerEquivalent is false → reconcileForCache is called:
+    //   id:1 matched by id → server-equivalent → server room1 used verbatim.
+    //   id:2 not found in server → deepSnakeize applied.
+    const serverRooms = [
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door' },
+      { id: 3, door_style: 'Walnut', door_style_name: 'Walnut Door' },
+    ];
+    const conflict = makeConflict({ rooms: serverRooms });
+    const resolvedBody = {
+      rooms: [
+        { id: 1, doorStyle: 'Shaker' },
+        { id: 2, doorStyle: 'Flat' },
+      ],
+    };
+
+    const patch = buildRestoredCachePatch(conflict, resolvedBody);
+    expect(patch).not.toBeNull();
+    const rooms = patch!.rooms as unknown[];
+    expect(rooms).toHaveLength(2);
+    expect(rooms[0]).toBe(serverRooms[0]);
+    expect((rooms[0] as Record<string, unknown>).door_style_name).toBe('Shaker Door');
+    expect(rooms[1]).toEqual({ id: 2, door_style: 'Flat' });
+    expect((rooms[1] as Record<string, unknown>).door_style_name).toBeUndefined();
+  });
+
+  it('server added one room, user has fewer rooms (different lengths): reconcileForCache matches existing rooms by id', () => {
+    // Server has 3 rooms, resolved has 2 — lengths differ so isServerEquivalent
+    // short-circuits to false immediately (length guard), which is correct
+    // (the arrays are not equivalent). reconcileForCache then matches each
+    // resolved room to its server counterpart by id.
+    const serverRooms = [
+      { id: 99, door_style: 'Slab', door_style_name: 'Slab Door' },
+      { id: 1,  door_style: 'Shaker', door_style_name: 'Shaker Door' },
+      { id: 2,  door_style: 'Flat',   door_style_name: 'Flat Door' },
+    ];
+    const conflict = makeConflict({ rooms: serverRooms });
+    const resolvedBody = {
+      rooms: [
+        { id: 1, doorStyle: 'Shaker' },
+        { id: 2, doorStyle: 'Flat' },
+      ],
+    };
+
+    const patch = buildRestoredCachePatch(conflict, resolvedBody);
+    expect(patch).not.toBeNull();
+    const rooms = patch!.rooms as unknown[];
+    expect(rooms).toHaveLength(2);
+    expect(rooms[0]).toBe(serverRooms[1]);
+    expect((rooms[0] as Record<string, unknown>).door_style_name).toBe('Shaker Door');
+    expect(rooms[1]).toBe(serverRooms[2]);
+    expect((rooms[1] as Record<string, unknown>).door_style_name).toBe('Flat Door');
+  });
+
+  it('server removed a room, user still has it (different lengths): the removed room is deep-snake-cased', () => {
+    // Server has 1 room, resolved has 2 — different lengths so isServerEquivalent
+    // short-circuits to false (correct). reconcileForCache: id:1 is found in
+    // server and equivalent → server object used; id:2 is not found and there
+    // is no index fallback → deepSnakeize applied.
+    const serverRooms = [
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door' },
+    ];
+    const conflict = makeConflict({ rooms: serverRooms });
+    const resolvedBody = {
+      rooms: [
+        { id: 1, doorStyle: 'Shaker' },
+        { id: 2, doorStyle: 'Flat' },
+      ],
+    };
+
+    const patch = buildRestoredCachePatch(conflict, resolvedBody);
+    expect(patch).not.toBeNull();
+    const rooms = patch!.rooms as unknown[];
+    expect(rooms).toHaveLength(2);
+    expect(rooms[0]).toBe(serverRooms[0]);
+    expect(rooms[1]).toEqual({ id: 2, door_style: 'Flat' });
   });
 });
