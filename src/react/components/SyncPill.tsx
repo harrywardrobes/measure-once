@@ -174,10 +174,18 @@ export default function SyncPill(props: SyncPillProps) {
     const list = failures;
     if (list.length === 0) return;
     const generatedAt = Date.now();
-    void import('../lib/failuresPdf').then((m) => {
-      m.downloadFailuresPdf(list, generatedAt);
-      showToast(`Saved ${m.failuresPdfFilename(generatedAt)} — your changes are safe to discard.`);
-    });
+    void (async () => {
+      try {
+        const m = await import('../lib/failuresPdf');
+        m.downloadFailuresPdf(list, generatedAt);
+        showToast(`Saved ${m.failuresPdfFilename(generatedAt)} — your changes are safe to discard.`);
+      } catch {
+        showToast(
+          "Couldn't save the PDF — your changes were NOT saved. Please try again before discarding.",
+          true,
+        );
+      }
+    })();
   };
 
   const { pending, syncing, failed } = counts;
