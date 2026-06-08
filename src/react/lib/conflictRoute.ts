@@ -57,23 +57,58 @@ function contactIdFor(conflict: ConflictEntry): string | null {
 }
 
 /**
+ * Best-effort lookup of the design-visit id a *visit* conflict touched, checked
+ * across the record key (`dv:<id>` / `design-visit:<id>`), the attempted write
+ * body, the server snapshot, and finally the request URL
+ * (`/api/design-visits/<id>`). Returns `null` when none can be derived.
+ */
+function visitIdFor(conflict: ConflictEntry): string | null {
+  const parts = recordKeyParts(conflict.recordKey);
+  if (parts && (parts.type === 'dv' || parts.type === 'design-visit')) {
+    const id = asId(parts.id);
+    if (id) return id;
+  }
+
+  const body = (conflict.attemptedBody ?? null) as Record<string, unknown> | null;
+  const fromBody = asId(body?.id ?? body?.visitId ?? body?.visit_id);
+  if (fromBody) return fromBody;
+
+  const server = (conflict.serverData ?? null) as Record<string, unknown> | null;
+  const fromServer = asId(server?.id ?? server?.visitId ?? server?.visit_id);
+  if (fromServer) return fromServer;
+
+  const m = conflict.url.match(/\/api\/design-visits\/([^/?#]+)/);
+  if (m) {
+    try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+  }
+  return null;
+}
+
+/**
  * Resolve a conflict to an in-app deep link, or `null` when none can be derived.
  *
  * - **customer** / **photo** edits → the customer detail page `/customers/:id`.
  * - **visit** edits → the owning customer page, where design visits are reviewed
  *   (there is no standalone per-visit route). The contact id is read from the
  *   attempted body / server snapshot, since a `dv:<visitId>` key alone is not a
- *   contact id.
+ *   contact id. When the specific visit id is known, a
+ *   `#design-visit-<visitId>` fragment is appended so the customer page can
+ *   auto-expand and scroll to that exact visit.
  */
 export function resolveConflictRoute(conflict: ConflictEntry): string | null {
   const contactId = contactIdFor(conflict);
   if (!contactId) return null;
 
+  const base = `/customers/${encodeURIComponent(contactId)}`;
+
   switch (conflict.area) {
     case 'customer':
     case 'photo':
-    case 'visit':
-      return `/customers/${encodeURIComponent(contactId)}`;
+      return base;
+    case 'visit': {
+      const visitId = visitIdFor(conflict);
+      return visitId ? `${base}#design-visit-${encodeURIComponent(visitId)}` : base;
+    }
     default:
       return null;
   }

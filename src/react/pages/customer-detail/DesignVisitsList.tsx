@@ -99,6 +99,14 @@ interface WizardState {
   existingVisit: ExistingVisit | null;
 }
 
+/** Parse a `#design-visit-<id>` deep-link fragment into a numeric visit id. */
+function visitIdFromHash(hash: string): number | null {
+  const m = hash.match(/^#design-visit-(\d+)$/);
+  if (!m) return null;
+  const id = Number(m[1]);
+  return Number.isFinite(id) ? id : null;
+}
+
 export function DesignVisitsList({ contactId, visits, loading, error, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -131,24 +139,47 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     if (removed) onRefresh();
   }, [pendingEntries, onRefresh]);
 
-  const toggleExpanded = useCallback(async (id: number) => {
+  const loadDetail = useCallback((id: number) => {
+    setDetails(d => {
+      if (d[id]) return d;
+      fetch(`/api/design-visits/${id}`)
+        .then(r => r.ok ? r.json() : Promise.reject(r))
+        .then((v: DesignVisit) => setDetails(dd => ({ ...dd, [id]: { loading: false, data: v, error: null } })))
+        .catch(() => setDetails(dd => ({ ...dd, [id]: { loading: false, data: null, error: 'Could not load' } })));
+      return { ...d, [id]: { loading: true, data: null, error: null } };
+    });
+  }, []);
+
+  const toggleExpanded = useCallback((id: number) => {
     setExpanded(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
       } else {
         next.add(id);
-        if (!details[id]) {
-          setDetails(d => ({ ...d, [id]: { loading: true, data: null, error: null } }));
-          fetch(`/api/design-visits/${id}`)
-            .then(r => r.ok ? r.json() : Promise.reject(r))
-            .then((v: DesignVisit) => setDetails(d => ({ ...d, [id]: { loading: false, data: v, error: null } })))
-            .catch(() => setDetails(d => ({ ...d, [id]: { loading: false, data: null, error: 'Could not load' } })));
-        }
+        loadDetail(id);
       }
       return next;
     });
-  }, [details]);
+  }, [loadDetail]);
+
+  // Deep-link support: a conflict "Open record" link can carry a
+  // `#design-visit-<id>` fragment so this list auto-expands and scrolls to the
+  // exact visit. Runs once per fragment+visits change, only acting when the
+  // target visit is actually present, so the user can still collapse it after.
+  const deepLinkedRef = useRef<number | null>(null);
+  useEffect(() => {
+    const targetId = visitIdFromHash(window.location.hash);
+    if (targetId == null || deepLinkedRef.current === targetId) return;
+    if (!visits.some(v => v.id === targetId)) return;
+    deepLinkedRef.current = targetId;
+    setExpanded(prev => (prev.has(targetId) ? prev : new Set(prev).add(targetId)));
+    loadDetail(targetId);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-dv-id="${targetId}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [visits, loadDetail]);
 
   const handleRevision = useCallback(async (id: number) => {
     if (!isAdmin) return;
