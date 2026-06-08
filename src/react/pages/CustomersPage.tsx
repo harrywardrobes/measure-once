@@ -949,6 +949,12 @@ export function CustomersPage(): React.ReactElement {
     scheduleCountsAttempt(0, 0);
   }, []);
 
+  const excludedStatusKeys = React.useMemo(
+    () => new Set(store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key.toUpperCase())),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store.loaded],
+  );
+
   const {
     contacts,
     total,
@@ -961,7 +967,7 @@ export function CustomersPage(): React.ReactElement {
     page,
     setPage,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, refreshNonce, pageSize: customersPageSize },
+    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize },
     { onFetchSuccess: scheduleCounts },
   );
 
@@ -1515,7 +1521,7 @@ export function CustomersPage(): React.ReactElement {
                     overlap="rectangular"
                     sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', minWidth: 16, height: 16, padding: '0 4px' } }}
                   >
-                    <Typography variant="body2">Incl. excluded</Typography>
+                    <Typography variant="body2">Show all</Typography>
                   </Badge>
                 </Tooltip>
               );

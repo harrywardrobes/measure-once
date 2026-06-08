@@ -35,6 +35,9 @@ export type UsePaginatedContactsParams = {
   sortBy: string;
   search: string;
   showArchived: boolean;
+  showExcluded?: boolean;
+  /** Keys of statuses that are excluded_from_sales; used by the offline filter. */
+  excludedStatusKeys?: Set<string>;
   refreshNonce?: number;
   staleAfterDays?: number;
   pageSize?: number;
@@ -69,6 +72,8 @@ type OfflineFilterParams = {
   sortBy: string;
   search: string;
   showArchived: boolean;
+  showExcluded?: boolean;
+  excludedStatusKeys?: Set<string>;
   page: number;
   limit: number;
 };
@@ -106,15 +111,28 @@ function matchesOfflineStage(c: PaginatedContact, stage: string, showArchived: b
  * Apply the active search box, lead-status / stage filters, sort order, and
  * pagination to a set of cached customer records client-side. Mirrors the
  * server-side logic in `/api/contacts-all` so the offline experience matches
- * the online one. (Dev-mode / excluded-from-sales / staleness filters are
- * server-only concerns and intentionally omitted here.)
+ * the online one. (Dev-mode / staleness filters are server-only concerns and
+ * intentionally omitted here.)
  */
 export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
   params: OfflineFilterParams,
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
-  const { leadStatus, stage, sortBy, search, showArchived, limit } = params;
+  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, limit } = params;
   let list = cached;
+
+  // Mirror the server-side excluded_from_sales filter: hide excluded contacts
+  // by default unless showExcluded is true or the caller is explicitly
+  // filtering by a specific excluded status (same logic as the server).
+  if (!showExcluded && excludedStatusKeys && excludedStatusKeys.size > 0) {
+    const callerFilteringByExcluded = leadStatus && excludedStatusKeys.has(leadStatus.toUpperCase());
+    if (!callerFilteringByExcluded) {
+      list = list.filter((c) => {
+        const ls = (c.properties?.hs_lead_status || '').toUpperCase();
+        return !excludedStatusKeys.has(ls);
+      });
+    }
+  }
 
   if (leadStatus) {
     if (leadStatus === '__no_status__') {
@@ -168,7 +186,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize } = params;
+  const { initialPage, leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -180,7 +198,7 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize });
+  const prevFiltersRef = React.useRef({ leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
     prevFiltersRef.current.substatus !== substatus ||
@@ -188,12 +206,13 @@ export function usePaginatedContacts(
     prevFiltersRef.current.sortBy !== sortBy ||
     prevFiltersRef.current.search !== search ||
     prevFiltersRef.current.showArchived !== showArchived ||
+    prevFiltersRef.current.showExcluded !== showExcluded ||
     prevFiltersRef.current.refreshNonce !== refreshNonce ||
     prevFiltersRef.current.staleAfterDays !== staleAfterDays ||
     prevFiltersRef.current.pageSize !== pageSize;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, substatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize };
+    prevFiltersRef.current = { leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the
@@ -260,6 +279,7 @@ export function usePaginatedContacts(
     if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
     if (search) qs.set('q', search);
     if (showArchived) qs.set('archived', '1');
+    if (showExcluded) qs.set('includeExcluded', '1');
     if (staleAfterDays !== undefined) qs.set('staleAfterDays', String(staleAfterDays));
 
     (async () => {
@@ -315,6 +335,8 @@ export function usePaginatedContacts(
               sortBy,
               search,
               showArchived,
+              showExcluded,
+              excludedStatusKeys,
               page: effectivePage,
               limit,
             });
@@ -350,7 +372,7 @@ export function usePaginatedContacts(
     return () => {
       cancelled = true;
     };
-  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize]);
 
   return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, page: effectivePage, setPage };
 }

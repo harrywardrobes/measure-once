@@ -1406,17 +1406,20 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       logger.warn({ err: dbErr.message }, '[contacts-all] could not read dev_mode_enabled:');
     }
 
-    // Server-side excluded_from_sales filter — only applied for Sales-board
-    // requests (stage === 'sales').  Customers, Surveys, and other consumers
-    // of this endpoint must see all lead statuses regardless of this flag.
-    const stageParamEarly = (req.query.stage || '').trim();
-    if (stageParamEarly === 'sales') {
+    // Server-side excluded_from_sales filter — applied whenever `includeExcluded`
+    // is absent or falsy (covers both the Sales board and the Customers list by
+    // default).  Skipped when the caller is already filtering by a specific
+    // excluded status so that explicitly-requested excluded-status views still
+    // return results.
+    const includeExcluded = req.query.includeExcluded === '1';
+    if (!includeExcluded) {
       try {
         const { rows: excludedRows } = await pool.query(
           'SELECT key FROM lead_status_config WHERE excluded_from_sales = TRUE'
         );
         const excludedKeys = new Set(excludedRows.map(r => r.key));
-        if (excludedKeys.size > 0) {
+        const callerFilteringByExcluded = leadStatus && excludedKeys.has(leadStatus.toUpperCase());
+        if (excludedKeys.size > 0 && !callerFilteringByExcluded) {
           contacts = contacts.filter(c => {
             const ls = (c.properties?.hs_lead_status || '').toUpperCase();
             return !excludedKeys.has(ls);
