@@ -95,6 +95,31 @@ Pages that render cards call `loadCardActionHandlers()` on this message to keep 
 
 ---
 
+## Card Action → HubSpot Status Map
+
+Only `arrange_visit` mutates HubSpot contact properties. `summarise_phone_call` creates a HubSpot note on the contact but does not touch any status fields. `show_message` is fully read-only and makes no HubSpot calls.
+
+### `arrange_visit` — outcome × visitType mapping
+
+| `outcome` | `visitType` | `hs_lead_status` set to | `hw_lead_substatus` set to |
+|---|---|---|---|
+| `booked` | `design` | `DESIGN_SCHEDULED` | `DSSC_AGREED` |
+| `booked` | `survey` | `SURVEY_SCHEDULED` | `SRSC_AGREED` |
+| `email_sent` | `design` | `DESIGN_SCHEDULED` | `DSSC_SUGGESTED` |
+| `email_sent` | `survey` | `SURVEY_SCHEDULED` | `SRSC_SUGGESTED` |
+| `not_proceeding` | *(any)* | `NOT_SUITABLE` | *(empty — cleared)* |
+
+### How `visitType` is determined (server-side)
+
+The server reads the contact's current `hs_lead_status` from HubSpot before applying the outcome. The rule is:
+
+- If `hs_lead_status === 'awaiting_deposit'` → `visitType = 'survey'`
+- Otherwise → `visitType = 'design'`
+
+The client never sends `visitType` directly; it is always derived server-side from the contact's live status.
+
+---
+
 ## Existing Handler Types Reference
 
 ### `add_design_visit_to_calendar`
