@@ -47,7 +47,31 @@ export interface ConflictDecision {
   serverUpdatedAt: number | null;
 }
 
-/** Pure comparison: did the server copy advance past the cached base? */
+/**
+ * Pure comparison: did the server copy advance past the cached base?
+ *
+ * Detection is intentionally **version/timestamp-only** — it does not compare
+ * room arrays or any other field-level data. This design is correct for two
+ * reasons:
+ *
+ * 1. **No index-based false positives.** Because we never inspect room arrays
+ *    here, a server-side room insertion (which shifts array indices) cannot
+ *    produce a phantom conflict. The only thing that triggers a conflict is a
+ *    newer `version` or `updated_at` on the server record.
+ *
+ * 2. **Pessimistic safety.** Whenever the server record advances (for any
+ *    reason — room addition, field edit, status change), we flag the queued
+ *    write for review rather than silently clobbering the server change. The
+ *    conflict **display** path (`isServerEquivalent`, `reconcileForCache` in
+ *    `offlineQueue.ts`) uses id-based room matching so the review UI accurately
+ *    highlights exactly which rooms or fields actually diverged, letting the
+ *    user make an informed decision.
+ *
+ * This means a server room addition that bumps `version` will be flagged as a
+ * conflict even if the queued write only touched an unrelated field. That is
+ * intentional — the correct fix is not to suppress detection but to make the
+ * review UI clear (which the id-based display path already handles).
+ */
 export function detectConflict(
   base: { version?: number | null; updatedAt?: string | null },
   serverData: unknown,
