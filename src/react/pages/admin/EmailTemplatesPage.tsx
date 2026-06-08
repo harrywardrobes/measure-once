@@ -28,7 +28,10 @@ import {
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { TokenHighlightField } from '../../components/TokenHighlightField';
+import {
+  TokenHighlightField,
+  type TokenHighlightFieldHandle,
+} from '../../components/TokenHighlightField';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -268,6 +271,26 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [saving, setSaving] = useState(false);
   const [confirmUnknownOpen, setConfirmUnknownOpen] = useState(false);
 
+  // ── Click-to-insert variable chips ─────────────────────────────────────────
+  // Track the most recently focused field so a chip click inserts the token at
+  // its caret. Falls back to appending to the plain-text body if none focused.
+  const fieldRefs = useRef<Record<keyof DraftFields, React.RefObject<TokenHighlightFieldHandle>>>({
+    subject: React.createRef(),
+    body_text: React.createRef(),
+    body_html: React.createRef(),
+    footer_text: React.createRef(),
+  });
+  const lastFocusedRef = useRef<keyof DraftFields | null>(null);
+
+  const handleInsertVariable = useCallback((name: string) => {
+    const target = lastFocusedRef.current;
+    if (target) {
+      fieldRefs.current[target].current?.insertAtCaret(`{{${name}}}`);
+    } else {
+      fieldRefs.current.body_text.current?.insertAtCaret(`{{${name}}}`, { append: true });
+    }
+  }, []);
+
   // ── Token analysis ────────────────────────────────────────────────────────
   const { unknownTokens, unusedVariables, malformedTokens } = useMemo(() => {
     // Matches both balanced `{{word}}` tokens and brace runs with a mismatched
@@ -383,11 +406,19 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
             {template.variables.length > 0 && (
               <Box>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                  Available variables (insert with double curly braces, e.g. {'{{firstName}}'}):
+                  Available variables — click one to insert it at your cursor:
                 </Typography>
                 <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
                   {template.variables.map((v) => (
-                    <Chip key={v} label={`{{${v}}}`} size="small" variant="outlined" />
+                    <Tooltip key={v} title={`Insert {{${v}}} into the field you're editing`}>
+                      <Chip
+                        label={`{{${v}}}`}
+                        size="small"
+                        variant="outlined"
+                        clickable
+                        onClick={() => handleInsertVariable(v)}
+                      />
+                    </Tooltip>
                   ))}
                 </Stack>
               </Box>
@@ -445,17 +476,21 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
             )}
 
             <TokenHighlightField
+              ref={fieldRefs.current.subject}
               label="Subject"
               value={fields.subject}
               onChange={set('subject')}
+              onFocus={() => { lastFocusedRef.current = 'subject'; }}
               knownVariables={template.variables}
               required
               data-testid="template-field-subject"
             />
             <TokenHighlightField
+              ref={fieldRefs.current.body_text}
               label="Body (plain text)"
               value={fields.body_text}
               onChange={set('body_text')}
+              onFocus={() => { lastFocusedRef.current = 'body_text'; }}
               knownVariables={template.variables}
               multiline
               minRows={6}
@@ -463,9 +498,11 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               data-testid="template-field-body-text"
             />
             <TokenHighlightField
+              ref={fieldRefs.current.body_html}
               label="Body (HTML)"
               value={fields.body_html}
               onChange={set('body_html')}
+              onFocus={() => { lastFocusedRef.current = 'body_html'; }}
               knownVariables={template.variables}
               multiline
               minRows={6}
@@ -473,9 +510,11 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               data-testid="template-field-body-html"
             />
             <TokenHighlightField
+              ref={fieldRefs.current.footer_text}
               label="Footer"
               value={fields.footer_text}
               onChange={set('footer_text')}
+              onFocus={() => { lastFocusedRef.current = 'footer_text'; }}
               knownVariables={template.variables}
               multiline
               minRows={2}

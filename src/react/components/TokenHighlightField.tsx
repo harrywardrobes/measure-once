@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useId,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -91,7 +92,21 @@ export interface TokenHighlightFieldProps {
   minRows?: number;
   required?: boolean;
   helperText?: React.ReactNode;
+  /** Called when this field gains focus — lets a parent track the last-focused field. */
+  onFocus?: () => void;
   'data-testid'?: string;
+}
+
+/** Imperative handle exposed via ref for programmatic caret insertion. */
+export interface TokenHighlightFieldHandle {
+  /**
+   * Insert `text` at the current caret position (replacing any selection).
+   * When `opts.append` is true the text is appended to the end of the field
+   * instead, with a separating space added if the field is non-empty.
+   */
+  insertAtCaret: (text: string, opts?: { append?: boolean }) => void;
+  /** Move keyboard focus to the field. */
+  focus: () => void;
 }
 
 /**
@@ -106,7 +121,10 @@ export interface TokenHighlightFieldProps {
  * stay aligned; the textarea auto-grows and the single-line input syncs its
  * horizontal scroll into the backdrop.
  */
-export function TokenHighlightField({
+export const TokenHighlightField = React.forwardRef<
+  TokenHighlightFieldHandle,
+  TokenHighlightFieldProps
+>(function TokenHighlightField({
   label,
   value,
   onChange,
@@ -115,17 +133,54 @@ export function TokenHighlightField({
   minRows = 1,
   required = false,
   helperText,
+  onFocus,
   'data-testid': dataTestId,
-}: TokenHighlightFieldProps) {
+}: TokenHighlightFieldProps, ref) {
   const reactId = useId();
   const inputId = `token-field-${reactId}`;
   const [focused, setFocused] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  // Caret position to restore after a programmatic insert re-renders the field.
+  const pendingCaretRef = useRef<number | null>(null);
 
   const knownSet = useMemo(() => new Set(knownVariables), [knownVariables]);
   const segments = useMemo(() => buildSegments(value, knownSet), [value, knownSet]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => textareaRef.current?.focus(),
+      insertAtCaret: (text, opts) => {
+        const el = textareaRef.current;
+        if (!el) return;
+        let start: number;
+        let end: number;
+        let insertText = text;
+        if (opts?.append) {
+          start = value.length;
+          end = value.length;
+          if (value.length > 0 && !/\s$/.test(value)) {
+            insertText = ' ' + text;
+          }
+        } else {
+          start = el.selectionStart ?? value.length;
+          end = el.selectionEnd ?? value.length;
+        }
+        const newValue = value.slice(0, start) + insertText + value.slice(end);
+        pendingCaretRef.current = start + insertText.length;
+        // Set the DOM value so the synthetic change carries the new text, then
+        // notify the parent (its handler only reads e.target.value).
+        el.value = newValue;
+        onChange({
+          target: el,
+          currentTarget: el,
+        } as unknown as React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>);
+      },
+    }),
+    [value, onChange],
+  );
 
   // Auto-grow the textarea to fit its content (mirrors MUI's TextareaAutosize).
   useLayoutEffect(() => {
@@ -135,6 +190,18 @@ export function TokenHighlightField({
     ta.style.height = 'auto';
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value, multiline]);
+
+  // Restore focus + caret after a programmatic insert updates the value.
+  useLayoutEffect(() => {
+    if (pendingCaretRef.current == null) return;
+    const el = textareaRef.current;
+    if (el) {
+      const pos = pendingCaretRef.current;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    }
+    pendingCaretRef.current = null;
+  }, [value]);
 
   // Keep the backdrop's horizontal scroll in sync for the single-line input.
   const handleScroll = useCallback(
@@ -260,7 +327,7 @@ export function TokenHighlightField({
           value={value}
           onChange={onChange}
           onScroll={handleScroll}
-          onFocus={() => setFocused(true)}
+          onFocus={() => { setFocused(true); onFocus?.(); }}
           onBlur={() => setFocused(false)}
           rows={multiline ? minRows : undefined}
           required={required}
@@ -287,6 +354,6 @@ export function TokenHighlightField({
       )}
     </Box>
   );
-}
+});
 
 export default TokenHighlightField;

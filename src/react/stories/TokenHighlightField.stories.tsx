@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
-import { TokenHighlightField } from '../components/TokenHighlightField';
+import Typography from '@mui/material/Typography';
+import {
+  TokenHighlightField,
+  type TokenHighlightFieldHandle,
+} from '../components/TokenHighlightField';
 
 const meta: Meta<typeof TokenHighlightField> = {
   title: 'Forms/TokenHighlightField',
@@ -114,4 +119,67 @@ export const NoTokens: Story = {
   render: () => (
     <Interactive label="Footer" multiline minRows={2} initial="Sent from Measure Once." />
   ),
+};
+
+function ClickToInsert() {
+  const [subject, setSubject] = useState('Hi , welcome aboard');
+  const [body, setBody] = useState(
+    'Hello ,\n\nThanks for choosing us. We look forward to your visit.',
+  );
+  const subjectRef = useRef<TokenHighlightFieldHandle>(null);
+  const bodyRef = useRef<TokenHighlightFieldHandle>(null);
+  const lastFocused = useRef<'subject' | 'body' | null>(null);
+
+  const insert = (name: string) => {
+    if (lastFocused.current === 'subject') {
+      subjectRef.current?.insertAtCaret(`{{${name}}}`);
+    } else if (lastFocused.current === 'body') {
+      bodyRef.current?.insertAtCaret(`{{${name}}}`);
+    } else {
+      bodyRef.current?.insertAtCaret(`{{${name}}}`, { append: true });
+    }
+  };
+
+  return (
+    <Stack spacing={2} sx={{ maxWidth: 560 }}>
+      <Typography variant="caption" color="text.secondary">
+        Click a variable to insert it at the caret of the last-focused field:
+      </Typography>
+      <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+        {KNOWN.map((v) => (
+          <Chip
+            key={v}
+            label={`{{${v}}}`}
+            size="small"
+            variant="outlined"
+            clickable
+            onClick={() => insert(v)}
+          />
+        ))}
+      </Stack>
+      <TokenHighlightField
+        ref={subjectRef}
+        label="Subject"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        onFocus={() => { lastFocused.current = 'subject'; }}
+        knownVariables={KNOWN}
+      />
+      <TokenHighlightField
+        ref={bodyRef}
+        label="Body (plain text)"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        onFocus={() => { lastFocused.current = 'body'; }}
+        knownVariables={KNOWN}
+        multiline
+        minRows={6}
+      />
+    </Stack>
+  );
+}
+
+export const ClickToInsertChips: Story = {
+  name: 'Click-to-insert variable chips',
+  render: () => <ClickToInsert />,
 };
