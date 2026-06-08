@@ -51,6 +51,25 @@ interface HubStatus {
   cooldownSecondsRemaining?: number;
 }
 
+interface LeadStatusHealthEntry {
+  key: string;
+  source: string;
+}
+
+interface LeadStatusHealth {
+  ok: boolean;
+  missing: LeadStatusHealthEntry[];
+}
+
+const LEAD_STATUS_FEATURE_LABEL: Record<string, string> = {
+  OPEN_DEAL:           'Creating new contacts',
+  SURVEY_SCHEDULED:    'Booking survey visits',
+  DESIGN_SCHEDULED:    'Booking design visits',
+  NOT_SUITABLE:        'Marking visits as not suitable & photo review outcomes',
+  AWAITING_PHOTOS:     'Customer photo submission',
+  ROUGH_ESTIMATE_SENT: 'Photo review outcomes',
+};
+
 const W = window as unknown as Record<string, unknown>;
 
 function showToast(msg: string, err?: boolean) {
@@ -211,6 +230,8 @@ export function SettingsPage() {
   const [syncingHubspot, setSyncingHubspot] = useState(false);
   const [syncResult, setSyncResult] = useState<'success' | { error: string } | null>(null);
 
+  const [healthData, setHealthData] = useState<LeadStatusHealth | null>(null);
+
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -328,6 +349,15 @@ export function SettingsPage() {
     }
   }, [pageFilterConfig, pageFilterDraft, fetchPageFilterConfig]);
 
+  const fetchHealthData = useCallback(async () => {
+    try {
+      const data = await GET<LeadStatusHealth>('/api/admin/lead-status-health');
+      setHealthData(data);
+    } catch {
+      setHealthData(null);
+    }
+  }, []);
+
   const syncSubstatusesToHubSpot = useCallback(async () => {
     setSyncingHubspot(true);
     setSyncResult(null);
@@ -387,6 +417,7 @@ export function SettingsPage() {
   useEffect(() => {
     fetchHubStatus();
     fetchStatuses();
+    fetchHealthData();
     fetchDigestSettings();
     fetchWebhookStatus();
     fetchPageFilterConfig();
@@ -394,14 +425,17 @@ export function SettingsPage() {
       .then((r) => setStorybookBuilt(r.ok))
       .catch(() => setStorybookBuilt(false));
     return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
-  }, [fetchHubStatus, fetchStatuses, fetchDigestSettings, fetchWebhookStatus, fetchPageFilterConfig]);
+  }, [fetchHubStatus, fetchStatuses, fetchHealthData, fetchDigestSettings, fetchWebhookStatus, fetchPageFilterConfig]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
     let bc: BroadcastChannel;
-    try { bc = new BroadcastChannel('lead_statuses_changed'); bc.onmessage = () => fetchStatuses(); } catch { return; }
+    try {
+      bc = new BroadcastChannel('lead_statuses_changed');
+      bc.onmessage = () => { fetchStatuses(); fetchHealthData(); };
+    } catch { return; }
     return () => bc.close();
-  }, [fetchStatuses]);
+  }, [fetchStatuses, fetchHealthData]);
 
   const saveAll = useCallback(async () => {
     const wrap = document.getElementById('lead-statuses-table-wrap');
@@ -499,8 +533,9 @@ export function SettingsPage() {
       setNewKey(''); setNewStage(''); setNewLabel('');
       setReloadKey(rk => rk + 1);
       notifyLsChanged();
+      fetchHealthData();
     } catch (e) { setAddErr((e as Error).message || 'Failed to add status.'); }
-  }, [newKey, newLabel, newStage]);
+  }, [newKey, newLabel, newStage, fetchHealthData]);
 
 
   useEffect(() => {
@@ -618,6 +653,31 @@ export function SettingsPage() {
             </Box>
             <Button variant="contained" onClick={saveAll} sx={{ flexShrink: 0 }}>Save</Button>
           </Box>
+
+          {healthData && !healthData.ok && healthData.missing.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                Pipeline configuration issue — {healthData.missing.length} required{' '}
+                {healthData.missing.length === 1 ? 'status is' : 'statuses are'} missing
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                The following keys are used by the application but are not present in this list.
+                Staff actions that rely on them will fail with an error until the keys are restored.
+              </Typography>
+              <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                {healthData.missing.map(({ key }) => (
+                  <Box component="li" key={key} sx={{ mb: 0.25 }}>
+                    <Box component="code" sx={{ fontSize: '0.8em', fontWeight: 600 }}>{key}</Box>
+                    {LEAD_STATUS_FEATURE_LABEL[key] && (
+                      <Box component="span" sx={{ color: 'text.secondary', ml: 0.75, fontSize: '0.85em' }}>
+                        — {LEAD_STATUS_FEATURE_LABEL[key]}
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </Alert>
+          )}
 
           <div id="lead-statuses-table-wrap">
             {loading ? (

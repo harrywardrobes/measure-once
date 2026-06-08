@@ -4495,6 +4495,22 @@ app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, r
   }
 });
 
+// Admin: pipeline configuration health — which hardcoded keys are missing from lead_status_config
+app.get('/api/admin/lead-status-health', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE`
+    );
+    const existing = new Set(rows.map(r => r.key));
+    const missing = HARDCODED_LEAD_STATUS_KEYS.filter(({ key }) => !existing.has(key));
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: missing.length === 0, missing });
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/lead-status-health error:');
+    res.status(500).json({ error: 'Could not check lead status health.' });
+  }
+});
+
 // Admin: add new status
 app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, res) => {
   const key   = (req.body?.key   || '').trim().toUpperCase().replace(/\s+/g, '_');
