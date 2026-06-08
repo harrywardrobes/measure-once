@@ -1488,37 +1488,6 @@ export function CustomersPage(): React.ReactElement {
 
         {/* ── Sort row: search | sort-by | Show all ───────────────────────── */}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
-          <TextField
-            id="search"
-            placeholder="Search customers"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            size="small"
-            sx={{ flexGrow: 1 }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" />
-                  </InputAdornment>
-                ),
-                endAdornment: searchInput ? (
-                  <InputAdornment position="end">
-                    <Button
-                      size="small"
-                      onClick={() => setSearchInput('')}
-                      aria-label="Clear search"
-                      sx={{ minWidth: 0 }}
-                    >
-                      <ClearIcon fontSize="small" />
-                    </Button>
-                  </InputAdornment>
-                ) : null,
-              },
-              htmlInput: { 'aria-label': 'Search customers' },
-            }}
-          />
-
           <SortSelect
             value={sortBy}
             onChange={(v) => {
@@ -1528,23 +1497,6 @@ export function CustomersPage(): React.ReactElement {
             options={SORT_OPTIONS}
             label="Sort by"
           />
-
-          <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
-            <Typography variant="body2">Show archived</Typography>
-            <Toggle
-              checked={showArchived}
-              title="Show archived contacts"
-              onChange={(next) => {
-                setShowArchived(next);
-                setPage(1);
-                setStageFilter('');
-                if (!next) {
-                  setLeadStatus('');
-                  setSubstatus('');
-                }
-              }}
-            />
-          </Stack>
 
           <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
             {(() => {
