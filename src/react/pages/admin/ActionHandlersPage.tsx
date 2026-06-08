@@ -49,6 +49,7 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   start_design_visit:           'Start design visit wizard',
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
+  arrange_visit:                'Arrange visit (call → book or email)',
 };
 
 export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
@@ -56,6 +57,7 @@ export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'summarise_phone_call',
   'upload_photos_and_info',
   'review_customer_photos',
+  'arrange_visit',
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
@@ -129,6 +131,16 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• Not Suitable: opens an editable confirmation step with a pre-filled email. On confirm, the email is sent and HubSpot lead status is set to NOT_SUITABLE (sub-status cleared).\n' +
     '• Send Rough Estimate: opens a confirmation step with a price-range field and an editable pre-filled email. On confirm, the email is sent and HubSpot lead status is set to ROUGH_ESTIMATE_SENT (sub-status cleared).\n' +
     '• The review outcome is recorded in the dashboard.\n' +
+    '• No config keys required.',
+  arrange_visit:
+    'Clicking the action on a card guides the team member through a call-first visit booking flow.\n' +
+    '• Step 1 — Call: shows the customer\'s name and phone number with a contextual prompt (design vs. survey). Four outcome buttons: Booked, No answer, Call back later, Not proceeding.\n' +
+    '• Booked: opens a date/time picker pre-filled with the customer\'s address. On save, updates HubSpot lead status to DSSC_AGREED (design) or SRSC_AGREED (survey) and opens the calendar scheduling modal.\n' +
+    '• No answer — Email: collects up to three proposed date/time slots, then sends a pre-filled email via Gmail (POST /api/emails/send) asking the customer to pick a slot. On send, updates HubSpot lead status to DSSC_SUGGESTED (design) or SRSC_SUGGESTED (survey).\n' +
+    '• Call back later: closes the modal immediately — no HubSpot change.\n' +
+    '• Not proceeding: updates HubSpot lead status to not_suitable and closes the modal.\n' +
+    '• Visit type (design vs. survey) is resolved automatically from the contact\'s current hs_lead_status — awaiting_deposit → survey, everything else → design.\n' +
+    '• In-progress form state is saved to sessionStorage and restored on re-open.\n' +
     '• No config keys required.',
 };
 

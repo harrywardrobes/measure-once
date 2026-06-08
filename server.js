@@ -5794,6 +5794,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   review_customer_photos(_cfg) {
     return { value: {} };
   },
+  // No required config keys — visit type (design vs survey) is resolved server-side from lead status.
+  arrange_visit(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -6222,6 +6226,81 @@ app.post('/api/card-actions/phone-call-summary',
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
       console.error('POST /api/card-actions/phone-call-summary error:', e.response?.data || e.message);
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// Execute: arrange_visit → fetch contact info, determine visit type from lead status.
+app.post('/api/card-actions/arrange-visit',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { timeout: 15000 }
+      );
+      const props = r.data?.properties || {};
+      const leadStatus = String(props.hs_lead_status || '').toLowerCase();
+      const visitType = leadStatus === 'awaiting_deposit' ? 'survey' : 'design';
+      const firstName = String(props.firstname || '');
+      const lastName  = String(props.lastname  || '');
+      const contactName    = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactPhone   = String(props.phone || '');
+      const contactEmail   = String(props.email || '');
+      const addressParts   = [props.address, props.city, props.zip].filter(Boolean);
+      const contactAddress = addressParts.join(', ');
+      res.json({ visitType, contactName, contactPhone, contactEmail, contactAddress });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      console.error('POST /api/card-actions/arrange-visit error:', e.response?.data || e.message);
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// Execute: arrange_visit outcome → update HubSpot lead status based on outcome.
+app.post('/api/card-actions/arrange-visit/outcome',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    const outcome   = String(req.body?.outcome   || '');
+    const visitType = String(req.body?.visitType || 'design').toLowerCase();
+
+    const OUTCOME_STATUS = {
+      booked:        visitType === 'survey' ? 'SRSC_AGREED'     : 'DSSC_AGREED',
+      email_sent:    visitType === 'survey' ? 'SRSC_SUGGESTED'  : 'DSSC_SUGGESTED',
+      not_proceeding: 'not_suitable',
+    };
+
+    const newStatus = OUTCOME_STATUS[outcome];
+    if (!newStatus) return res.status(400).json({ error: 'outcome must be one of: booked, email_sent, not_proceeding.' });
+
+    try {
+      await hubspotRequestWithRetry('patch',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        { properties: { hs_lead_status: newStatus } }
+      );
+      res.json({ ok: true, newStatus });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      console.error('POST /api/card-actions/arrange-visit/outcome error:', e.response?.data || e.message);
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }
