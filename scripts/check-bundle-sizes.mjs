@@ -83,7 +83,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 38 * 1024,       // 38 kB — mount runtime + shell UI + card-action modals (raised: MONO_FONT_FAMILY token added to theme)
+    threshold: 40 * 1024,       // 40 kB — mount runtime + shell UI + card-action modals (raised: ArrangeVisitModal added)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {
