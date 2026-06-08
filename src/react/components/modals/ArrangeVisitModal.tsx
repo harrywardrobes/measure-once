@@ -133,8 +133,10 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
         setContactInfo(d);
         if (!hasDraft) {
           // Fresh open: initialise address and step from the API response.
+          // Use functional update so a stale response from a rapid reopen
+          // never clobbers a step that has already advanced past 'loading'.
           setAddress(d.contactAddress || '');
-          setStep('call');
+          setStep(prev => prev === 'loading' ? 'call' : prev);
           saveDraft(key, { step: 'call', address: d.contactAddress || '', slotIso: [null, null, null], bookedSlotIso: null });
         }
       })
@@ -142,7 +144,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
         if (!hasDraft) {
           // Fresh open: show the error and advance past the loading spinner.
           setLoadError(e.message || 'Could not load contact info.');
-          setStep('call');
+          setStep(prev => prev === 'loading' ? 'call' : prev);
         }
         // Draft restore: phone numbers just won't appear if the API is
         // unreachable; the user can still proceed with their saved state.
