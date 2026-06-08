@@ -183,7 +183,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     window.showBottomConfirm('Delete this design visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
-  const handleEdit = useCallback((id: number) => {
+  const openWizardForEdit = useCallback((id: number) => {
     const v = visits.find(x => x.id === id);
     if (!v || !['submitted', 'revision_requested', 'draft'].includes(v.status)) return;
     const detail = details[id]?.data || v;
@@ -195,6 +195,25 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     setEditingId(id);
     setWizardState({ handler: { config: {} }, ctx, existingVisit: detail as unknown as ExistingVisit });
   }, [visits, details, contactId]);
+
+  const handleEdit = useCallback((id: number) => {
+    // A queued (pending/syncing/failed) edit for this same visit means an
+    // earlier set of changes hasn't reached the server yet. Editing the server
+    // copy now risks overwriting those queued changes once both replay, so warn
+    // and let the user wait for sync or knowingly proceed on the stale copy.
+    const pending = pendingEditByVisitId.get(id);
+    if (pending && pending.status !== 'synced') {
+      const detail = pending.status === 'failed'
+        ? "This visit has changes that failed to sync and haven't reached the server yet."
+        : "This visit has changes saved on this device that haven't synced to the server yet.";
+      window.showBottomConfirm(
+        `${detail} Editing now means you'll change the server copy, which could overwrite those unsynced changes once they upload. Edit anyway?`,
+        () => openWizardForEdit(id),
+      );
+      return;
+    }
+    openWizardForEdit(id);
+  }, [pendingEditByVisitId, openWizardForEdit]);
 
   return (
     <>
