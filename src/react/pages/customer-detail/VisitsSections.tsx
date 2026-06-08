@@ -79,6 +79,7 @@ const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-
 const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
 const sxMuted: React.CSSProperties = { fontSize: '0.875rem', fontStyle: 'italic', padding: '0 4px', color: 'var(--stone-deep)' };
+const sxHelper: React.CSSProperties = { fontSize: '0.75rem', lineHeight: 1.5, padding: '6px 4px 0', color: 'var(--ink-4)' };
 const sxStack: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
 
 interface Props {
@@ -290,7 +291,13 @@ export function UpcomingVisitsSection({ contactId, contact, upcomingVisits, load
       </div>
       {loadingVisits && <p style={sxMuted}>Loading…</p>}
       {!loadingVisits && upcomingVisits.length === 0 && (
-        <p style={sxMuted}>No upcoming visits.</p>
+        <>
+          <p style={sxMuted}>No upcoming visits.</p>
+          <p style={sxHelper}>
+            Visits scheduled from card actions are saved straight to the shared
+            Google Calendar and won&rsquo;t appear here.{canEdit ? ' Use “Add visit” to track one in this rail.' : ''}
+          </p>
+        </>
       )}
       {!loadingVisits && upcomingVisits.length > 0 && (
         <div style={sxStack}>
