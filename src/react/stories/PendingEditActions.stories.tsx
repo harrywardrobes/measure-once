@@ -13,6 +13,9 @@ const failedEdit: PendingVisitEntry = {
   createdAt: Date.parse('2026-06-08T10:30:00Z'),
   estimateTotalPence: 480000,
   lastError: 'request failed (500)',
+  queuedBody: null,
+  baseVersion: null,
+  baseUpdatedAt: null,
 };
 
 const meta: Meta<typeof PendingEditActions> = {
