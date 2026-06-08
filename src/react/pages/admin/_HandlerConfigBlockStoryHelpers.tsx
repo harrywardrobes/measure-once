@@ -43,7 +43,9 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     'Generic visit scheduler — works for any visit type (survey, installation, ' +
     'remedial, workshop, etc.).\n' +
     '• Clicking the action on a card opens a DateTimePicker modal.\n' +
-    '• On submit, a visit row is created in this CRM (POST /api/visits).\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
+    'No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.',
   show_message:
     'Clicking the action on a Sales/Survey card opens a simple popup showing ' +
@@ -63,14 +65,16 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   schedule_delivery_window:
     'Clicking the action on a card opens a modal for scheduling a delivery ' +
     'window with a start and end date/time.\n' +
-    '• On submit, a visit of type "delivery" is created in this CRM and appears ' +
-    'in the "Upcoming visits" section of the customer page.\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
+    'No separate CRM visit row is created.\n' +
     'Config keys: defaultTitle (≤120 chars).',
   schedule_installation_slot:
     'Clicking the action on a card opens a modal for scheduling a single ' +
     'installation slot with a start time and duration.\n' +
-    '• On submit, a visit of type "installation" is created in this CRM and ' +
-    'appears in the "Upcoming visits" section of the customer page.\n' +
+    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
+    'No separate CRM visit row is created.\n' +
     'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars).',
 };
 
