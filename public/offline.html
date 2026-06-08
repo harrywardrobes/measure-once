@@ -60,6 +60,54 @@
       max-width: 34ch;
       color: var(--ink-2, #3a3937);
     }
+
+    /* ── Connection monitor ─────────────────────────────────────── */
+    .conn-monitor {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 auto 24px;
+      height: 28px;
+    }
+    /* Three stacked arcs that light up sequentially, like a signal icon */
+    .conn-signal {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 18px;
+    }
+    .conn-signal span {
+      display: block;
+      width: 4px;
+      border-radius: 2px;
+      background: var(--orchid, #8B2BFF);
+      opacity: 0.18;
+    }
+    .conn-signal span:nth-child(1) { height: 6px;  animation: bar-pulse 1.6s ease-in-out infinite 0s; }
+    .conn-signal span:nth-child(2) { height: 11px; animation: bar-pulse 1.6s ease-in-out infinite 0.2s; }
+    .conn-signal span:nth-child(3) { height: 16px; animation: bar-pulse 1.6s ease-in-out infinite 0.4s; }
+    .conn-signal span:nth-child(4) { height: 18px; animation: bar-pulse 1.6s ease-in-out infinite 0.6s; }
+
+    @keyframes bar-pulse {
+      0%, 100% { opacity: 0.18; }
+      40%       { opacity: 1;    }
+    }
+
+    .conn-label {
+      font-size: 0.82rem;
+      color: var(--ink-4, #8b8a87);
+      letter-spacing: 0.01em;
+      min-width: 12ch;
+      text-align: left;
+    }
+
+    /* Hide monitor once we're back online */
+    .conn-monitor.is-online {
+      display: none;
+    }
+    /* ──────────────────────────────────────────────────────────── */
+
     .offline-actions {
       display: flex;
       flex-direction: column;
@@ -106,6 +154,14 @@
         This page hasn&rsquo;t been loaded yet, so it isn&rsquo;t available offline.
         Reconnect to view it.
       </p>
+
+      <div class="conn-monitor" id="conn-monitor">
+        <div class="conn-signal" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <span class="conn-label" id="conn-label">Checking&hellip;</span>
+      </div>
+
       <div class="offline-actions">
         <button class="offline-retry" id="retry-btn" onclick="retryNow()">Try again</button>
         <a class="offline-home" href="/">Back to home</a>
@@ -115,8 +171,28 @@
   </main>
   <script>
     (function () {
-      var statusEl = document.getElementById('offline-status');
-      var retryBtn = document.getElementById('retry-btn');
+      var statusEl  = document.getElementById('offline-status');
+      var retryBtn  = document.getElementById('retry-btn');
+      var monitor   = document.getElementById('conn-monitor');
+      var connLabel = document.getElementById('conn-label');
+
+      /* Cycling label shown while offline */
+      var cycleSteps = ['Checking\u2026', 'Waiting for signal\u2026', 'Monitoring connection\u2026'];
+      var cycleIdx   = 0;
+      var cycleTimer = null;
+
+      function startCycle() {
+        if (cycleTimer) return;
+        cycleTimer = setInterval(function () {
+          cycleIdx = (cycleIdx + 1) % cycleSteps.length;
+          connLabel.textContent = cycleSteps[cycleIdx];
+        }, 2600);
+      }
+
+      function stopCycle() {
+        clearInterval(cycleTimer);
+        cycleTimer = null;
+      }
 
       function reload() {
         if (navigator.onLine) {
@@ -133,18 +209,25 @@
       };
 
       window.addEventListener('online', function () {
+        stopCycle();
+        monitor.classList.add('is-online');
         statusEl.textContent = 'Connection restored \u2014 reloading\u2026';
         retryBtn.disabled = true;
         setTimeout(reload, 400);
       });
 
       window.addEventListener('offline', function () {
+        monitor.classList.remove('is-online');
+        startCycle();
         statusEl.textContent = 'Still offline \u2014 this page will reload automatically when you reconnect.';
         retryBtn.disabled = false;
       });
 
       if (!navigator.onLine) {
         statusEl.textContent = 'This page will reload automatically when you reconnect.';
+        startCycle();
+      } else {
+        monitor.classList.add('is-online');
       }
     })();
   </script>
