@@ -54,7 +54,7 @@ const SAMPLE: ConflictEntry[] = [
     serverUpdatedAt: new Date(now - 1000 * 60 * 5).toISOString(),
     attemptedBody: { leadStatus: 'qualified' },
     serverData: { leadStatus: 'unqualified' },
-    resolution: 'last_write_wins',
+    resolution: 'flagged',
     detectedAt: now - 1000 * 60 * 3,
   },
 ];

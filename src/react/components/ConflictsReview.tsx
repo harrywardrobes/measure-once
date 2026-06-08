@@ -21,6 +21,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
 import type { ConflictEntry, OfflineArea, ResolveConflictResult } from '../lib/offlineQueue';
 import { resolveConflictRoute } from '../lib/conflictRoute';
+import { explainConflict } from '../lib/syncErrorMessages';
 
 // ── Offline sync-conflict review ─────────────────────────────────────────────────
 // When a queued offline edit replays onto a record that changed on the server,
@@ -366,6 +367,14 @@ function ConflictCard({
   const changedKeys = rows.filter((r) => r.changed).map((r) => r.key);
   const canRestore = changedKeys.length > 0;
 
+  // Plain-language explanation shared with the admin Offline support tab, so
+  // field users and admins read the same friendly, actionable wording.
+  const explained = explainConflict({
+    resolution: conflict.resolution,
+    serverVersion: conflict.serverVersion,
+    baseVersion: conflict.baseVersion,
+  });
+
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<Record<string, FieldChoice>>({});
   const [busy, setBusy] = useState(false);
@@ -444,10 +453,14 @@ function ConflictCard({
         )}
       </Stack>
 
-      <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
-        Someone else changed this record while your edit was waiting to sync. Your change was
-        applied anyway (last edit wins), overwriting the server copy. Choose which version to keep.
+      <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }} data-testid="conflict-explanation">
+        {explained.summary}
       </Typography>
+      {explained.detail && (
+        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.5 }} data-testid="conflict-explanation-detail">
+          {explained.detail}
+        </Typography>
+      )}
 
       {(hasVersions || hasTimestamps) && (
         <>
