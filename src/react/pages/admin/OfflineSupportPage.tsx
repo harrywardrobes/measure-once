@@ -26,21 +26,25 @@ import CloudDoneIcon from '@mui/icons-material/CloudDone';
 import SyncProblemIcon from '@mui/icons-material/SyncProblem';
 import SyncIcon from '@mui/icons-material/Sync';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
+import { useOfflineFailures } from '../../hooks/useOfflineFailures';
 import type { ConflictEntry } from '../../lib/offlineQueue';
 import { FEATURE_AREAS, type CapabilityLevel } from '../../lib/offlineCapabilities';
 
 /**
  * Admin → Offline support tab (#tab-offline).
  *
- * A read-only operations view over the Offline Phase 1/2 infrastructure. It does
- * NOT change any offline behaviour — it only surfaces it:
+ * An operations view over the Offline Phase 1/2 infrastructure. It surfaces:
  *  - a config-driven **capability matrix** documenting which areas work fully
  *    offline, are view-only when cached, or need a live connection;
  *  - **live sync status** (pending / syncing / failed queue counts + the last
  *    successful sync time);
+ *  - a **failed-changes list** of writes that exhausted their retry budget,
+ *    with per-item Retry / Discard actions (reusing `useOfflineFailures`, the
+ *    same hook backing the header SyncPill dialog);
  *  - a **lightweight conflicts list** of stale-write conflicts the sync engine
  *    flagged during replay, for manual review.
  *
@@ -118,6 +122,7 @@ export function OfflineSupportPage() {
   usePageTitle('Offline support · Measure Once');
 
   const counts = useOfflineQueue();
+  const { failures, retry, discard } = useOfflineFailures();
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [conflicts, setConflicts] = useState<ConflictEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -192,8 +197,8 @@ export function OfflineSupportPage() {
           <Typography variant="body2" color="text.secondary">
             Measure Once is an installable app that keeps working when your connection
             drops. The table below shows what each area can do offline, and the panels
-            track changes saved on this device that are waiting to sync. This view is
-            read-only — it reports offline behaviour but does not change it.
+            track changes saved on this device that are waiting to sync — including any
+            that failed, which you can retry or discard individually.
           </Typography>
         </CardContent>
       </Card>
@@ -332,6 +337,93 @@ export function OfflineSupportPage() {
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* Failed changes */}
+      <Card variant="outlined">
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+            <Typography variant="h6">Changes that failed to sync</Typography>
+            {failures.length > 0 && (
+              <Chip label={failures.length} color="error" size="small" />
+            )}
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            These changes are still saved on this device but couldn&apos;t be sent to the server
+            after several automatic attempts. Retry one to send it again now, or discard it if it
+            is no longer needed.
+          </Typography>
+
+          {failures.length === 0 ? (
+            <Alert severity="success" icon={<CheckCircleOutlineIcon fontSize="small" />}>
+              No failed changes — everything has synced or is still queued.
+            </Alert>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700, width: '16%' }}>Area</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Change</TableCell>
+                  <TableCell sx={{ fontWeight: 700, width: '18%' }}>Last tried</TableCell>
+                  <TableCell sx={{ fontWeight: 700, width: '18%' }} align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {failures.map((entry) => (
+                  <TableRow key={entry.id} data-testid="failed-sync-row">
+                    <TableCell>
+                      <Chip
+                        label={AREA_LABELS[entry.area] ?? entry.area}
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+                        {entry.label || entry.recordKey || 'Change'}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        data-testid="failed-sync-error"
+                        sx={{ color: 'error.main', display: 'block', wordBreak: 'break-word' }}
+                      >
+                        {entry.lastError || 'This change could not be synced after several attempts.'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatTimestamp(entry.updatedAt)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end' }}>
+                        <Button
+                          size="small"
+                          color="inherit"
+                          startIcon={<DeleteOutlineIcon />}
+                          onClick={() => void discard(entry.id)}
+                          data-testid="failed-sync-discard"
+                        >
+                          Discard
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<RefreshIcon />}
+                          onClick={() => void retry(entry.id)}
+                          data-testid="failed-sync-retry"
+                        >
+                          Retry
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
