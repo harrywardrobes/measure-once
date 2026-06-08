@@ -1,0 +1,17 @@
+Remove the filter-count badges (the (N) numbers shown next to lead-status and sub-status filter chips on the Customers page) — they take up space and aren't needed. This only exists in one place: src/react/pages/CustomersPage.tsx, rendered via the shared FilterChipRow.tsx component.
+
+Important — read before starting: the same count data (store.counts / store.substatusCounts) is used for two different things:
+
+Displaying the (N) badge — this should be removed.
+Deciding whether to hide/disable filter chips that currently have zero matching results (e.g. disabled={n === 0} and .filter((s) => (store.counts[s.key] || 0) > 0)) — this behavior should be kept (we still want empty filters hidden/disabled, we just don't want the number shown).
+So this is not a simple "delete the counts fetch" — the underlying count data still needs to be fetched to drive visibility/enabled-state, but the display of the number should go away.
+
+Specific changes:
+
+src/react/components/FilterChipRow.tsx: Remove the count-in-label behavior — line 38 (chip.count !== undefined ? \${chip.label} (${chip.count})` : chip.label) should just render chip.label. You can keep the count?: numberfield onFilterChip(line 12) if it's still needed elsewhere for visibility logic, or remove it if it's purely cosmetic — check all usages first (also referenced inFilterChipRow.stories.tsx`).
+src/react/pages/CustomersPage.tsx:
+Lines ~1364-1383: the hidden a11y <select> renders {store.nullLabel} ({nullCount}) (line 1371) and {s.label} ({n}) (line 1377) — strip the (${n}) / (${nullCount}) suffixes so it just shows the label, while keeping the disabled={n === 0} filtering logic intact.
+Lines ~1395-1414 (lead-status FilterChipRow) and ~1424-1455 (sub-status FilterChipRow): stop passing count: store.counts[...] / the conditional count (lines ~1400, 1405, 1441, 1445) into the chip objects passed to FilterChipRow, so no badge renders — but keep using the underlying count values (store.counts, store.substatusCounts) wherever they drive .filter(...) / disabled={...} logic that hides empty filter options.
+Do NOT remove or simplify the data-fetching that powers this (loadLeadStatusCounts/loadSubstatusCounts, /api/contacts-lead-status-counts//api/contacts-substatus-counts, store.counts/store.substatusCounts, scheduleCounts, retry scheduler, etc., roughly lines 270-293, 796, 826-863, 1029-1077) — it's still required to drive the "hide empty filters" behavior described above. Removing it would break that functionality.
+Do NOT touch ContactsPagination (lines ~1565-1572, total/totalPages/visibleCount) — those are result/pagination counts, not filter-option counts, and should remain exactly as they are.
+Test that: filter chips no longer show (N) numbers, but filters with zero matching results are still hidden/disabled as before, and pagination totals are unaffected.

@@ -6,10 +6,6 @@ import Chip from '@mui/material/Chip';
 export interface FilterChip {
   key: string;
   label: string;
-  /**
-   * Optional count appended to the label as "(N)". Pass `undefined` to omit.
-   */
-  count?: number;
 }
 
 export interface FilterChipRowProps {
@@ -34,13 +30,11 @@ export function FilterChipRow({ chips, value, onChange }: FilterChipRowProps) {
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'nowrap' }}>
         {chips.map((chip) => {
           const active = value === chip.key;
-          const label =
-            chip.count !== undefined ? `${chip.label} (${chip.count})` : chip.label;
           return (
             <Chip
               key={chip.key}
               data-testid="filter-chip"
-              label={label}
+              label={chip.label}
               variant={active ? 'filled' : 'outlined'}
               color={active ? 'primary' : 'default'}
               onClick={() => onChange(chip.key)}

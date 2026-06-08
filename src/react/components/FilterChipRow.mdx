@@ -13,7 +13,7 @@ An empty-string `value` represents "no filter / show all".
 ## When to use
 
 - For filtering a list by a set of discrete named categories (e.g. lead status, stage).
-- When counts per category are available and worth showing inline.
+- When the set of options is small enough to fit in a single scrollable row.
 
 ## When not to use
 
@@ -27,8 +27,8 @@ An empty-string `value` represents "no filter / show all".
 **Do:** always include an "All" chip (key `""`, label `"All"`) as the first option so
 users can clear the filter without hunting for a "Clear" button.
 
-**Don't:** show counts that are stale or out of sync with the current data — fetch
-counts reactively so chips stay accurate.
+**Don't:** show options that have zero matching results — hide or disable empty
+chips so users only see filters that will return something.
 
 ---
 

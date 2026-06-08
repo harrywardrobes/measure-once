@@ -1369,13 +1369,13 @@ export function CustomersPage(): React.ReactElement {
                 return (
                   <>
                     <option value="__no_status__" disabled={nullCount === 0}>
-                      {store.nullLabel} ({nullCount})
+                      {store.nullLabel}
                     </option>
                     {store.statuses.filter((s) => !s.excluded_from_sales).map((s) => {
                       const n = counts[s.key] || 0;
                       return (
                         <option key={s.key} value={s.key} disabled={n === 0}>
-                          {s.label} ({n})
+                          {s.label}
                         </option>
                       );
                     })}
@@ -1398,12 +1398,12 @@ export function CustomersPage(): React.ReactElement {
             chips={[
               { key: '', label: 'All statuses' },
               ...(store.counts['__no_status__'] > 0
-                ? [{ key: '__no_status__', label: store.nullLabel, count: store.counts['__no_status__'] }]
+                ? [{ key: '__no_status__', label: store.nullLabel }]
                 : []),
               ...store.statuses
                 .filter((s) => !s.excluded_from_sales)
                 .filter((s) => (store.counts[s.key] || 0) > 0)
-                .map((s) => ({ key: s.key, label: s.label, count: store.counts[s.key] || 0 })),
+                .map((s) => ({ key: s.key, label: s.label })),
             ]}
             value={leadStatus}
             onChange={(key) => {
@@ -1439,11 +1439,9 @@ export function CustomersPage(): React.ReactElement {
                 { key: '', label: 'All sub-statuses' },
                 ...visibleSubstatuses.map((s) => {
                   const chipKey = `${String(leadStatus).toUpperCase()}__${String(s.substatus_key).toUpperCase()}`;
-                  const count = stageFilter ? (store.substatusCounts[chipKey] || 0) : undefined;
                   return {
                     key: chipKey,
                     label: s.label || s.substatus_key,
-                    ...(count !== undefined ? { count } : {}),
                   };
                 }),
               ]}

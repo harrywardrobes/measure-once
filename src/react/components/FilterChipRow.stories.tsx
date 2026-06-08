@@ -3,12 +3,12 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { FilterChipRow } from './FilterChipRow';
 
 const LEAD_STATUS_CHIPS = [
-  { key: '', label: 'All', count: 42 },
-  { key: 'new', label: 'New', count: 8 },
-  { key: 'contacted', label: 'Contacted', count: 14 },
-  { key: 'qualified', label: 'Qualified', count: 11 },
-  { key: 'proposal', label: 'Proposal', count: 5 },
-  { key: 'won', label: 'Won', count: 4 },
+  { key: '', label: 'All' },
+  { key: 'new', label: 'New' },
+  { key: 'contacted', label: 'Contacted' },
+  { key: 'qualified', label: 'Qualified' },
+  { key: 'proposal', label: 'Proposal' },
+  { key: 'won', label: 'Won' },
 ];
 
 const meta: Meta<typeof FilterChipRow> = {
@@ -37,7 +37,7 @@ export const Default: Story = {
   },
   parameters: {
     docs: {
-      description: { story: '"All" chip active (empty string key) — shows counts appended to each label.' },
+      description: { story: '"All" chip active (empty string key).' },
     },
   },
 };
@@ -55,7 +55,7 @@ export const WithActiveFilter: Story = {
   },
 };
 
-export const NoCounts: Story = {
+export const AltLabels: Story = {
   args: {
     chips: [
       { key: '', label: 'All' },
@@ -68,19 +68,16 @@ export const NoCounts: Story = {
   },
   parameters: {
     docs: {
-      description: { story: 'Chips with no `count` — labels render without the "(N)" suffix.' },
+      description: { story: 'A different set of status labels with "Open" active.' },
     },
   },
 };
-
-const MANY_CHIP_COUNTS = [12, 7, 23, 4, 18, 9, 31, 2, 15, 6, 27, 11];
 
 export const ManyChips: Story = {
   args: {
     chips: Array.from({ length: 12 }, (_, i) => ({
       key: `filter-${i}`,
       label: `Filter ${i + 1}`,
-      count: MANY_CHIP_COUNTS[i],
     })),
     value: 'filter-3',
     onChange: () => {},
