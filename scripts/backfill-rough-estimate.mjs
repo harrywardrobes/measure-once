@@ -1,13 +1,17 @@
 /**
  * scripts/backfill-rough-estimate.mjs
  *
- * One-time backfill: move all HubSpot contacts currently sitting on
- * hs_lead_status = AWAITING_PHOTOS (who have a submitted customer-info form)
- * to hs_lead_status = ROUGH_ESTIMATE_SENT.
+ * One-time backfill: move ALL HubSpot contacts currently sitting on
+ * hs_lead_status = AWAITING_PHOTOS to hs_lead_status = ROUGH_ESTIMATE
+ * (the HubSpot enum value; the app's internal key is ROUGH_ESTIMATE_SENT).
  *
  * The user confirmed every AWAITING_PHOTOS contact has already been manually
- * reviewed and a rough estimate was sent outside the app.  This script makes
- * HubSpot and the local lead_status_config consistent with that reality.
+ * reviewed and a rough estimate was sent.  This script makes HubSpot and the
+ * local lead_status_config consistent with that reality.
+ *
+ * Local customer_info_submissions are cross-referenced for audit logging only
+ * — contacts without an in-app form submission (photos sent via email/WhatsApp)
+ * are still updated.
  *
  * Usage:
  *   node scripts/backfill-rough-estimate.mjs
@@ -195,13 +199,15 @@ async function main() {
     return;
   }
 
-  // 4a. Ensure local lead_status_config row exists
+  // 4a. Ensure local lead_status_config row exists (hard precondition)
   console.log('\n4/4  Applying updates…');
   try {
     await ensureRoughEstimateSentLocal();
     console.log('     ✓  ROUGH_ESTIMATE_SENT ensured in local lead_status_config.');
   } catch (err) {
-    console.error('     ⚠  Could not ensure local lead_status_config row (non-fatal):', err.message);
+    console.error('❌  Could not ensure local lead_status_config row — aborting before HubSpot writes:', err.message);
+    await pool.end();
+    process.exit(1);
   }
 
   // 4b. Patch each contact in HubSpot
@@ -222,11 +228,30 @@ async function main() {
     await delay(120);
   }
 
-  console.log(`\n────────────────────────────────────────`);
-  console.log(`  Updated : ${successCount}`);
-  if (failCount > 0) {
-    console.log(`  Failed  : ${failCount} (check errors above and re-run to retry)`);
+  // 4c. Post-run verification: count remaining AWAITING_PHOTOS contacts
+  let remaining = '(skipped — failures present)';
+  if (failCount === 0) {
+    try {
+      const verifyResp = await http.post(
+        `${HS_BASE}/crm/v3/objects/contacts/search`,
+        {
+          filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: 'AWAITING_PHOTOS' }] }],
+          limit: 1,
+        },
+        { headers: HS_HEADERS }
+      );
+      remaining = String(verifyResp.data.total ?? verifyResp.data.results?.length ?? '?');
+    } catch {
+      remaining = '(verification request failed)';
+    }
   }
+
+  console.log(`\n────────────────────────────────────────`);
+  console.log(`  Updated                    : ${successCount}`);
+  if (failCount > 0) {
+    console.log(`  Failed                     : ${failCount} (check errors above and re-run to retry)`);
+  }
+  console.log(`  Remaining AWAITING_PHOTOS  : ${remaining}`);
   console.log(`────────────────────────────────────────\n`);
 
   await pool.end();
