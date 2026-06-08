@@ -134,6 +134,24 @@ Middleware: `isAuthenticated`, `requirePrivilege('member')`, `requireHubspotToke
 ### `show_message`
 Opens a read-only popup with an admin-authored message. Config: `message` (required, ≤2000 chars), `title` (≤120 chars).
 
+### `arrange_visit`
+Opens `ArrangeVisitModal` (React, `src/react/components/modals/ArrangeVisitModal.tsx`) — a two-step flow that first loads the contact's current visit context, then lets the user record one of three outcomes: **Booked**, **Email sent**, or **Not proceeding**.
+
+**API routes (both share the same middleware chain):**
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/card-actions/arrange-visit` | Fetches contact properties from HubSpot (`contactName`, `contactPhone`, `contactEmail`, `contactAddress`) and determines `visitType` server-side. Returns `{ visitType, contactName, contactPhone, contactEmail, contactAddress }`. |
+| `POST` | `/api/card-actions/arrange-visit/outcome` | Accepts `{ contactId, outcome, visitType }` and applies the outcome to the contact's HubSpot `hs_lead_status` and `hw_lead_substatus`. Returns `{ ok, hs_lead_status, hw_lead_substatus }`. |
+
+Middleware (both routes): `isAuthenticated`, `requirePrivilege('member')`, `requireHubspotToken`, `hubspotMutationLimiter`.
+
+**Config keys:** none — `config` is always `{}` for this handler type.
+
+**Draft persistence:** the modal saves in-progress form state to `sessionStorage` under the key `mo-arrange-visit-draft-<contactId>` and clears it on a successful outcome submission.
+
+**`visitType` flow:** the first route derives `visitType` server-side from the contact's live `hs_lead_status` (see [Card Action → HubSpot Status Map](#card-action--hubspot-status-map) above) and returns it to the client. The client stores it locally and echoes it back as `visitType` in the outcome request body. The outcome route accepts the client-supplied value with a fallback to `'design'`.
+
 ---
 
 ## Proposed New Handler: `start_design_visit`
