@@ -1,0 +1,64 @@
+Now I have a full picture of the codebase. Let me write the Replit prompt.
+
+---
+
+Here's your Replit prompt:
+
+---
+
+## Replit Prompt: Sync Admin HubSpot Lead Statuses Panel with HubSpot
+
+**Context:**
+This is a Next.js/Express app with a PostgreSQL database. There is an admin settings page at `src/react/pages/admin/SettingsPage.tsx` that manages a `lead_status_config` table (key, label, sort_order, excluded_from_sales, stage, shorthand). There is also a HubSpot integration — `hs_lead_status` is an enumeration property on HubSpot contacts. A function `syncLeadStatusesToHubSpot()` in `server.js` pushes local statuses *to* HubSpot, but currently there is no way to pull and reconcile from HubSpot back to the local DB.
+
+**Goal:**
+Add a "Sync from HubSpot" feature to the admin panel so that the local `lead_status_config` table stays in sync with whatever enumeration options exist on HubSpot's `hs_lead_status` property — including their order.
+
+---
+
+### What to build:
+
+**1. New API endpoint: `GET /api/admin/hubspot-lead-statuses`**
+- Calls the HubSpot Properties API: `GET https://api.hubapi.com/crm/v3/properties/contacts/hs_lead_status`
+- Uses `HUBSPOT_ACCESS_TOKEN` from `hubspot-creds.js`
+- Returns the `options` array from the response (each option has `value`, `label`, `displayOrder`, `hidden`)
+- Returns `{ options: [...] }` or error with appropriate code
+
+**2. New API endpoint: `POST /api/admin/hubspot-lead-statuses/import`**
+- Accepts `{ options: [...] }` in the request body (the raw HubSpot options)
+- For each non-hidden option, upserts into `lead_status_config`:
+  - `key` = option `value` (uppercased, already is in HubSpot format)
+  - `label` = option `label` (only update label if this is a NEW row, don't overwrite existing custom labels)
+  - `sort_order` = option `displayOrder`
+- Does NOT delete statuses that exist locally but not in HubSpot (to preserve local-only configs)
+- Does NOT overwrite `excluded_from_sales`, `stage`, or `shorthand` on existing rows
+- Returns `{ upserted: number, skipped: number }`
+- After upserting, invalidates the lead status guard cache (same pattern used in existing PATCH endpoints)
+- Admin-only (use existing `requireAdmin` middleware)
+
+**3. Update `SettingsPage.tsx` — add a "Sync from HubSpot" UI section**
+- In the Lead Status Config section, add a button: **"Import order & statuses from HubSpot"**
+- On click, call `GET /api/admin/hubspot-lead-statuses` first to preview
+- Show a preview modal/popover listing the statuses that will be added or reordered, with a confirm step
+- On confirm, POST to `/api/admin/hubspot-lead-statuses/import`
+- Show a success toast: "Synced X statuses from HubSpot"
+- Refetch the local lead-statuses list after import
+
+**4. Visual diff in preview:**
+- For each HubSpot option, show one of: `NEW` (doesn't exist locally), `REORDERED` (sort_order differs), or `OK` (already in sync)
+- If HubSpot has options that are `hidden: true`, skip them entirely
+
+---
+
+### Key files to touch:
+- `server.js` — add two new admin routes near the existing `/api/admin/lead-statuses` routes
+- `src/react/pages/admin/SettingsPage.tsx` — add the button, preview modal, and import logic
+- Use the existing `hubspot-creds.js` pattern for credentials
+- Use the existing `requireAdmin` middleware pattern for auth
+
+### Do NOT:
+- Delete local statuses that aren't in HubSpot
+- Overwrite `excluded_from_sales`, `stage`, `shorthand`, or labels on existing rows
+- Change the existing `syncLeadStatusesToHubSpot()` push direction — this is additive
+
+---
