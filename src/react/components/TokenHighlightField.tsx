@@ -11,6 +11,7 @@ import React, {
 import Box from '@mui/material/Box';
 import FormHelperText from '@mui/material/FormHelperText';
 import Tooltip from '@mui/material/Tooltip';
+import { visuallyHidden } from '@mui/utils';
 
 import { STATUS_COLORS } from '../theme';
 
@@ -353,6 +354,32 @@ export const TokenHighlightField = React.forwardRef<
   const knownSet = useMemo(() => new Set(knownVariables), [knownVariables]);
   const segments = useMemo(() => buildSegments(value, knownSet), [value, knownSet]);
 
+  // ── Keyboard / screen-reader parity for malformed-token hints ─────────────
+  // The highlighted backdrop is `aria-hidden`, so the hover hint is invisible to
+  // assistive tech. We mirror the same `malformedReasonHint()` wording into a
+  // visually-hidden description associated with the input via `aria-describedby`,
+  // so a screen reader announces *why* the field's tokens are flagged on focus —
+  // no mouse required. Reasons are deduped and surfaced in the canonical order.
+  const malformedCount = useMemo(
+    () => segments.filter((s) => s.kind === 'malformed').length,
+    [segments],
+  );
+  const malformedDescription = useMemo(() => {
+    if (malformedCount === 0) return '';
+    const present = new Set(
+      segments
+        .filter((s) => s.kind === 'malformed' && s.malformedReason)
+        .map((s) => s.malformedReason as MalformedReason),
+    );
+    const reasons = MALFORMED_REASON_ORDER.filter((r) => present.has(r));
+    const lead =
+      malformedCount === 1
+        ? '1 placeholder in this field needs attention.'
+        : `${malformedCount} placeholders in this field need attention.`;
+    return [lead, ...reasons.map((r) => malformedReasonHint(r))].join(' ');
+  }, [segments, malformedCount]);
+  const malformedDescId = `${inputId}-malformed`;
+
   useImperativeHandle(
     ref,
     () => ({
@@ -584,6 +611,7 @@ export const TokenHighlightField = React.forwardRef<
           rows={multiline ? minRows : undefined}
           required={required}
           aria-required={required || undefined}
+          aria-describedby={malformedDescription ? malformedDescId : undefined}
           spellCheck={false}
           sx={{
             ...sharedLayer,
@@ -622,6 +650,15 @@ export const TokenHighlightField = React.forwardRef<
             sx={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }}
           />
         </Tooltip>
+
+        {/* Screen-reader-only description of any malformed placeholders, tied to
+            the input via aria-describedby. Mirrors the hover hint wording so
+            keyboard / screen-reader users get the same explanation on focus. */}
+        {malformedDescription && (
+          <Box component="span" id={malformedDescId} sx={visuallyHidden}>
+            {malformedDescription}
+          </Box>
+        )}
       </Box>
 
       {helperText != null && helperText !== '' && (
