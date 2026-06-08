@@ -58,6 +58,9 @@ const { count, size, warnings } = await generateSW({
     'tokens.css',
     'app-styles.css',
     'manifest.json',
+    // Friendly offline fallback for never-cached navigations (served by the
+    // navigate runtime cache's precacheFallback below).
+    'offline.html',
   ],
   globIgnores: ['**/*.map', 'storybook/**'],
   swDest: SW_DEST,
@@ -117,7 +120,10 @@ const { count, size, warnings } = await generateSW({
       };
     }),
     // App-shell navigations (server-rendered EJS). NetworkFirst so online users
-    // always get fresh HTML, offline users get the last cached shell.
+    // always get fresh HTML, offline users get the last cached shell. When a
+    // navigation misses both the network (offline) and the mo-pages cache (page
+    // never visited), precacheFallback returns the friendly offline document
+    // instead of letting the request fail with the browser error page.
     {
       urlPattern: ({ request, sameOrigin }) => sameOrigin && request.mode === 'navigate',
       handler: 'NetworkFirst',
@@ -126,6 +132,7 @@ const { count, size, warnings } = await generateSW({
         networkTimeoutSeconds: 3,
         expiration: { maxEntries: 50, maxAgeSeconds: ONE_DAY },
         cacheableResponse: { statuses: [200] },
+        precacheFallback: { fallbackURL: '/offline.html' },
       },
     },
   ],

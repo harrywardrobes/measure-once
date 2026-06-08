@@ -19,6 +19,7 @@ Measure Once is an installable Progressive Web App with offline support.
 | Service worker | `public/sw.js` (generated) | Workbox precache + runtime caching. Built by `scripts/build-sw.mjs`. Gitignored. |
 | SW registration | `src/react/lib/registerServiceWorker.ts` | Registers `/sw.js` at scope `/` (skipped under Vite dev). Called from `main.tsx`. |
 | Offline indicator | `src/react/context/ConnectionToastContext.tsx` + `GlobalHeader.tsx` | `navigator.onLine` + online/offline events drive an "Offline" pill in the header. |
+| Offline fallback page | `public/offline.html` | Static, branded "You're offline" document (no network / no React chunks needed). Precached and served by the navigate runtime cache's `precacheFallback` when an unvisited page is opened offline. Links back to `/`. |
 | Structured store | `src/react/lib/offlineDb.ts` | IndexedDB (`idb`) cache of customer/visit/photo data, plus the Phase 2 `outbox` + `conflicts` stores and their typed accessors (DB v2). |
 | Write queue | `src/react/lib/offlineQueue.ts` | Domain write queue: `enqueue`/dedupe, status/list/counts, pub/sub, conflict log, and the `sendOrQueue` helper (Blob/multipart aware). |
 | Sync engine | `src/react/lib/syncEngine.ts` | Replays queued writes in order on `online` + on an interval, with retry backoff, conflict detection, and failure surfacing. Bootstrapped via `initOfflineSync()` in `registerServiceWorker.ts` (called from `main.tsx`). |
@@ -48,7 +49,7 @@ client reloads once on `controllerchange` to run against the new bundle.
 
 | Cache | Contents | Strategy | TTL | Max entries |
 |---|---|---|---|---|
-| workbox precache | React bundle/chunks/assets, fonts, CSS, icons, manifest, stable HTML routes (`/`, `/customers`, `/profile`) | Precache (revisioned) | until next build | — |
+| workbox precache | React bundle/chunks/assets, fonts, CSS, icons, manifest, stable HTML routes (`/`, `/customers`, `/profile`), and the offline fallback (`/offline.html`) | Precache (revisioned) | until next build | — |
 | `mo-pages` | App-shell navigations (dynamic EJS pages, e.g. `/customers/:id`) | NetworkFirst (3s timeout) | 24h | 50 |
 | `mo-customers` | `GET /api/contacts-all`, `…lead-status-counts`, `…substatus-counts`, `/api/lead-statuses`, `/api/lead-substatuses`, `/api/workflow`, `/api/contacts/:id`(`/localdata`\|`/tasks`) | StaleWhileRevalidate | 12h | 200 |
 | `mo-visits` | `GET /api/visits`, `/api/design-visits`(`/:id`), `/api/events` | StaleWhileRevalidate | 12h | 100 |
