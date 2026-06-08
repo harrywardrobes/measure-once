@@ -193,6 +193,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/job-roles',                            level: 'admin' },
   { method: 'POST',   path: '/api/admin/job-roles',                            level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/job-roles/__nope__',                   level: 'admin' },
+  { method: 'POST',   path: '/api/email-templates/render',                    level: 'auth',   body: { key: 'arrange_visit_no_answer', vars: {} } },
   { method: 'GET',    path: '/api/admin/email-templates',                      level: 'admin' },
   { method: 'GET',    path: '/api/admin/email-templates/customer_invite',      level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/email-templates/customer_invite',      level: 'admin', body: { subject: 'x' } },
