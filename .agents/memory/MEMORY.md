@@ -2,3 +2,4 @@
 - [MUI v6 Stack layout props](mui-v6-stack-props.md) — shorthand layout props (alignItems, flexWrap, direction) must go inside sx={} on Stack, not as direct props.
 - [Isolated test DB schema](isolated-test-db-schema.md) — temp :ci DBs now need migrations applied + rate_limit warmup in with-test-db.js (schema no longer built at boot); design_visit created_by is numeric user id.
 - [Schema migration parity](schema-migration-parity.md) — verify migrations via golden-vs-fresh DB column/index/constraint diff; dev DB has legacy orphan tables/columns to exclude.
+- [Bundle-size gate & idb](bundle-size-idb.md) — main.js has a ~40kB gzip gate; keep idb/offlineDb out of the always-loaded bundle via dynamic import().

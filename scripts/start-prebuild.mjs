@@ -35,6 +35,10 @@ if (existsSync(BUNDLE)) {
   execSync('node scripts/check-bundle-sizes.mjs', { stdio: 'inherit' });
 }
 
+// Always (re)generate the service worker so public/sw.js matches the current
+// bundle. Cheap (~ms) and idempotent, so it's safe on the skip-build path too.
+execSync('node scripts/build-sw.mjs', { stdio: 'inherit' });
+
 if (existsSync(STORYBOOK)) {
   console.log('[start-prebuild] Storybook already built — skipping.');
 } else {

@@ -25,6 +25,7 @@ import { ChangePasswordCard } from '../components/ChangePasswordDialog';
 import { Pill } from '../components/Pill';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { clearOfflineData } from '../lib/registerServiceWorker';
 
 type Profile = {
   id: string;
@@ -580,11 +581,16 @@ function GoogleCalendarCard() {
 
 function AccountActionsCard({ isAdmin }: { isAdmin: boolean }) {
   const onSignOut = () => {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/api/logout';
-    document.body.appendChild(form);
-    form.submit();
+    const submit = () => {
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = '/api/logout';
+      document.body.appendChild(form);
+      form.submit();
+    };
+    // Clear cached offline data first so it doesn't persist for the next user
+    // on a shared browser; submit regardless of success.
+    clearOfflineData().finally(submit);
   };
 
   const rowSx = {

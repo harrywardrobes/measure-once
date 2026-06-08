@@ -240,6 +240,20 @@ app.use(
   })
 );
 
+// Service worker: served from the site root so it can control the whole origin
+// (scope "/"). Sent with no-cache + Service-Worker-Allowed so browsers always
+// re-validate it and pick up new builds promptly. Must precede express.static
+// so these headers win over the default static handling.
+app.get('/sw.js', (_req, res) => {
+  const swPath = path.join(__dirname, 'public', 'sw.js');
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Service-Worker-Allowed', '/');
+  res.type('application/javascript');
+  res.sendFile(swPath, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 

@@ -15,11 +15,12 @@ import HubIcon from '@mui/icons-material/Hub';
 import EventIcon from '@mui/icons-material/Event';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import StorageIcon from '@mui/icons-material/Storage';
+import CloudOffIcon from '@mui/icons-material/CloudOff';
 import type { CurrentUser } from '../hooks/useCurrentUser';
 import { useAuth } from '../contexts/AuthContext';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
-import { useServiceStatuses, useConnectionToast, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
+import { useServiceStatuses, useConnectionToast, useOnlineStatus, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
 import { BRAND_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
 
@@ -175,6 +176,41 @@ export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps)
   );
 }
 
+// ── Offline indicator ──────────────────────────────────────────────────────────
+
+function OfflinePill() {
+  return (
+    <Tooltip title="You're offline — showing saved data. Changes can't be sent until you reconnect.">
+      <Box
+        component="span"
+        role="status"
+        aria-live="polite"
+        aria-label="Offline — showing saved data"
+        data-testid="offline-pill"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          height: 28,
+          px: 1,
+          borderRadius: '8px',
+          color: '#fcd34d',
+          bgcolor: 'rgba(245,158,11,0.16)',
+          border: '1px solid rgba(252,211,77,0.4)',
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.03em',
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <CloudOffIcon fontSize="small" />
+        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Offline</Box>
+      </Box>
+    </Tooltip>
+  );
+}
+
 // ── GlobalHeader ───────────────────────────────────────────────────────────────
 
 export function GlobalHeader() {
@@ -183,6 +219,7 @@ export function GlobalHeader() {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const serviceStatuses = useServiceStatuses();
   const { checkServicesOnMount } = useConnectionToast();
+  const online = useOnlineStatus();
 
   usePrivilegeSync();
 
@@ -298,25 +335,33 @@ export function GlobalHeader() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-          {/* Service status icons — always visible with checking/ok/error/warning states */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              mr: 0.25,
-            }}
-            role="group"
-            aria-label="Service status"
-          >
-            {visibleServices.map((svc) => (
-              <ServiceStatusBadge
-                key={svc}
-                service={svc}
-                status={serviceStatuses.get(svc) ?? 'checking'}
-              />
-            ))}
-          </Box>
+          {/* When offline, the per-service badges are meaningless (every check
+              would fail), so show a single Offline pill instead. */}
+          {!online ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', mr: 0.25 }}>
+              <OfflinePill />
+            </Box>
+          ) : (
+            /* Service status icons — visible with checking/ok/error/warning states */
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mr: 0.25,
+              }}
+              role="group"
+              aria-label="Service status"
+            >
+              {visibleServices.map((svc) => (
+                <ServiceStatusBadge
+                  key={svc}
+                  service={svc}
+                  status={serviceStatuses.get(svc) ?? 'checking'}
+                />
+              ))}
+            </Box>
+          )}
 
           <Tooltip title={`Search (${kbdHint})`}>
             <IconButton

@@ -4,6 +4,7 @@ import type { SearchSettings } from '../lib/searchSettings';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { useContactSearch } from '../hooks/useContactSearch';
 import { triggerLoad as triggerQBLoad } from '../lib/qbInvoicesStore';
+import { clearOfflineData } from '../lib/registerServiceWorker';
 import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -201,9 +202,10 @@ export function CommandPalette() {
         location.href = '/customers?new=1';
       },
       'sign-out': () => {
-        fetch('/api/logout', { method: 'POST' })
-          .then(() => { location.href = '/login?signed_out=1'; })
-          .catch(() => { location.href = '/login?signed_out=1'; });
+        const done = () => { location.href = '/login?signed_out=1'; };
+        clearOfflineData().finally(() => {
+          fetch('/api/logout', { method: 'POST' }).then(done).catch(done);
+        });
       },
       'go-admin-group-people':        () => adminGroupNav('people'),
       'go-admin-group-configuration': () => adminGroupNav('configuration'),

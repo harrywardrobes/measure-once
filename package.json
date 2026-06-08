@@ -15,9 +15,10 @@
     "dev": "nodemon server.js",
     "dev:react": "vite",
     "watch:react": "node scripts/watch-react.mjs",
-    "build:react:dev": "node scripts/generate-tokens-css.mjs && vite build",
+    "build:react:dev": "node scripts/generate-tokens-css.mjs && vite build && node scripts/build-sw.mjs",
     "typecheck": "tsc --noEmit",
-    "build:react": "node scripts/generate-tokens-css.mjs && npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs",
+    "build:react": "node scripts/generate-tokens-css.mjs && npm run typecheck && vite build && node scripts/check-bundle-sizes.mjs && node scripts/build-sw.mjs",
+    "build:sw": "node scripts/build-sw.mjs",
     "bundle-sizes": "node scripts/check-bundle-sizes.mjs",
     "storybook": "storybook dev -p 6006",
     "watch:storybook": "storybook dev -p 6006",
@@ -291,6 +292,7 @@
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
     "googleapis": "^128.0.0",
+    "idb": "^8.0.3",
     "memoizee": "^0.4.17",
     "multer": "^2.1.1",
     "node-pg-migrate": "^8.0.4",
@@ -302,6 +304,7 @@
     "pino-pretty": "^13.1.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "workbox-build": "^7.4.1",
     "zxcvbn": "^4.4.2"
   },
   "devDependencies": {

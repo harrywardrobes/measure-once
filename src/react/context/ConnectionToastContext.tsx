@@ -30,6 +30,31 @@ function _notifyAll(): void {
   for (const cb of _updateCallbacks) cb();
 }
 
+// ── Browser online/offline state ──────────────────────────────────────────────
+// Tracked separately from per-service connection status: this reflects the
+// device's own connectivity (navigator.onLine) rather than whether a specific
+// upstream integration is reachable. Subscribers re-render when it flips.
+
+let _online: boolean =
+  typeof navigator === 'undefined' || typeof navigator.onLine === 'undefined'
+    ? true
+    : navigator.onLine;
+const _onlineCallbacks = new Set<() => void>();
+let _onlineListenersBound = false;
+
+function _setOnline(next: boolean): void {
+  if (_online === next) return;
+  _online = next;
+  for (const cb of _onlineCallbacks) cb();
+}
+
+function _ensureOnlineListeners(): void {
+  if (_onlineListenersBound || typeof window === 'undefined') return;
+  _onlineListenersBound = true;
+  window.addEventListener('online', () => _setOnline(true));
+  window.addEventListener('offline', () => _setOnline(false));
+}
+
 function _fire(service: ConnectionService, kind: ToastKind): void {
   const newStatus: ServiceStatus = kind === 'disconnected' ? 'error' : 'ok';
   const prev = _lastKnown.get(service);
@@ -304,4 +329,30 @@ export function useServiceStatuses(): Map<ConnectionService, ServiceStatus> {
   }, []);
 
   return _lastKnown;
+}
+
+/**
+ * Returns whether the device currently has network connectivity
+ * (`navigator.onLine`), re-rendering when the browser fires `online` /
+ * `offline` events. Used by GlobalHeader to show an offline indicator.
+ *
+ * `navigator.onLine === false` is authoritative (definitely offline); `true`
+ * only means a network interface is up, not that the server is reachable — so
+ * pair this with the per-service status for full connection awareness.
+ */
+export function useOnlineStatus(): boolean {
+  const [, forceRender] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => {
+    _ensureOnlineListeners();
+    // Re-sync in case connectivity changed between module init and mount.
+    if (typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean') {
+      _setOnline(navigator.onLine);
+    }
+    const cb = () => forceRender();
+    _onlineCallbacks.add(cb);
+    return () => { _onlineCallbacks.delete(cb); };
+  }, []);
+
+  return _online;
 }

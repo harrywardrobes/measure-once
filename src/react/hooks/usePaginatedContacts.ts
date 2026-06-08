@@ -1,4 +1,5 @@
 import React from 'react';
+import { cacheRecords } from '../lib/offlineDb';
 
 export type PaginatedContact = {
   id: string;
@@ -173,6 +174,8 @@ export function usePaginatedContacts(
         }
         const list = data.results || [];
         setContacts(list);
+        // Write-through to the offline store (best-effort, never blocks the UI).
+        void cacheRecords('customers', list);
         setTotal(data.total != null ? data.total : list.length);
         setTotalPages(data.totalPages || 1);
         setLoading(false);

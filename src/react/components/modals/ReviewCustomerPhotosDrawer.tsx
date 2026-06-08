@@ -12,6 +12,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { cacheRecord } from '../../lib/offlineDb';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,8 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           return;
         }
         setSubmission(d.submission);
+        // Write-through to the offline store (best-effort, never blocks the UI).
+        void cacheRecord('photos', ctx.contactId, d.submission);
         setStep('review');
       })
       .catch(e => {

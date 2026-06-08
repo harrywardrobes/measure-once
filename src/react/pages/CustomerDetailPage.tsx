@@ -19,6 +19,7 @@ import {
 } from './customer-detail/types';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { cacheRecord, cacheRecords } from '../lib/offlineDb';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,8 @@ export function CustomerDetailPage() {
   const fetchContact = useCallback(async (): Promise<Contact | null> => {
     const c = await apiFetch<Contact>(`/api/contacts/${contactId}`);
     if (!c?.id) return null;
+    // Write-through to the offline store (best-effort, never blocks the UI).
+    void cacheRecord('customers', contactId, c);
     // Sync globals
     const g = window as unknown as Record<string, unknown>;
     const st = ((g.state as Record<string, unknown>) || {});
@@ -169,6 +172,7 @@ export function CustomerDetailPage() {
     try {
       const v = await apiFetch<DesignVisit[]>(`/api/design-visits?contactId=${encodeURIComponent(contactId)}`);
       setDesignVisits(Array.isArray(v) ? v : []);
+      if (Array.isArray(v)) void cacheRecords('visits', v, (dv) => `dv:${dv.id}`);
     } catch {
       setDvError('load-error');
     } finally {
@@ -188,6 +192,7 @@ export function CustomerDetailPage() {
         : [];
       setUpcomingVisits(filtered.filter(v => new Date(v.endAt).getTime() >= now));
       setPastVisits(filtered.filter(v => new Date(v.endAt).getTime() < now).reverse());
+      void cacheRecords('visits', filtered, (v) => `v:${v.id}`);
     } catch { /* noop */ } finally { setVisitsLoading(false); }
   }, [contactId]);
 
