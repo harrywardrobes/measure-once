@@ -66,6 +66,13 @@ app.use('/__mockup', (req, res) => {
 // signature verification. A separate express.raw() middleware is applied
 // inline to this single route only.
 const _hsWebhookSseClients = new Set();
+// Per-user connection tracking for SSE abuse prevention.
+// Maps userId -> Set of active response objects.
+const _hsWebhookSseByUser = new Map();
+const HS_SSE_PER_USER_CAP = 5;   // max concurrent SSE connections per user
+const HS_SSE_GLOBAL_CAP   = 100; // max total SSE connections across all users
+const HS_SSE_MAX_DURATION = 30 * 60 * 1000; // forcibly close after 30 min
+const HS_SSE_HEARTBEAT_MS = 25 * 1000;      // heartbeat interval to detect dead connections
 setCustomerInfoSseClients(_hsWebhookSseClients);
 // Wire in the cache invalidator — called by customer-info.js before pushing
 // customer_info_submitted SSE so the board refetch gets fresh HubSpot data.
@@ -1004,6 +1011,20 @@ app.get('/api/hubspot/webhook-events', isAuthenticated, (req, res) => {
   if (!String(req.headers['accept'] || '').includes('text/event-stream')) {
     return res.status(200).json({ ok: true, info: 'SSE endpoint — connect with EventSource' });
   }
+
+  // ── Abuse controls ────────────────────────────────────────────────────────
+  // Reject if we are at the global connection ceiling.
+  if (_hsWebhookSseClients.size >= HS_SSE_GLOBAL_CAP) {
+    return res.status(503).json({ error: 'SSE connection limit reached. Try again later.' });
+  }
+
+  // Reject if this user already holds too many connections.
+  const userId = String(req.user?.id || req.user?.claims?.sub || 'unknown');
+  const userConns = _hsWebhookSseByUser.get(userId);
+  if (userConns && userConns.size >= HS_SSE_PER_USER_CAP) {
+    return res.status(429).json({ error: 'Too many concurrent SSE connections.' });
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -1012,8 +1033,37 @@ app.get('/api/hubspot/webhook-events', isAuthenticated, (req, res) => {
   // Send a connected confirmation so the client can tell the SSE stream is live.
   res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
 
+  // Register connection in both the broadcast set and the per-user map.
   _hsWebhookSseClients.add(res);
-  req.on('close', () => _hsWebhookSseClients.delete(res));
+  if (!_hsWebhookSseByUser.has(userId)) _hsWebhookSseByUser.set(userId, new Set());
+  _hsWebhookSseByUser.get(userId).add(res);
+
+  // Heartbeat: keeps the TCP connection alive and allows the server to detect
+  // dead sockets early (write will throw on a closed pipe).
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); } catch { cleanup(); } // eslint-disable-line no-use-before-define
+  }, HS_SSE_HEARTBEAT_MS);
+
+  // Hard ceiling: forcibly close the connection after HS_SSE_MAX_DURATION so
+  // long-running tabs are not counted forever against the global cap.
+  const maxDuration = setTimeout(() => {
+    try { res.write(`data: ${JSON.stringify({ type: 'reconnect' })}\n\n`); } catch { /* ignore */ }
+    cleanup(); // eslint-disable-line no-use-before-define
+    res.end();
+  }, HS_SSE_MAX_DURATION);
+
+  function cleanup() {
+    clearInterval(heartbeat);
+    clearTimeout(maxDuration);
+    _hsWebhookSseClients.delete(res);
+    const uc = _hsWebhookSseByUser.get(userId);
+    if (uc) {
+      uc.delete(res);
+      if (uc.size === 0) _hsWebhookSseByUser.delete(userId);
+    }
+  }
+
+  req.on('close', () => { cleanup(); });
 });
 
 // ── HubSpot: Webhook subscription management (admin only) ─────────────────────

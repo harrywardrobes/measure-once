@@ -46,15 +46,38 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 
 // Returns true and records the attempt if under the limit; false if over limit.
+// Uses a per-user advisory transaction lock to serialize concurrent calls for
+// the same user, preventing two simultaneous requests from both observing the
+// same pre-insert count and both proceeding past the SEND_LIMIT.
 async function checkSendRateLimit(userId) {
-  const r = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM qb_send_log
-     WHERE user_id = $1 AND sent_at > NOW() - INTERVAL '1 hour'`,
-    [userId]
-  );
-  if (Number(r.rows[0].cnt) >= SEND_LIMIT) return false;
-  await pool.query(`INSERT INTO qb_send_log (user_id) VALUES ($1)`, [userId]);
-  return true;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // pg_advisory_xact_lock blocks until it can acquire an exclusive lock for
+    // this transaction, keyed on a stable integer derived from the user id.
+    // The lock is released automatically when the transaction ends.
+    await client.query(
+      'SELECT pg_advisory_xact_lock(hashtext($1)::bigint)',
+      [String(userId)]
+    );
+    const r = await client.query(
+      `SELECT COUNT(*) AS cnt FROM qb_send_log
+       WHERE user_id = $1 AND sent_at > NOW() - INTERVAL '1 hour'`,
+      [userId]
+    );
+    if (Number(r.rows[0].cnt) >= SEND_LIMIT) {
+      await client.query('COMMIT');
+      return false;
+    }
+    await client.query(`INSERT INTO qb_send_log (user_id) VALUES ($1)`, [userId]);
+    await client.query('COMMIT');
+    return true;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 async function getStoredTokens() {
@@ -285,7 +308,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requireAdmin, qui
 });
 
 // ── API: send invoice by email ─────────────────────────────────────────────────
-router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, async (req, res) => {
+router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, quickbooksReadWriteLimiter, async (req, res) => {
   // Rate-limit: cap sends per authenticated user to SEND_LIMIT per rolling hour.
   const userId = req.user?.claims?.sub || req.user?.id;
   try {
