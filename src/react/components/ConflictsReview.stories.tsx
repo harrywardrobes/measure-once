@@ -18,6 +18,25 @@ const SAMPLE: ConflictEntry[] = [
     serverVersion: 5,
     baseUpdatedAt: new Date(now - 1000 * 60 * 60 * 6).toISOString(),
     serverUpdatedAt: new Date(now - 1000 * 60 * 30).toISOString(),
+    // Field-level diff inputs: the queued edit vs the server snapshot. The
+    // server arrives wrapped in a `designVisit` envelope, which buildFieldDiff
+    // unwraps before comparing.
+    attemptedBody: {
+      leadStatus: 'won',
+      notes: 'Customer ready to proceed with the kitchen.',
+      appointmentDate: '2026-06-12',
+      estimateTotal: 8200,
+    },
+    serverData: {
+      designVisit: {
+        version: 5,
+        updated_at: new Date(now - 1000 * 60 * 30).toISOString(),
+        leadStatus: 'in_progress',
+        notes: 'Customer ready to proceed with the kitchen.',
+        appointmentDate: '2026-06-10',
+        estimateTotal: 7500,
+      },
+    },
     resolution: 'last_write_wins',
     detectedAt: now - 1000 * 60 * 12,
   },
@@ -30,6 +49,8 @@ const SAMPLE: ConflictEntry[] = [
     recordKey: 'contact:991',
     baseUpdatedAt: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
     serverUpdatedAt: new Date(now - 1000 * 60 * 5).toISOString(),
+    attemptedBody: { leadStatus: 'qualified' },
+    serverData: { leadStatus: 'unqualified' },
     resolution: 'last_write_wins',
     detectedAt: now - 1000 * 60 * 3,
   },

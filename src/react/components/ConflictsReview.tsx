@@ -10,7 +10,10 @@ import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
+import Collapse from '@mui/material/Collapse';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
 import type { ConflictEntry, OfflineArea } from '../lib/offlineQueue';
 
@@ -45,6 +48,190 @@ function formatTimestamp(value: number | string | null | undefined): string {
   } catch {
     return new Date(ms).toISOString();
   }
+}
+
+// ── Field-level diff ─────────────────────────────────────────────────────────────
+// The conflict stores the user's queued edit (`attemptedBody`) and a snapshot of
+// the server record at conflict time (`serverData`). Both can arrive wrapped in a
+// response envelope (`{ visit: … }`, `{ designVisit: … }`, `{ submission: … }`),
+// so we unwrap to the meaningful record before comparing field by field.
+
+const RESPONSE_ENVELOPE_KEYS = ['visit', 'designVisit', 'submission', 'record', 'data'];
+
+// Bookkeeping / sync-plumbing keys that never represent a user-meaningful field.
+const NOISE_KEYS = new Set([
+  'id',
+  'version',
+  'updated_at',
+  'updatedAt',
+  'created_at',
+  'createdAt',
+  'created_by',
+  'createdBy',
+  'updated_by',
+  'updatedBy',
+]);
+
+function unwrapRecord(data: unknown): Record<string, unknown> {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+  const obj = data as Record<string, unknown>;
+  for (const key of RESPONSE_ENVELOPE_KEYS) {
+    const nested = obj[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+  }
+  return obj;
+}
+
+function humanizeKey(key: string): string {
+  const spaced = key
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .trim();
+  if (!spaced) return key;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function formatFieldValue(value: unknown): string {
+  if (value == null) return '—';
+  if (typeof value === 'string') return value.trim() === '' ? '—' : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    const json = JSON.stringify(value);
+    return json.length > 200 ? `${json.slice(0, 197)}…` : json;
+  } catch {
+    return String(value);
+  }
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+export interface FieldDiffRow {
+  key: string;
+  label: string;
+  attempted: unknown;
+  server: unknown;
+  changed: boolean;
+}
+
+/**
+ * Build a per-field comparison of the queued edit vs the server snapshot.
+ *
+ * Only the keys the user actually edited (present in `attemptedBody`) are listed —
+ * those are the fields the last-write-wins replay overwrote. Server-only keys are
+ * deliberately excluded: the user never touched them, so flagging them as
+ * "changed" would inflate the overwrite count and mislead. Noise/plumbing keys
+ * are dropped and function values skipped.
+ */
+export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): FieldDiffRow[] {
+  const attempted = unwrapRecord(attemptedBody);
+  const server = unwrapRecord(serverData);
+
+  const rows: FieldDiffRow[] = [];
+  for (const key of Object.keys(attempted)) {
+    if (NOISE_KEYS.has(key) || typeof attempted[key] === 'function') continue;
+    rows.push({
+      key,
+      label: humanizeKey(key),
+      attempted: attempted[key],
+      server: server[key],
+      changed: !valuesEqual(attempted[key], server[key]),
+    });
+  }
+  return rows;
+}
+
+function FieldDiffSection({ conflict }: { conflict: ConflictEntry }) {
+  const [open, setOpen] = useState(false);
+  const rows = buildFieldDiff(conflict.attemptedBody, conflict.serverData);
+  if (rows.length === 0) return null;
+
+  const changedCount = rows.filter((r) => r.changed).length;
+
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Button
+        size="small"
+        variant="text"
+        color="inherit"
+        onClick={() => setOpen((v) => !v)}
+        startIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        data-testid="conflict-fields-toggle"
+        sx={{ textTransform: 'none', px: 0.5 }}
+      >
+        {open ? 'Hide field changes' : `Compare fields${changedCount ? ` (${changedCount} changed)` : ''}`}
+      </Button>
+      <Collapse in={open} unmountOnExit>
+        <Box
+          data-testid="conflict-fields"
+          sx={{ mt: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
+        >
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 1,
+              px: 1.25,
+              py: 0.75,
+              bgcolor: 'action.hover',
+            }}
+          >
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+              Your edit
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+              Server copy (overwritten)
+            </Typography>
+          </Box>
+          {rows.map((row) => (
+            <Box
+              key={row.key}
+              data-testid="conflict-field-row"
+              data-changed={row.changed ? 'true' : 'false'}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 1,
+                px: 1.25,
+                py: 0.75,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                bgcolor: row.changed ? 'rgba(249,115,22,0.1)' : 'transparent',
+              }}
+            >
+              <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
+                {row.label}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{ wordBreak: 'break-word', fontWeight: row.changed ? 600 : 400 }}
+              >
+                {formatFieldValue(row.attempted)}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  wordBreak: 'break-word',
+                  color: row.changed ? 'text.primary' : 'text.secondary',
+                  textDecoration: row.changed ? 'line-through' : 'none',
+                }}
+              >
+                {formatFieldValue(row.server)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  );
 }
 
 function VersionRow({ label, base, server }: { label: string; base: React.ReactNode; server: React.ReactNode }) {
@@ -137,6 +324,8 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
           )}
         </>
       )}
+
+      <FieldDiffSection conflict={conflict} />
     </Box>
   );
 }
