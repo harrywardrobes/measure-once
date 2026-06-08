@@ -4427,6 +4427,39 @@ async function backfillLeadStatusShorthands() {
   logger.info(`  Backfilled shorthand for ${rows.length} lead status(es).`);
 }
 
+// Keys hardcoded in mutation paths across server.js, customer-info.js, photo-reviews.js.
+// If an admin renames or deletes one of these in lead_status_config the corresponding
+// HubSpot PATCH will silently send an INVALID_OPTION value.  This boot-time check
+// logs a warning for each missing key so the problem is surfaced early.
+//
+// MAINTENANCE CONTRACT: whenever a new hardcoded hs_lead_status literal is added
+// to a HubSpot mutation path anywhere in the codebase, add a matching entry here.
+// The `source` field should identify the file and call-site so the warning message
+// points maintainers directly to the affected code.
+const HARDCODED_LEAD_STATUS_KEYS = [
+  { key: 'OPEN_DEAL',           source: 'server.js — contact create' },
+  { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP' },
+  { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP' },
+  { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js' },
+  { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission' },
+  { key: 'ROUGH_ESTIMATE_SENT', source: 'photo-reviews.js — review outcome' },
+];
+
+async function checkHardcodedLeadStatusKeys() {
+  const { rows } = await pool.query(
+    `SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE`
+  );
+  const existing = new Set(rows.map(r => r.key));
+  for (const { key, source } of HARDCODED_LEAD_STATUS_KEYS) {
+    if (!existing.has(key)) {
+      logger.warn(
+        `  [lead-status] Hardcoded key "${key}" (used in ${source}) is missing from ` +
+        `lead_status_config. HubSpot patches using this key will be rejected with INVALID_OPTION.`
+      );
+    }
+  }
+}
+
 // Public authenticated: full ordered list for all frontend pages
 app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
   try {
@@ -6747,6 +6780,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Lead status seed failed'); }
     try { await backfillLeadStatusShorthands(); }
     catch (e) { logger.error({ err: e }, '  Lead status shorthand backfill failed'); }
+    try { await checkHardcodedLeadStatusKeys(); }
+    catch (e) { logger.error({ err: e }, '  Hardcoded lead status key check failed'); }
     try { await seedStageActionLabelsDefaults(); }
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }
