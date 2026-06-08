@@ -24,7 +24,7 @@ const { router: designVisitsRouter } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
-const { assertLeadStatusKey } = require('./lead-status-guard');
+const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -4526,6 +4526,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage, shorthand) VALUES ($1, $2, $3, FALSE, $4, $5) RETURNING *',
       [key, label, next, stage, shorthand]
     );
+    invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     _invalidateProjectContactsCache();
@@ -4596,6 +4597,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
         'UPDATE lead_status_config SET label = $1, shorthand = $2 WHERE key = $3 RETURNING *',
         [newLabel, newShorthand, key]
       );
+      invalidateLeadStatusCache();
       const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
       for (const client of _hsWebhookSseClients) {
         try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
@@ -4613,6 +4615,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       'UPDATE lead_status_config SET key = $1, label = $2, sort_order = $3, excluded_from_sales = $4, stage = $5, shorthand = $6 WHERE key = $7 RETURNING *',
       [finalKey, newLabel, newOrder, newExcluded, newStage, newShorthand, key]
     );
+    invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     _invalidateProjectContactsCache();
@@ -5099,6 +5102,7 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       [key]
     );
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+    invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     _invalidateProjectContactsCache();

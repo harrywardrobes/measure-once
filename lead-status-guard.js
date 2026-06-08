@@ -20,6 +20,17 @@ async function _loadKeys() {
 }
 
 /**
+ * Immediately clears the in-memory lead-status key cache.
+ * Call this after any admin mutation to lead_status_config so the guard
+ * re-reads from the DB on the very next request rather than waiting for
+ * the 60-second TTL to expire.
+ */
+function invalidateLeadStatusCache() {
+  _cache = null;
+  _cacheAt = 0;
+}
+
+/**
  * Asserts that `key` exists in lead_status_config (results cached for 60 s).
  * Throws an error with `err.code = 'LEAD_STATUS_REMOVED'` and `err.statusCode = 422`
  * if the key is absent, so callers can return a structured error before touching HubSpot.
@@ -40,4 +51,4 @@ async function assertLeadStatusKey(key) {
   }
 }
 
-module.exports = { assertLeadStatusKey };
+module.exports = { assertLeadStatusKey, invalidateLeadStatusCache };
