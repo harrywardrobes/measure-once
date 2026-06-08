@@ -41,6 +41,7 @@ interface ContactInfo {
   contactName: string;
   contactPhone: string;
   contactMobilePhone: string;
+  contactWhatsAppPhone: string;
   contactEmail: string;
   contactAddress: string;
 }
@@ -317,6 +318,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const displayName = contactInfo?.contactName || ctx.contactName || 'the customer';
   const landline = contactInfo?.contactPhone || '';
   const mobile = contactInfo?.contactMobilePhone || '';
+  const whatsapp = contactInfo?.contactWhatsAppPhone || '';
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -343,7 +345,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             <DialogTitle>Call {displayName}</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                {(landline || mobile) ? (
+                {(landline || mobile || whatsapp) ? (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {landline && (
                       <Box>
@@ -355,6 +357,12 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
                       <Box>
                         <Typography variant="body2" color="text.secondary">Mobile</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 600 }}>{mobile}</Typography>
+                      </Box>
+                    )}
+                    {whatsapp && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">WhatsApp</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{whatsapp}</Typography>
                       </Box>
                     )}
                   </Box>

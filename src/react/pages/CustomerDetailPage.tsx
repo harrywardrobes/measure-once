@@ -777,7 +777,7 @@ export function CustomerDetailPage() {
 
             <WhatsAppHistory
               contactId={contactId}
-              phone={contact.properties.phone || contact.properties.mobilephone || ''}
+              phone={contact.properties.phone || contact.properties.mobilephone || contact.properties.hs_whatsapp_phone_number || ''}
               messages={waMessages}
               loading={waLoading}
               error={waError}
@@ -802,7 +802,7 @@ export function CustomerDetailPage() {
       {waModalOpen && contact && (
         <WhatsAppModal
           contactId={contactId}
-          phone={contact.properties.phone || contact.properties.mobilephone || ''}
+          phone={contact.properties.phone || contact.properties.mobilephone || contact.properties.hs_whatsapp_phone_number || ''}
           open={waModalOpen}
           onClose={() => setWaModalOpen(false)}
         />
