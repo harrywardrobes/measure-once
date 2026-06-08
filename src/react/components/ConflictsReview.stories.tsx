@@ -28,10 +28,14 @@ const SAMPLE: ConflictEntry[] = [
       notes: 'Customer ready to proceed with the kitchen.',
       appointmentDate: '2026-06-12',
       estimateTotal: 8200,
-      // Write shape: camelCase, door style by id. Room 1 changed (units + price),
-      // Room 2 (Utility) added in this edit but absent on the server.
+      // Write shape: camelCase, door style by id. Three rooms exercise the
+      // per-room toggle states: Room 1 (Kitchen) changed (units + price), Room 2
+      // (Bedroom) unchanged, Room 3 (Utility) added in this edit (absent on the
+      // server). Each changed/added room gets its own keep-mine / use-server
+      // toggle so the field user can mix per-room choices.
       rooms: [
         { roomName: 'Kitchen', doorStyleId: 3, widthMm: 3200, heightMm: 2400, depthMm: 600, unitCount: 12, unitPricePence: 145000 },
+        { roomName: 'Bedroom', doorStyleId: 7, widthMm: 4000, heightMm: 2400, depthMm: 600, unitCount: 8, unitPricePence: 98000 },
         { roomName: 'Utility', doorStyleId: 3, widthMm: 1800, heightMm: 2400, depthMm: 600, unitCount: 5, unitPricePence: 62000 },
       ],
     },
@@ -47,6 +51,7 @@ const SAMPLE: ConflictEntry[] = [
         // Read shape: snake_case, door style carries both id and resolved name.
         rooms: [
           { room_name: 'Kitchen', door_style_id: 3, door_style_name: 'Shaker White', width_mm: 3200, height_mm: 2400, depth_mm: 600, unit_count: 10, unit_price_pence: 139000 },
+          { room_name: 'Bedroom', door_style_id: 7, door_style_name: 'Oak Veneer', width_mm: 4000, height_mm: 2400, depth_mm: 600, unit_count: 8, unit_price_pence: 98000 },
         ],
       },
     },
@@ -172,5 +177,62 @@ export const SingleConflict: Story = {
       );
     }
     return <One />;
+  },
+};
+
+/**
+ * Per-room resolution: the queued edit *removed* a room the server still has
+ * (Room 2, Bedroom — present only on the server). Its per-room toggle reads
+ * "Keep mine" (stay removed) vs "Restore room" (bring the server's room back),
+ * letting the field user decide that one room independently of the others.
+ */
+export const RemovedRoom: Story = {
+  name: 'Per-room: removed room (restore individually)',
+  render: () => {
+    function Removed() {
+      const removedRoomConflict: ConflictEntry = {
+        ...SAMPLE[0],
+        id: 3,
+        label: 'Design visit — 9 Birch Court',
+        attemptedBody: {
+          ...(SAMPLE[0].attemptedBody as Record<string, unknown>),
+          // User kept only the Kitchen — the Bedroom they dropped still exists on
+          // the server, so it reads as "Only on server" and can be restored.
+          rooms: [
+            { roomName: 'Kitchen', doorStyleId: 3, widthMm: 3200, heightMm: 2400, depthMm: 600, unitCount: 12, unitPricePence: 145000 },
+          ],
+        },
+        serverData: {
+          contact_id: '4071',
+          designVisit: {
+            version: 5,
+            updated_at: new Date(now - 1000 * 60 * 30).toISOString(),
+            leadStatus: 'in_progress',
+            notes: 'Customer ready to proceed with the kitchen.',
+            appointmentDate: '2026-06-10',
+            estimateTotal: 7500,
+            rooms: [
+              { room_name: 'Kitchen', door_style_id: 3, door_style_name: 'Shaker White', width_mm: 3200, height_mm: 2400, depth_mm: 600, unit_count: 10, unit_price_pence: 139000 },
+              { room_name: 'Bedroom', door_style_id: 7, door_style_name: 'Oak Veneer', width_mm: 4000, height_mm: 2400, depth_mm: 600, unit_count: 8, unit_price_pence: 98000 },
+            ],
+          },
+        },
+      };
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([removedRoomConflict]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <Removed />;
   },
 };

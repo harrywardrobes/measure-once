@@ -311,6 +311,46 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
 }
 
 /**
+ * Assemble a mixed `rooms` array from per-room choices.
+ *
+ * Rooms are paired by position with the server snapshot. For each index the
+ * caller's `roomChoices[i]` decides which side wins (default `'mine'`):
+ * - `'mine'`  → keep the user's room at that index. A room the user *removed*
+ *   (present only on the server) stays dropped.
+ * - `'server'` → take the server's room at that index, projected to the write
+ *   shape so the body is one the endpoint accepts. A room the user *added*
+ *   (absent on the server) is dropped.
+ *
+ * The result preserves only rooms that survive their per-index choice, so a
+ * field user can keep their Room 2 edit while taking the server's Room 1, and
+ * individually keep or drop added/removed rooms.
+ */
+function buildMixedRooms(
+  attemptedRooms: unknown,
+  serverRooms: unknown,
+  roomChoices: Record<number, FieldChoice>,
+): unknown[] {
+  const aRooms = Array.isArray(attemptedRooms) ? attemptedRooms : [];
+  const sRooms = Array.isArray(serverRooms) ? serverRooms : [];
+  const count = Math.max(aRooms.length, sRooms.length);
+  // Template for projecting a chosen server room onto the write shape: prefer a
+  // user room (true write shape), else fall back to a server room.
+  const template = aRooms.length ? aRooms[0] : sRooms.length ? sRooms[0] : {};
+  const out: unknown[] = [];
+  for (let i = 0; i < count; i++) {
+    const choice = roomChoices[i] ?? 'mine';
+    if (choice === 'server') {
+      const serverRoom = sRooms[i];
+      if (serverRoom != null) out.push(projectServerValue(template, serverRoom));
+    } else {
+      const attemptedRoom = aRooms[i];
+      if (attemptedRoom != null) out.push(attemptedRoom);
+    }
+  }
+  return out;
+}
+
+/**
  * Build the write body that re-applies the chosen server values.
  *
  * Starts from the original queued body (so fields the user is keeping — and any
@@ -319,6 +359,10 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
  * with the server snapshot value. Missing server values become `null` so the
  * field is explicitly cleared rather than silently dropped from the body.
  *
+ * When `roomChoices` is supplied and `'rooms'` is among `restoreKeys`, the
+ * `rooms` field is assembled per-room (mixing kept and restored rooms) via
+ * `buildMixedRooms` instead of replacing the whole array with the server's.
+ *
  * Returns `null` when there is nothing to restore (no keys, or no usable
  * attempted body), signalling the caller to keep the edit instead.
  */
@@ -326,6 +370,7 @@ export function buildRestoreBody(
   attemptedBody: unknown,
   serverData: unknown,
   restoreKeys: string[],
+  roomChoices?: Record<number, FieldChoice>,
 ): Record<string, unknown> | null {
   if (!restoreKeys || restoreKeys.length === 0) return null;
   if (!attemptedBody || typeof attemptedBody !== 'object' || Array.isArray(attemptedBody)) {
@@ -335,6 +380,12 @@ export function buildRestoreBody(
   const server = unwrapRecord(serverData);
   const body: Record<string, unknown> = { ...(attemptedBody as Record<string, unknown>) };
   for (const key of restoreKeys) {
+    // The rooms field supports a per-room mix: assemble it from the user's and
+    // server's rooms according to each room's individual choice.
+    if (key === 'rooms' && roomChoices) {
+      body[key] = buildMixedRooms(attempted[key], lookupServerValue(server, key), roomChoices);
+      continue;
+    }
     // Resolve and reshape the server value to the write shape (camelCase for
     // design visits) so the restored body is one the endpoint accepts. Missing
     // server values become `null` to explicitly clear the field.
@@ -354,25 +405,55 @@ const ROOM_ATTR_DEFS: Array<{ key: 'door' | 'dim' | 'units' | 'price'; label: st
   { key: 'price', label: 'Unit price', field: 'price' },
 ];
 
-/** One room's side-by-side comparison. Rooms are paired by position: a room
- *  present on only one side reads as added (your edit) or removed (server). */
-function RoomDiffBlock({
-  index,
-  attemptedRaw,
-  serverRaw,
-  choice,
-}: {
+/** One room's position-paired diff status. `changed` is true when the room was
+ *  added, removed, or any compared attribute differs. */
+interface RoomDiffItem {
   index: number;
   attemptedRaw: unknown;
   serverRaw: unknown;
+  added: boolean;
+  removed: boolean;
+  changed: boolean;
+}
+
+/** Pair the queued edit's rooms with the server snapshot's rooms by position
+ *  and classify each as added / removed / changed. Shared by the renderer and
+ *  the resolve logic so both agree on which rooms are individually selectable. */
+function computeRoomDiffs(attempted: unknown, server: unknown): RoomDiffItem[] {
+  const aRooms = Array.isArray(attempted) ? attempted : [];
+  const sRooms = Array.isArray(server) ? server : [];
+  const count = Math.max(aRooms.length, sRooms.length);
+  const items: RoomDiffItem[] = [];
+  for (let i = 0; i < count; i++) {
+    const attemptedRaw = aRooms[i] ?? null;
+    const serverRaw = sRooms[i] ?? null;
+    const added = attemptedRaw != null && serverRaw == null;
+    const removed = serverRaw != null && attemptedRaw == null;
+    const changed =
+      added || removed || ROOM_ATTR_DEFS.some((def) => roomAttrChanged(attemptedRaw, serverRaw, def.key));
+    items.push({ index: i, attemptedRaw, serverRaw, added, removed, changed });
+  }
+  return items;
+}
+
+/** One room's side-by-side comparison. Rooms are paired by position: a room
+ *  present on only one side reads as added (your edit) or removed (server). A
+ *  changed room carries its own keep-mine / use-server toggle so the field user
+ *  can resolve it independently of the other rooms. */
+function RoomDiffBlock({
+  item,
+  choice,
+  onChoose,
+  disabled,
+}: {
+  item: RoomDiffItem;
   choice: FieldChoice;
+  onChoose: (index: number, choice: FieldChoice) => void;
+  disabled: boolean;
 }) {
-  const hasA = attemptedRaw != null;
-  const hasS = serverRaw != null;
-  const a = hasA ? normalizeRoom(attemptedRaw) : null;
-  const s = hasS ? normalizeRoom(serverRaw) : null;
-  const added = hasA && !hasS;
-  const removed = hasS && !hasA;
+  const { index, attemptedRaw, serverRaw, added, removed, changed: anyChanged } = item;
+  const a = attemptedRaw != null ? normalizeRoom(attemptedRaw) : null;
+  const s = serverRaw != null ? normalizeRoom(serverRaw) : null;
 
   const attrs = ROOM_ATTR_DEFS.map((def) => ({
     ...def,
@@ -382,7 +463,6 @@ function RoomDiffBlock({
     // the underlying values (door style by id, not the displayed name).
     changed: added || removed ? true : roomAttrChanged(attemptedRaw, serverRaw, def.key),
   }));
-  const anyChanged = added || removed || attrs.some((x) => x.changed);
 
   const title = a?.name || s?.name || '';
   const status = added ? 'Added in your edit' : removed ? 'Only on server' : anyChanged ? 'Changed' : 'No changes';
@@ -406,19 +486,44 @@ function RoomDiffBlock({
         />
       </Stack>
       {anyChanged ? (
-        attrs.map((attr) => (
-          <Box key={attr.key} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 0.5 }}>
-            <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
-              {attr.label}
-            </Typography>
-            <Typography variant="body2" sx={diffCellSx(attr.changed, 'mine', choice)}>
-              {attr.mine}
-            </Typography>
-            <Typography variant="body2" sx={diffCellSx(attr.changed, 'server', choice)}>
-              {attr.server}
-            </Typography>
-          </Box>
-        ))
+        <>
+          {attrs.map((attr) => (
+            <Box key={attr.key} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 0.5 }}>
+              <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
+                {attr.label}
+              </Typography>
+              <Typography variant="body2" sx={diffCellSx(attr.changed, 'mine', choice)}>
+                {attr.mine}
+              </Typography>
+              <Typography variant="body2" sx={diffCellSx(attr.changed, 'server', choice)}>
+                {attr.server}
+              </Typography>
+            </Box>
+          ))}
+          <ToggleButtonGroup
+            exclusive
+            size="small"
+            value={choice}
+            disabled={disabled}
+            onChange={(_e, next: FieldChoice | null) => { if (next) onChoose(index, next); }}
+            data-testid="conflict-room-choice"
+            sx={{
+              mt: 0.75,
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                py: 0.25,
+                fontSize: 11,
+              },
+            }}
+          >
+            <ToggleButton value="mine" data-testid="conflict-room-choice-mine">
+              {added ? 'Keep added' : 'Keep mine'}
+            </ToggleButton>
+            <ToggleButton value="server" data-testid="conflict-room-choice-server">
+              {added ? 'Drop room' : removed ? 'Restore room' : 'Use server'}
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </>
       ) : (
         <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>
           No changes
@@ -429,22 +534,25 @@ function RoomDiffBlock({
 }
 
 /** Render a design-visit `rooms` array as a legible room-by-room comparison
- *  instead of a truncated JSON blob. `attempted` is the queued edit's rooms;
+ *  instead of a truncated JSON blob, each changed room carrying its own
+ *  keep-mine / use-server toggle. `attempted` is the queued edit's rooms;
  *  `server` is the raw server snapshot's rooms (kept un-projected so server-only
  *  fields like `door_style_name` survive for display). */
 function RoomsDiff({
   attempted,
   server,
-  choice,
+  roomChoices,
+  onChooseRoom,
+  disabled,
 }: {
   attempted: unknown;
   server: unknown;
-  choice: FieldChoice;
+  roomChoices: Record<number, FieldChoice>;
+  onChooseRoom: (index: number, choice: FieldChoice) => void;
+  disabled: boolean;
 }) {
-  const aRooms = Array.isArray(attempted) ? attempted : [];
-  const sRooms = Array.isArray(server) ? server : [];
-  const count = Math.max(aRooms.length, sRooms.length);
-  if (count === 0) {
+  const items = computeRoomDiffs(attempted, server);
+  if (items.length === 0) {
     return (
       <Typography variant="body2" data-testid="conflict-rooms-empty" sx={{ color: 'text.disabled' }}>
         No rooms
@@ -453,13 +561,13 @@ function RoomsDiff({
   }
   return (
     <Stack spacing={1} data-testid="conflict-rooms-diff" sx={{ gridColumn: '1 / -1', mt: 0.5 }}>
-      {Array.from({ length: count }, (_, i) => (
+      {items.map((item) => (
         <RoomDiffBlock
-          key={i}
-          index={i}
-          attemptedRaw={aRooms[i] ?? null}
-          serverRaw={sRooms[i] ?? null}
-          choice={choice}
+          key={item.index}
+          item={item}
+          choice={roomChoices[item.index] ?? 'mine'}
+          onChoose={onChooseRoom}
+          disabled={disabled}
         />
       ))}
     </Stack>
@@ -472,6 +580,8 @@ function FieldDiffSection({
   onToggleOpen,
   choices,
   onChoose,
+  roomChoices,
+  onChooseRoom,
   disabled,
 }: {
   rows: FieldDiffRow[];
@@ -479,6 +589,8 @@ function FieldDiffSection({
   onToggleOpen: () => void;
   choices: Record<string, FieldChoice>;
   onChoose: (key: string, choice: FieldChoice) => void;
+  roomChoices: Record<number, FieldChoice>;
+  onChooseRoom: (index: number, choice: FieldChoice) => void;
   disabled: boolean;
 }) {
   if (rows.length === 0) return null;
@@ -542,7 +654,13 @@ function FieldDiffSection({
                   {row.label}
                 </Typography>
                 {row.key === 'rooms' ? (
-                  <RoomsDiff attempted={row.attempted} server={row.serverRaw} choice={choice} />
+                  <RoomsDiff
+                    attempted={row.attempted}
+                    server={row.serverRaw}
+                    roomChoices={roomChoices}
+                    onChooseRoom={onChooseRoom}
+                    disabled={disabled}
+                  />
                 ) : (
                   <>
                     <Typography variant="body2" sx={diffCellSx(row.changed, 'mine', choice)}>
@@ -553,7 +671,9 @@ function FieldDiffSection({
                     </Typography>
                   </>
                 )}
-                {row.changed && (
+                {/* The rooms field resolves per room (toggles live inside each
+                    RoomDiffBlock), so it skips the whole-field toggle. */}
+                {row.changed && row.key !== 'rooms' && (
                   <ToggleButtonGroup
                     exclusive
                     size="small"
@@ -634,6 +754,15 @@ function ConflictCard({
   const changedKeys = rows.filter((r) => r.changed).map((r) => r.key);
   const canRestore = changedKeys.length > 0;
 
+  // The rooms field resolves per room rather than as one field. Pre-compute its
+  // room-by-room diff so we know which rooms are individually selectable.
+  const roomsRow = rows.find((r) => r.key === 'rooms');
+  const changedRoomIndices = roomsRow
+    ? computeRoomDiffs(roomsRow.attempted, roomsRow.serverRaw)
+        .filter((it) => it.changed)
+        .map((it) => it.index)
+    : [];
+
   // Plain-language explanation shared with the admin Offline support tab, so
   // field users and admins read the same friendly, actionable wording.
   const explained = explainConflict({
@@ -644,6 +773,7 @@ function ConflictCard({
 
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<Record<string, FieldChoice>>({});
+  const [roomChoices, setRoomChoices] = useState<Record<number, FieldChoice>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -651,15 +781,29 @@ function ConflictCard({
     setChoices((prev) => ({ ...prev, [key]: choice }));
   };
 
-  // Keys the user has explicitly flipped to the server value.
-  const selectedServerKeys = changedKeys.filter((k) => choices[k] === 'server');
-  const hasSelection = selectedServerKeys.length > 0;
+  const chooseRoom = (index: number, choice: FieldChoice) => {
+    setRoomChoices((prev) => ({ ...prev, [index]: choice }));
+  };
 
-  const run = async (restoreKeys: string[]) => {
+  // Non-rooms fields the user has explicitly flipped to the server value.
+  const selectedServerFieldKeys = changedKeys.filter(
+    (k) => k !== 'rooms' && choices[k] === 'server',
+  );
+  // Individual rooms flipped to the server value.
+  const selectedServerRoomIndices = changedRoomIndices.filter((i) => roomChoices[i] === 'server');
+  const selectionCount = selectedServerFieldKeys.length + selectedServerRoomIndices.length;
+  const hasSelection = selectionCount > 0;
+
+  const run = async (restoreKeys: string[], roomSelection?: Record<number, FieldChoice>) => {
     setBusy(true);
     setError(null);
     try {
-      const body = buildRestoreBody(conflict.attemptedBody, conflict.serverData, restoreKeys);
+      const body = buildRestoreBody(
+        conflict.attemptedBody,
+        conflict.serverData,
+        restoreKeys,
+        roomSelection,
+      );
       const res = await onResolve(conflict, body);
       // The server changed again since this conflict was detected — the restore
       // was abandoned and a fresh conflict re-flagged. This card unmounts and a
@@ -755,6 +899,8 @@ function ConflictCard({
         onToggleOpen={() => setOpen((v) => !v)}
         choices={choices}
         onChoose={choose}
+        roomChoices={roomChoices}
+        onChooseRoom={chooseRoom}
         disabled={busy}
       />
 
@@ -798,10 +944,17 @@ function ConflictCard({
             color="primary"
             disabled={busy}
             startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
-            onClick={() => void run(selectedServerKeys)}
+            onClick={() => {
+              // Restore the fields/rooms flipped to the server value. When any
+              // room is selected, include the `rooms` key and pass the per-room
+              // choices so the body mixes kept and restored rooms.
+              const keys = [...selectedServerFieldKeys];
+              if (selectedServerRoomIndices.length > 0) keys.push('rooms');
+              void run(keys, roomChoices);
+            }}
             data-testid="conflict-apply-selection"
           >
-            Apply selection ({selectedServerKeys.length})
+            Apply selection ({selectionCount})
           </Button>
         )}
       </Stack>
