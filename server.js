@@ -24,6 +24,7 @@ const { router: designVisitsRouter } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
+const { assertLeadStatusKey } = require('./lead-status-guard');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -1967,6 +1968,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
   const areaPrefix = areaMatch ? areaMatch[1].toUpperCase() : 'XX';
 
   try {
+    await assertLeadStatusKey('OPEN_DEAL');
     // Create the contact in HubSpot
     const createBody = {
       properties: {
@@ -2001,6 +2003,9 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     clearContactCache();
     return res.status(201).json(contact);
   } catch (e) {
+    if (e.code === 'LEAD_STATUS_REMOVED') {
+      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+    }
     const status = e.response?.status;
     if (status === 409) {
       return res.status(409).json({ error: 'A contact with this email address already exists in HubSpot.' });
@@ -6351,12 +6356,16 @@ app.post('/api/card-actions/arrange-visit/outcome',
     const { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } = outcomeEntry[visitType] || outcomeEntry['design'];
 
     try {
+      await assertLeadStatusKey(newLeadStatus);
       await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         { properties: { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } }
       );
       res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
     } catch (e) {
+      if (e.code === 'LEAD_STATUS_REMOVED') {
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+      }
       const status = e.response?.status;
       if (status === 401 || status === 403) {
         return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });

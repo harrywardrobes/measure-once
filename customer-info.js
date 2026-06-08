@@ -13,6 +13,7 @@ const path       = require('path');
 const fs         = require('fs');
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { assertLeadStatusKey } = require('./lead-status-guard');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -759,6 +760,17 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     return res.status(400).json({ error: 'Invalid photo key: all keys must start with obj:ci_.' });
   }
   const keys = rawKeys;
+
+  // Reject early if AWAITING_PHOTOS no longer exists in lead_status_config
+  // so the submission fails before we commit any DB changes.
+  try {
+    await assertLeadStatusKey('AWAITING_PHOTOS');
+  } catch (e) {
+    if (e.code === 'LEAD_STATUS_REMOVED') {
+      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+    }
+    throw e;
+  }
 
   // Atomically lock the row, re-verify it is still unsubmitted, and mark it
   // submitted — all inside a single transaction.  This prevents two concurrent

@@ -10,6 +10,7 @@ const axios      = require('axios').create({ timeout: 12000 });
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { assertLeadStatusKey } = require('./lead-status-guard');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -278,6 +279,18 @@ router.post('/api/card-actions/review-customer-photos',
     const cid  = String(contactId).trim();
     const subId = Number(submissionId);
     const range = outcome === 'rough_estimate_sent' ? (priceRange || '').trim().slice(0, 200) : null;
+
+    // Reject early if the target lead status no longer exists in lead_status_config,
+    // so we never commit the review outcome and then fail the HubSpot patch.
+    const hsStatusForCheck = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE_SENT';
+    try {
+      await assertLeadStatusKey(hsStatusForCheck);
+    } catch (e) {
+      if (e.code === 'LEAD_STATUS_REMOVED') {
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+      }
+      throw e;
+    }
 
     // Use a transaction with a row-level lock on the submission to serialise
     // concurrent review requests.  The duplicate-outcome check and the outcome
