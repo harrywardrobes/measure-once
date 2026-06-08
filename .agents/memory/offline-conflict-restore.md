@@ -17,6 +17,20 @@ read cache after a "Restore server copy":
 The offline patch only includes keys present in `conflict.serverData` (the
 read-shaped GET snapshot), so write-only payload keys are skipped.
 
+## Restore replay never last-write-wins (abortOnConflict)
+A queued "Restore server copy" write carries `abortOnConflict: true` plus the
+conflict-check inputs (`conflictCheckUrl`/`baseVersion`/`baseUpdatedAt`, set
+only when a base exists). At replay, `processEntry` re-reads the live record and
+if the server advanced past the snapshot being restored it records a fresh
+`flagged` conflict and **drops** the entry (`removeEntry`) — it does NOT fall
+through to the write. This mirrors the online re-check in `resolveConflict`.
+**Why:** the sync engine's default for a detected conflict is
+last-write-wins-with-warning; a restore must never silently clobber a newer
+server change just because it was queued offline.
+**Scope decision:** this abort applies to **restores only**. Normal queued edits
+keep last-write-wins (the established contract) — broadening it to all writes
+would change that contract and needs explicit user sign-off.
+
 ## Key gotcha: write body vs read shape
 **Why:** Per-field conflict diff/restore matches by key name. It only works when
 the queued write body uses the same field names as the server read shape.
