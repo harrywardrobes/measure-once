@@ -22,6 +22,10 @@ export interface UseOfflineFailures {
   count: number;
   retry: (id: number) => Promise<void>;
   discard: (id: number) => Promise<void>;
+  /** Reset every failed entry to `pending` and kick a single flush. */
+  retryAll: () => Promise<void>;
+  /** Remove every failed entry from the queue. */
+  discardAll: () => Promise<void>;
 }
 
 export function useOfflineFailures(): UseOfflineFailures {
@@ -71,5 +75,27 @@ export function useOfflineFailures(): UseOfflineFailures {
     await modRef.current?.removeEntry(id);
   }, []);
 
-  return { failures, count: failures.length, retry, discard };
+  const retryAll = useCallback(async () => {
+    const mod = modRef.current;
+    if (!mod) return;
+    const list = (await mod.getEntries()).filter((e) => e.status === 'failed');
+    if (list.length === 0) return;
+    const now = Date.now();
+    await Promise.all(
+      list.map((e) =>
+        mod.updateEntry(e.id, { status: 'pending', attempts: 0, nextAttemptAt: now, lastError: undefined }),
+      ),
+    );
+    const engine = await import('../lib/syncEngine');
+    await engine.flushQueue();
+  }, []);
+
+  const discardAll = useCallback(async () => {
+    const mod = modRef.current;
+    if (!mod) return;
+    const list = (await mod.getEntries()).filter((e) => e.status === 'failed');
+    await Promise.all(list.map((e) => mod.removeEntry(e.id)));
+  }, []);
+
+  return { failures, count: failures.length, retry, discard, retryAll, discardAll };
 }

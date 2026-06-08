@@ -14,6 +14,7 @@ const SAMPLE_FAILURES: QueueEntry[] = [
     method: 'PUT',
     url: '/api/design-visits/482',
     recordKey: 'dv:482',
+    body: { lead_status: 'Quoted', notes: 'Customer prefers oak veneer doors.' },
     status: 'failed',
     attempts: 5,
     createdAt: now - 1000 * 60 * 60,
@@ -28,6 +29,10 @@ const SAMPLE_FAILURES: QueueEntry[] = [
     method: 'POST',
     url: '/api/design-visits/482/photos',
     recordKey: 'dv:482',
+    formFields: [
+      { name: 'room', value: 'Kitchen' },
+      { name: 'photo', filename: 'kitchen.jpg', blob: new Blob([]) },
+    ],
     status: 'failed',
     attempts: 5,
     createdAt: now - 1000 * 60 * 50,
@@ -52,7 +57,8 @@ const meta: Meta<typeof SyncPill> = {
           'Header pending-sync indicator. It appears whenever the offline write queue has ' +
           'entries (pending / syncing / failed). When there are writes that exhausted their ' +
           'automatic retries, the pill turns red and becomes clickable, opening a dialog that ' +
-          'lists each failed change with its error plus one-tap Retry and Discard actions.',
+          'lists each failed change with its error plus one-tap Retry and Discard actions, ' +
+          'as well as bulk Retry all / Discard all (confirmation-gated) / Download as PDF actions.',
       },
     },
   },
@@ -65,6 +71,7 @@ type Story = StoryObj<typeof SyncPill>;
 function InteractiveFailed({ open }: { open?: boolean }) {
   const [failures, setFailures] = useState<QueueEntry[]>(SAMPLE_FAILURES);
   const remove = (id: number) => setFailures((fs) => fs.filter((f) => f.id !== id));
+  const clearAll = () => setFailures([]);
   return (
     <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
       <SyncPill
@@ -73,6 +80,8 @@ function InteractiveFailed({ open }: { open?: boolean }) {
         defaultOpen={open}
         onRetry={remove}
         onDiscard={remove}
+        onRetryAll={clearAll}
+        onDiscardAll={clearAll}
       />
     </Box>
   );

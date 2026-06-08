@@ -15,6 +15,8 @@ import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import SyncProblemIcon from '@mui/icons-material/SyncProblem';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import DownloadIcon from '@mui/icons-material/Download';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../hooks/useOfflineFailures';
@@ -122,6 +124,8 @@ export interface SyncPillProps {
   failures?: QueueEntry[];
   onRetry?: (id: number) => void | Promise<void>;
   onDiscard?: (id: number) => void | Promise<void>;
+  onRetryAll?: () => void | Promise<void>;
+  onDiscardAll?: () => void | Promise<void>;
   /** Force the dialog open (Storybook). */
   defaultOpen?: boolean;
 }
@@ -134,8 +138,17 @@ export default function SyncPill(props: SyncPillProps) {
   const failures = props.failures ?? liveFailures.failures;
   const retry = props.onRetry ?? liveFailures.retry;
   const discard = props.onDiscard ?? liveFailures.discard;
+  const retryAll = props.onRetryAll ?? liveFailures.retryAll;
+  const discardAll = props.onDiscardAll ?? liveFailures.discardAll;
 
   const [open, setOpen] = useState(!!props.defaultOpen);
+  const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
+
+  const downloadPdf = () => {
+    const list = failures;
+    if (list.length === 0) return;
+    void import('../lib/failuresPdf').then((m) => m.downloadFailuresPdf(list));
+  };
 
   const { pending, syncing, failed } = counts;
   if (pending === 0 && syncing === 0 && failed === 0) return null;
@@ -251,9 +264,76 @@ export default function SyncPill(props: SyncPillProps) {
               </Stack>
             )}
           </DialogContent>
+          <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'space-between' }}>
+            <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
+              {failures.length > 0 && (
+                <>
+                  <Button
+                    size="small"
+                    color="inherit"
+                    startIcon={<DownloadIcon />}
+                    onClick={downloadPdf}
+                    data-testid="failed-sync-download-pdf"
+                  >
+                    Download as PDF
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<DeleteSweepIcon />}
+                    onClick={() => setConfirmDiscardAll(true)}
+                    data-testid="failed-sync-discard-all"
+                  >
+                    Discard all
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<RefreshIcon />}
+                    onClick={() => void retryAll()}
+                    data-testid="failed-sync-retry-all"
+                  >
+                    Retry all
+                  </Button>
+                </>
+              )}
+            </Stack>
+            <Button onClick={() => setOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {interactive && (
+        <Dialog
+          open={confirmDiscardAll}
+          onClose={() => setConfirmDiscardAll(false)}
+          maxWidth="xs"
+          fullWidth
+          data-testid="failed-sync-discard-all-confirm"
+        >
+          <DialogTitle>Discard all failed changes?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              This permanently removes all {failures.length} failed change
+              {failures.length === 1 ? '' : 's'} from this device. They can&apos;t be recovered.
+              Consider downloading a PDF first if you may need to re-enter them.
+            </Typography>
+          </DialogContent>
           <DialogActions>
-            <Button variant="contained" onClick={() => setOpen(false)}>
-              Close
+            <Button color="inherit" onClick={() => setConfirmDiscardAll(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<DeleteSweepIcon />}
+              onClick={() => {
+                void discardAll();
+                setConfirmDiscardAll(false);
+              }}
+              data-testid="failed-sync-discard-all-confirm-btn"
+            >
+              Discard all
             </Button>
           </DialogActions>
         </Dialog>
