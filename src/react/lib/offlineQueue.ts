@@ -35,7 +35,7 @@ import {
   setMeta,
 } from './offlineDb';
 import type { CacheStore } from './offlineDb';
-import { resolveConflictRoute } from './conflictRoute';
+import { resolveConflictRoute, resolveQueueEntryRoute } from './conflictRoute';
 import { detectConflict } from './conflictDetection';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -467,7 +467,7 @@ export interface ConflictResolvedDetail {
  * `recordKey` (`contact:`/`visit:`/`design-visit:`/`dv:`) and falls back to
  * parsing the write URL. Returns `null` when no cache entry can be derived.
  */
-function cacheTargetForConflict(conflict: ConflictEntry): { store: CacheStore; id: string } | null {
+function cacheTargetForConflict(conflict: { recordKey?: string; url: string }): { store: CacheStore; id: string } | null {
   const rk = conflict.recordKey;
   if (rk) {
     const idx = rk.indexOf(':');
@@ -640,6 +640,35 @@ export async function resolveConflict(
     }
   }
   return { ok: res.ok, queued: res.queued, status: res.status };
+}
+
+/**
+ * Reconcile the read cache after the sync engine **abandons** a queued restore
+ * at replay time (its `abortOnConflict` branch).
+ *
+ * The cached record still holds the stale restored (older) values the user
+ * picked while offline. Because the server has advanced again and a fresh
+ * conflict has just been re-flagged, evict that cached copy so the next read
+ * repopulates from the newer server state, and point any open page at the record
+ * (via {@link CONFLICT_RESOLVED_EVENT}) so it re-fetches without a manual reload.
+ *
+ * The engine only reaches this path after a successful online conflict-check
+ * fetch, so the device is online and eviction (rather than an offline patch) is
+ * the correct reconciliation — the next fetch reads the newer server snapshot.
+ */
+export async function reconcileAbortedRestore(entry: QueueEntry): Promise<void> {
+  const target = cacheTargetForConflict(entry);
+  if (target) await evictCachedRecord(target.store, target.id);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent<ConflictResolvedDetail>(CONFLICT_RESOLVED_EVENT, {
+      detail: {
+        area: entry.area,
+        recordKey: entry.recordKey,
+        url: entry.url,
+        route: resolveQueueEntryRoute(entry),
+      },
+    }));
+  }
 }
 
 // ── Last successful sync bookkeeping ─────────────────────────────────────────────

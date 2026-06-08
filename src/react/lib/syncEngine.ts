@@ -27,6 +27,7 @@ import {
   updateEntry,
   removeEntry,
   recordConflict,
+  reconcileAbortedRestore,
   markSynced,
   type QueueEntry,
   type OfflineArea,
@@ -226,6 +227,11 @@ async function processEntry(entry: QueueEntry): Promise<void> {
         surfaceConflict(entry);
         if (entry.abortOnConflict) {
           await removeEntry(entry.id);
+          // The local read cache (and the page) still shows the abandoned
+          // restore's older values. Evict that cached copy and point any open
+          // page at the record so it re-fetches the newer server state, instead
+          // of leaving the screen on the stale restore until the next reload.
+          await reconcileAbortedRestore(entry);
           log('warn', 'sync_restore_aborted', {
             area: entry.area, label: entry.label, recordKey: entry.recordKey,
           });
