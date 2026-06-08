@@ -8,6 +8,7 @@ import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import { Contact } from './types';
+import { updateRecentCustomer } from '../../utils/formatters';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
         ...contact,
         properties: { ...contact.properties, ...values },
       };
+      updateRecentCustomer(updated);
       onSaved(updated);
       onClose();
     } catch (e) {

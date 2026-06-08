@@ -18,6 +18,7 @@ import {
   DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
+import { updateRecentCustomer } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
@@ -176,15 +177,7 @@ export function CustomerDetailPage() {
     st.selectedContactId = contactId;
     g.state = st;
     // Recent customers
-    try {
-      const KEY  = 'cp_recent_customers';
-      const name = contactName(c);
-      const entry = { id: contactId, name, company: c.properties.company || '', ts: Date.now() };
-      const list  = JSON.parse(localStorage.getItem(KEY) || '[]') as typeof entry[];
-      const filtered = list.filter(r => r.id !== contactId);
-      filtered.unshift(entry);
-      localStorage.setItem(KEY, JSON.stringify(filtered.slice(0, 5)));
-    } catch { /* noop */ }
+    updateRecentCustomer(c);
     return c;
   }, [contactId]);
 

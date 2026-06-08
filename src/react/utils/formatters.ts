@@ -101,6 +101,34 @@ export function formatQuickBooksDate(iso: string | null | undefined): string {
 }
 
 /**
+ * Updates the cp_recent_customers localStorage entry for a contact after a
+ * successful save.  Any rename path that writes a new name to the server
+ * should call this so the cached name stays current without requiring a visit
+ * to CustomerDetailPage first.
+ *
+ * Name derivation mirrors customer-detail/types.contactName:
+ *   "First Last" → email → company → "Unnamed"
+ * (company is included as a fallback for contacts without a personal name/email)
+ */
+export function updateRecentCustomer(contact: {
+  id: string;
+  properties?: { firstname?: string; lastname?: string; email?: string; company?: string };
+}): void {
+  try {
+    const KEY = 'cp_recent_customers';
+    const p = contact.properties || {};
+    const parts = [p.firstname, p.lastname].filter(Boolean);
+    const name = parts.length ? parts.join(' ') : (p.email || p.company || 'Unnamed');
+    const entry = { id: contact.id, name, company: p.company || '', ts: Date.now() };
+    type Entry = typeof entry;
+    const list = JSON.parse(localStorage.getItem(KEY) || '[]') as Entry[];
+    const filtered = list.filter((r) => r.id !== contact.id);
+    filtered.unshift(entry);
+    localStorage.setItem(KEY, JSON.stringify(filtered.slice(0, 5)));
+  } catch { /* noop */ }
+}
+
+/**
  * Returns the URL if it is a valid http/https URL, otherwise ''.
  */
 export function safeUrl(url: string | null | undefined): string {
