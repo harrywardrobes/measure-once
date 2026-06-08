@@ -147,6 +147,7 @@ const STEPS = [
   'test:project-contacts-dev-mode:ci',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
+  'test:conflicts-review-logic',
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',

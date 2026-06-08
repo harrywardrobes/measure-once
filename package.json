@@ -99,6 +99,7 @@
     "test:arrange-visit:ci": "node scripts/with-test-db.js test/arrange-visit/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
     "test:handler-config-blocks": "vitest run src/react/pages/admin/HandlerConfigBlocks.test.tsx",
+    "test:conflicts-review-logic": "vitest run src/react/components/ConflictsReview.test.ts",
     "test:quick-load-and-update": "node test/quick-load-and-update/run.js",
     "test:dv-catalogue-admin": "node test/dv-catalogue-admin/run.js",
     "test:dv-catalogue-admin:ci": "node scripts/with-test-db.js test/dv-catalogue-admin/run.js",
