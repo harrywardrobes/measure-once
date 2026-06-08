@@ -49,4 +49,16 @@ export const OFFLINE_READ_CACHES = [
       '^/api/customer-info/',
     ],
   },
+  {
+    // Customer-info submission photo *images* (HMAC-signed object-storage
+    // reads). Kept in their own cache — separate from the JSON list reads in
+    // mo-photos — so a contact with a large photo set evicts only older images
+    // (oldest-first) and never the cached submissions lists. Each online list
+    // load mints fresh signed URLs (1h exp), so entries churn but stay bounded
+    // by maxEntries; offline reads use the URLs from the last cached list,
+    // which match the most-recently-cached image entries.
+    cacheName: 'mo-customer-photos',
+    maxEntries: 200,
+    routes: ['^/api/customer-info-photos/'],
+  },
 ];

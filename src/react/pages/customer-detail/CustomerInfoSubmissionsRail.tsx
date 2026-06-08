@@ -123,6 +123,57 @@ function datesMatch(a: string, b: string): boolean {
   } catch { return true; }
 }
 
+/**
+ * Warm the service-worker `mo-customer-photos` cache with the submission photo
+ * images so they render offline.
+ *
+ * Submission thumbnails live inside a collapsed, lazy-loaded grid, so the
+ * browser only fetches them when a card is expanded. A field user who caches
+ * the list online but never expands a card would otherwise have no image bytes
+ * cached, and offline expansion would show broken thumbnails. We therefore
+ * proactively fetch each signed photo URL right after a successful online load,
+ * which lets the SW runtime cache store the 200 responses under the exact URLs
+ * the offline list will reference.
+ *
+ * Bounded + best-effort:
+ *  - Skips entirely when known offline (the SW has nothing fresh to add and the
+ *    fetches would just fail).
+ *  - Only touches same-origin signed photo routes.
+ *  - Caps the total prefetched per load (`MAX_PREFETCH`) so a huge photo set
+ *    degrades gracefully instead of flooding the network; the SW cache's own
+ *    `maxEntries` evicts oldest-first beyond that.
+ *  - Limited concurrency; every fetch failure is swallowed.
+ */
+const MAX_PREFETCH_PHOTOS = 60;
+const PREFETCH_CONCURRENCY = 4;
+
+async function prefetchSubmissionPhotos(urls: string[]): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (typeof fetch !== 'function') return;
+  const targets = urls
+    .filter((u): u is string => typeof u === 'string' && u.startsWith('/api/customer-info-photos/'))
+    .slice(0, MAX_PREFETCH_PHOTOS);
+  if (targets.length === 0) return;
+
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < targets.length) {
+      const url = targets[cursor++];
+      try {
+        // Let the response go through the SW so it lands in mo-customer-photos.
+        await fetch(url, { credentials: 'same-origin' });
+      } catch {
+        /* best-effort warming — broken/expired URLs just stay uncached */
+      }
+    }
+  };
+  const workers = Array.from(
+    { length: Math.min(PREFETCH_CONCURRENCY, targets.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
+}
+
 // ── Copy link button (controlled) ─────────────────────────────────────────────
 
 function CopyLinkButton({
@@ -845,6 +896,9 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         // Write-through the full list (keyed by contactId) so the whole history
         // — not just the single drawer-cached submission — is available offline.
         void cacheRecord('customerInfo', contactId, d);
+        // Warm the SW image cache so the photo thumbnails (lazy, inside a
+        // collapsed grid) are available offline even if no card is expanded.
+        void prefetchSubmissionPhotos(d.flatMap(s => Array.isArray(s.photoUrls) ? s.photoUrls : []));
       })
       .catch(async e => {
         // Offline fallback. Prefer the full submissions list cached on the last

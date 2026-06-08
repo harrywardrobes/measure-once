@@ -107,8 +107,9 @@ export const FEATURE_AREAS: FeatureArea[] = [
     name: 'Customer photo review',
     capability: 'full',
     backedBy: ['photo'],
+    cachedBy: ['mo-customer-photos'],
     detail:
-      "Reviewing a customer's submitted photos and sending the 'not suitable' or 'rough estimate' outcome is queued offline and replayed on reconnect (the email and lead-status update happen when the write syncs).",
+      "Reviewing a customer's submitted photos and sending the 'not suitable' or 'rough estimate' outcome is queued offline and replayed on reconnect (the email and lead-status update happen when the write syncs). The submitted photo images are cached on load, so the thumbnails stay viewable offline.",
   },
   {
     name: 'Customer-info forms',

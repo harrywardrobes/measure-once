@@ -53,6 +53,7 @@ client reloads once on `controllerchange` to run against the new bundle.
 | `mo-customers` | `GET /api/contacts-all`, `…lead-status-counts`, `…substatus-counts`, `/api/lead-statuses`, `/api/lead-substatuses`, `/api/workflow`, `/api/contacts/:id`(`/localdata`\|`/tasks`) | StaleWhileRevalidate | 12h | 200 |
 | `mo-visits` | `GET /api/visits`, `/api/design-visits`(`/:id`), `/api/events` | StaleWhileRevalidate | 12h | 100 |
 | `mo-photos` | `GET /api/card-actions/review-customer-photos/:id`, `/api/customer-info/*` | StaleWhileRevalidate | 12h | 100 |
+| `mo-customer-photos` | `GET /api/customer-info-photos/:key` (HMAC-signed submission photo images) | StaleWhileRevalidate | 12h | 200 |
 | `mo-google-fonts-css` | Google Fonts stylesheets | StaleWhileRevalidate | — | — |
 | `mo-google-fonts-files` | Google Fonts files | CacheFirst | 1y | 20 |
 
@@ -61,8 +62,8 @@ fresh copy is fetched in the background for next time. Only `200` responses are
 cached (fonts also allow opaque `0`). Entries past their TTL or beyond the max
 count are evicted automatically by Workbox's expiration plugin.
 
-> The three runtime *read* caches above (`mo-customers`, `mo-visits`,
-> `mo-photos`) are defined once in `scripts/offline-read-caches.mjs`
+> The four runtime *read* caches above (`mo-customers`, `mo-visits`,
+> `mo-photos`, `mo-customer-photos`) are defined once in `scripts/offline-read-caches.mjs`
 > (`OFFLINE_READ_CACHES`), which `scripts/build-sw.mjs` consumes to build the
 > Workbox `runtimeCaching` rules — so that manifest *is* the real SW behaviour.
 > The machine-readable `offline-view-cache` HTML-comment annotations below
@@ -79,6 +80,7 @@ count are evicted automatically by Workbox's expiration plugin.
 <!-- offline-view-cache: mo-customers routes: ^/api/(contacts-all|contacts-lead-status-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$ ; ^/api/contacts/[^/]+(/(localdata|tasks))?$ -->
 <!-- offline-view-cache: mo-visits routes: ^/api/(visits|design-visits|events)(/[^/]+)?$ -->
 <!-- offline-view-cache: mo-photos routes: ^/api/card-actions/review-customer-photos/[^/]+$ ; ^/api/customer-info/ -->
+<!-- offline-view-cache: mo-customer-photos routes: ^/api/customer-info-photos/ -->
 
 ### IndexedDB store (`measure-once-offline`)
 
