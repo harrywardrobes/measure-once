@@ -20,7 +20,9 @@ const SAMPLE: ConflictEntry[] = [
     serverUpdatedAt: new Date(now - 1000 * 60 * 30).toISOString(),
     // Field-level diff inputs: the queued edit vs the server snapshot. The
     // server arrives wrapped in a `designVisit` envelope, which buildFieldDiff
-    // unwraps before comparing.
+    // unwraps before comparing. The top-level `contact_id` lets
+    // resolveConflictRoute derive the owning customer page for the "Open record"
+    // link without appearing as a field-diff row.
     attemptedBody: {
       leadStatus: 'won',
       notes: 'Customer ready to proceed with the kitchen.',
@@ -28,6 +30,7 @@ const SAMPLE: ConflictEntry[] = [
       estimateTotal: 8200,
     },
     serverData: {
+      contact_id: '4071',
       designVisit: {
         version: 5,
         updated_at: new Date(now - 1000 * 60 * 30).toISOString(),

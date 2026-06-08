@@ -14,8 +14,10 @@ import Collapse from '@mui/material/Collapse';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
 import type { ConflictEntry, OfflineArea } from '../lib/offlineQueue';
+import { resolveConflictRoute } from '../lib/conflictRoute';
 
 // ── Offline sync-conflict review ─────────────────────────────────────────────────
 // When a queued offline edit replays onto a record that changed on the server,
@@ -266,6 +268,7 @@ function VersionRow({ label, base, server }: { label: string; base: React.ReactN
 function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDismiss: (id: number) => void }) {
   const hasVersions = conflict.baseVersion != null || conflict.serverVersion != null;
   const hasTimestamps = !!conflict.baseUpdatedAt || !!conflict.serverUpdatedAt;
+  const recordHref = resolveConflictRoute(conflict);
 
   return (
     <Box
@@ -289,15 +292,31 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
             Detected {formatTimestamp(conflict.detectedAt)}
           </Typography>
         </Box>
-        <Button
-          size="small"
-          variant="text"
-          color="inherit"
-          onClick={() => onDismiss(conflict.id)}
-          data-testid="conflict-dismiss"
-        >
-          Dismiss
-        </Button>
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          {recordHref && (
+            <Button
+              size="small"
+              variant="outlined"
+              component="a"
+              href={recordHref}
+              target="_blank"
+              rel="noopener"
+              startIcon={<OpenInNewIcon />}
+              data-testid="conflict-open-record"
+            >
+              Open record
+            </Button>
+          )}
+          <Button
+            size="small"
+            variant="text"
+            color="inherit"
+            onClick={() => onDismiss(conflict.id)}
+            data-testid="conflict-dismiss"
+          >
+            Dismiss
+          </Button>
+        </Stack>
       </Stack>
 
       <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
