@@ -40,6 +40,7 @@ interface ContactInfo {
   visitType: 'design' | 'survey';
   contactName: string;
   contactPhone: string;
+  contactMobilePhone: string;
   contactEmail: string;
   contactAddress: string;
 }
@@ -302,7 +303,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const visitType = contactInfo?.visitType ?? 'design';
   const label = visitLabel(visitType);
   const displayName = contactInfo?.contactName || ctx.contactName || 'the customer';
-  const phone = contactInfo?.contactPhone || '';
+  const landline = contactInfo?.contactPhone || '';
+  const mobile = contactInfo?.contactMobilePhone || '';
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -329,10 +331,20 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             <DialogTitle>Call {displayName}</DialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                {phone ? (
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Phone number</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{phone}</Typography>
+                {(landline || mobile) ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {landline && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Phone</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{landline}</Typography>
+                      </Box>
+                    )}
+                    {mobile && (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Mobile</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{mobile}</Typography>
+                      </Box>
+                    )}
                   </Box>
                 ) : (
                   <Alert severity="warning">No phone number on record for this contact.</Alert>

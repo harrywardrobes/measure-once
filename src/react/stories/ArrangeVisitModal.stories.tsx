@@ -40,6 +40,71 @@ export const CallStepDesign: Story = {
               visitType: 'design',
               contactName: 'Jane Smith',
               contactPhone: '07700 900123',
+              contactMobilePhone: '',
+              contactEmail: 'jane@example.com',
+              contactAddress: '14 Oak Street, London, SW1A 1AA',
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          return origFetch(input, init);
+        };
+      }
+      return <Story />;
+    },
+  ],
+};
+
+export const MobileOnly: Story = {
+  name: 'Call step — mobile number only',
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
+          step: 'call',
+          address: '14 Oak Street, London, SW1A 1AA',
+          slotIso: [null, null, null],
+          bookedSlotIso: null,
+        }));
+        const origFetch = window.fetch;
+        window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+          if (url.includes('arrange-visit') && !url.includes('outcome')) {
+            return new Response(JSON.stringify({
+              visitType: 'design',
+              contactName: 'Jane Smith',
+              contactPhone: '',
+              contactMobilePhone: '07911 123456',
+              contactEmail: 'jane@example.com',
+              contactAddress: '14 Oak Street, London, SW1A 1AA',
+            }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+          return origFetch(input, init);
+        };
+      }
+      return <Story />;
+    },
+  ],
+};
+
+export const BothNumbers: Story = {
+  name: 'Call step — landline and mobile',
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
+          step: 'call',
+          address: '14 Oak Street, London, SW1A 1AA',
+          slotIso: [null, null, null],
+          bookedSlotIso: null,
+        }));
+        const origFetch = window.fetch;
+        window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+          if (url.includes('arrange-visit') && !url.includes('outcome')) {
+            return new Response(JSON.stringify({
+              visitType: 'design',
+              contactName: 'Jane Smith',
+              contactPhone: '020 7946 0958',
+              contactMobilePhone: '07911 123456',
               contactEmail: 'jane@example.com',
               contactAddress: '14 Oak Street, London, SW1A 1AA',
             }), { status: 200, headers: { 'Content-Type': 'application/json' } });

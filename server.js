@@ -6163,19 +6163,20 @@ app.post('/api/card-actions/arrange-visit',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,zip,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const leadStatus = String(props.hs_lead_status || '').toLowerCase();
       const visitType = leadStatus === 'awaiting_deposit' ? 'survey' : 'design';
       const firstName = String(props.firstname || '');
       const lastName  = String(props.lastname  || '');
-      const contactName    = [firstName, lastName].filter(Boolean).join(' ') || '';
-      const contactPhone   = String(props.phone || '');
-      const contactEmail   = String(props.email || '');
-      const addressParts   = [props.address, props.city, props.zip].filter(Boolean);
-      const contactAddress = addressParts.join(', ');
-      res.json({ visitType, contactName, contactPhone, contactEmail, contactAddress });
+      const contactName        = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactPhone       = String(props.phone || '');
+      const contactMobilePhone = String(props.mobilephone || '');
+      const contactEmail       = String(props.email || '');
+      const addressParts       = [props.address, props.city, props.zip].filter(Boolean);
+      const contactAddress     = addressParts.join(', ');
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
