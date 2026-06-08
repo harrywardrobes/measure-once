@@ -11,6 +11,7 @@ const axios      = require('axios').create({ timeout: 12000 });
 const path       = require('path');
 const fs         = require('fs');
 const { isAuthenticated, requirePrivilege } = require('./auth');
+const { getEmailTemplate, renderEmail } = require('./email-templates');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -219,41 +220,18 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
+  const tmpl = await getEmailTemplate('customer_invite');
+  const { subject, text, html } = renderEmail(tmpl, {
+    textVars: { maskedEmail, formLink },
+    htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
+  });
   try {
     await transport.sendMail({
       from, replyTo,
       to:      contactEmail,
-      subject: 'Tell us about your home...',
-      text: [
-        `Hi,`,
-        '',
-        `We'd love to know a bit more about your home so we can put together the perfect quote for you.`,
-        '',
-        `This link is just for you (${maskedEmail}) — please click it to fill in a short form:`,
-        '',
-        `  ${formLink}`,
-        '',
-        `It only takes a few minutes and you can upload photos of the spaces you have in mind.`,
-        '',
-        `If you have any questions, just reply to this email.`,
-        '',
-        `Warm regards,`,
-        `The Measure Once team`,
-      ].join('\n'),
-      html: `
-        <p>Hi,</p>
-        <p>We'd love to know a bit more about your home so we can put together the perfect quote for you.</p>
-        <p>This link is just for you (${escapeHtml(maskedEmail)}) — please click the button below to fill in a short form:</p>
-        <p style="margin:24px 0;">
-          <a href="${escapeHtml(formLink)}"
-             style="display:inline-block;padding:12px 24px;background:#7c3aed;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">
-            Tell us about your home
-          </a>
-        </p>
-        <p>It only takes a few minutes and you can upload photos of the spaces you have in mind.</p>
-        <p>If you have any questions, just reply to this email.</p>
-        <p>Warm regards,<br>The Measure Once team</p>
-      `,
+      subject,
+      text,
+      html,
     });
     console.log(`[customer-info] Invite email sent to ${contactEmail}`);
   } catch (err) {
@@ -271,7 +249,7 @@ async function sendAdminNotificationEmail(submission) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const { id: submissionId, contact_id, contact_name, contact_email, corrected_email, corrected_mobile,
+  const { id: submissionId, contact_id, contact_name, contact_email,
           address_line1, city, postcode, room_count, room_notes } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
@@ -350,41 +328,32 @@ async function sendAdminNotificationEmail(submission) {
     }
   }
 
+  const customerName  = contact_name || contact_email || 'Unknown';
+  const customerEmail = contact_email || '—';
+  const notesValue    = room_notes || '—';
+  const tmpl = await getEmailTemplate('admin_notification');
+  const { subject, text, html } = renderEmail(tmpl, {
+    textVars: {
+      customerName, customerEmail, address, rooms: roomLabel,
+      notes: notesValue, photoSummary: photoSummaryText,
+    },
+    htmlVars: {
+      customerName:  escapeHtml(customerName),
+      customerEmail: escapeHtml(customerEmail),
+      address:       escapeHtml(address),
+      rooms:         escapeHtml(roomLabel),
+      notes:         escapeHtml(notesValue),
+      photoSummary:  photoSummaryHtml,
+    },
+  });
   try {
     await transport.sendMail({
       from, replyTo,
       to:      admins.join(', '),
-      subject: `New customer info submission – ${contact_name || contact_email || 'Unknown'}`,
+      subject,
       attachments,
-      text: [
-        `New customer info submission received.`,
-        '',
-        `Customer:     ${contact_name || '—'}`,
-        `Email:        ${contact_email || '—'}`,
-        corrected_email  ? `Corrected email:  ${corrected_email}`  : '',
-        corrected_mobile ? `Corrected mobile: ${corrected_mobile}` : '',
-        '',
-        `Address:      ${address}`,
-        `Rooms:        ${roomLabel}`,
-        '',
-        `Notes:`,
-        room_notes || '—',
-        '',
-        photoSummaryText,
-      ].filter(l => l !== undefined && l !== false).join('\n'),
-      html: `
-        <p><strong>New customer info submission received.</strong></p>
-        <table cellpadding="4" cellspacing="0">
-          <tr><td><strong>Customer</strong></td><td>${escapeHtml(contact_name || '—')}</td></tr>
-          <tr><td><strong>Email</strong></td><td>${escapeHtml(contact_email || '—')}</td></tr>
-          ${corrected_email  ? `<tr><td><strong>Corrected email</strong></td><td>${escapeHtml(corrected_email)}</td></tr>`  : ''}
-          ${corrected_mobile ? `<tr><td><strong>Corrected mobile</strong></td><td>${escapeHtml(corrected_mobile)}</td></tr>` : ''}
-          <tr><td><strong>Address</strong></td><td>${escapeHtml(address)}</td></tr>
-          <tr><td><strong>Rooms</strong></td><td>${escapeHtml(roomLabel)}</td></tr>
-        </table>
-        ${room_notes ? `<p><strong>Notes:</strong></p><p style="white-space:pre-wrap">${escapeHtml(room_notes)}</p>` : ''}
-        ${photoSummaryHtml}
-      `,
+      text,
+      html,
     });
     console.log(`[customer-info] Admin notification sent for contact ${contact_email}`);
   } catch (err) {
@@ -401,24 +370,18 @@ async function sendCustomerThankYouEmail(contactEmail, contactName) {
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
   const firstName = contactName ? contactName.split(' ')[0] : '';
+  const tmpl = await getEmailTemplate('customer_thank_you');
+  const { subject, text, html } = renderEmail(tmpl, {
+    textVars: { firstName },
+    htmlVars: { firstName: escapeHtml(firstName) },
+  });
   try {
     await transport.sendMail({
       from, replyTo,
       to:      contactEmail,
-      subject: 'Thanks for sharing!',
-      text: [
-        `Hi${firstName ? ' ' + firstName : ''},`,
-        '',
-        'Thank you for the extra info about your home, we will be in touch shortly.',
-        '',
-        'Warm regards,',
-        'The Measure Once team',
-      ].join('\n'),
-      html: `
-        <p>Hi${firstName ? ' ' + firstName : ''},</p>
-        <p>Thank you for the extra info about your home, we will be in touch shortly.</p>
-        <p>Warm regards,<br>The Measure Once team</p>
-      `,
+      subject,
+      text,
+      html,
     });
     console.log(`[customer-info] Thank-you email sent to ${contactEmail}`);
   } catch (err) {

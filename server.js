@@ -21,6 +21,7 @@ const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
+const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS } = require('./email-templates');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -4705,6 +4706,101 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
   }
 });
 
+// ── Email templates (admin-editable) ─────────────────────────────────────────
+// Merge a DB row with its TEMPLATE_DEFS metadata (advertised variables, label).
+function _emailTemplateWithMeta(row) {
+  const def = TEMPLATE_DEFS[row.key] || {};
+  return {
+    key:         row.key,
+    label:       def.label || row.key,
+    description: def.description || '',
+    variables:   def.variables || [],
+    subject:     row.subject,
+    body_text:   row.body_text,
+    body_html:   row.body_html,
+    footer_text: row.footer_text,
+    updated_at:  row.updated_at,
+    updated_by:  row.updated_by,
+  };
+}
+
+// GET /api/admin/email-templates — all templates ordered by key.
+app.get('/api/admin/email-templates', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT key, subject, body_text, body_html, footer_text, updated_at, updated_by
+       FROM email_templates ORDER BY key`
+    );
+    res.json(r.rows.map(_emailTemplateWithMeta));
+  } catch (e) {
+    console.error('GET /api/admin/email-templates error:', e.message);
+    res.status(500).json({ error: 'Could not load email templates.' });
+  }
+});
+
+// GET /api/admin/email-templates/:key — one template (404 if missing).
+app.get('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const { key } = req.params;
+  if (!TEMPLATE_KEYS.includes(key)) {
+    return res.status(404).json({ error: 'Unknown email template key.' });
+  }
+  try {
+    const r = await pool.query(
+      `SELECT key, subject, body_text, body_html, footer_text, updated_at, updated_by
+       FROM email_templates WHERE key = $1 LIMIT 1`,
+      [key]
+    );
+    if (!r.rows.length) {
+      return res.status(404).json({ error: 'Email template not found.' });
+    }
+    res.json(_emailTemplateWithMeta(r.rows[0]));
+  } catch (e) {
+    console.error('GET /api/admin/email-templates/:key error:', e.message);
+    res.status(500).json({ error: 'Could not load email template.' });
+  }
+});
+
+// PATCH /api/admin/email-templates/:key — upsert subject/body/footer, audit-log.
+app.patch('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, async (req, res) => {
+  const { key } = req.params;
+  if (!TEMPLATE_KEYS.includes(key)) {
+    return res.status(404).json({ error: 'Unknown email template key.' });
+  }
+  const { subject, body_text, body_html, footer_text } = req.body || {};
+  if (typeof subject !== 'string' || !subject.trim()) {
+    return res.status(400).json({ error: 'Subject is required.' });
+  }
+  const adminEmail = req.user?.email || req.user?.claims?.email || 'unknown';
+  try {
+    const r = await pool.query(
+      `INSERT INTO email_templates (key, subject, body_text, body_html, footer_text, updated_at, updated_by)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+       ON CONFLICT (key) DO UPDATE SET
+         subject     = EXCLUDED.subject,
+         body_text   = EXCLUDED.body_text,
+         body_html   = EXCLUDED.body_html,
+         footer_text = EXCLUDED.footer_text,
+         updated_at  = NOW(),
+         updated_by  = EXCLUDED.updated_by
+       RETURNING key, subject, body_text, body_html, footer_text, updated_at, updated_by`,
+      [
+        key,
+        subject.trim(),
+        typeof body_text === 'string' ? body_text : '',
+        typeof body_html === 'string' ? body_html : '',
+        typeof footer_text === 'string' ? footer_text : '',
+        adminEmail,
+      ]
+    );
+    invalidateEmailTemplate(key);
+    await logAdminAction(adminEmail, 'update_email_template', null, `Updated email template: ${key}`);
+    res.json(_emailTemplateWithMeta(r.rows[0]));
+  } catch (e) {
+    console.error('PATCH /api/admin/email-templates/:key error:', e.message);
+    res.status(500).json({ error: 'Could not update email template.' });
+  }
+});
+
 // ── Substatus clear failure tracking ─────────────────────────────────────────
 // When the fire-and-forget orphaned-substatus clear job fails (search error or
 // per-contact PATCH error after retries), an entry is written here so admins
@@ -6808,6 +6904,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { console.error('  Substatus handler auto-binding failed:', e.message); }
     try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
     catch (e) { console.error('  Page filter config table setup failed:', e.message); }
+    try { await ensureEmailTemplatesTable(); console.log('  Email templates table ready'); }
+    catch (e) { console.error('  Email templates table setup failed:', e.message); }
     try { await cleanupStaleHubSpotCredentialRows(); }
     catch (e) { console.error('  HubSpot credential row cleanup failed:', e.message); }
     scheduleConflictDigest();

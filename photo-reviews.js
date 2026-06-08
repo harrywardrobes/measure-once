@@ -8,6 +8,7 @@ const nodemailer = require('nodemailer');
 const axios      = require('axios').create({ timeout: 12000 });
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { signCustomerPhotoUrl } = require('./customer-info');
+const { getEmailTemplate, renderEmail } = require('./email-templates');
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -63,9 +64,6 @@ function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-function companyName() {
-  return process.env.COMPANY_NAME || 'Measure Once';
 }
 
 // ── DB schema ─────────────────────────────────────────────────────────────────
@@ -160,53 +158,6 @@ async function ensurePhotoReviewOutcomesTable() {
   }
 }
 
-// ── Email templates ───────────────────────────────────────────────────────────
-function notSuitableSubject() {
-  return 'Regarding your enquiry';
-}
-function notSuitableBody(contactName) {
-  const firstName = contactName ? contactName.split(' ')[0] : '';
-  const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
-  return [
-    greeting,
-    '',
-    'Thank you so much for getting in touch with us and sharing details about your home.',
-    '',
-    "Unfortunately, after reviewing your enquiry, we don't think this is a project we'd be able to help with at this time.",
-    '',
-    "We're sorry we can't be of more help on this occasion, and we wish you all the best in finding the right team for your project.",
-    '',
-    'Warm regards,',
-    companyName(),
-  ].join('\n');
-}
-
-function roughEstimateSubject() {
-  return `Your rough estimate from ${companyName()}`;
-}
-function roughEstimateBody(contactName, priceRange) {
-  const firstName = contactName ? contactName.split(' ')[0] : '';
-  const greeting = firstName ? `Hi ${firstName},` : 'Hi,';
-  return [
-    greeting,
-    '',
-    'Thank you for sharing details about your home — we really appreciate it.',
-    '',
-    `Based on the information you've provided, our rough estimate for the work is:`,
-    '',
-    `  ${priceRange || '—'}`,
-    '',
-    'Please note that this is a rough guide only and is subject to change once we have had a chance to see your space in person.',
-    '',
-    "One of our team will be in touch shortly to arrange a design visit, where we can discuss your project in detail, take accurate measurements, and give you a precise quote.",
-    '',
-    "We're looking forward to helping you create your dream space!",
-    '',
-    'Warm regards,',
-    companyName(),
-  ].join('\n');
-}
-
 // ── HubSpot helpers ───────────────────────────────────────────────────────────
 async function updateHubSpotLeadStatus(contactId, status) {
   const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
@@ -228,7 +179,7 @@ async function ensureLeadStatusExists(key, label) {
 }
 
 // ── Send review outcome email ─────────────────────────────────────────────────
-async function sendReviewEmail(toEmail, subject, textBody) {
+async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
   const transport = createMailTransport();
   if (!transport) {
     console.warn('[photo-reviews] SMTP not configured — skipping review outcome email.');
@@ -236,17 +187,19 @@ async function sendReviewEmail(toEmail, subject, textBody) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const htmlBody = textBody
-    .split('\n')
-    .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
-    .join('');
+  const html = (htmlBody && htmlBody.trim())
+    ? htmlBody
+    : textBody
+        .split('\n')
+        .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
+        .join('');
   try {
     await transport.sendMail({
       from, replyTo,
       to:      toEmail,
       subject,
       text:    textBody,
-      html:    htmlBody,
+      html,
     });
     console.log(`[photo-reviews] Review outcome email sent to ${toEmail}`);
   } catch (err) {
@@ -319,7 +272,7 @@ router.post('/api/card-actions/review-customer-photos',
   isAuthenticated,
   requirePrivilege('member'),
   async (req, res) => {
-    const { contactId, submissionId, outcome, priceRange, emailSubject, emailBody } = req.body;
+    const { contactId, submissionId, outcome, priceRange } = req.body;
 
     if (!contactId || typeof contactId !== 'string' || !/^\d+$/.test(String(contactId).trim())) {
       return res.status(400).json({ error: 'contactId is required.' });
@@ -333,18 +286,10 @@ router.post('/api/card-actions/review-customer-photos',
     if (outcome === 'rough_estimate_sent' && (!priceRange || typeof priceRange !== 'string' || !priceRange.trim())) {
       return res.status(400).json({ error: 'priceRange is required for rough_estimate_sent.' });
     }
-    if (!emailSubject || typeof emailSubject !== 'string' || !emailSubject.trim()) {
-      return res.status(400).json({ error: 'emailSubject is required.' });
-    }
-    if (!emailBody || typeof emailBody !== 'string' || !emailBody.trim()) {
-      return res.status(400).json({ error: 'emailBody is required.' });
-    }
 
     const cid  = String(contactId).trim();
     const subId = Number(submissionId);
-    const subject = emailSubject.trim().slice(0, 500);
-    const body    = emailBody.trim().slice(0, 10000);
-    const range   = outcome === 'rough_estimate_sent' ? (priceRange || '').trim().slice(0, 200) : null;
+    const range = outcome === 'rough_estimate_sent' ? (priceRange || '').trim().slice(0, 200) : null;
 
     // Verify submission belongs to this contact and exists
     let submission;
@@ -387,9 +332,26 @@ router.post('/api/card-actions/review-customer-photos',
       return res.status(400).json({ error: 'No email address on record for this customer.' });
     }
 
+    // Compose the outcome email from the admin-editable template.
+    const firstName = submission.contact_name ? submission.contact_name.split(' ')[0] : '';
+    const templateKey = outcome === 'not_suitable'
+      ? 'photo_review_not_suitable'
+      : 'photo_review_rough_estimate';
+    const tmpl = await getEmailTemplate(templateKey);
+    const rendered = renderEmail(tmpl, {
+      textVars: { firstName, priceRange: range || '' },
+      htmlVars: { firstName: escapeHtml(firstName), priceRange: escapeHtml(range || '') },
+    });
+    const subject = rendered.subject.slice(0, 500);
+    const body    = rendered.text.slice(0, 10000);
+    // Only pass rendered HTML when the template actually defines a body_html;
+    // otherwise sendReviewEmail derives HTML from the text (preserving the
+    // original behaviour for the default text-only photo-review templates).
+    const htmlBody = (tmpl && tmpl.body_html && tmpl.body_html.trim()) ? rendered.html : undefined;
+
     // Send email
     try {
-      await sendReviewEmail(toEmail, subject, body);
+      await sendReviewEmail(toEmail, subject, body, htmlBody);
     } catch (err) {
       return res.status(502).json({ error: 'Failed to send email: ' + err.message });
     }

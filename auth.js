@@ -14,6 +14,7 @@ const nodemailer = require('nodemailer');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const zxcvbn = require('zxcvbn');
+const { getEmailTemplate, renderEmail } = require('./email-templates');
 
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
@@ -214,41 +215,21 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
   const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
   const from = buildFromHeader();
   const replyTo = buildReplyTo();
-  const subject = reset
-    ? 'Reset your Measure Once password'
+  const templateKey = reset
+    ? 'set_password_reset'
     : resend
-      ? 'Set your Measure Once password (new link)'
-      : 'Welcome to Measure Once — set your password';
-  const intro = reset
-    ? 'A password reset was requested for your Measure Once account.'
-    : resend
-      ? 'A new password setup link has been issued for your Measure Once account.'
-      : "You've been granted access to Measure Once.";
-  const introHtml = reset
-    ? 'A password reset was requested for your <strong>Measure Once</strong> account.'
-    : resend
-      ? 'A new password setup link has been issued for your Measure Once account.'
-      : "You've been granted access to <strong>Measure Once</strong>.";
-  const action = reset
-    ? 'Reset your password by clicking the link below (valid for 1 hour):'
-    : 'Set your password by clicking the link below (valid for 24 hours):';
+      ? 'set_password_resend'
+      : 'set_password_welcome';
+  const tmpl = await getEmailTemplate(templateKey);
+  const { subject, text, html } = renderEmail(tmpl, {
+    textVars: { link },
+    htmlVars: { link: escapeHtml(link) },
+  });
   try {
     await transport.sendMail({
       from, replyTo, to: email, subject,
-      text: [
-        intro,
-        '',
-        action,
-        `  ${link}`,
-        '',
-        "If you didn't request this, you can safely ignore this email.",
-      ].join('\n'),
-      html: `
-        <p>${introHtml}</p>
-        <p>${action}</p>
-        <p><a href="${link}">${link}</a></p>
-        <p>If you didn't request this, you can safely ignore this email.</p>
-      `,
+      text,
+      html,
     });
     console.log(`  Set-password email sent to ${email}`);
   } catch (err) {
