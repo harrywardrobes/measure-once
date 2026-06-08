@@ -31,6 +31,7 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 import {
   analyzeTemplateTokens,
   TokenHighlightField,
+  type MalformedReason,
   type TokenHighlightFieldHandle,
 } from '../../components/TokenHighlightField';
 
@@ -248,6 +249,49 @@ function PreviewPanel({ templateKey, fields }: PreviewPanelProps) {
   );
 }
 
+// ── Malformed-placeholder messaging ───────────────────────────────────────────
+// Each malformed cause gets its own precise, plain-language explanation so the
+// fix is obvious (a missing closing `}}` is a different problem from the wrong
+// number of braces or a name with stray characters).
+
+interface MalformedReasonText {
+  /** Short heading naming the cause, e.g. "Missing closing braces". */
+  heading: string;
+  /** One-line plain-language explanation of how to fix it. */
+  explanation: string;
+}
+
+const MALFORMED_REASON_TEXT: Record<MalformedReason, MalformedReasonText> = {
+  unclosed: {
+    heading: 'Missing closing braces',
+    explanation:
+      'this opens with {{ but is never closed — add the closing }} to finish it, e.g. {{firstName}}',
+  },
+  'brace-count': {
+    heading: 'Wrong number of braces',
+    explanation:
+      'variables need exactly two curly braces on each side, e.g. {{firstName}}',
+  },
+  'invalid-name': {
+    heading: 'Invalid characters in the name',
+    explanation:
+      'names can only contain letters, numbers and underscores — no spaces, hyphens or dots, e.g. {{firstName}}',
+  },
+};
+
+// Fixed display order: surface unclosed openers first (most confusing), then
+// brace-count typos, then stray-character names.
+const MALFORMED_REASON_ORDER: MalformedReason[] = [
+  'unclosed',
+  'brace-count',
+  'invalid-name',
+];
+
+interface MalformedGroup extends MalformedReasonText {
+  reason: MalformedReason;
+  tokens: string[];
+}
+
 // ── Edit dialog ───────────────────────────────────────────────────────────────
 
 interface EditDialogProps {
@@ -312,6 +356,20 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       malformedTokens,
     };
   }, [fields, template.variables]);
+
+  // Group malformed placeholders by their cause so the save-guard banner and
+  // confirm dialog can give each cause its own precise explanation.
+  const malformedGroups = useMemo<MalformedGroup[]>(
+    () =>
+      MALFORMED_REASON_ORDER.map((reason) => ({
+        reason,
+        ...MALFORMED_REASON_TEXT[reason],
+        tokens: malformedTokens
+          .filter((m) => m.reason === reason)
+          .map((m) => m.text),
+      })).filter((g) => g.tokens.length > 0),
+    [malformedTokens],
+  );
 
   useEffect(() => {
     try {
@@ -420,16 +478,15 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               </Alert>
             )}
 
-            {malformedTokens.length > 0 && (
-              <Alert severity="warning">
-                <strong>
-                  Malformed placeholder{malformedTokens.length > 1 ? 's' : ''}:
-                </strong>{' '}
-                {malformedTokens.join(', ')}
-                {' '}— check the curly braces. Variables need exactly two on each
-                side, e.g. {'{{firstName}}'}. As written these render as literal text.
+            {malformedGroups.map((g) => (
+              <Alert key={g.reason} severity="warning">
+                <strong>{g.heading}:</strong>{' '}
+                {g.tokens.join(', ')}
+                {' '}— {g.explanation}. As written{' '}
+                {g.tokens.length > 1 ? 'these render' : 'this renders'} as literal
+                text.
               </Alert>
-            )}
+            ))}
 
             {unknownTokens.length > 0 && (
               <Alert severity="warning">
@@ -537,21 +594,18 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               : 'Unknown variables in template'}
         </DialogTitle>
         <DialogContent>
-          {malformedTokens.length > 0 && (
-            <>
-              <Typography variant="body2" sx={{ mb: 1.5 }}>
-                {malformedTokens.length > 1
-                  ? 'These placeholders have the wrong number of curly braces'
-                  : 'This placeholder has the wrong number of curly braces'}
-                {' '}(variables need exactly two on each side, e.g. {'{{firstName}}'}):
+          {malformedGroups.map((g) => (
+            <React.Fragment key={g.reason}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>{g.heading}</strong> — {g.explanation}:
               </Typography>
               <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-                {malformedTokens.map((t) => (
+                {g.tokens.map((t) => (
                   <Chip key={t} label={t} size="small" color="warning" />
                 ))}
               </Stack>
-            </>
-          )}
+            </React.Fragment>
+          ))}
           {unknownTokens.length > 0 && (
             <>
               <Typography variant="body2" sx={{ mb: 1.5 }}>

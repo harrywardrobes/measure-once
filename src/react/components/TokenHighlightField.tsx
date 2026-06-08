@@ -30,11 +30,24 @@ const NAME_PREFIX_RE = /^\w*/;
 
 type SegmentKind = 'plain' | 'known' | 'unknown' | 'malformed';
 
+/**
+ * Why a placeholder is malformed — lets callers give a precise, plain-language
+ * explanation instead of one generic "check the braces" message:
+ *   - `brace-count`  — wrong number of braces (`{word}`, `{{word}`, `{word}}`);
+ *   - `invalid-name` — balanced `{{…}}` whose name has stray characters
+ *                      (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`);
+ *   - `unclosed`     — a `{{` opener with no matching closing braces
+ *                      (`{{firstName` followed by more text).
+ */
+export type MalformedReason = 'brace-count' | 'invalid-name' | 'unclosed';
+
 interface Segment {
   text: string;
   kind: SegmentKind;
   /** Clean variable name, present only for `known` / `unknown` token segments. */
   name?: string;
+  /** Present only for `malformed` segments — why the placeholder is malformed. */
+  malformedReason?: MalformedReason;
 }
 
 /**
@@ -98,8 +111,13 @@ export function buildSegments(text: string, known: Set<string>): Segment[] {
           name: content,
         });
       } else {
-        // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
-        segments.push({ text: full, kind: 'malformed' });
+        // A balanced `{{…}}` reaching here has stray characters in the name;
+        // anything else is a mismatched brace count.
+        segments.push({
+          text: full,
+          kind: 'malformed',
+          malformedReason: balanced ? 'invalid-name' : 'brace-count',
+        });
       }
       i = closeStart + closeLen;
       plainStart = i;
@@ -122,7 +140,11 @@ export function buildSegments(text: string, known: Set<string>): Segment[] {
       const name = NAME_PREFIX_RE.exec(content)![0];
       const tokenEnd = contentStart + name.length;
       pushPlain(openStart);
-      segments.push({ text: text.slice(openStart, tokenEnd), kind: 'malformed' });
+      segments.push({
+        text: text.slice(openStart, tokenEnd),
+        kind: 'malformed',
+        malformedReason: 'unclosed',
+      });
       i = tokenEnd;
       plainStart = i;
       continue;
@@ -138,14 +160,22 @@ export function buildSegments(text: string, known: Set<string>): Segment[] {
 
 // ── Aggregate token analysis (for save-guard banners) ──────────────────────────
 
+/** A malformed placeholder plus the specific reason it is malformed. */
+export interface MalformedToken {
+  /** Literal text of the malformed placeholder, e.g. `{firstName}`. */
+  text: string;
+  /** Why it is malformed — drives the precise save-guard explanation. */
+  reason: MalformedReason;
+}
+
 export interface TemplateTokenAnalysis {
   /** Clean token names used anywhere (both known and unknown). */
   usedNames: string[];
   /** Token names not present in the known-variable set. */
   unknownNames: string[];
-  /** Literal text of malformed placeholders (wrong braces, stray chars, or
-   *  unclosed openers). */
-  malformedTokens: string[];
+  /** Malformed placeholders (wrong braces, stray chars, or unclosed openers),
+   *  each tagged with the specific reason it is malformed. */
+  malformedTokens: MalformedToken[];
 }
 
 /**
@@ -161,11 +191,15 @@ export function analyzeTemplateTokens(
 ): TemplateTokenAnalysis {
   const used = new Set<string>();
   const unknown = new Set<string>();
-  const malformed = new Set<string>();
+  // Dedupe malformed placeholders by their literal text; keep the first reason
+  // seen for each (a given literal can only be classified one way anyway).
+  const malformed = new Map<string, MalformedReason>();
   for (const text of texts) {
     for (const seg of buildSegments(text, known)) {
       if (seg.kind === 'malformed') {
-        malformed.add(seg.text);
+        if (!malformed.has(seg.text)) {
+          malformed.set(seg.text, seg.malformedReason ?? 'brace-count');
+        }
       } else if (seg.name) {
         used.add(seg.name);
         if (seg.kind === 'unknown') unknown.add(seg.name);
@@ -175,7 +209,7 @@ export function analyzeTemplateTokens(
   return {
     usedNames: [...used],
     unknownNames: [...unknown],
-    malformedTokens: [...malformed],
+    malformedTokens: [...malformed].map(([text, reason]) => ({ text, reason })),
   };
 }
 
