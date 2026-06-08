@@ -2050,7 +2050,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (!/^\d+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id.' });
     }
-    const allowed = ['hs_lead_status', 'hw_lead_substatus', 'firstname', 'lastname', 'email', 'phone', 'address', 'city', 'zip'];
+    const allowed = ['hs_lead_status', 'hw_lead_substatus', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number', 'address', 'city', 'zip'];
     const properties = {};
     for (const key of allowed) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {

@@ -12,6 +12,7 @@ import { DesignVisitsList } from './customer-detail/DesignVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
+import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
   Contact, Room, HubSpotTask, LeadStatus, LeadSubstatus,
   DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
@@ -116,6 +117,8 @@ export function CustomerDetailPage() {
   const [waError,     setWaError]     = useState<string | null>(null);
   const [waEnabled,   setWaEnabled]   = useState(false);
   const [waModalOpen, setWaModalOpen] = useState(false);
+
+  const [contactEditOpen, setContactEditOpen] = useState(false);
 
   // ── Data fetchers ─────────────────────────────────────────────────────────
 
@@ -702,6 +705,7 @@ export function CustomerDetailPage() {
           leadStatuses={leadStatuses}
           leadSubstatuses={leadSubs}
           nullLeadStatusLabel={nullLsLabel}
+          onEditContact={() => setContactEditOpen(true)}
           onOpenWhatsApp={() => setWaModalOpen(true)}
           whatsappEnabled={waEnabled}
         />
@@ -797,6 +801,21 @@ export function CustomerDetailPage() {
           onSubstatusChange={handleSubstatusChange}
         />
       </div>
+
+      {/* Contact edit modal */}
+      {contact && (
+        <ContactEditModal
+          contact={contact}
+          open={contactEditOpen}
+          onClose={() => setContactEditOpen(false)}
+          onSaved={(updated) => {
+            setContact(updated);
+            const g  = window as unknown as Record<string, unknown>;
+            const st = g.state as Record<string, unknown> | undefined;
+            if (st) st.selectedContact = updated;
+          }}
+        />
+      )}
 
       {/* WhatsApp modal */}
       {waModalOpen && contact && (
