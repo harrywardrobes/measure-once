@@ -502,7 +502,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           : {}),
       });
       if (!res.queued && !res.ok) {
-        throw new Error((res.data as { error?: string })?.error || (editMode ? 'Save failed' : 'Submission failed'));
+        const d = res.data as { error?: string; code?: string } | undefined;
+        if (d?.code === 'LEAD_STATUS_REMOVED') {
+          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+        }
+        throw new Error(d?.error || (editMode ? 'Save failed' : 'Submission failed'));
       }
       committedRef.current = true;
       pendingUploadKeysRef.current.clear();

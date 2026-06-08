@@ -252,7 +252,10 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
       // Surface only genuine server rejections (4xx). A queued write is success
       // from the user's perspective — it will replay on reconnect.
       if (!res.queued && !res.ok) {
-        const d = res.data as { error?: string; message?: string } | undefined;
+        const d = res.data as { error?: string; message?: string; code?: string } | undefined;
+        if (d?.code === 'LEAD_STATUS_REMOVED') {
+          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+        }
         throw new Error(d?.error || d?.message || 'Failed');
       }
 

@@ -1759,6 +1759,8 @@ function NewCustomerDialog({
         setErr('HubSpot token is invalid or expired — ask an admin to update the token.');
       } else if (er.code === 'HUBSPOT_RATE_LIMIT') {
         setErr('HubSpot rate limit reached — please wait a moment and try again.');
+      } else if (er.code === 'LEAD_STATUS_REMOVED') {
+        setErr(`${er.message} Visit Settings → Lead statuses to restore it.`);
       } else {
         setErr(er.message || 'Failed to create customer.');
       }

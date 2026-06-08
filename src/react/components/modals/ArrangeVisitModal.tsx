@@ -206,7 +206,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
           visitType: contactInfo?.visitType ?? 'design',
         },
       });
-      if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
+      if (!res.queued && !res.ok) {
+        const d = res.data as { error?: string; code?: string } | undefined;
+        if (d?.code === 'LEAD_STATUS_REMOVED') {
+          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+        }
+        throw new Error(d?.error || 'Could not update status.');
+      }
       clearDraft(key);
       showToast(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
       setStep('done');
@@ -244,7 +250,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
           address: address.trim(),
         },
       });
-      if (!res.queued && !res.ok) throw new Error((res.data as { error?: string })?.error || 'Could not update status.');
+      if (!res.queued && !res.ok) {
+        const d = res.data as { error?: string; code?: string } | undefined;
+        if (d?.code === 'LEAD_STATUS_REMOVED') {
+          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+        }
+        throw new Error(d?.error || 'Could not update status.');
+      }
       clearDraft(key);
       showToast(res.queued ? 'Booking saved offline — it will sync when you reconnect' : 'Visit booked and status updated', false);
 
@@ -310,6 +322,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     } catch (e) {
       if (isGoogleAuthError(e)) {
         setActionError('GOOGLE_AUTH');
+      } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
+        setActionError(`${(e as Error).message} Visit Settings → Lead statuses to restore it.`);
       } else {
         setActionError((e as Error).message || 'Could not send email.');
       }

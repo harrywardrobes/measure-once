@@ -439,7 +439,12 @@ export function CustomerInfoPage() {
         }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Submission failed');
+      if (!r.ok) {
+        if (d.code === 'LEAD_STATUS_REMOVED') {
+          throw new Error('This form is temporarily unavailable due to a configuration change. Please contact us directly and we\'ll be happy to help.');
+        }
+        throw new Error(d.error || 'Submission failed');
+      }
       clearDraft(token);
       setPageState('submitted');
     } catch (e) {
