@@ -12,11 +12,20 @@
  *   public/legacy-shim.js) was removed when legacy-shim.js was deleted. All
  *   client-side privilege checks now go through the React usePrivilege() hook.
  *
- * ── Surface 1 — public/*.js ──────────────────────────────────────────────────
+ * ── Surface 1 — hand-written public/*.js (RETIRED — currently 0 files) ────────
  *
- *   Every .js file under public/ except:
+ *   After the EJS/React migration there are no hand-written vanilla-JS source
+ *   files left under public/ — the old vanilla client was replaced by the
+ *   bundled React island (public/react/main.js). The only `.js` files that now
+ *   live under public/ are auto-generated, gitignored build artifacts, all of
+ *   which are excluded:
  *     - public/react/**         — compiled React island (auto-generated, gitignored)
  *     - public/storybook/**     — compiled Storybook output (auto-generated, gitignored)
+ *     - public/sw.js            — Workbox service worker (auto-generated, gitignored)
+ *
+ *   This surface is kept as a guard: if a hand-written `.js` file is ever added
+ *   back under public/, it will be scanned automatically. Until then it scans
+ *   0 source files by design.
  *
  *   A line is a violation when ALL of the following are true:
  *     • it contains `privilege_level`
@@ -88,7 +97,10 @@ const SRC_REACT_DIR  = resolve(ROOT, 'src', 'react');
 // ── Surface 1 exclusions — public/ ───────────────────────────────────────────
 
 const EXCLUDED_FILES = new Set([
-  // legacy-shim.js was deleted (task #1593); no vanilla-JS canonical file remains
+  // legacy-shim.js was deleted; no vanilla-JS canonical file remains.
+  // sw.js is the Workbox service worker — an auto-generated, gitignored build
+  // artifact (same category as react/ and storybook/), not hand-written source.
+  resolve(PUBLIC_DIR, 'sw.js'),
 ]);
 
 const EXCLUDED_DIRS = [
@@ -255,8 +267,8 @@ const violations       = [...jsViolations, ...tsViolations, ...serverViolations]
 // ── Report ────────────────────────────────────────────────────────────────────
 
 console.log(
-  `check-privilege-reads: scanned ${jsFiles.length} JS file(s) under public/ ` +
-  `(react/, storybook/ excluded)\n` +
+  `check-privilege-reads: scanned ${jsFiles.length} hand-written JS file(s) under public/ ` +
+  `(react/, storybook/, sw.js auto-generated — vanilla JS retired post-migration)\n` +
   `                        and ${tsFiles.length} TS/TSX file(s) under src/react/ ` +
   `(usePrivilege.ts, usePrivilegeSync.ts, *.stories.* excluded)\n` +
   `                        and ${SERVER_FILES.length} server-side module(s) ` +
@@ -292,8 +304,8 @@ if (serverCount > 0) {
 }
 
 console.error(
-  'Fix (client): replace direct .privilege_level reads with getPrivilegeLevel() (vanilla JS)\n' +
-  '              or usePrivilege() (React). See the "Privilege checks" section in replit.md.\n' +
+  'Fix (client): replace direct .privilege_level reads with usePrivilege() (React hook).\n' +
+  '              See the "Privilege checks" section in replit.md.\n' +
   'Fix (server): replace req.user?.privilege_level reads with getRequestPrivilegeLevel(req) (auth.js).\n' +
   '              For route-level gating prefer requireAdmin / requirePrivilege / requireManagerOrAdmin\n' +
   '              — those re-query the database and are always up-to-date after a privilege change.\n' +

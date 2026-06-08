@@ -155,8 +155,13 @@ no effect on `public/storybook/` (the static build served by Express at
 - **Lint guard:** `npm run test:privilege-reads` (script:
   `scripts/check-privilege-reads.mjs`) fails CI if any guarded file contains
   a privilege bypass outside an approved context. Three surfaces are scanned:
-  - `.js` files under `public/` — except `core.js`, `react/`, and `storybook/`
-    (auto-generated). Flags any `privilege_level` read.
+  - Hand-written `.js` files under `public/` — currently **none**. After the
+    EJS/React migration the vanilla-JS client was replaced by the bundled React
+    island, so this surface is retired but kept as a guard: it scans 0 source
+    files today and will catch any hand-written `.js` re-added under `public/`.
+    The only `.js` files there now are auto-generated, gitignored build
+    artifacts (`react/`, `storybook/`, and the Workbox `sw.js`), all excluded.
+    Flags any `privilege_level` read.
   - `.ts`/`.tsx` files under `src/react/` — except `hooks/usePrivilege.ts` and
     `hooks/usePrivilegeSync.ts` (canonical implementations) and `*.stories.*`
     (Storybook fixtures). TypeScript property-declaration lines
