@@ -42,6 +42,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { useOfflineContactEntries } from '../hooks/useOfflineContactEntries';
 import { SyncStatePill } from '../components/SyncStatePill';
+import { ContactSyncRecovery } from '../components/ContactSyncRecovery';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
@@ -614,6 +615,7 @@ function CustomerCard({
   resolveActionLabel,
   draftVisitId,
   syncStatus,
+  syncFailedIds,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -641,6 +643,11 @@ function CustomerCard({
    * "Sync failed" badge.
    */
   syncStatus?: 'pending' | 'syncing' | 'failed' | null;
+  /**
+   * Queue entry ids for this contact's `failed` writes, used by the inline
+   * Retry / Discard affordance when {@link syncStatus} is `failed`.
+   */
+  syncFailedIds?: number[];
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -662,6 +669,10 @@ function CustomerCard({
 
   // ── Action strip ─────────────────────────────────────────────────────────────
   const [dispatchingAction, setDispatchingAction] = useState(false);
+
+  // Queue entry ids for this contact's failed status/archive writes; drives the
+  // inline Retry / Discard recovery strip below the card.
+  const failedIds: number[] = syncFailedIds ?? [];
 
   // Pick the highest-stage active room as the primary stage (rooms are
   // already sorted by stage descending in resolveRooms; first active wins).
@@ -812,6 +823,11 @@ function CustomerCard({
           )}
         </Box>
       )}
+
+      {/* Failed-sync recovery strip — rendered outside the CardActionArea (no
+          nested interactive elements inside the navigation anchor) when this
+          contact has a queued status/archive edit that exhausted its retries. */}
+      {syncStatus === 'failed' && <ContactSyncRecovery failedIds={failedIds} />}
     </Card>
   );
 }
@@ -1640,7 +1656,8 @@ export function CustomersPage(): React.ReactElement {
                   cardActionHandlerFor={cardActionHandlerFor}
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
-                  syncStatus={contactSyncMap.get(contact.id) ?? null}
+                  syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
+                  syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
                 />
               </Grid>
             ))}

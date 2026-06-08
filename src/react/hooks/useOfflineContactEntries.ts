@@ -53,13 +53,26 @@ function badgeableStatus(e: QueueEntry): BadgeableStatus | null {
 }
 
 /**
+ * Aggregated offline-sync state for a single contact's queued writes.
+ * `status` is the worst (most attention-worthy) badge to show; `failedIds`
+ * lists every queued entry currently `failed`, so the card can offer a
+ * Retry / Discard affordance that targets exactly the stuck writes (a mixed
+ * pending+failed contact keeps its pending writes when the failed ones are
+ * retried or discarded).
+ */
+export interface ContactSyncState {
+  status: BadgeableStatus;
+  failedIds: number[];
+}
+
+/**
  * Queued contact writes aggregated by contact id. A contact with no queued
  * change is simply absent from the map. The badge clears once the sync engine
  * drains the outbox (the queue's pub/sub and the `mo:offline-sync-ok` event both
  * trigger a refresh).
  */
-export function useOfflineContactEntries(): Map<string, BadgeableStatus> {
-  const [entries, setEntries] = useState<Map<string, BadgeableStatus>>(new Map());
+export function useOfflineContactEntries(): Map<string, ContactSyncState> {
+  const [entries, setEntries] = useState<Map<string, ContactSyncState>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -70,15 +83,23 @@ export function useOfflineContactEntries(): Map<string, BadgeableStatus> {
       mod?.getEntries()
         .then((list) => {
           if (cancelled) return;
-          const map = new Map<string, BadgeableStatus>();
+          const map = new Map<string, ContactSyncState>();
           for (const raw of list) {
             const status = badgeableStatus(raw);
             if (!status) continue;
             const id = contactIdFromUrl(raw.url);
             if (!id) continue;
             const existing = map.get(id);
-            if (!existing || STATUS_RANK[status] > STATUS_RANK[existing]) {
-              map.set(id, status);
+            if (!existing) {
+              map.set(id, {
+                status,
+                failedIds: status === 'failed' ? [raw.id] : [],
+              });
+            } else {
+              if (STATUS_RANK[status] > STATUS_RANK[existing.status]) {
+                existing.status = status;
+              }
+              if (status === 'failed') existing.failedIds.push(raw.id);
             }
           }
           setEntries(map);
