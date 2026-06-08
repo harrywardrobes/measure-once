@@ -25,7 +25,7 @@ export default function SyncPill() {
     tone = { color: '#fca5a5', bg: 'rgba(239,68,68,0.16)', border: 'rgba(252,165,165,0.4)' };
     Icon = SyncProblemIcon;
     label = `${failed} failed`;
-    tooltip = `${failed} change${failed === 1 ? '' : 's'} couldn't be synced after several attempts. They'll retry when you reconnect.`;
+    tooltip = `${failed} change${failed === 1 ? '' : 's'} couldn't be synced after several attempts. ${failed === 1 ? "It's" : "They're"} still saved on this device and need attention.`;
   } else if (syncing > 0) {
     tone = { color: '#93c5fd', bg: 'rgba(59,130,246,0.16)', border: 'rgba(147,197,253,0.4)' };
     Icon = CloudSyncIcon;
