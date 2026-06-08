@@ -40,6 +40,8 @@ import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
+import { useOfflineContactEntries } from '../hooks/useOfflineContactEntries';
+import { SyncStatePill } from '../components/SyncStatePill';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
@@ -611,6 +613,7 @@ function CustomerCard({
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
+  syncStatus,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -632,6 +635,12 @@ function CustomerCard({
     hwSubstatusValue: string | undefined,
   ) => string;
   draftVisitId?: number | string | null;
+  /**
+   * Offline-queue status for this contact's pending status/archive edits, or
+   * null when nothing is queued. Drives the per-card "Pending sync" /
+   * "Sync failed" badge.
+   */
+  syncStatus?: 'pending' | 'syncing' | 'failed' | null;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -743,6 +752,7 @@ function CustomerCard({
 
           {/* Right column — stage pills, lead status, QB badge */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+            {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
             {substatusLabel ? <Chip label={substatusLabel} size="small" variant="outlined" /> : null}
             <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}>
@@ -1295,6 +1305,9 @@ export function CustomersPage(): React.ReactElement {
     return out;
   }, [contacts, substatus, resolveRooms]);
 
+  // Per-contact offline-sync status (Pending sync / Sync failed badges).
+  const contactSyncMap = useOfflineContactEntries();
+
   const statusMap = React.useMemo(() => {
     const m = new Map<string, LeadStatus>();
     for (const s of store.statuses) m.set(s.key, s);
@@ -1627,6 +1640,7 @@ export function CustomersPage(): React.ReactElement {
                   cardActionHandlerFor={cardActionHandlerFor}
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
+                  syncStatus={contactSyncMap.get(contact.id) ?? null}
                 />
               </Grid>
             ))}
