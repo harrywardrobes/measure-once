@@ -24,6 +24,7 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
+import { readRecord } from '../../lib/offlineDb';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,58 @@ interface Submission {
   photoUrls: string[];
   email_skipped_count: number;
   form_link: string | null;
+}
+
+/**
+ * Shape the "Review customer photos" drawer writes into the offline `photos`
+ * store (keyed by contactId). Mirrors that drawer's `Submission` interface —
+ * camelCase, with only the fields a submitted review needs.
+ */
+interface CachedPhotoSubmission {
+  id: number;
+  contactName: string | null;
+  contactEmail: string | null;
+  addressLine1: string | null;
+  city: string | null;
+  postcode: string | null;
+  roomCount: string | null;
+  roomNotes: string | null;
+  correctedEmail: string | null;
+  correctedMobile: string | null;
+  submittedAt: string | null;
+  emailSkippedCount: number;
+  photoUrls: string[];
+}
+
+/**
+ * Map a cached photo-review submission (camelCase, from IndexedDB) into the
+ * rail's snake_case `Submission` shape. Used only as an offline fallback when
+ * the live submissions fetch fails, so any submission with a queued review
+ * still renders with its sync pill. Fields the cache doesn't carry
+ * (`created_at`, `expires_at`, `form_link`, `photo_keys`) are left empty —
+ * a reviewed submission is always submitted, so the pending-only fields are
+ * never read for it.
+ */
+function cachedToSubmission(c: CachedPhotoSubmission): Submission {
+  return {
+    id: c.id,
+    created_at: '',
+    submitted_at: c.submittedAt,
+    expires_at: '',
+    contact_name: c.contactName ?? null,
+    contact_email: c.contactEmail ?? null,
+    corrected_email: c.correctedEmail ?? null,
+    corrected_mobile: c.correctedMobile ?? null,
+    address_line1: c.addressLine1 ?? null,
+    city: c.city ?? null,
+    postcode: c.postcode ?? null,
+    room_count: c.roomCount ?? null,
+    room_notes: c.roomNotes ?? null,
+    photo_keys: [],
+    photoUrls: Array.isArray(c.photoUrls) ? c.photoUrls : [],
+    email_skipped_count: c.emailSkippedCount ?? 0,
+    form_link: null,
+  };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -685,6 +738,9 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
+  // True when submissions are served from the offline cache because the live
+  // fetch failed (e.g. the device is offline).
+  const [fromCache, setFromCache]     = useState(false);
   const [open, setOpen]               = useState(true);
   const [deepLinkId, setDeepLinkId]   = useState<number | null>(null);
   const { isViewer }                  = usePrivilege();
@@ -699,8 +755,22 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const d = await r.json() as Submission[];
         setSubmissions(d);
+        setFromCache(false);
       })
-      .catch(e => setError((e as Error).message))
+      .catch(async e => {
+        // Offline fallback: the "Review customer photos" drawer caches the
+        // submission it acted on into IndexedDB (`photos` store, keyed by
+        // contactId). When the live fetch fails, surface that cached submission
+        // so a card with a queued review still appears with its sync pill.
+        const cached = await readRecord<CachedPhotoSubmission>('photos', contactId);
+        if (cached && cached.id != null) {
+          setSubmissions([cachedToSubmission(cached)]);
+          setFromCache(true);
+          setError('');
+        } else {
+          setError((e as Error).message);
+        }
+      })
       .finally(() => setLoading(false));
   }, [contactId, isViewer]);
 
@@ -801,6 +871,13 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         )}
         {!loading && !error && (
           <Stack spacing={1.5} data-testid="submission-cards-stack">
+            {fromCache && (
+              <Alert severity="info" sx={{ py: 0.5 }} data-testid="submissions-offline-banner">
+                {typeof navigator !== 'undefined' && navigator.onLine === false
+                  ? "You're offline — showing saved submissions from your last visit. The list may be incomplete or out of date."
+                  : "Couldn't reach the server — showing saved submissions from your last visit. The list may be incomplete or out of date."}
+              </Alert>
+            )}
             {sortedSubmissions.map((sub, index) => (
               <SubmissionCard
                 key={sub.id}
