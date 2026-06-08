@@ -543,15 +543,18 @@ function RoomsDiff({
   server,
   roomChoices,
   onChooseRoom,
+  onChooseAllRooms,
   disabled,
 }: {
   attempted: unknown;
   server: unknown;
   roomChoices: Record<number, FieldChoice>;
   onChooseRoom: (index: number, choice: FieldChoice) => void;
+  onChooseAllRooms: (choice: FieldChoice) => void;
   disabled: boolean;
 }) {
   const items = computeRoomDiffs(attempted, server);
+  const changedCount = items.filter((i) => i.changed).length;
   if (items.length === 0) {
     return (
       <Typography variant="body2" data-testid="conflict-rooms-empty" sx={{ color: 'text.disabled' }}>
@@ -561,6 +564,41 @@ function RoomsDiff({
   }
   return (
     <Stack spacing={1} data-testid="conflict-rooms-diff" sx={{ gridColumn: '1 / -1', mt: 0.5 }}>
+      {changedCount > 0 && (
+        <Stack
+          direction="row"
+          data-testid="conflict-rooms-bulk-bar"
+          sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+        >
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {changedCount} room{changedCount === 1 ? '' : 's'} changed
+          </Typography>
+          <Stack direction="row" sx={{ gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="text"
+              color="inherit"
+              disabled={disabled}
+              onClick={() => onChooseAllRooms('mine')}
+              data-testid="conflict-rooms-keep-all"
+              sx={{ textTransform: 'none', fontSize: 11, py: 0.25, px: 0.75, minWidth: 0 }}
+            >
+              Keep all mine
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              color="primary"
+              disabled={disabled}
+              onClick={() => onChooseAllRooms('server')}
+              data-testid="conflict-rooms-use-server-all"
+              sx={{ textTransform: 'none', fontSize: 11, py: 0.25, px: 0.75, minWidth: 0 }}
+            >
+              Use server for all
+            </Button>
+          </Stack>
+        </Stack>
+      )}
       {items.map((item) => (
         <RoomDiffBlock
           key={item.index}
@@ -582,6 +620,7 @@ function FieldDiffSection({
   onChoose,
   roomChoices,
   onChooseRoom,
+  onChooseAllRooms,
   disabled,
 }: {
   rows: FieldDiffRow[];
@@ -591,6 +630,7 @@ function FieldDiffSection({
   onChoose: (key: string, choice: FieldChoice) => void;
   roomChoices: Record<number, FieldChoice>;
   onChooseRoom: (index: number, choice: FieldChoice) => void;
+  onChooseAllRooms: (choice: FieldChoice) => void;
   disabled: boolean;
 }) {
   if (rows.length === 0) return null;
@@ -659,6 +699,7 @@ function FieldDiffSection({
                     server={row.serverRaw}
                     roomChoices={roomChoices}
                     onChooseRoom={onChooseRoom}
+                    onChooseAllRooms={onChooseAllRooms}
                     disabled={disabled}
                   />
                 ) : (
@@ -785,6 +826,16 @@ function ConflictCard({
     setRoomChoices((prev) => ({ ...prev, [index]: choice }));
   };
 
+  const chooseAllRooms = (choice: FieldChoice) => {
+    setRoomChoices((prev) => {
+      const next = { ...prev };
+      for (const i of changedRoomIndices) {
+        next[i] = choice;
+      }
+      return next;
+    });
+  };
+
   // Non-rooms fields the user has explicitly flipped to the server value.
   const selectedServerFieldKeys = changedKeys.filter(
     (k) => k !== 'rooms' && choices[k] === 'server',
@@ -901,6 +952,7 @@ function ConflictCard({
         onChoose={choose}
         roomChoices={roomChoices}
         onChooseRoom={chooseRoom}
+        onChooseAllRooms={chooseAllRooms}
         disabled={busy}
       />
 

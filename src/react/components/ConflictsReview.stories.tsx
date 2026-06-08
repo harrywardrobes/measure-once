@@ -181,6 +181,37 @@ export const SingleConflict: Story = {
 };
 
 /**
+ * Multi-room conflict with the bulk shortcuts visible: expand "Compare fields"
+ * to see the "Use server for all" / "Keep all mine" header above the per-room
+ * toggles. The fixture has three rooms — Kitchen (changed), Bedroom (unchanged),
+ * and Utility (added by the edit) — so the bulk bar reads "2 rooms changed".
+ * Clicking "Use server for all" flips all changed rooms to the server side at
+ * once; each per-room toggle can still override afterwards.
+ */
+export const BulkRoomShortcuts: Story = {
+  name: 'Bulk room shortcuts (Use server for all / Keep all mine)',
+  render: () => {
+    function Bulk() {
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([SAMPLE[0]]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <Bulk />;
+  },
+};
+
+/**
  * Per-room resolution: the queued edit *removed* a room the server still has
  * (Room 2, Bedroom — present only on the server). Its per-room toggle reads
  * "Keep mine" (stay removed) vs "Restore room" (bring the server's room back),
