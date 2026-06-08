@@ -146,6 +146,36 @@ export const StrayCharactersInName: Story = {
   ),
 };
 
+function InlineReasonHints() {
+  const [value, setValue] = useState(
+    'Missing close: {{firstName, welcome!\n\n' +
+      'Wrong braces: {firstName} and {{companyName}.\n\n' +
+      'Stray characters: {{first Name}}, {{first-name}} and {{first.name}}.\n\n' +
+      'A clean {{lastName}} stays green with no hint.',
+  );
+  return (
+    <Stack spacing={1.5} sx={{ maxWidth: 560 }}>
+      <Typography variant="caption" color="text.secondary">
+        Hover any amber-underlined token to see a plain-language hint naming the
+        cause and how to fix it — the same wording the save-guard banner uses.
+      </Typography>
+      <TokenHighlightField
+        label="Body (plain text)"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        knownVariables={KNOWN}
+        multiline
+        minRows={8}
+      />
+    </Stack>
+  );
+}
+
+export const InlineMalformedHints: Story = {
+  name: 'Malformed — inline per-reason hover hint',
+  render: () => <InlineReasonHints />,
+};
+
 export const AllKnown: Story = {
   name: 'All tokens recognised',
   render: () => (

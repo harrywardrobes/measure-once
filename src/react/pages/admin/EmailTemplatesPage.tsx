@@ -30,8 +30,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import {
   analyzeTemplateTokens,
+  MALFORMED_REASON_ORDER,
+  MALFORMED_REASON_TEXT,
   TokenHighlightField,
   type MalformedReason,
+  type MalformedReasonText,
   type TokenHighlightFieldHandle,
 } from '../../components/TokenHighlightField';
 
@@ -250,42 +253,10 @@ function PreviewPanel({ templateKey, fields }: PreviewPanelProps) {
 }
 
 // ── Malformed-placeholder messaging ───────────────────────────────────────────
-// Each malformed cause gets its own precise, plain-language explanation so the
-// fix is obvious (a missing closing `}}` is a different problem from the wrong
-// number of braces or a name with stray characters).
-
-interface MalformedReasonText {
-  /** Short heading naming the cause, e.g. "Missing closing braces". */
-  heading: string;
-  /** One-line plain-language explanation of how to fix it. */
-  explanation: string;
-}
-
-const MALFORMED_REASON_TEXT: Record<MalformedReason, MalformedReasonText> = {
-  unclosed: {
-    heading: 'Missing closing braces',
-    explanation:
-      'this opens with {{ but is never closed — add the closing }} to finish it, e.g. {{firstName}}',
-  },
-  'brace-count': {
-    heading: 'Wrong number of braces',
-    explanation:
-      'variables need exactly two curly braces on each side, e.g. {{firstName}}',
-  },
-  'invalid-name': {
-    heading: 'Invalid characters in the name',
-    explanation:
-      'names can only contain letters, numbers and underscores — no spaces, hyphens or dots, e.g. {{firstName}}',
-  },
-};
-
-// Fixed display order: surface unclosed openers first (most confusing), then
-// brace-count typos, then stray-character names.
-const MALFORMED_REASON_ORDER: MalformedReason[] = [
-  'unclosed',
-  'brace-count',
-  'invalid-name',
-];
+// The per-reason wording (MALFORMED_REASON_TEXT / MALFORMED_REASON_ORDER) and
+// the MalformedReasonText shape now live alongside the token classifier in
+// TokenHighlightField, so the inline hover hint and this save-guard banner /
+// confirm dialog share one source of truth.
 
 interface MalformedGroup extends MalformedReasonText {
   reason: MalformedReason;

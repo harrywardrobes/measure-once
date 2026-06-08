@@ -10,6 +10,7 @@ import React, {
 
 import Box from '@mui/material/Box';
 import FormHelperText from '@mui/material/FormHelperText';
+import Tooltip from '@mui/material/Tooltip';
 
 import { STATUS_COLORS } from '../theme';
 
@@ -40,6 +41,55 @@ type SegmentKind = 'plain' | 'known' | 'unknown' | 'malformed';
  *                      (`{{firstName` followed by more text).
  */
 export type MalformedReason = 'brace-count' | 'invalid-name' | 'unclosed';
+
+// ── Malformed-placeholder messaging (shared) ──────────────────────────────────
+// Each malformed cause gets its own precise, plain-language explanation so the
+// fix is obvious (a missing closing `}}` is a different problem from the wrong
+// number of braces or a name with stray characters). This is the single source
+// of wording for both the inline hover hint (below) and the save-guard banner /
+// confirm dialog in EmailTemplatesPage, so the two surfaces never disagree.
+
+export interface MalformedReasonText {
+  /** Short heading naming the cause, e.g. "Missing closing braces". */
+  heading: string;
+  /** One-line plain-language explanation of how to fix it. */
+  explanation: string;
+}
+
+export const MALFORMED_REASON_TEXT: Record<MalformedReason, MalformedReasonText> = {
+  unclosed: {
+    heading: 'Missing closing braces',
+    explanation:
+      'this opens with {{ but is never closed — add the closing }} to finish it, e.g. {{firstName}}',
+  },
+  'brace-count': {
+    heading: 'Wrong number of braces',
+    explanation:
+      'variables need exactly two curly braces on each side, e.g. {{firstName}}',
+  },
+  'invalid-name': {
+    heading: 'Invalid characters in the name',
+    explanation:
+      'names can only contain letters, numbers and underscores — no spaces, hyphens or dots, e.g. {{firstName}}',
+  },
+};
+
+// Fixed display order: surface unclosed openers first (most confusing), then
+// brace-count typos, then stray-character names.
+export const MALFORMED_REASON_ORDER: MalformedReason[] = [
+  'unclosed',
+  'brace-count',
+  'invalid-name',
+];
+
+/**
+ * Plain-language hint for the inline hover tooltip on a malformed token,
+ * combining the same heading + explanation the save-guard banner uses.
+ */
+export function malformedReasonHint(reason: MalformedReason): string {
+  const { heading, explanation } = MALFORMED_REASON_TEXT[reason];
+  return `${heading}: ${explanation}`;
+}
 
 interface Segment {
   text: string;
@@ -370,6 +420,43 @@ export const TokenHighlightField = React.forwardRef<
     [],
   );
 
+  // ── Inline malformed-token hover hint ─────────────────────────────────────
+  // The backdrop is non-interactive (pointer-events: none) so it never steals
+  // clicks from the input. To still surface a per-reason hint on hover we watch
+  // the *input's* pointer position and hit-test it against the malformed spans'
+  // client rects, then show a controlled MUI Tooltip anchored to that span.
+  const [hint, setHint] = useState<{ reason: MalformedReason; el: HTMLElement } | null>(null);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const backdrop = backdropRef.current;
+      if (!backdrop) return;
+      const { clientX: x, clientY: y } = e;
+      const spans = backdrop.querySelectorAll<HTMLElement>('[data-malformed-reason]');
+      let found: { reason: MalformedReason; el: HTMLElement } | null = null;
+      for (const span of Array.from(spans)) {
+        for (const r of Array.from(span.getClientRects())) {
+          if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+            found = {
+              reason: span.dataset.malformedReason as MalformedReason,
+              el: span,
+            };
+            break;
+          }
+        }
+        if (found) break;
+      }
+      setHint((prev) => {
+        if (!found) return prev ? null : prev;
+        if (prev && prev.el === found.el) return prev;
+        return found;
+      });
+    },
+    [],
+  );
+
+  const handleMouseLeave = useCallback(() => setHint(null), []);
+
   const minHeight = multiline
     ? `calc(${minRows} * ${LINE_HEIGHT}em + ${PAD_Y * 2}px)`
     : undefined;
@@ -451,10 +538,18 @@ export const TokenHighlightField = React.forwardRef<
             const underlineColor = isMalformed
               ? STATUS_COLORS.warningDeep.bg
               : STATUS_COLORS.danger.text;
+            // The backdrop stays fully non-interactive (pointer-events: none) so
+            // it never steals clicks / caret placement from the input above it.
+            // Malformed spans are tagged with `data-malformed-reason`; the hover
+            // hint is driven from the input's mouse position (see handleMouseMove)
+            // and pointed at the matching span — no interactive overlay needed.
             return (
               <Box
                 key={i}
                 component="span"
+                data-malformed-reason={
+                  isMalformed ? seg.malformedReason : undefined
+                }
                 sx={{
                   bgcolor: palette.bg,
                   color: palette.text,
@@ -482,6 +577,8 @@ export const TokenHighlightField = React.forwardRef<
           value={value}
           onChange={onChange}
           onScroll={handleScroll}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
           onFocus={() => { setFocused(true); onFocus?.(); }}
           onBlur={() => setFocused(false)}
           rows={multiline ? minRows : undefined}
@@ -502,6 +599,29 @@ export const TokenHighlightField = React.forwardRef<
             '&::-moz-selection': { color: 'transparent' },
           }}
         />
+
+        {/* Inline malformed-token hint — a controlled tooltip anchored to the
+            currently-hovered malformed span (its position is hit-tested from the
+            input's pointer in handleMouseMove). The anchor child is a zero-size
+            span; the real anchor is supplied via slotProps.popper.anchorEl. */}
+        <Tooltip
+          arrow
+          open={hint != null}
+          title={hint ? malformedReasonHint(hint.reason) : ''}
+          slotProps={{
+            popper: {
+              anchorEl: hint
+                ? { getBoundingClientRect: () => hint.el.getBoundingClientRect() }
+                : undefined,
+            },
+          }}
+        >
+          <Box
+            aria-hidden
+            component="span"
+            sx={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0 }}
+          />
+        </Tooltip>
       </Box>
 
       {helperText != null && helperText !== '' && (
