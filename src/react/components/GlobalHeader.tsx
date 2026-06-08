@@ -28,6 +28,8 @@ export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
 // Lazy-loaded so the offline-queue hook + its icons stay out of main.js.
 const SyncPill = lazy(() => import('./SyncPill'));
+// Lazy-loaded too — surfaces persisted offline sync conflicts for review.
+const ConflictsReview = lazy(() => import('./ConflictsReview'));
 
 declare global {
   interface Window {
@@ -342,6 +344,11 @@ export function GlobalHeader() {
               syncing, or failed; independent of the online/offline pill below. */}
           <Suspense fallback={null}>
             <SyncPill />
+          </Suspense>
+          {/* Sync-conflict review — appears only while there are persisted
+              conflicts from offline edits that overwrote newer server data. */}
+          <Suspense fallback={null}>
+            <ConflictsReview />
           </Suspense>
           {/* When offline, the per-service badges are meaningless (every check
               would fail), so show a single Offline pill instead. */}

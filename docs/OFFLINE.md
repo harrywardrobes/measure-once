@@ -24,6 +24,8 @@ Measure Once is an installable Progressive Web App with offline support.
 | Sync engine | `src/react/lib/syncEngine.ts` | Replays queued writes in order on `online` + on an interval, with retry backoff, conflict detection, and failure surfacing. Bootstrapped via `initOfflineSync()` in `registerServiceWorker.ts` (called from `main.tsx`). |
 | Queue hook | `src/react/hooks/useOfflineQueue.ts` | React hook exposing live pending/syncing/failed counts (dynamic-imports the queue so `idb` stays out of `main.js`). |
 | Pending-sync indicator | `src/react/components/SyncPill.tsx` | Header pill showing queued / syncing / failed counts. Lazy-loaded by `GlobalHeader.tsx`. |
+| Conflicts hook | `src/react/hooks/useOfflineConflicts.ts` | React hook exposing the persisted `conflicts` store plus `dismiss`/`dismissAll` (dynamic-imports the queue so `idb` stays out of `main.js`). |
+| Conflicts review | `src/react/components/ConflictsReview.tsx` | Header pill + dialog (Phase 3) listing detected conflicts — entity, version/timestamp diff, detection time — with per-item and bulk dismiss. Lazy-loaded by `GlobalHeader.tsx`. |
 
 ## Build & serving
 
@@ -158,6 +160,28 @@ Genuine server rejections (e.g. unsupported type / too large, HTTP ≥ 400) are
 **not** queued inline — they surface as an upload error immediately, since they
 would fail again on replay.
 
+## Phase 3 — conflicts review
+
+When the sync engine applies last-write-wins-with-warning it persists a row in
+the IndexedDB `conflicts` store. The Phase 3 review surface exposes those rows so
+a user can see what their offline edit overwrote and acknowledge it.
+
+- **Entry point:** an orange **"N conflicts"** pill in the `GlobalHeader`,
+  rendered by `ConflictsReview.tsx` (lazy-loaded alongside `SyncPill`). It shows
+  only while unreviewed conflicts exist and sits beside the pending-sync pill.
+- **Review dialog:** clicking the pill opens a dialog listing each conflict —
+  area (Customer / Visit / Photo), record label, the version and `updated_at`
+  the edit was based on vs. what the server had, and when the conflict was
+  detected.
+- **Acknowledge:** each row has a **Dismiss** action (and a **Dismiss all** in
+  the dialog footer) that clears the row from the `conflicts` store via
+  `clearConflict` / `getConflicts` in `offlineQueue.ts`. Live updates flow
+  through the queue pub/sub plus the `mo:offline-sync-conflict` window event,
+  exposed to React by `useOfflineConflicts.ts`.
+
+A standalone Admin "Offline" settings section (queue/cache management) is a
+separate Phase 3 task and is **not** part of this review surface.
+
 ## Out of scope (Phase 2 / 3)
 
 - **Customer-info & "send photos" offline uploads.** The customer-info two-step
@@ -189,3 +213,7 @@ changing it:
   (`getConflicts()`) flagged during replay (last-write-wins-with-warning), with a
   per-row **Dismiss** action (`clearConflict(id)`). Manual review only — no
   automatic resolution.
+
+- **Phase 3 — conflicts review UI:** done — see [Phase 3 — conflicts review](#phase-3--conflicts-review).
+- **Phase 3 — Admin "Offline" settings section:** a separate task (queue/cache
+  management surface), not yet built.
