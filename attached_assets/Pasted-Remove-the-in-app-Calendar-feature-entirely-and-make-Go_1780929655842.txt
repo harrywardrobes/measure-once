@@ -1,0 +1,24 @@
+Remove the in-app Calendar feature entirely and make Google Calendar the single source of truth for scheduling — with a shared calendar named "Measure Once" (coloured purple, owned by harry@harrywardrobes.co.uk) aggregating every event created by every user.
+
+1. Remove the in-app Calendar page and its plumbing:
+
+Delete src/react/pages/CalendarPage.tsx and its lazy-loaded route registration in src/react/main.tsx (the tab-calendar entry, ~line 175, and the lazy import ~line 56).
+Remove the 'calendar' entry from BottomNav.tsx (~lines 73 and 77, including from DEFAULT_PRIMARY_KEYS).
+Remove the /calendar entry from src/react/lib/pageTitles.ts (~line 5).
+Remove the SSR route app.get('/calendar', ...) in server.js (~line 151) and delete views/calendar.ejs.
+Remove/deprecate calendar-specific modals that are no longer needed: VisitCalendarModal.tsx, GenericVisitEditModal.tsx (check whether DesignVisitCalendarModal.tsx, DeliveryWindowModal.tsx, InstallationSlotModal.tsx are still used elsewhere for scheduling actions before deleting — they may just need their "view in app calendar" links removed rather than full deletion).
+Remove the 'calendar' default-nav-key references in server.js (~line 2829) and auth.js (~lines 562-594).
+Remove or update the calendar-related tests: test/calendar-page/run.js, test/calendar-empty-state/run.js, test/profile-google-calendar/run.js (update the latter if it tests Google Calendar connection, which should remain).
+Remove the GET /api/calendar/upcoming widget route (server.js ~line 3877) if it was only used by the in-app calendar/dashboard widget — check usages first.
+2. Stop dual-writing to the in-app visits table:
+
+In visits.js, the visits table and /api/visits CRUD routes (lines ~148-215) currently store visit data alongside an optional Google Calendar sync. Since Google Calendar becomes the sole source of truth, remove the in-app visits writes from the scheduling action handlers (add_design_visit_to_calendar, schedule_visit, start_design_visit, schedule_delivery_window, schedule_installation_slot — config validators in server.js lines 5661-5800) so they create Google Calendar events directly instead of writing to visits first. Drop the addToGoogleCalendar boolean toggle — it should always go to Google Calendar, no longer optional. (If other parts of the app read from the visits table for non-calendar purposes, keep the table but stop treating it as the scheduling source of truth — flag any such dependencies you find.)
+3. Route all app-created events to a shared "Measure Once" calendar owned by harry@harrywardrobes.co.uk:
+
+Add a GOOGLE_SHARED_CALENDAR_ID environment variable holding the calendar ID of a shared Google Calendar named "Measure Once", coloured purple, that Harry owns and has shared with write access ("Make changes to events") to all users who connect their Google account via the app's existing OAuth flow (server.js lines 858-909, req.session.googleTokens).
+If creating the calendar programmatically via the Google Calendar API, set summary: "Measure Once" and colorId to a purple shade from Google's calendar colour palette (e.g. colorId: "9" "Blueberry" or colorId: "3" "Grape" — pick whichever renders as purple in the Calendar UI). If created manually, name it "Measure Once" and pick a purple colour from the calendar's colour picker in Google Calendar settings.
+Update /api/events routes (server.js ~lines 2266-2330) and the scheduling action handlers so all app-created events are written to calendarId: process.env.GOOGLE_SHARED_CALENDAR_ID instead of 'primary'. The creating user's connected Google account remains the one performing the write (so existing per-user OAuth/auth still applies); only the target calendar changes.
+Update getGoogleClient() (server.js ~line 2182) and any place that hardcodes 'primary' for app-created scheduling events.
+Keep the existing per-user OAuth connect/disconnect flow in ProfilePage.tsx (GoogleCalendarCard, lines ~482-570) intact — it's still required so each user can authorize calendar writes.
+Add a clear error/setup message if GOOGLE_SHARED_CALENDAR_ID is missing or the connected user lacks write access to that calendar (e.g. surfaced in the scheduling UI or server logs), so misconfiguration is easy to diagnose.
+Setup note for Harry (do this before/while testing): Create a new calendar named "Measure Once" in your Google account, set its colour to purple, and share it with "Make changes to events" permission with the Google accounts that will connect via the app (or with your Workspace domain if applicable). Then grab its Calendar ID from Google Calendar → Settings → that calendar → "Integrate calendar" and set it as GOOGLE_SHARED_CALENDAR_ID.
