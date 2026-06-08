@@ -30,6 +30,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import type { ConflictEntry } from '../../lib/offlineQueue';
+import { FEATURE_AREAS, type CapabilityLevel } from '../../lib/offlineCapabilities';
 
 /**
  * Admin → Offline support tab (#tab-offline).
@@ -43,13 +44,17 @@ import type { ConflictEntry } from '../../lib/offlineQueue';
  *  - a **lightweight conflicts list** of stale-write conflicts the sync engine
  *    flagged during replay, for manual review.
  *
- * Capability levels and the per-area descriptions are sourced from
- * `docs/OFFLINE.md` (the authoritative reference for what is offline-capable).
+ * The capability matrix data (`FEATURE_AREAS`) is imported from the shared
+ * single source of truth `src/react/lib/offlineCapabilities.ts`; a CI lint
+ * keeps it in lockstep with the real covered write surfaces and `docs/OFFLINE.md`.
  */
 
 // ── Capability matrix (config-driven) ────────────────────────────────────────
-
-type CapabilityLevel = 'full' | 'view' | 'online';
+// The matrix data (FEATURE_AREAS) lives in the shared single-source-of-truth
+// module `src/react/lib/offlineCapabilities.ts`. A CI lint
+// (scripts/check-offline-capability-sync.mjs) keeps it in sync with the real
+// covered write surfaces and docs/OFFLINE.md, so this table can't drift.
+// Only the presentational chip styling (CAPABILITY_META) is defined here.
 
 interface CapabilityMeta {
   label: string;
@@ -80,73 +85,6 @@ const CAPABILITY_META: Record<CapabilityLevel, CapabilityMeta> = {
     blurb: 'This area is unavailable until you reconnect.',
   },
 };
-
-interface FeatureArea {
-  name: string;
-  capability: CapabilityLevel;
-  detail: string;
-}
-
-const FEATURE_AREAS: FeatureArea[] = [
-  {
-    name: 'Customer cards & details',
-    capability: 'full',
-    detail:
-      'Browse cached customer cards and detail pages. Lead-status changes, sub-status quick-sets, and rooms/notes edits are queued and synced on reconnect.',
-  },
-  {
-    name: 'Visits & schedule',
-    capability: 'full',
-    detail:
-      'View cached visits and design visits. Design-visit wizard submissions (new and edits) are queued offline and replayed in order; edits are checked for conflicts on sync.',
-  },
-  {
-    name: 'Photo capture',
-    capability: 'full',
-    detail:
-      'Room photos captured in the design-visit wizard are saved on the device and uploaded with the queued submission when you reconnect.',
-  },
-  {
-    name: 'Arrange-visit outcomes',
-    capability: 'full',
-    detail:
-      "The 'not proceeding' and 'booked' outcomes are queued offline (the calendar event is created once you're back online). The 'email a time slot' outcome needs a live email session.",
-  },
-  {
-    name: 'Customer-info forms',
-    capability: 'online',
-    detail:
-      'The public customer-info form and its photo uploads need a connection to submit, though in-progress entries are draft-saved in your browser.',
-  },
-  {
-    name: 'Projects (pipeline board)',
-    capability: 'online',
-    detail:
-      'The pipeline board loads live, all-stage pipeline data that is not cached for offline use.',
-  },
-  {
-    name: 'Trades',
-    capability: 'online',
-    detail: 'The trade-company directory and submissions require a live connection.',
-  },
-  {
-    name: 'Calendar & scheduling',
-    capability: 'view',
-    detail:
-      'Previously loaded calendar events are viewable offline, but creating or booking new events writes to Google Calendar and needs internet.',
-  },
-  {
-    name: 'QuickBooks invoices & estimates',
-    capability: 'online',
-    detail:
-      'Invoice and estimate data is read from QuickBooks live; creating or sending estimates needs internet.',
-  },
-  {
-    name: 'Admin settings, team & permissions',
-    capability: 'online',
-    detail: 'All admin configuration screens read and write live data and require a connection.',
-  },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

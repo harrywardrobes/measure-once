@@ -136,11 +136,17 @@ without a `conflictCheckUrl` skip the check gracefully.
 
 ### Covered write surfaces
 
+> The `<!-- offline-areas: … -->` annotations below are machine-readable: the
+> `test:offline-capability-sync` lint asserts they match both the `area:` codes
+> used by the real `sendOrQueue()` callers and the `backedBy` codes on the `full`
+> rows of the capability matrix (`src/react/lib/offlineCapabilities.ts`). Update
+> all three together when offline coverage changes.
+
 | Surface | Action |
 |---|---|
-| Customer detail | Lead-status change, sub-status quick-set & change, rooms/notes localdata edits |
-| Design-visit wizard | Submit (create and edit; edits carry a `conflictCheckUrl`); **room photos captured offline** ride along inline (see below) |
-| Arrange-visit modal | `not_proceeding` outcome, and `booked` outcome (calendar event dispatched only when the write is sent now, not when queued) |
+| Customer detail <!-- offline-areas: customer --> | Lead-status change, sub-status quick-set & change, rooms/notes localdata edits |
+| Design-visit wizard <!-- offline-areas: visit --> | Submit (create and edit; edits carry a `conflictCheckUrl`); **room photos captured offline** ride along inline (see below) |
+| Arrange-visit modal <!-- offline-areas: visit --> | `not_proceeding` outcome, and `booked` outcome (calendar event dispatched only when the write is sent now, not when queued) |
 
 ### Offline design-visit room photos
 
@@ -199,11 +205,18 @@ The admin panel has an **Offline support** tab (Configuration group;
 is a **read-only** operations view — it surfaces offline behaviour without
 changing it:
 
-- **Capability matrix** — a config-driven table (the `FEATURE_AREAS` array in
-  `OfflineSupportPage.tsx`, capability levels `full` / `view` / `online`)
-  documenting which areas work fully offline, are view-only when cached, or need
-  a live connection. Keep it in sync with the "Covered write surfaces" and "Out
-  of scope" sections above.
+- **Capability matrix** — a config-driven table documenting which areas work
+  fully offline, are view-only when cached, or need a live connection. Its data
+  (`FEATURE_AREAS`, capability levels `full` / `view` / `online`) lives in the
+  shared **single source of truth** `src/react/lib/offlineCapabilities.ts`;
+  `OfflineSupportPage.tsx` imports and renders it directly (no second copy).
+  Each `full` row declares `backedBy` — the offline-queue `area:` codes whose
+  `sendOrQueue()` writes make it work offline. The `test:offline-capability-sync`
+  lint (`scripts/check-offline-capability-sync.mjs`) enforces a three-way match
+  between those `backedBy` codes, the `area:` codes actually used by
+  `sendOrQueue()` callers, and the `<!-- offline-areas: … -->` annotations on the
+  "Covered write surfaces" rows above — so the matrix cannot silently drift from
+  real offline behaviour.
 - **Live sync status** — pending / syncing / failed queue counts (via
   `useOfflineQueue`) plus the **last successful sync time**. The sync engine
   stamps `markSynced()` (a `lastSuccessfulSyncAt` value in the `meta` store) after

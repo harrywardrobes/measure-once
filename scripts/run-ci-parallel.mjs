@@ -80,6 +80,7 @@ const STATIC_SUITES = [
   'test:suite-probe-counts-advisory',
   'test:browser-launch-pattern',
   'test:story-count-sync',
+  'test:offline-capability-sync',
 ];
 
 /**
