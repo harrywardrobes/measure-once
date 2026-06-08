@@ -16,8 +16,10 @@
 //   (A.3)     hs_lead_status='' (absent) → visitType='design'
 //   (A.bad)   Non-numeric contactId → 400
 //   (B.1-6)   All 6 valid outcome × visitType combinations map to the correct
-//             HubSpot hs_lead_status key: SRSC_AGREED, DSSC_AGREED,
-//             SRSC_SUGGESTED, DSSC_SUGGESTED, not_suitable (×2)
+//             HubSpot hs_lead_status and hw_lead_substatus keys:
+//             SURVEY_SCHEDULED__SRSC_AGREED, DESIGN_SCHEDULED__DSSC_AGREED,
+//             SURVEY_SCHEDULED__SRSC_SUGGESTED, DESIGN_SCHEDULED__DSSC_SUGGESTED,
+//             not_suitable (×2, empty substatus)
 //   (B.bad)   Invalid outcome → 400
 //
 // Usage:
@@ -281,10 +283,10 @@ async function main() {
   console.log('\n  — outcome → HubSpot status mapping (B) —');
 
   const OUTCOME_CASES = [
-    { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SRSC_AGREED' },
-    { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DSSC_AGREED' },
-    { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SRSC_SUGGESTED' },
-    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DSSC_SUGGESTED' },
+    { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SURVEY_SCHEDULED__SRSC_AGREED' },
+    { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DESIGN_SCHEDULED__DSSC_AGREED' },
+    { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SURVEY_SCHEDULED__SRSC_SUGGESTED' },
+    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DESIGN_SCHEDULED__DSSC_SUGGESTED' },
     { outcome: 'not_proceeding', visitType: 'survey', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
     { outcome: 'not_proceeding', visitType: 'design', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
   ];

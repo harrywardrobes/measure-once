@@ -6202,12 +6202,12 @@ app.post('/api/card-actions/arrange-visit/outcome',
 
     const OUTCOME_MAP = {
       booked: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SRSC_AGREED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DSSC_AGREED' },
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SURVEY_SCHEDULED__SRSC_AGREED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DESIGN_SCHEDULED__DSSC_AGREED' },
       },
       email_sent: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SRSC_SUGGESTED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DSSC_SUGGESTED' },
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SURVEY_SCHEDULED__SRSC_SUGGESTED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DESIGN_SCHEDULED__DSSC_SUGGESTED' },
       },
       not_proceeding: {
         survey: { hs_lead_status: 'NOT_SUITABLE', hw_lead_substatus: '' },
