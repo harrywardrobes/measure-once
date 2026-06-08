@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="Harry Wardrobes">
+  <rect width="32" height="32" rx="6" fill="#200842"/>
+  <g fill="none" stroke="#F6F1E7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 3.5 C8.5 8.5 5.5 16 8.8 22 C11 26.8 21 26.8 23.2 22 C26.5 16 23.5 8.5 16 3.5 Z"/>
+    <path d="M16 8 C10.8 12, 8.8 17, 11 21 C13 24.8, 19 24.8, 21 21 C23.2 17, 21.2 12, 16 8 Z"/>
+  </g>
+  <ellipse cx="16" cy="16.8" rx="3.3" ry="4.3" fill="#F6F1E7"/>
+</svg>

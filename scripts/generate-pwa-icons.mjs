@@ -31,8 +31,10 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ICONS_DIR = resolve(__dirname, '..', 'public', 'icons');
-const SOURCE_MARK = resolve(__dirname, '..', 'public', 'assets', 'logo-mark-paper.png');
+const PUBLIC_DIR = resolve(__dirname, '..', 'public');
+const ICONS_DIR = resolve(PUBLIC_DIR, 'icons');
+const SOURCE_MARK = resolve(PUBLIC_DIR, 'assets', 'logo-mark-paper.png');
+const FAVICON_SVG = resolve(PUBLIC_DIR, 'favicon.svg');
 
 // Brand palette (mirrors src/react/theme.ts BRAND_COLORS).
 const PLUM = '#200842';
@@ -73,5 +75,39 @@ const targets = [
 ];
 
 for (const t of targets) writeIcon(t.file, t.size, t.scale);
+
+/**
+ * Rasterise public/favicon.svg into a browser-tab PNG at a given size.
+ * The SVG carries a simplified wood-knot motif on the plum field so it stays
+ * legible down to 16px (the full wood-grain pattern turns to mush that small).
+ *
+ * @param {string} file  output filename (under public/)
+ * @param {number} size  square edge length in px
+ */
+function writeFaviconPng(file, size) {
+  const out = resolve(PUBLIC_DIR, file);
+  execFileSync('convert', [
+    '-background', 'none',
+    FAVICON_SVG,
+    '-resize', `${size}x${size}`,
+    '-depth', '8',
+    '-define', 'png:color-type=6',
+    out,
+  ]);
+  console.log(`[pwa-icons] wrote public/${file} (${size}x${size})`);
+}
+
+writeFaviconPng('favicon-16.png', 16);
+writeFaviconPng('favicon-32.png', 32);
+
+// Multi-resolution .ico fallback for legacy browsers that ignore SVG/PNG icons.
+const ICO_OUT = resolve(PUBLIC_DIR, 'favicon.ico');
+execFileSync('convert', [
+  '-background', 'none',
+  FAVICON_SVG,
+  '-define', 'icon:auto-resize=16,32,48',
+  ICO_OUT,
+]);
+console.log('[pwa-icons] wrote public/favicon.ico (16,32,48)');
 
 console.log('[pwa-icons] done.');
