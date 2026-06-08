@@ -150,6 +150,7 @@ export function InstallationSlotModal(props: Props) {
           },
           conflictCheckUrl: `/api/visits/${visit.id}`,
           recordKey: `visit:${visit.id}`,
+          dedupeKey: `visit:${visit.id}`,
           baseVersion: visit.version ?? null,
           baseUpdatedAt: visit.updatedAt ?? null,
         });
