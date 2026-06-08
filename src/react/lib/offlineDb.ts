@@ -22,16 +22,18 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
 export const OFFLINE_DB_NAME = 'measure-once-offline';
-export const OFFLINE_DB_VERSION = 2;
+export const OFFLINE_DB_VERSION = 3;
 
 /** Cached-data stores (excludes `meta` and the reserved `outbox`). */
-export type CacheStore = 'customers' | 'visits' | 'photos';
+export type CacheStore = 'customers' | 'visits' | 'photos' | 'customerInfo';
 
 /** Bounded freshness/eviction policy. See docs/OFFLINE.md. */
 export const CACHE_LIMITS: Record<CacheStore, number> = {
   customers: 200,
   visits: 250,
   photos: 150,
+  // One record per contact, each holding that contact's full submissions list.
+  customerInfo: 200,
 };
 
 /** Records older than this are pruned on next write (12 hours). */
@@ -73,6 +75,7 @@ interface OfflineDB extends DBSchema {
   customers: { key: string; value: CachedRecord; indexes: { cachedAt: number } };
   visits: { key: string; value: CachedRecord; indexes: { cachedAt: number } };
   photos: { key: string; value: CachedRecord; indexes: { cachedAt: number } };
+  customerInfo: { key: string; value: CachedRecord; indexes: { cachedAt: number } };
   meta: { key: string; value: MetaRecord };
   outbox: { key: number; value: OutboxRecord };
   conflicts: { key: number; value: ConflictRecord };
@@ -93,7 +96,7 @@ function getDb(): Promise<IDBPDatabase<OfflineDB>> | null {
   if (!_dbPromise) {
     _dbPromise = openDB<OfflineDB>(OFFLINE_DB_NAME, OFFLINE_DB_VERSION, {
       upgrade(db) {
-        for (const name of ['customers', 'visits', 'photos'] as const) {
+        for (const name of ['customers', 'visits', 'photos', 'customerInfo'] as const) {
           if (!db.objectStoreNames.contains(name)) {
             const store = db.createObjectStore(name, { keyPath: 'id' });
             store.createIndex('cachedAt', 'cachedAt');
@@ -308,11 +311,12 @@ export async function clearOfflineDb(): Promise<void> {
   if (!dbp) return;
   try {
     const db = await dbp;
-    const tx = db.transaction(['customers', 'visits', 'photos', 'meta', 'outbox', 'conflicts'], 'readwrite');
+    const tx = db.transaction(['customers', 'visits', 'photos', 'customerInfo', 'meta', 'outbox', 'conflicts'], 'readwrite');
     await Promise.all([
       tx.objectStore('customers').clear(),
       tx.objectStore('visits').clear(),
       tx.objectStore('photos').clear(),
+      tx.objectStore('customerInfo').clear(),
       tx.objectStore('meta').clear(),
       tx.objectStore('outbox').clear(),
       tx.objectStore('conflicts').clear(),

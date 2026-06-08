@@ -24,7 +24,7 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
-import { readRecord } from '../../lib/offlineDb';
+import { cacheRecord, readRecord } from '../../lib/offlineDb';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -842,12 +842,23 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         const d = await r.json() as Submission[];
         setSubmissions(d);
         setFromCache(false);
+        // Write-through the full list (keyed by contactId) so the whole history
+        // — not just the single drawer-cached submission — is available offline.
+        void cacheRecord('customerInfo', contactId, d);
       })
       .catch(async e => {
-        // Offline fallback: the "Review customer photos" drawer caches the
-        // submission it acted on into IndexedDB (`photos` store, keyed by
-        // contactId). When the live fetch fails, surface that cached submission
-        // so a card with a queued review still appears with its sync pill.
+        // Offline fallback. Prefer the full submissions list cached on the last
+        // successful online load. If that's missing, fall back to the single
+        // submission the "Review customer photos" drawer cached (`photos` store,
+        // keyed by contactId) so a card with a queued review still appears with
+        // its sync pill.
+        const cachedList = await readRecord<Submission[]>('customerInfo', contactId);
+        if (Array.isArray(cachedList) && cachedList.length > 0) {
+          setSubmissions(cachedList);
+          setFromCache(true);
+          setError('');
+          return;
+        }
         const cached = await readRecord<CachedPhotoSubmission>('photos', contactId);
         if (cached && cached.id != null) {
           setSubmissions([cachedToSubmission(cached)]);
