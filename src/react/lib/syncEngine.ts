@@ -261,8 +261,39 @@ async function processEntry(entry: QueueEntry): Promise<void> {
     await scheduleRetry(entry, `server error ${result.status}`);
     return;
   }
-  // Terminal client error — parking as failed.
-  const msg = (result.data as { error?: string })?.error || `request failed (${result.status})`;
+  // Terminal client error.
+  const data = result.data as { error?: string; code?: string } | null;
+
+  // LEAD_STATUS_REMOVED: the queued write was rejected because the pipeline status
+  // it referenced has been removed. This will never succeed on blind retry, but it
+  // also isn't a data-version conflict — it is a configuration error that needs
+  // admin action. Record it as a flagged conflict (with `errorCode`) so the
+  // ConflictsReview drawer can surface the targeted admin guidance, then remove
+  // the entry from the queue so it doesn't sit as a permanently-failed change.
+  if (data?.code === 'LEAD_STATUS_REMOVED') {
+    await recordConflict({
+      area: entry.area,
+      label: entry.label,
+      url: entry.url,
+      method: entry.method,
+      recordKey: entry.recordKey,
+      conflictCheckUrl: entry.conflictCheckUrl,
+      attemptedBody: entry.body,
+      baseVersion: entry.baseVersion ?? null,
+      baseUpdatedAt: entry.baseUpdatedAt ?? null,
+      serverVersion: null,
+      serverUpdatedAt: null,
+      serverData: null,
+      resolution: 'flagged',
+      errorCode: 'LEAD_STATUS_REMOVED',
+    });
+    await removeEntry(entry.id);
+    surfaceConflict(entry);
+    log('warn', 'sync_lead_status_removed', { area: entry.area, label: entry.label, recordKey: entry.recordKey });
+    return;
+  }
+
+  const msg = data?.error || `request failed (${result.status})`;
   await updateEntry(entry.id, { status: 'failed', attempts: entry.attempts + 1, lastError: msg });
   surfaceFailure({ ...entry, attempts: entry.attempts + 1 }, msg);
 }

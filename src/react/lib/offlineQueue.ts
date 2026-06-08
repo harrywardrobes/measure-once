@@ -144,6 +144,13 @@ export interface ConflictEntry {
   serverData?: unknown;
   /** How the engine handled it: applied anyway, or held for manual review. */
   resolution: 'last_write_wins' | 'flagged';
+  /**
+   * When set, this conflict was caused by a specific server-side error code
+   * rather than a data-version conflict. The ConflictsReview drawer uses this
+   * to surface targeted guidance (e.g. `LEAD_STATUS_REMOVED` → admin must
+   * restore the pipeline status before the change can be re-entered).
+   */
+  errorCode?: string;
   detectedAt: number;
 }
 

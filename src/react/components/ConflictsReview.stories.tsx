@@ -350,6 +350,49 @@ export const ServerAddedRoom: Story = {
 };
 
 /**
+ * A queued write was rejected because the pipeline status it referenced was
+ * removed by an admin before the device came back online. The entry is surfaced
+ * in the Conflicts drawer (not the generic "failed" dialog) so the targeted
+ * admin guidance — "restore it in Visit Settings → Lead statuses" — is
+ * immediately visible. The field diff and "Restore server copy" buttons are
+ * hidden because the write was never applied; only "Dismiss" is shown.
+ */
+export const LeadStatusRemoved: Story = {
+  name: 'Pipeline config error: lead status removed',
+  render: () => {
+    function LeadStatusRemovedConflict() {
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([
+        {
+          id: 20,
+          area: 'visit',
+          label: 'Design visit — 7 Maple Close',
+          url: '/api/design-visits/503',
+          method: 'PUT',
+          recordKey: 'dv:503',
+          errorCode: 'LEAD_STATUS_REMOVED',
+          resolution: 'flagged',
+          detectedAt: now - 1000 * 60 * 5,
+        },
+      ]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <LeadStatusRemovedConflict />;
+  },
+};
+
+/**
  * Per-room resolution: the queued edit *removed* a room the server still has
  * (Room 2, Bedroom — present only on the server). Its per-room toggle reads
  * "Keep mine" (stay removed) vs "Restore room" (bring the server's room back),

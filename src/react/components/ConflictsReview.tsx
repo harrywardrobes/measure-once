@@ -906,11 +906,21 @@ function ConflictCard({
 
   // Plain-language explanation shared with the admin Offline support tab, so
   // field users and admins read the same friendly, actionable wording.
+  // `errorCode` takes precedence over the version-based explanation when
+  // present (e.g. LEAD_STATUS_REMOVED needs targeted admin guidance rather
+  // than a "keep mine / restore server" framing).
   const explained = explainConflict({
     resolution: conflict.resolution,
     serverVersion: conflict.serverVersion,
     baseVersion: conflict.baseVersion,
+    errorCode: conflict.errorCode,
   });
+
+  // When the conflict was caused by a pipeline-configuration error the queued
+  // write was never applied — there is nothing to restore. Skip the field diff
+  // and resolve buttons; just let the user dismiss the notice once they have
+  // acted on the guidance.
+  const isConfigError = !!conflict.errorCode;
 
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<Record<string, FieldChoice>>({});
@@ -1037,7 +1047,7 @@ function ConflictCard({
         </Typography>
       )}
 
-      {(hasVersions || hasTimestamps) && (
+      {!isConfigError && (hasVersions || hasTimestamps) && (
         <>
           <Divider sx={{ my: 1.5 }} />
           {hasVersions && (
@@ -1057,18 +1067,20 @@ function ConflictCard({
         </>
       )}
 
-      <FieldDiffSection
-        rows={rows}
-        open={open}
-        onToggleOpen={() => setOpen((v) => !v)}
-        choices={choices}
-        onChoose={choose}
-        onChooseAllFields={chooseAllFields}
-        roomChoices={roomChoices}
-        onChooseRoom={chooseRoom}
-        onChooseAllRooms={chooseAllRooms}
-        disabled={busy}
-      />
+      {!isConfigError && (
+        <FieldDiffSection
+          rows={rows}
+          open={open}
+          onToggleOpen={() => setOpen((v) => !v)}
+          choices={choices}
+          onChoose={choose}
+          onChooseAllFields={chooseAllFields}
+          roomChoices={roomChoices}
+          onChooseRoom={chooseRoom}
+          onChooseAllRooms={chooseAllRooms}
+          disabled={busy}
+        />
+      )}
 
       {error && (
         <Typography variant="caption" sx={{ color: 'error.main', display: 'block', mt: 1 }} data-testid="conflict-error">
@@ -1076,6 +1088,24 @@ function ConflictCard({
         </Typography>
       )}
 
+      {isConfigError ? (
+        // Configuration-error conflicts: the queued write was never applied so
+        // there is nothing to compare or restore. A single "Dismiss" clears the
+        // notice once the user has acted on the admin guidance above.
+        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 1.5 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
+            onClick={() => void run([])}
+            data-testid="conflict-dismiss"
+          >
+            Dismiss
+          </Button>
+        </Stack>
+      ) : (
       <Stack
         direction="row"
         sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, mt: 1.5 }}
@@ -1124,6 +1154,7 @@ function ConflictCard({
           </Button>
         )}
       </Stack>
+      )}
     </Box>
   );
 }

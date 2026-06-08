@@ -162,6 +162,11 @@ export interface ConflictExplanationInput {
   serverVersion?: number | null;
   /** Version your queued edit was based on. */
   baseVersion?: number | null;
+  /**
+   * When set, the conflict was caused by a specific server-side error code
+   * rather than a data-version race. Takes precedence over `resolution`.
+   */
+  errorCode?: string | null;
 }
 
 export interface ConflictExplanation {
@@ -183,7 +188,20 @@ export interface ConflictExplanation {
  * nothing was overwritten yet but a decision is needed.
  */
 export function explainConflict(input: ConflictExplanationInput): ConflictExplanation {
-  const { resolution, serverVersion, baseVersion } = input;
+  const { resolution, serverVersion, baseVersion, errorCode } = input;
+
+  // ── Configuration errors (not data-version races) ──
+  // These take precedence over the resolution-based explanations below because
+  // the queued write was never applied — the server rejected it outright. The
+  // user needs targeted admin guidance rather than a "keep mine / restore
+  // server" framing.
+  if (errorCode === 'LEAD_STATUS_REMOVED') {
+    return {
+      summary:
+        'This change was rejected because the pipeline status it referenced has been removed. ' +
+        'Ask an admin to restore it in Visit Settings → Lead statuses, then re-enter the change.',
+    };
+  }
 
   const haveVersions = serverVersion != null && baseVersion != null;
   const detail = haveVersions
