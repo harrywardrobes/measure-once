@@ -60,24 +60,28 @@ card_action_handler_bindings (
 
 ### Valid Types List
 
-`CARD_ACTION_HANDLER_TYPES` (server.js ~3536) is a `Set` and the single source of truth:
+`CARD_ACTION_HANDLER_TYPES` (server.js ~3536) is a `Set` derived from the keys of `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` and is the single source of truth:
 ```js
 const CARD_ACTION_HANDLER_TYPES = new Set([
   'add_design_visit_to_calendar',
   'summarise_phone_call',
   'show_message',
-  // add new types here
+  'arrange_visit',
+  // add new types here (by adding a validator to CARD_ACTION_HANDLER_CONFIG_VALIDATORS)
 ]);
 ```
 The matching client object is `HANDLER_TYPE_LABELS` in `admin.html` (~line 2318) — both must stay in sync.
 
 ### Dispatch Pattern (client)
 
+> **Note:** For handler types implemented as React modals (e.g. `arrange_visit`), the canonical client dispatch path is `CardActionModalsHost.tsx` (`src/react/components/CardActionModalsHost.tsx`), which renders the appropriate React modal via a `switch` on `handler.type`. The vanilla-JS `dispatchCardActionHandler` in `public/card-action-handlers.js` handles non-React handlers and remains the entry point that delegates to `CardActionModalsHost` for React-backed types.
+
 ```js
 function dispatchCardActionHandler(handler, ctx) {
   if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
   if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
   if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
+  if (handler.type === 'arrange_visit')               return openReactModal(handler, ctx); // → CardActionModalsHost.tsx
   // add new type branch here
   console.warn('Unknown card action handler type:', handler.type);
 }
