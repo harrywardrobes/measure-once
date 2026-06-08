@@ -14,6 +14,27 @@
  */
 
 import type { QueueEntry, OfflineArea } from './offlineQueue';
+import { resolveQueueEntryRoute } from './conflictRoute';
+
+/**
+ * Turn a resolved in-app route into a full, openable URL when an origin is
+ * available; otherwise fall back to the relative route. Returns `null` when no
+ * route can be derived for the entry, so the caller omits the line cleanly.
+ */
+function entryRecordLink(entry: QueueEntry, origin: string | null): string | null {
+  const route = resolveQueueEntryRoute(entry);
+  if (!route) return null;
+  return origin ? `${origin}${route}` : route;
+}
+
+function defaultOrigin(): string | null {
+  try {
+    const o = typeof window !== 'undefined' ? window.location?.origin : null;
+    return o && o !== 'null' ? o : null;
+  } catch {
+    return null;
+  }
+}
 
 const AREA_LABELS: Record<OfflineArea, string> = {
   customer: 'Customer details',
@@ -182,7 +203,7 @@ function wrapText(text: string, maxChars: number): string[] {
 }
 
 /** Build the ordered list of rendered lines for the whole document. */
-function buildLines(entries: QueueEntry[], generatedAt: number): Line[] {
+function buildLines(entries: QueueEntry[], generatedAt: number, origin: string | null): Line[] {
   const lines: Line[] = [];
   lines.push({ text: 'Changes that failed to sync', size: TITLE_SIZE });
   lines.push({ text: `Exported ${formatTimestamp(generatedAt)}`, size: BODY_SIZE });
@@ -197,6 +218,13 @@ function buildLines(entries: QueueEntry[], generatedAt: number): Line[] {
       lines.push({ text: t, size: BODY_SIZE, spacerBefore: i === 0 ? 1 : 0 });
     });
     lines.push({ text: `Original change: ${formatTimestamp(entry.createdAt)}`, size: BODY_SIZE });
+
+    const recordLink = entryRecordLink(entry, origin);
+    if (recordLink) {
+      wrapText(`Record link: ${recordLink}`, MAX_CHARS).forEach((t, i) => {
+        lines.push({ text: i === 0 ? t : `    ${t}`, size: BODY_SIZE });
+      });
+    }
 
     const fields = entryFields(entry);
     if (fields.length === 0) {
@@ -271,8 +299,12 @@ function latin1Bytes(str: string): number[] {
  * Assemble a complete, text-only PDF document from the failed entries.
  * Returns a `Blob` of type `application/pdf`.
  */
-export function buildFailuresPdf(entries: QueueEntry[], generatedAt: number = Date.now()): Blob {
-  const pages = paginate(buildLines(entries, generatedAt));
+export function buildFailuresPdf(
+  entries: QueueEntry[],
+  generatedAt: number = Date.now(),
+  origin: string | null = defaultOrigin(),
+): Blob {
+  const pages = paginate(buildLines(entries, generatedAt, origin));
 
   // Object layout: 1 = Catalog, 2 = Pages, 3 = Font, then per page a Page object
   // and a content-stream object.

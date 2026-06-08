@@ -14,7 +14,20 @@
  * Returns `null` when no route can be derived; the caller hides the link then.
  */
 
-import type { ConflictEntry } from './offlineQueue';
+import type { ConflictEntry, QueueEntry, OfflineArea } from './offlineQueue';
+
+/**
+ * Minimal shape needed to derive a record route. Both {@link ConflictEntry}
+ * (conflicts review) and an adapted {@link QueueEntry} (failed-sync PDF export)
+ * satisfy it, so the resolver logic is shared across both surfaces.
+ */
+interface RouteSource {
+  area: OfflineArea;
+  url: string;
+  recordKey?: string;
+  attemptedBody?: unknown;
+  serverData?: unknown;
+}
 
 function asId(value: unknown): string | null {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -37,7 +50,7 @@ function recordKeyParts(recordKey?: string): { type: string; id: string } | null
  * across every surface that may carry it: the record key, the attempted write
  * body, the server snapshot, and finally the request URL.
  */
-function contactIdFor(conflict: ConflictEntry): string | null {
+function contactIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
   if (parts && parts.type === 'contact') return parts.id;
 
@@ -62,7 +75,7 @@ function contactIdFor(conflict: ConflictEntry): string | null {
  * body, the server snapshot, and finally the request URL
  * (`/api/design-visits/<id>`). Returns `null` when none can be derived.
  */
-function visitIdFor(conflict: ConflictEntry): string | null {
+function visitIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
   if (parts && (parts.type === 'dv' || parts.type === 'design-visit')) {
     const id = asId(parts.id);
@@ -92,7 +105,7 @@ function visitIdFor(conflict: ConflictEntry): string | null {
  * request URL (e.g. `/api/customer-info/submissions/<id>`). Returns `null`
  * when none can be derived.
  */
-function submissionIdFor(conflict: ConflictEntry): string | null {
+function submissionIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
   if (parts && (parts.type === 'customer-info' || parts.type === 'submission' || parts.type === 'photo')) {
     const id = asId(parts.id);
@@ -129,24 +142,43 @@ function submissionIdFor(conflict: ConflictEntry): string | null {
  *   `#design-visit-<visitId>` fragment is appended so the customer page can
  *   auto-expand and scroll to that exact visit.
  */
-export function resolveConflictRoute(conflict: ConflictEntry): string | null {
-  const contactId = contactIdFor(conflict);
+function resolveRoute(source: RouteSource): string | null {
+  const contactId = contactIdFor(source);
   if (!contactId) return null;
 
   const base = `/customers/${encodeURIComponent(contactId)}`;
 
-  switch (conflict.area) {
+  switch (source.area) {
     case 'customer':
       return base;
     case 'photo': {
-      const submissionId = submissionIdFor(conflict);
+      const submissionId = submissionIdFor(source);
       return submissionId ? `${base}#customer-info-${encodeURIComponent(submissionId)}` : base;
     }
     case 'visit': {
-      const visitId = visitIdFor(conflict);
+      const visitId = visitIdFor(source);
       return visitId ? `${base}#design-visit-${encodeURIComponent(visitId)}` : base;
     }
     default:
       return null;
   }
+}
+
+export function resolveConflictRoute(conflict: ConflictEntry): string | null {
+  return resolveRoute(conflict);
+}
+
+/**
+ * Resolve a queued (failed-sync) entry to the same in-app record route used by
+ * the conflicts review, or `null` when none can be derived. A {@link QueueEntry}
+ * carries its attempted write in `body` (there is no server snapshot), so it is
+ * mapped onto the shared {@link RouteSource} shape before resolving.
+ */
+export function resolveQueueEntryRoute(entry: QueueEntry): string | null {
+  return resolveRoute({
+    area: entry.area,
+    url: entry.url,
+    recordKey: entry.recordKey,
+    attemptedBody: entry.body,
+  });
 }
