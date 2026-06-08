@@ -1,23 +1,20 @@
 'use strict';
 // test/bottom-nav/run.js
 //
-// End-to-end test for the "More" drawer in the bottom navigation bar.
+// End-to-end test for the bottom navigation bar with the current four-tab nav.
 // Verifies:
 //
-//   [M-BAR]   Member bar shows Home, Calendar, Trades + More; NOT Sales/Projects
-//   [MG-BAR]  Manager bar shows Home, Sales, Projects + More; NOT Calendar/Trades
-//   [M-DRAW]  Tapping More opens drawer for member, listing Ideas
-//   [MG-DRAW] Tapping More opens drawer for manager, listing Survey, Calendar,
-//             Invoices, Trades, Ideas (all overflow tabs)
-//   [M-ACT]   Navigating to an overflow tab (/ideas) makes More selected in bar
-//   [MG-ACT]  Navigating to an overflow tab (/survey) makes More selected in bar
-//   [M-NAV]   Member taps Ideas in drawer → drawer closes, pathname=/ideas, More selected
-//   [MG-NAV]  Manager taps Calendar in drawer → drawer closes, pathname=/calendar, More selected
-//   [CLO]     Drawer closes when the MUI backdrop is clicked
+//   [M-BAR]  Member bar shows Home, Customers, Projects — all three visible tabs
+//            render directly in the bar; NO "More" button present.
+//   [MG-BAR] Manager bar shows Home, Customers, Projects, Invoices — all four
+//            visible tabs render directly; NO "More" button present.
+//   [M-ACT]  Member active-tab highlight: Home at /, Customers at /customers,
+//            Projects at /projects.
+//   [MG-ACT] Manager Invoices tab highlights directly in the bar when at
+//            /invoices — no "More" overflow needed.
 //
-// Follows the harness + Puppeteer conventions from test/calendar-page/run.js:
-// boots a disposable server, seeds members/managers, drives the UI, then
-// writes a markdown report to test-results/bottom-nav.md.
+// With FIT_THRESHOLD = 4 and the current nav having at most 4 items, allFit is
+// always true so the primary/overflow split and "More" button are never shown.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:bottom-nav
@@ -105,91 +102,53 @@ async function openPage(browser, jar, url) {
 }
 
 /**
- * Return an object describing what is currently in the bar (nav container)
- * and whether [data-more-selected] is present.
+ * Read which named tab ids are present in the primary bar and whether the
+ * "More" button is present.
  */
 function readBarState(page) {
   return page.evaluate(() => {
     const nav = document.querySelector('nav.bottom-nav#main-content');
     if (!nav) return null;
     const inBar = id => !!nav.querySelector(`#${id}`);
-    const moreSelected = !!document.querySelector('[data-more-selected]');
-    const moreHasMuiSelected = nav.querySelector('#bnav-more')
-      ? nav.querySelector('#bnav-more').getAttribute('data-selected') === 'true'
-      : false;
     return {
-      home:     inBar('bnav-home'),
-      calendar: inBar('bnav-calendar'),
-      trades:   inBar('bnav-trades'),
-      sales:    inBar('bnav-sales'),
-      survey:   inBar('bnav-survey'),
-      projects: inBar('bnav-projects'),
-      invoices: inBar('bnav-invoices'),
-      ideas:    inBar('bnav-ideas'),
-      more:     inBar('bnav-more'),
-      moreSelected,
-      moreHasMuiSelected,
+      home:      inBar('bnav-home'),
+      customers: inBar('bnav-customers'),
+      projects:  inBar('bnav-projects'),
+      invoices:  inBar('bnav-invoices'),
+      more:      inBar('bnav-more'),
     };
   });
 }
 
 /**
- * Check whether the MUI Drawer paper is currently visible on-screen.
- * MUI Drawer renders a `.MuiDrawer-paper` element even when closed, but
- * transforms it off-screen.  When open, its top edge is within viewport.
+ * Return the data-selected state of a given bar tab and whether More is active.
  */
-function readDrawerOpen(page) {
-  return page.evaluate(() => {
-    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-    if (!paper) return false;
-    const rect = paper.getBoundingClientRect();
-    return rect.top < window.innerHeight && rect.height > 0;
-  });
+function readBarTabState(page, key) {
+  return page.evaluate((k) => {
+    const nav   = document.querySelector('nav.bottom-nav#main-content');
+    const el    = nav ? nav.querySelector(`#bnav-${k}`) : null;
+    const moreEl = nav ? nav.querySelector('#bnav-more') : null;
+    return {
+      exists:   !!el,
+      selected: el ? el.getAttribute('data-selected') === 'true' : false,
+      morePresent: !!moreEl,
+      moreSelected: !!document.querySelector('[data-more-selected]'),
+    };
+  }, key);
 }
 
 /**
- * Return the list of IDs found in the drawer paper element (outside the
- * nav bar container, scoped to .MuiDrawer-paper list items).
+ * Wait until #bnav-<key> gains or loses data-selected="true".
  */
-function readDrawerItemIds(page) {
-  return page.evaluate(() => {
-    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-    if (!paper) return [];
-    return Array.from(paper.querySelectorAll('[id^="bnav-"]'))
-      .map(el => el.id.replace('bnav-', ''));
-  });
-}
-
-/**
- * Click the More button in the bottom bar and wait until the drawer is
- * visible on-screen (up to timeoutMs).
- */
-async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
-  await page.evaluate(() => {
-    const btn = document.querySelector('#bnav-more');
-    if (btn) btn.click();
-  });
-  const ok = await poll(page, () => {
-    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-    if (!paper) return null;
-    const rect = paper.getBoundingClientRect();
-    return rect.top < window.innerHeight && rect.height > 0 ? 'ok' : null;
-  }, null, timeoutMs);
-  return ok === 'ok';
-}
-
-/**
- * Close the drawer by clicking the MUI Backdrop element.
- */
-async function closeDrawerViaBackdrop(page) {
-  await page.keyboard.press('Escape');
-  // Wait for drawer to slide away
-  await poll(page, () => {
-    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-    if (!paper) return 'ok';
-    const rect = paper.getBoundingClientRect();
-    return rect.top >= window.innerHeight ? 'ok' : null;
-  }, null, 5000);
+async function waitForTabSelected(page, key, wantSelected, timeoutMs = 5000) {
+  const result = await poll(page, (args) => {
+    const nav = document.querySelector('nav.bottom-nav#main-content');
+    const el  = nav ? nav.querySelector(`#bnav-${args.key}`) : null;
+    if (!el) return null;
+    const has = el.getAttribute('data-selected') === 'true';
+    return has === args.want ? 'ok' : null;
+  }, { key, want: wantSelected }, timeoutMs);
+  return result === 'ok';
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -212,7 +171,7 @@ async function main() {
   }
 
   const runId = Math.random().toString(36).slice(2, 8);
-  console.log(`\n  bottom-nav More drawer — E2E  run=${runId}`);
+  console.log(`\n  bottom-nav flat-nav — E2E  run=${runId}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
 
   if (!puppeteer) {
@@ -288,7 +247,7 @@ async function main() {
   try {
 
     // ══════════════════════════════════════════════════════════════════════════
-    // [M-BAR] Member bar layout
+    // [M-BAR] Member bar layout: Home + Customers + Projects, no More
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [M-BAR] Member bottom bar');
     {
@@ -302,34 +261,28 @@ async function main() {
         !!(bar && bar.home),
       );
       record(
-        '[M-BAR] Calendar in member bar',
-        'bnav-calendar present in nav',
-        bar ? (bar.calendar ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.calendar),
+        '[M-BAR] Customers in member bar',
+        'bnav-customers present in nav',
+        bar ? (bar.customers ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.customers),
       );
       record(
-        '[M-BAR] Trades in member bar',
-        'bnav-trades present in nav',
-        bar ? (bar.trades ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.trades),
+        '[M-BAR] Projects in member bar',
+        'bnav-projects present in nav',
+        bar ? (bar.projects ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.projects),
       );
       record(
-        '[M-BAR] More in member bar',
-        'bnav-more present in nav',
-        bar ? (bar.more ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.more),
+        '[M-BAR] Invoices NOT in member bar (manager-only)',
+        'bnav-invoices absent from nav',
+        bar ? (bar.invoices ? 'present' : 'absent') : 'bar state null',
+        !!(bar && !bar.invoices),
       );
       record(
-        '[M-BAR] Sales NOT in member bar (manager-only)',
-        'bnav-sales absent from nav',
-        bar ? (bar.sales ? 'present' : 'absent') : 'bar state null',
-        !!(bar && !bar.sales),
-      );
-      record(
-        '[M-BAR] Projects NOT in member bar (manager-only)',
-        'bnav-projects absent from nav',
-        bar ? (bar.projects ? 'present' : 'absent') : 'bar state null',
-        !!(bar && !bar.projects),
+        '[M-BAR] More button NOT present for member (all tabs fit)',
+        'bnav-more absent from nav',
+        bar ? (bar.more ? 'present' : 'absent') : 'bar state null',
+        !!(bar && !bar.more),
       );
 
       await page.close().catch(() => {});
@@ -337,7 +290,7 @@ async function main() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // [MG-BAR] Manager bar layout
+    // [MG-BAR] Manager bar layout: Home + Customers + Projects + Invoices, no More
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [MG-BAR] Manager bottom bar');
     {
@@ -351,10 +304,10 @@ async function main() {
         !!(bar && bar.home),
       );
       record(
-        '[MG-BAR] Sales in manager bar',
-        'bnav-sales present in nav',
-        bar ? (bar.sales ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.sales),
+        '[MG-BAR] Customers in manager bar',
+        'bnav-customers present in nav',
+        bar ? (bar.customers ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.customers),
       );
       record(
         '[MG-BAR] Projects in manager bar',
@@ -363,22 +316,16 @@ async function main() {
         !!(bar && bar.projects),
       );
       record(
-        '[MG-BAR] More in manager bar',
-        'bnav-more present in nav',
-        bar ? (bar.more ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.more),
+        '[MG-BAR] Invoices in manager bar (manager-only tab)',
+        'bnav-invoices present in nav',
+        bar ? (bar.invoices ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.invoices),
       );
       record(
-        '[MG-BAR] Calendar NOT in manager primary bar (overflow only)',
-        'bnav-calendar absent from nav',
-        bar ? (bar.calendar ? 'present' : 'absent') : 'bar state null',
-        !!(bar && !bar.calendar),
-      );
-      record(
-        '[MG-BAR] Trades NOT in manager primary bar (overflow only)',
-        'bnav-trades absent from nav',
-        bar ? (bar.trades ? 'present' : 'absent') : 'bar state null',
-        !!(bar && !bar.trades),
+        '[MG-BAR] More button NOT present for manager (all 4 tabs fit within threshold)',
+        'bnav-more absent from nav',
+        bar ? (bar.more ? 'present' : 'absent') : 'bar state null',
+        !!(bar && !bar.more),
       );
 
       await page.close().catch(() => {});
@@ -386,393 +333,119 @@ async function main() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // [M-DRAW] Member More drawer — opens and lists Ideas
+    // [M-ACT] Member active-tab highlights: /, /customers, /projects
     // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [M-DRAW] Member More drawer');
+    console.log('\n  [M-ACT] Member active-tab highlights');
     {
-      const page = await openPage(browser, memberClient.cookie, '/');
-
-      const drawerInitiallyClosed = !(await readDrawerOpen(page));
-      record(
-        '[M-DRAW] Drawer is initially closed',
-        'drawer not visible',
-        drawerInitiallyClosed ? 'not visible' : 'visible (unexpected)',
-        drawerInitiallyClosed,
-      );
-
-      const opened = await clickMoreAndWaitForDrawer(page);
-      record(
-        '[M-DRAW] Tapping More opens the drawer',
-        'drawer visible after click',
-        opened ? 'visible' : 'not visible',
-        opened,
-      );
-
-      const moreSelectedAfterOpen = await page.evaluate(
-        () => !!document.querySelector('[data-more-selected]'),
-      );
-      record(
-        '[M-DRAW] [data-more-selected] present while drawer is open',
-        'present',
-        moreSelectedAfterOpen ? 'present' : 'absent',
-        moreSelectedAfterOpen,
-      );
-
-      const drawerIds = await readDrawerItemIds(page);
-      record(
-        '[M-DRAW] Drawer lists Ideas overflow tab',
-        'ideas in drawer',
-        JSON.stringify(drawerIds),
-        drawerIds.includes('ideas'),
-      );
-      record(
-        '[M-DRAW] Drawer does NOT list Home (primary bar item)',
-        'home absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('home'),
-      );
-      record(
-        '[M-DRAW] Drawer does NOT list Calendar (primary bar item for member)',
-        'calendar absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('calendar'),
-      );
-      record(
-        '[M-DRAW] Drawer does NOT list Trades (primary bar item for member)',
-        'trades absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('trades'),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [MG-DRAW] Manager More drawer — opens and lists all overflow tabs
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [MG-DRAW] Manager More drawer');
-    {
-      const page = await openPage(browser, managerClient.cookie, '/');
-
-      const opened = await clickMoreAndWaitForDrawer(page);
-      record(
-        '[MG-DRAW] Tapping More opens the drawer for manager',
-        'drawer visible after click',
-        opened ? 'visible' : 'not visible',
-        opened,
-      );
-
-      const drawerIds = await readDrawerItemIds(page);
-      const expectedOverflow = ['survey', 'calendar', 'invoices', 'trades', 'ideas'];
-      for (const key of expectedOverflow) {
+      // Home at /
+      {
+        const page = await openPage(browser, memberClient.cookie, '/');
+        const state = await readBarTabState(page, 'home');
         record(
-          `[MG-DRAW] Drawer lists "${key}" overflow tab`,
-          `${key} in drawer`,
-          JSON.stringify(drawerIds),
-          drawerIds.includes(key),
-        );
-      }
-      record(
-        '[MG-DRAW] Drawer does NOT list Home (primary bar item)',
-        'home absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('home'),
-      );
-      record(
-        '[MG-DRAW] Drawer does NOT list Sales (primary bar item for manager)',
-        'sales absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('sales'),
-      );
-      record(
-        '[MG-DRAW] Drawer does NOT list Projects (primary bar item for manager)',
-        'projects absent from drawer',
-        JSON.stringify(drawerIds),
-        !drawerIds.includes('projects'),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [M-ACT] Member — navigating to overflow tab makes More selected
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [M-ACT] Member active-in-overflow: /ideas → More selected');
-    {
-      // Navigate directly to /ideas (an overflow tab for members).
-      const page = await openPage(browser, memberClient.cookie, '/ideas');
-
-      const bar = await readBarState(page);
-      record(
-        '[M-ACT] [data-more-selected] present when at /ideas',
-        'present',
-        bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
-        !!(bar && bar.moreSelected),
-      );
-      record(
-        '[M-ACT] #bnav-more has Mui-selected class when at /ideas',
-        'Mui-selected on bnav-more',
-        bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
-        !!(bar && bar.moreHasMuiSelected),
-      );
-
-      // Also verify More stays deselected when navigating to a primary bar tab.
-      // Push state to /calendar (primary for member) and fire popstate.
-      await page.evaluate(() => {
-        history.pushState({}, '', '/calendar');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      });
-      // Give the React effect time to re-sync the value
-      await poll(page, () => {
-        const el = document.querySelector('[data-more-selected]');
-        return el ? null : 'gone';
-      }, null, 5000);
-
-      const barAfterPrimary = await readBarState(page);
-      record(
-        '[M-ACT] [data-more-selected] absent when at primary tab (/calendar)',
-        'absent',
-        barAfterPrimary ? (barAfterPrimary.moreSelected ? 'present' : 'absent') : 'bar state null',
-        !!(barAfterPrimary && !barAfterPrimary.moreSelected),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [MG-ACT] Manager — navigating to overflow tab makes More selected
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [MG-ACT] Manager active-in-overflow: /survey → More selected');
-    {
-      const page = await openPage(browser, managerClient.cookie, '/survey');
-
-      const bar = await readBarState(page);
-      record(
-        '[MG-ACT] [data-more-selected] present when at /survey (manager overflow)',
-        'present',
-        bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
-        !!(bar && bar.moreSelected),
-      );
-      record(
-        '[MG-ACT] #bnav-more has Mui-selected class when at /survey',
-        'Mui-selected on bnav-more',
-        bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
-        !!(bar && bar.moreHasMuiSelected),
-      );
-
-      // Push to /sales (primary for manager) and verify More deselects.
-      await page.evaluate(() => {
-        history.pushState({}, '', '/sales');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      });
-      await poll(page, () => {
-        const el = document.querySelector('[data-more-selected]');
-        return el ? null : 'gone';
-      }, null, 5000);
-
-      const barAfterPrimary = await readBarState(page);
-      record(
-        '[MG-ACT] [data-more-selected] absent when at primary tab (/sales)',
-        'absent',
-        barAfterPrimary ? (barAfterPrimary.moreSelected ? 'present' : 'absent') : 'bar state null',
-        !!(barAfterPrimary && !barAfterPrimary.moreSelected),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [M-NAV] Member — click Ideas in drawer → navigates + More selected
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [M-NAV] Member drawer click-through: Ideas');
-    {
-      const page = await openPage(browser, memberClient.cookie, '/');
-
-      const opened = await clickMoreAndWaitForDrawer(page);
-      record(
-        '[M-NAV] Drawer opened before clicking Ideas',
-        'drawer visible',
-        opened ? 'visible' : 'not visible',
-        opened,
-      );
-
-      // Click the Ideas drawer item — it is an <a> so it causes full navigation.
-      const [navResponse] = await Promise.all([
-        page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
-        page.evaluate(() => {
-          const btn = document.querySelector('[data-testid="bottom-nav-drawer-paper"] #bnav-ideas');
-          if (btn) btn.click();
-        }),
-      ]);
-
-      // Wait for BottomNav to remount after navigation.
-      await poll(page, () => {
-        const nav = document.querySelector('nav.bottom-nav#main-content');
-        return nav && nav.querySelector('#bnav-home') ? 'ok' : null;
-      }, null, 15000);
-
-      // Drawer must be closed (fresh page load, no open drawer state).
-      const drawerClosed = !(await readDrawerOpen(page));
-      record(
-        '[M-NAV] Drawer is closed after clicking Ideas',
-        'drawer not visible',
-        drawerClosed ? 'not visible' : 'still visible',
-        drawerClosed,
-      );
-
-      const pathname = await page.evaluate(() => window.location.pathname);
-      record(
-        '[M-NAV] pathname is /ideas after clicking Ideas drawer item',
-        '/ideas',
-        String(pathname),
-        pathname === '/ideas',
-      );
-
-      const bar = await readBarState(page);
-      record(
-        '[M-NAV] [data-more-selected] present on /ideas after drawer click',
-        'present',
-        bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
-        !!(bar && bar.moreSelected),
-      );
-      record(
-        '[M-NAV] #bnav-more has Mui-selected class on /ideas after drawer click',
-        'Mui-selected on bnav-more',
-        bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
-        !!(bar && bar.moreHasMuiSelected),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [MG-NAV] Manager — click first overflow item in drawer → navigates +
-    //          drawer closes + More selected
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [MG-NAV] Manager drawer click-through: first overflow tab');
-    {
-      const page = await openPage(browser, managerClient.cookie, '/');
-
-      const opened = await clickMoreAndWaitForDrawer(page);
-      record(
-        '[MG-NAV] Drawer opened before clicking overflow tab',
-        'drawer visible',
-        opened ? 'visible' : 'not visible',
-        opened,
-      );
-
-      // Read the first overflow item from the drawer so the probe is resilient
-      // to nav-customisation preferences changing which tabs are in overflow.
-      const firstDrawerItem = await page.evaluate(() => {
-        const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-        if (!paper) return null;
-        const anchor = paper.querySelector('[id^="bnav-"]');
-        if (!anchor) return null;
-        return { id: anchor.id, href: anchor.getAttribute('href') };
-      });
-
-      const hasDrawerItem = !!(firstDrawerItem && firstDrawerItem.href);
-      record(
-        '[MG-NAV] Drawer contains at least one overflow item to click',
-        'at least one drawer item present',
-        hasDrawerItem ? `found ${firstDrawerItem.id}` : 'no drawer items found',
-        hasDrawerItem,
-      );
-
-      if (hasDrawerItem) {
-        // Click the anchor — it is a real <a> so it causes full page navigation.
-        const [/* navResponse */] = await Promise.all([
-          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 }),
-          page.evaluate((itemId) => {
-            const btn = document.querySelector(`[data-testid="bottom-nav-drawer-paper"] #${itemId}`);
-            if (btn) btn.click();
-          }, firstDrawerItem.id),
-        ]);
-
-        // Wait for BottomNav to remount after navigation.
-        await poll(page, () => {
-          const nav = document.querySelector('nav.bottom-nav#main-content');
-          return nav && nav.querySelector('#bnav-home') ? 'ok' : null;
-        }, null, 15000);
-
-        const drawerClosed = !(await readDrawerOpen(page));
-        record(
-          '[MG-NAV] Drawer is closed after clicking overflow tab',
-          'drawer not visible',
-          drawerClosed ? 'not visible' : 'still visible',
-          drawerClosed,
-        );
-
-        const expectedPath = firstDrawerItem.href;
-        const pathname = await page.evaluate(() => window.location.pathname);
-        record(
-          `[MG-NAV] pathname is ${expectedPath} after clicking ${firstDrawerItem.id}`,
-          expectedPath,
-          String(pathname),
-          pathname === expectedPath,
-        );
-
-        const bar = await readBarState(page);
-        record(
-          '[MG-NAV] [data-more-selected] present after navigating to overflow tab',
-          'present',
-          bar ? (bar.moreSelected ? 'present' : 'absent') : 'bar state null',
-          !!(bar && bar.moreSelected),
+          '[M-ACT] #bnav-home has data-selected="true" at /',
+          'selected',
+          state ? (state.selected ? 'selected' : 'not selected') : 'state null',
+          !!(state && state.selected),
         );
         record(
-          '[MG-NAV] #bnav-more has Mui-selected class after navigating to overflow tab',
-          'Mui-selected on bnav-more',
-          bar ? (bar.moreHasMuiSelected ? 'Mui-selected' : 'not selected') : 'bar state null',
-          !!(bar && bar.moreHasMuiSelected),
+          '[M-ACT] [data-more-selected] absent at / (primary tab)',
+          'absent',
+          state ? (state.moreSelected ? 'present (unexpected)' : 'absent') : 'state null',
+          !!(state && !state.moreSelected),
         );
+        await page.close().catch(() => {});
+        await page.__ctx.close().catch(() => {});
       }
 
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
+      // Customers at /customers
+      {
+        const page = await openPage(browser, memberClient.cookie, '/customers');
+        const state = await readBarTabState(page, 'customers');
+        record(
+          '[M-ACT] #bnav-customers has data-selected="true" at /customers',
+          'selected',
+          state ? (state.selected ? 'selected' : 'not selected') : 'state null',
+          !!(state && state.selected),
+        );
+        record(
+          '[M-ACT] [data-more-selected] absent at /customers (primary tab)',
+          'absent',
+          state ? (state.moreSelected ? 'present (unexpected)' : 'absent') : 'state null',
+          !!(state && !state.moreSelected),
+        );
+        await page.close().catch(() => {});
+        await page.__ctx.close().catch(() => {});
+      }
+
+      // Projects at /projects
+      {
+        const page = await openPage(browser, memberClient.cookie, '/projects');
+        const state = await readBarTabState(page, 'projects');
+        record(
+          '[M-ACT] #bnav-projects has data-selected="true" at /projects',
+          'selected',
+          state ? (state.selected ? 'selected' : 'not selected') : 'state null',
+          !!(state && state.selected),
+        );
+        record(
+          '[M-ACT] [data-more-selected] absent at /projects (primary tab)',
+          'absent',
+          state ? (state.moreSelected ? 'present (unexpected)' : 'absent') : 'state null',
+          !!(state && !state.moreSelected),
+        );
+        await page.close().catch(() => {});
+        await page.__ctx.close().catch(() => {});
+      }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // [CLO] Backdrop click closes the drawer
+    // [MG-ACT] Manager Invoices highlights directly in bar at /invoices;
+    //          no "More" overflow needed. Navigating to a different primary tab
+    //          deselects Invoices.
     // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CLO] Drawer closes via backdrop');
+    console.log('\n  [MG-ACT] Manager active-tab: /invoices highlights Invoices directly');
     {
-      const page = await openPage(browser, memberClient.cookie, '/');
+      const page = await openPage(browser, managerClient.cookie, '/invoices');
 
-      await clickMoreAndWaitForDrawer(page);
-      const openedOk = await readDrawerOpen(page);
-
-      await closeDrawerViaBackdrop(page);
-
-      const closedOk = !(await readDrawerOpen(page));
-
-      // [data-more-selected] should vanish once the drawer closes and we are
-      // on a primary tab (home).
-      const moreDeselected = await poll(page, () => {
-        return document.querySelector('[data-more-selected]') ? null : 'gone';
-      }, null, 5000);
-
+      const state = await readBarTabState(page, 'invoices');
       record(
-        '[CLO] Drawer was open before backdrop click',
-        'drawer open',
-        openedOk ? 'open' : 'not open (precondition failed)',
-        !!openedOk,
+        '[MG-ACT] #bnav-invoices has data-selected="true" at /invoices',
+        'selected',
+        state ? (state.selected ? 'selected' : 'not selected') : 'state null',
+        !!(state && state.selected),
       );
       record(
-        '[CLO] Backdrop click closes the drawer',
-        'drawer not visible',
-        closedOk ? 'not visible' : 'still visible',
-        !!closedOk,
-      );
-      record(
-        '[CLO] [data-more-selected] absent after drawer closes on primary tab',
+        '[MG-ACT] [data-more-selected] absent at /invoices (primary tab, no overflow)',
         'absent',
-        moreDeselected === 'gone' ? 'absent' : 'still present',
-        moreDeselected === 'gone',
+        state ? (state.moreSelected ? 'present (unexpected)' : 'absent') : 'state null',
+        !!(state && !state.moreSelected),
+      );
+      record(
+        '[MG-ACT] More button absent at /invoices (allFit=true)',
+        'bnav-more absent',
+        state ? (state.morePresent ? 'present (unexpected)' : 'absent') : 'state null',
+        !!(state && !state.morePresent),
+      );
+
+      // Push to / (home) and verify Invoices deselects
+      await page.evaluate(() => {
+        history.pushState({}, '', '/');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      const invoicesDeselected = await waitForTabSelected(page, 'invoices', false, 5000);
+      record(
+        '[MG-ACT] #bnav-invoices loses data-selected after pushState to /',
+        'not selected',
+        invoicesDeselected ? 'not selected' : 'still selected',
+        invoicesDeselected,
+      );
+
+      const homeSelected = await waitForTabSelected(page, 'home', true, 5000);
+      record(
+        '[MG-ACT] #bnav-home becomes selected after pushState to /',
+        'selected',
+        homeSelected ? 'selected' : 'not selected',
+        homeSelected,
       );
 
       await page.close().catch(() => {});
@@ -802,7 +475,7 @@ async function writeReport(findings, runId) {
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
   const lines = [
-    '# bottom-nav More drawer — E2E',
+    '# bottom-nav flat-nav — E2E',
     '',
     `- Date    : ${new Date().toISOString()}`,
     `- Run ID  : ${runId}`,
@@ -823,18 +496,15 @@ async function writeReport(findings, runId) {
     '',
     '## Coverage',
     '',
-    '- **[M-BAR]**   Member bar contains Home, Calendar, Trades + More; no Sales/Projects.',
-    '- **[MG-BAR]**  Manager bar contains Home, Sales, Projects + More; Calendar/Trades are overflow.',
-    '- **[M-DRAW]**  Tapping More opens the MUI bottom Drawer; member overflow lists Ideas only.',
-    '- **[MG-DRAW]** Manager overflow lists Survey, Calendar, Invoices, Trades, Ideas.',
-    '- **[M-ACT]**   Navigating to /ideas (overflow tab) sets `[data-more-selected]` and',
-    '               `Mui-selected` on #bnav-more; navigating back to a primary tab clears it.',
-    '- **[MG-ACT]**  Same active-in-overflow logic verified for manager at /survey.',
-    '- **[M-NAV]**   Member clicks Ideas in the open drawer: drawer closes, pathname becomes',
-    '               /ideas, and More is selected in the bar.',
-    '- **[MG-NAV]**  Manager clicks Calendar (overflow) in the open drawer: drawer closes,',
-    '               pathname becomes /calendar, and More is selected in the bar.',
-    '- **[CLO]**     MUI Backdrop click closes the drawer; `[data-more-selected]` is cleared.',
+    '- **[M-BAR]**  Member bar renders Home + Customers + Projects directly; no "More"',
+    '              button. Invoices (manager-only) is absent.',
+    '- **[MG-BAR]** Manager bar renders Home + Customers + Projects + Invoices directly;',
+    '              no "More" button. FIT_THRESHOLD=4 means all 4 tabs fit.',
+    '- **[M-ACT]**  Active-tab highlight works for each primary tab in the member bar:',
+    '              Home at /, Customers at /customers, Projects at /projects.',
+    '- **[MG-ACT]** Invoices highlights directly in the manager bar at /invoices;',
+    '              [data-more-selected] is absent and #bnav-more is not in the DOM.',
+    '              pushState to / deselects Invoices and selects Home.',
     '',
     '## Relevant files',
     '',

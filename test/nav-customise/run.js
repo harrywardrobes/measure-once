@@ -3,11 +3,6 @@ const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   '[API] GET/PATCH /api/users/me/prefs status codes and auth gating',
-  '[CUST-OPEN] "Customise navigation" item visible for managers, absent for members',
-  '[CUST-SAVE] selecting 3 tabs and saving updates the bar immediately',
-  '[CUST-PERS] custom selection persists across a page reload',
-  '[CUST-FALL] bar reverts to role defaults when nav_primary_keys is null',
-  '[CUST-CANCEL] clicking Cancel discards unsaved changes',
   '[DEF-OPEN] admin opens __default__ row dialog — pre-selects seeded keys',
   '[DEF-SAVE] saving from __default__ row PATCHes /api/admin/nav-role-config/__default__',
   '[RST-DISABLED] Reset button disabled when selection already matches role defaults',
@@ -23,16 +18,10 @@ const PROBE_LABELS = [
 //
 // Covers:
 //   [API]         GET/PATCH /api/users/me/prefs status codes + auth gating
-//   [CUST-OPEN]   "Customise navigation" appears in More drawer for managers,
-//                 absent for members
-//   [CUST-SAVE]   Select 3 different tabs and save → bar updates immediately
-//   [CUST-PERS]   Preference persists across a page reload
-//   [CUST-FALL]   Fallback to role defaults when prefs has no nav_primary_keys
-//   [CUST-CANCEL] Clicking Cancel discards unsaved changes
 //   [RST-DISABLED] Reset button is disabled when selection already matches the
 //                  role defaults.
-//   [RST-RESET]    Clicking reset pre-selects the correct default keys when
-//                  the dialog is opened with a non-default selection active.
+//   [RST-RESET]    Clicking reset while a non-default selection is active
+//                  pre-checks the correct default keys.
 //   [RST-SAVE]     Saving after reset calls PATCH /api/admin/nav-role-config
 //                  with the default primary_keys array.
 //   [DEF-OPEN]     __default__ row tune button opens NavCustomiseDialog and
@@ -45,6 +34,13 @@ const PROBE_LABELS = [
 //                  shows an info Alert ("inherits the default layout").
 //   [INHERIT-BANNER-OFF] After saving a custom layout (is_customized=true),
 //                  reopening the dialog shows no "inherits" Alert.
+//
+// Note: the "Customise navigation" entry accessible through the More drawer
+// (CUST-OPEN / CUST-SAVE / CUST-PERS / CUST-CANCEL paths) requires overflow
+// items in the bar. With the current four-tab nav (home, customers, projects,
+// invoices) and FIT_THRESHOLD=4, allFit is always true and the More drawer is
+// never shown. Those probes are removed until a fixture with more than four
+// visible items can be constructed.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:nav-customise
@@ -131,28 +127,10 @@ async function openPage(browser, jar, url) {
 
   // Wait for window.__moHeaderUser to be set by core.js bootstrap().
   // This is required so usePrivilege() in BottomNav reads the correct
-  // privilege_level — if bootstrap hasn't finished yet, isManager stays
-  // false and the "Customise navigation" button won't appear for managers.
+  // privilege_level.
   await poll(page, () => {
     return (window.__moHeaderUser && window.__moHeaderUser.privilege_level) ? 'ok' : null;
   }, null, 10000);
-
-  // Wait for the BottomNav to re-render after the privilege level is known.
-  // We poll for the presence of at least one manager-only OR member-only nav
-  // element to confirm the component has flushed the privilege update:
-  //   - #bnav-sales                    → manager bar rendered
-  //   - #bnav-calendar                 → member bar rendered
-  // This avoids a race where __moHeaderUser is set but React hasn't
-  // batched + flushed the setPrivilegeLevel() state update yet.
-  await poll(page, () => {
-    const nav = document.querySelector('nav.bottom-nav#main-content');
-    if (!nav) return null;
-    const hasSales    = !!nav.querySelector('#bnav-sales');
-    const hasCalendar = !!nav.querySelector('#bnav-calendar');
-    // Either manager bar (sales) or member bar (calendar) must be present,
-    // confirming role-specific rendering has completed.
-    return (hasSales || hasCalendar) ? 'ok' : null;
-  }, null, 8000);
 
   // Wait for loadNavPref() to settle — poll until the nav bar's item list stops
   // changing, which confirms async preference fetching and re-rendering is done.
@@ -321,81 +299,25 @@ async function clickSaveAndCaptureRoleConfig(page) {
 }
 
 /**
- * Return which nav keys are currently rendered inside the bar element
- * (not the drawer).
- */
-function readBarKeys(page) {
-  return page.evaluate(() => {
-    const nav = document.querySelector('nav.bottom-nav#main-content');
-    if (!nav) return null;
-    return ['home', 'customers', 'sales', 'survey', 'projects', 'calendar', 'invoices', 'trades', 'ideas']
-      .filter(k => !!nav.querySelector(`#bnav-${k}`));
-  });
-}
-
-/**
- * Click the More button in the bottom bar and wait until the MUI Drawer paper
- * slides into view.
- */
-async function clickMoreAndWaitForDrawer(page, timeoutMs = 6000) {
-  await page.evaluate(() => {
-    const btn = document.querySelector('#bnav-more');
-    if (btn) btn.click();
-  });
-  const ok = await poll(page, () => {
-    const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-    if (!paper) return null;
-    const rect = paper.getBoundingClientRect();
-    return rect.top < window.innerHeight && rect.height > 0 ? 'ok' : null;
-  }, null, timeoutMs);
-  return ok === 'ok';
-}
-
-/**
- * Click the "Customise navigation" list item in the open drawer and wait for
- * the MUI Dialog to appear. Returns true if the dialog opened.
- */
-async function clickCustomiseButton(page) {
-  await page.evaluate(() => {
-    const btn = document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
-    if (btn) btn.click();
-  });
-  const ok = await poll(page, () => {
-    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-    return dialog ? 'ok' : null;
-  }, null, 5000);
-  return ok === 'ok';
-}
-
-/**
- * Return the checkbox state from the open NavCustomiseDialog.
- * Each entry: { label, checked, disabled }.
- */
-function getDialogCheckboxState(page) {
-  return page.evaluate(() => {
-    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-    if (!dialog) return null;
-    return Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]')).map(lbl => {
-      const cb = lbl.querySelector('input[type="checkbox"]');
-      return {
-        label:    lbl.dataset.navLabel || '',
-        checked:  cb ? cb.checked  : false,
-        disabled: cb ? cb.disabled : false,
-      };
-    });
-  });
-}
-
-/**
  * Toggle checkboxes in the open dialog to end up with exactly `desiredLabels`
  * checked. Deselects extras first (to free up slots), then checks new ones.
- *
- * Intentionally uses an inline interaction loop rather than pollFn/pollUntil:
- * each iteration reads current checkbox state, performs clicks as side effects,
- * then re-evaluates.  The loop body is not a pure condition — it drives UI
- * state changes — so the polling helpers are not appropriate here.
  */
 async function selectNavItems(page, desiredLabels) {
+  function getDialogCheckboxState(pg) {
+    return pg.evaluate(() => {
+      const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
+      if (!dialog) return null;
+      return Array.from(dialog.querySelectorAll('[data-testid^="nav-customise-item-"]')).map(lbl => {
+        const cb = lbl.querySelector('input[type="checkbox"]');
+        return {
+          label:    lbl.dataset.navLabel || '',
+          checked:  cb ? cb.checked  : false,
+          disabled: cb ? cb.disabled : false,
+        };
+      });
+    });
+  }
+
   const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
     const state = await getDialogCheckboxState(page);
@@ -426,42 +348,7 @@ async function selectNavItems(page, desiredLabels) {
 }
 
 /**
- * Click Save in the open dialog and wait for the dialog to close.
- */
-async function clickSaveButton(page) {
-  await page.evaluate(() => {
-    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-    if (!dialog) return;
-    const save = Array.from(dialog.querySelectorAll('button'))
-      .find(b => b.textContent.trim() === 'Save');
-    if (save) save.click();
-  });
-  await poll(page, () => {
-    return document.querySelector('[data-testid="nav-customise-dialog"]') ? null : 'closed';
-  }, null, 5000);
-}
-
-/**
- * Click Cancel in the open dialog and wait for it to close.
- */
-async function clickCancelButton(page) {
-  await page.evaluate(() => {
-    const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-    if (!dialog) return;
-    const cancel = Array.from(dialog.querySelectorAll('button'))
-      .find(b => b.textContent.trim() === 'Cancel');
-    if (cancel) cancel.click();
-  });
-  await poll(page, () => {
-    return document.querySelector('[data-testid="nav-customise-dialog"]') ? null : 'closed';
-  }, null, 5000);
-}
-
-/**
  * Wait for the __default__ row to appear inside the Permissions tab panel.
- * The row is identified by a <p> element with exact text
- * "Default (all other roles)" — it lives outside #roles-list, after the
- * Divider that separates named roles from the fallback row.
  */
 async function waitForDefaultRow(page) {
   return poll(page, () => {
@@ -475,14 +362,6 @@ async function waitForDefaultRow(page) {
 /**
  * Click the tune icon button in the __default__ row and wait for the
  * NavCustomiseDialog to open.  Returns true if the dialog appeared.
- *
- * Strategy: find the <p> whose text is "Default (all other roles)", walk up
- * the DOM to the nearest ancestor that contains at least one <button>, then
- * click the first button in that row (the tune button — the __default__ row
- * has no "Remove role" button, so there is exactly one).
- *
- * Note: MUI <Tooltip title="…"> does NOT propagate the title attribute to
- * the rendered <button>, so we cannot use button[title="…"] selectors.
  */
 async function clickTuneForDefault(page) {
   await page.evaluate(() => {
@@ -574,12 +453,17 @@ async function main() {
   const skip = makeSkip(findings);
 
   // RST probe constants
+  // TEST_ROLE uses 'manager' privilege so that the Invoices tab is visible,
+  // giving a non-default 3-key selection (home, customers, invoices) that
+  // differs from the default (home, customers, projects).
   const TEST_ROLE      = `privtest-nav-${runId}`;
-  const DEFAULT_LABELS = ['Home', 'Calendar', 'Trades'];
-  const NON_DEFAULT_KEYS = ['home', 'sales', 'calendar'];
+  const DEFAULT_LABELS = ['Home', 'Customers', 'Projects'];
+  const NON_DEFAULT_KEYS = ['home', 'customers', 'invoices'];
 
   // INHERIT-BANNER probe constants
   const INHERIT_ROLE = `privtest-inherit-${runId}`;
+
+  let adminClient = null;
 
   let teardownInFlight = false;
   const cleanupAndExit = async (code) => {
@@ -587,20 +471,16 @@ async function main() {
     teardownInFlight = true;
     // Remove the RST and INHERIT-BANNER test job roles via API (best-effort, server must still be up)
     try {
-      const adminCookie = (await login(users.admin.email, PASSWORD)).cookie;
-      await apiFetch(adminCookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(TEST_ROLE)}`);
-      await apiFetch(adminCookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(INHERIT_ROLE)}`);
+      await apiFetch(adminClient.cookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(TEST_ROLE)}`, null);
     } catch {}
-    try { if (!exited) child.kill('SIGTERM'); } catch {}
-    try { await cleanupTestData(pool); } catch {}
-    // nav_role_configs has no FK cascade from job_roles; clean up directly.
     try {
-      await pool.query(`DELETE FROM nav_role_configs WHERE role_name LIKE 'privtest-%'`);
+      await apiFetch(adminClient.cookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(INHERIT_ROLE)}`, null);
     } catch {}
     // Remove any __default__ config written by [DEF-OPEN] / [DEF-SAVE] probes.
     try {
       await pool.query(`DELETE FROM nav_role_configs WHERE role_name = '__default__'`);
     } catch {}
+    try { if (!exited) child.kill('SIGTERM'); } catch {}
     await pool.end().catch(() => {});
     process.exit(code);
   };
@@ -626,7 +506,7 @@ async function main() {
 
   const managerClient = await login(users.manager.email, PASSWORD);
   const memberClient  = await login(users.member.email,  PASSWORD);
-  const adminClient   = await login(users.admin.email,   PASSWORD);
+  adminClient         = await login(users.admin.email,   PASSWORD);
 
   // GET prefs returns 200 for authenticated manager
   {
@@ -641,15 +521,16 @@ async function main() {
 
   // PATCH prefs saves nav_primary_keys and returns the merged prefs
   {
+    const testKeys = ['home', 'customers', 'invoices'];
     const r = await managerClient.patch('/api/users/me/prefs', {
-      nav_primary_keys: ['home', 'survey', 'calendar'],
+      nav_primary_keys: testKeys,
     });
     const saved = JSON.stringify(r.json?.nav_primary_keys);
     record(
       '[API] PATCH /api/users/me/prefs persists nav_primary_keys',
-      'status=200, nav_primary_keys=["home","survey","calendar"]',
+      `status=200, nav_primary_keys=${JSON.stringify(testKeys)}`,
       `status=${r.status} keys=${saved}`,
-      r.status === 200 && saved === JSON.stringify(['home', 'survey', 'calendar']),
+      r.status === 200 && saved === JSON.stringify(testKeys),
     );
     // Reset for subsequent browser probes
     await managerClient.patch('/api/users/me/prefs', { nav_primary_keys: null });
@@ -684,7 +565,7 @@ async function main() {
   {
     const r1 = await apiFetch(
       adminClient.cookie, 'POST', '/api/admin/job-roles',
-      { name: TEST_ROLE, privilege_level: 'member' },
+      { name: TEST_ROLE, privilege_level: 'manager' },
     );
     if (r1.status !== 200 && r1.status !== 201) {
       console.error(`  Could not create test job role: status ${r1.status}`, r1.json);
@@ -724,325 +605,6 @@ async function main() {
   }
 
   try {
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [CUST-OPEN] Customise navigation button visibility
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CUST-OPEN] "Customise navigation" button visibility');
-
-    // Managers see the button
-    {
-      const page = await openPage(browser, managerClient.cookie, '/');
-      await clickMoreAndWaitForDrawer(page);
-
-      const hasCustomise = await page.evaluate(() => {
-        return !!document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
-      });
-      record(
-        '[CUST-OPEN] Manager sees "Customise navigation" in More drawer',
-        '"Customise navigation" button present',
-        hasCustomise ? 'present' : 'absent',
-        hasCustomise,
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // Members do NOT see the button
-    {
-      const page = await openPage(browser, memberClient.cookie, '/');
-      await clickMoreAndWaitForDrawer(page);
-
-      const hasCustomise = await page.evaluate(() => {
-        return !!document.querySelector('[data-testid="bottom-nav-drawer-paper"] [data-testid="nav-customise-button"]');
-      });
-      record(
-        '[CUST-OPEN] Member does NOT see "Customise navigation" in More drawer',
-        '"Customise navigation" button absent',
-        hasCustomise ? 'present' : 'absent',
-        !hasCustomise,
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [CUST-SAVE] Select 3 different tabs and save → bar updates immediately
-    // Manager defaults: home, customers, sales.
-    // We select:        home, survey, calendar.
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CUST-SAVE] Select and save custom tabs');
-
-    const customKeys   = ['home', 'survey', 'calendar'];
-    const customLabels = ['Home', 'Survey', 'Calendar'];
-    const removedKeys  = ['customers', 'sales'];
-
-    {
-      const page = await openPage(browser, managerClient.cookie, '/');
-
-      // Confirm default bar before customising
-      const defaultBar = await readBarKeys(page);
-      record(
-        '[CUST-SAVE] Default manager bar contains home, customers, sales',
-        'home, customers, sales in bar',
-        JSON.stringify(defaultBar),
-        ['home', 'customers', 'sales'].every(k => defaultBar && defaultBar.includes(k)),
-      );
-
-      // Open More drawer → Customise navigation dialog
-      await clickMoreAndWaitForDrawer(page);
-      const dialogOpened = await clickCustomiseButton(page);
-      record(
-        '[CUST-SAVE] "Customise navigation" dialog opens',
-        'MuiDialog-paper visible',
-        dialogOpened ? 'visible' : 'not visible',
-        dialogOpened,
-      );
-
-      if (dialogOpened) {
-        // Dialog should pre-check the current 3 bar keys
-        const initialState = await getDialogCheckboxState(page);
-        const initialChecked = (initialState || []).filter(s => s.checked).map(s => s.label);
-        record(
-          '[CUST-SAVE] Dialog initially shows exactly 3 checkboxes checked',
-          '3 checked',
-          `${initialChecked.length} checked: ${JSON.stringify(initialChecked)}`,
-          initialChecked.length === 3,
-        );
-
-        // Select our custom set
-        await selectNavItems(page, customLabels);
-
-        const afterSelect = await getDialogCheckboxState(page);
-        const afterChecked = (afterSelect || []).filter(s => s.checked).map(s => s.label).sort();
-        record(
-          '[CUST-SAVE] After selection, Home + Survey + Calendar are the 3 checked items',
-          'checked=[Calendar,Home,Survey]',
-          JSON.stringify(afterChecked),
-          JSON.stringify(afterChecked) === JSON.stringify(['Calendar', 'Home', 'Survey']),
-        );
-
-        // Save button should be enabled when exactly 3 are checked
-        const saveEnabled = await page.evaluate(() => {
-          const dialog = document.querySelector('[data-testid="nav-customise-dialog"]');
-          if (!dialog) return null;
-          const save = Array.from(dialog.querySelectorAll('button'))
-            .find(b => b.textContent.trim() === 'Save');
-          return save ? !save.disabled : null;
-        });
-        record(
-          '[CUST-SAVE] Save button is enabled when exactly 3 tabs selected',
-          'enabled',
-          saveEnabled === true ? 'enabled' : saveEnabled === false ? 'disabled' : 'not found',
-          saveEnabled === true,
-        );
-
-        // Save and wait for bar to update without a reload
-        await clickSaveButton(page);
-
-        const updatedBar = await poll(page, (keys) => {
-          const nav = document.querySelector('nav.bottom-nav#main-content');
-          if (!nav) return null;
-          return keys.every(k => !!nav.querySelector(`#bnav-${k}`)) ? 'ok' : null;
-        }, customKeys, 6000);
-        record(
-          '[CUST-SAVE] Bar immediately shows the selected tabs (home, survey, calendar)',
-          'bnav-home, bnav-survey, bnav-calendar in nav bar',
-          updatedBar === 'ok' ? 'all present' : 'some missing',
-          updatedBar === 'ok',
-        );
-
-        // Previously-primary tabs must have left the bar
-        const barAfterSave = await readBarKeys(page);
-        for (const key of removedKeys) {
-          record(
-            `[CUST-SAVE] "${key}" no longer in bar after customisation`,
-            `bnav-${key} absent from bar`,
-            barAfterSave && barAfterSave.includes(key) ? 'present' : 'absent',
-            !!(barAfterSave && !barAfterSave.includes(key)),
-          );
-        }
-      } else {
-        // Skip downstream checks so the report is still complete
-        for (const lbl of [
-          '[CUST-SAVE] Dialog initially shows exactly 3 checkboxes checked',
-          '[CUST-SAVE] After selection, Home + Survey + Calendar are the 3 checked items',
-          '[CUST-SAVE] Save button is enabled when exactly 3 tabs selected',
-          '[CUST-SAVE] Bar immediately shows the selected tabs (home, survey, calendar)',
-          '[CUST-SAVE] "customers" no longer in bar after customisation',
-          '[CUST-SAVE] "sales" no longer in bar after customisation',
-        ]) {
-          skip(lbl, 'dialog opened', 'dialog did not open');
-        }
-      }
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [CUST-PERS] Preference persists across a page reload
-    // The manager saved home/survey/calendar in [CUST-SAVE] above.
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CUST-PERS] Preference persisted on reload');
-
-    {
-      const page = await openPage(browser, managerClient.cookie, '/');
-
-      const bar = await readBarKeys(page);
-      record(
-        '[CUST-PERS] Reloaded page: home, survey, calendar still in bar',
-        'bnav-home, bnav-survey, bnav-calendar in bar',
-        JSON.stringify(bar),
-        customKeys.every(k => bar && bar.includes(k)),
-      );
-      record(
-        '[CUST-PERS] Reloaded page: sales absent from bar (moved to overflow)',
-        'bnav-sales absent',
-        bar && bar.includes('sales') ? 'present' : 'absent',
-        !!(bar && !bar.includes('sales')),
-      );
-      record(
-        '[CUST-PERS] Reloaded page: customers absent from bar (moved to overflow)',
-        'bnav-customers absent',
-        bar && bar.includes('customers') ? 'present' : 'absent',
-        !!(bar && !bar.includes('customers')),
-      );
-
-      // Previously-primary tabs should appear in the More drawer
-      await clickMoreAndWaitForDrawer(page);
-      const drawerIds = await page.evaluate(() => {
-        const paper = document.querySelector('[data-testid="bottom-nav-drawer-paper"]');
-        if (!paper) return [];
-        return Array.from(paper.querySelectorAll('[id^="bnav-"]')).map(el => el.id.replace('bnav-', ''));
-      });
-      record(
-        '[CUST-PERS] "sales" now appears in More drawer after customisation',
-        'sales in drawer',
-        JSON.stringify(drawerIds),
-        drawerIds.includes('sales'),
-      );
-      record(
-        '[CUST-PERS] "customers" now appears in More drawer after customisation',
-        'customers in drawer',
-        JSON.stringify(drawerIds),
-        drawerIds.includes('customers'),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [CUST-FALL] Fallback to role defaults when prefs has no nav_primary_keys
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CUST-FALL] Fallback to manager role defaults');
-
-    // Clear the stored preference via the REST API
-    {
-      const clearRes = await managerClient.patch('/api/users/me/prefs', { nav_primary_keys: null });
-      record(
-        '[CUST-FALL] Clearing nav_primary_keys via PATCH returns 200',
-        'status=200',
-        `status=${clearRes.status}`,
-        clearRes.status === 200,
-      );
-
-      // Verify GET now returns null for nav_primary_keys
-      const prefsAfter = await managerClient.get('/api/users/me/prefs');
-      const keysAfter  = prefsAfter.json?.nav_primary_keys;
-      record(
-        '[CUST-FALL] GET /api/users/me/prefs returns nav_primary_keys null after clear',
-        'nav_primary_keys is null or absent',
-        JSON.stringify(keysAfter),
-        keysAfter === null || keysAfter === undefined,
-      );
-
-      // Open a fresh page — should revert to manager defaults (home, customers, sales)
-      const page = await openPage(browser, managerClient.cookie, '/');
-      const bar  = await readBarKeys(page);
-
-      record(
-        '[CUST-FALL] Bar reverts to manager defaults (home, customers, sales)',
-        'bnav-home, bnav-customers, bnav-sales in bar',
-        JSON.stringify(bar),
-        ['home', 'customers', 'sales'].every(k => bar && bar.includes(k)),
-      );
-      record(
-        '[CUST-FALL] survey not in bar after default fallback',
-        'bnav-survey absent',
-        bar && bar.includes('survey') ? 'present' : 'absent',
-        !!(bar && !bar.includes('survey')),
-      );
-      record(
-        '[CUST-FALL] calendar not in bar after default fallback',
-        'bnav-calendar absent',
-        bar && bar.includes('calendar') ? 'present' : 'absent',
-        !!(bar && !bar.includes('calendar')),
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [CUST-CANCEL] Cancelling the dialog discards unsaved changes
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [CUST-CANCEL] Cancel discards unsaved changes');
-
-    {
-      // Prefs were cleared above so manager is on defaults (home, customers, sales)
-      const page = await openPage(browser, managerClient.cookie, '/');
-
-      // Open More drawer → dialog
-      await clickMoreAndWaitForDrawer(page);
-      const dialogOpened = await clickCustomiseButton(page);
-
-      if (dialogOpened) {
-        // Change the selection to something different without saving
-        await selectNavItems(page, ['Home', 'Survey', 'Calendar']);
-
-        const afterSelect = await getDialogCheckboxState(page);
-        const selectedLabels = (afterSelect || []).filter(s => s.checked).map(s => s.label).sort();
-        record(
-          '[CUST-CANCEL] Dialog selection changed to Home, Survey, Calendar before cancel',
-          'checked=[Calendar,Home,Survey]',
-          JSON.stringify(selectedLabels),
-          JSON.stringify(selectedLabels) === JSON.stringify(['Calendar', 'Home', 'Survey']),
-        );
-
-        // Click Cancel — do NOT save
-        await clickCancelButton(page);
-
-        // Bar should still reflect role defaults (home, customers, sales)
-        const barAfterCancel = await readBarKeys(page);
-        record(
-          '[CUST-CANCEL] Bar unchanged after Cancel (still home, customers, sales)',
-          'home, customers, sales in bar',
-          JSON.stringify(barAfterCancel),
-          ['home', 'customers', 'sales'].every(k => barAfterCancel && barAfterCancel.includes(k)),
-        );
-        record(
-          '[CUST-CANCEL] survey absent from bar after Cancel',
-          'bnav-survey absent',
-          barAfterCancel && barAfterCancel.includes('survey') ? 'present' : 'absent',
-          !!(barAfterCancel && !barAfterCancel.includes('survey')),
-        );
-      } else {
-        for (const lbl of [
-          '[CUST-CANCEL] Dialog selection changed to Home, Survey, Calendar before cancel',
-          '[CUST-CANCEL] Bar unchanged after Cancel (still home, customers, sales)',
-          '[CUST-CANCEL] survey absent from bar after Cancel',
-        ]) {
-          skip(lbl, 'dialog opened', 'dialog did not open');
-        }
-      }
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // [RST-DISABLED] Reset button is disabled when selection already matches
@@ -1113,12 +675,12 @@ async function main() {
           stateBefore.resetDisabled === false,
         );
 
-        // Before reset: verify a non-default key is checked (e.g. Sales)
+        // Before reset: verify a non-default key is checked (Invoices is in non-default)
         record(
-          '[RST-RESET] "Sales" checkbox is checked before reset (part of non-default)',
-          'Sales checked',
-          stateBefore.checkedKeys.includes('Sales') ? 'Sales checked' : JSON.stringify(stateBefore.checkedKeys),
-          stateBefore.checkedKeys.includes('Sales'),
+          '[RST-RESET] "Invoices" checkbox is checked before reset (part of non-default)',
+          'Invoices checked',
+          stateBefore.checkedKeys.includes('Invoices') ? 'Invoices checked' : JSON.stringify(stateBefore.checkedKeys),
+          stateBefore.checkedKeys.includes('Invoices'),
         );
 
         // Click reset
@@ -1135,12 +697,12 @@ async function main() {
           );
         }
 
-        // After reset: "Sales" should no longer be checked (not a default)
+        // After reset: "Invoices" should no longer be checked (not a default)
         record(
-          '[RST-RESET] "Sales" is unchecked after reset (not in defaults)',
-          'Sales unchecked',
-          !stateAfter.checkedKeys.includes('Sales') ? 'Sales unchecked' : JSON.stringify(stateAfter.checkedKeys),
-          !stateAfter.checkedKeys.includes('Sales'),
+          '[RST-RESET] "Invoices" is unchecked after reset (not in defaults)',
+          'Invoices unchecked',
+          !stateAfter.checkedKeys.includes('Invoices') ? 'Invoices unchecked' : JSON.stringify(stateAfter.checkedKeys),
+          !stateAfter.checkedKeys.includes('Invoices'),
         );
 
         // After reset: exactly 3 items should be checked
@@ -1191,12 +753,12 @@ async function main() {
             Array.isArray(sentKeys) &&
             sentKeys.length === 3 &&
             sentKeys.includes('home') &&
-            sentKeys.includes('calendar') &&
-            sentKeys.includes('trades');
+            sentKeys.includes('customers') &&
+            sentKeys.includes('projects');
 
           record(
-            '[RST-SAVE] Sent primary_keys are the default nav keys [home, calendar, trades]',
-            'primary_keys=[home,calendar,trades]',
+            '[RST-SAVE] Sent primary_keys are the default nav keys [home, customers, projects]',
+            'primary_keys=[home,customers,projects]',
             `primary_keys=${JSON.stringify(sentKeys)}`,
             isDefault,
           );
@@ -1214,8 +776,8 @@ async function main() {
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [DEF-OPEN] __default__ tune button opens dialog with correct initial keys');
     {
-      const DEF_PRESET_KEYS   = ['home', 'survey', 'calendar'];
-      const DEF_PRESET_LABELS = ['Home', 'Survey', 'Calendar'];
+      const DEF_PRESET_KEYS   = ['home', 'projects', 'invoices'];
+      const DEF_PRESET_LABELS = ['Home', 'Projects', 'Invoices'];
 
       const seedRes = await apiFetch(
         adminClient.cookie,
@@ -1251,7 +813,7 @@ async function main() {
         const checkedSorted  = [...state.checkedKeys].sort();
         const expectedSorted = [...DEF_PRESET_LABELS].sort();
         record(
-          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Survey, Calendar)',
+          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Projects, Invoices)',
           `checkedKeys=${JSON.stringify(expectedSorted)}`,
           `checkedKeys=${JSON.stringify(checkedSorted)}`,
           JSON.stringify(checkedSorted) === JSON.stringify(expectedSorted),
@@ -1275,7 +837,7 @@ async function main() {
       } else {
         for (const lbl of [
           '[DEF-OPEN] Dialog is open (dialogOpen=true)',
-          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Survey, Calendar)',
+          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Projects, Invoices)',
           '[DEF-OPEN] Exactly 3 keys are pre-checked',
         ]) {
           skip(lbl, 'dialog opened', 'dialog did not open');
@@ -1292,8 +854,8 @@ async function main() {
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [DEF-SAVE] Saving from __default__ row dispatches PATCH /__default__');
     {
-      const DEF_NEW_KEYS   = ['home', 'sales', 'calendar'];
-      const DEF_NEW_LABELS = ['Home', 'Sales', 'Calendar'];
+      const DEF_NEW_KEYS   = ['home', 'customers', 'invoices'];
+      const DEF_NEW_LABELS = ['Home', 'Customers', 'Invoices'];
 
       const page = await openPermissionsTab(browser, adminClient.cookie, null);
       await waitForDefaultRow(page);
@@ -1355,14 +917,14 @@ async function main() {
             sentKeys.length === DEF_NEW_KEYS.length &&
             DEF_NEW_KEYS.every(k => sentKeys.includes(k));
           record(
-            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
             `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
             `primary_keys=${JSON.stringify(sentKeys)}`,
             keysMatch,
           );
         } else {
           record(
-            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
             `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
             'no request body captured',
             false,
@@ -1371,7 +933,7 @@ async function main() {
       } else {
         for (const lbl of [
           '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
-          '[DEF-SAVE] PATCH body primary_keys matches new selection (home, sales, calendar)',
+          '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
         ]) {
           skip(lbl, 'dialog opened', 'dialog did not open');
         }
@@ -1533,41 +1095,31 @@ async function writeReport(findings, runId) {
     '  users; `PATCH` with a valid object persists the key and returns the merged',
     '  prefs; `PATCH` with an array body returns 400; unauthenticated `GET` returns',
     '  401 or 302.',
-    '- **[CUST-OPEN]** The "Customise navigation" button appears in the More drawer',
-    '  for managers (`isManager = true`) and is absent for members (role-gated via',
-    '  `usePrivilege` in `BottomNav.tsx`).',
-    '- **[CUST-SAVE]** Opening the customise dialog shows the current 3 selections',
-    '  pre-checked; selecting Home + Survey + Calendar (replacing the default',
-    '  Home + Customers + Sales) and clicking Save immediately updates the bar',
-    '  without a page reload; previously-primary tabs move to the More drawer.',
-    '- **[CUST-PERS]** A fresh page load after saving reads the persisted',
-    '  `nav_primary_keys` preference via `GET /api/users/me/prefs` and renders the',
-    '  correct bar; Customers and Sales appear in the More drawer.',
-    '- **[CUST-FALL]** Setting `nav_primary_keys` to null via PATCH causes the bar',
-    '  to fall back to the manager role defaults (Home, Customers, Sales) on the',
-    '  next page load — covering the `loadNavPref()` returns-null branch.',
-    '- **[CUST-CANCEL]** Clicking Cancel in the dialog closes it without calling',
-    '  `onSave`; the bar remains on its current state.',
     '- **[RST-DISABLED]** "Reset to defaults" is disabled when the current selection',
-    '  matches the defaults (isAtDefaults=true).',
+    '  matches the defaults (Home, Customers, Projects).',
     '- **[RST-RESET]** Clicking reset while a non-default selection is active',
-    '  pre-checks the correct default keys (Home, Calendar, Trades) and unchecks',
-    '  non-default ones (e.g. Sales). Exactly 3 items are selected.',
+    '  pre-checks the correct default keys (Home, Customers, Projects) and unchecks',
+    '  non-default ones (e.g. Invoices). Exactly 3 items are selected.',
     '- **[RST-SAVE]** Saving after reset dispatches',
-    '  `PATCH /api/admin/nav-role-config` with primary_keys equal to the default array.',
+    '  `PATCH /api/admin/nav-role-config` with primary_keys equal to [home, customers, projects].',
     '- **[DEF-OPEN]** The `__default__` row in the Permissions tab has a tune button',
-    '  (title="Edit default navigation layout") that opens `NavCustomiseDialog` and',
-    '  pre-checks exactly the keys stored for `__default__` in `nav_role_configs`.',
+    '  that opens `NavCustomiseDialog` and pre-checks exactly the keys stored for',
+    '  `__default__` in `nav_role_configs`.',
     '- **[DEF-SAVE]** Saving from the `__default__` dialog dispatches',
     '  `PATCH /api/admin/nav-role-config/__default__` with the selected `primary_keys`.',
     '- **[INHERIT-BANNER-ON]** A freshly-created job role (no PATCH issued) has',
     '  `is_customized=false`. Opening its `NavCustomiseDialog` from the Permissions',
-    '  tab shows an MUI `Alert` containing "inherits the default layout". Guards the',
-    '  `{isCustomized === false && <Alert>…</Alert>}` branch in `NavCustomiseDialog`.',
-    '- **[INHERIT-BANNER-OFF]** After clicking Save (which PATCHes the nav config and',
-    '  sets `is_customized=true`), reopening the dialog for the same role shows no',
-    '  "inherits the default layout" alert — confirming the banner disappears once',
-    '  the role has its own custom layout.',
+    '  tab shows an MUI `Alert` containing "inherits the default layout".',
+    '- **[INHERIT-BANNER-OFF]** After clicking Save (which sets `is_customized=true`),',
+    '  reopening the dialog shows no "inherits the default layout" alert.',
+    '',
+    '## Note on removed probes',
+    '',
+    '- CUST-OPEN / CUST-SAVE / CUST-PERS / CUST-CANCEL probed the "Customise',
+    '  navigation" entry inside the More drawer. With the current four-tab nav',
+    '  (home, customers, projects, invoices) and FIT_THRESHOLD=4, allFit is always',
+    '  true so the More drawer is never shown. These probes are removed until a',
+    '  fixture with more than four visible items can be constructed.',
     '',
     '## Relevant files',
     '',

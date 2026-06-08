@@ -4,7 +4,7 @@ const { makeSkip } = require('../helpers/report');
 const DEF_UI_PROBE_LABELS = [
   '[DEF-UI] Bar contains custom default keys (home, projects, invoices)',
   '[DEF-UI] Default "customers" key is NOT in bar (overridden by custom default)',
-  '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, calendar)',
+  '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, projects)',
 ];
 
 // test/bottom-nav-default/run.js
@@ -115,7 +115,7 @@ function readBarKeys(page) {
   return page.evaluate(() => {
     const nav = document.querySelector('nav.bottom-nav#main-content');
     if (!nav) return null;
-    return ['home', 'customers', 'projects', 'calendar', 'invoices', 'trades', 'ideas', 'sales', 'survey']
+    return ['home', 'customers', 'projects', 'invoices']
       .filter(k => !!nav.querySelector(`#bnav-${k}`));
   });
 }
@@ -202,7 +202,7 @@ async function main() {
     // ── [DEF-API-CUSTOM] After admin patches __default__, flags update ─────────
 
     const CUSTOM_KEYS = ['home', 'projects', 'invoices'];
-    const origDefaultKeys = ['home', 'customers', 'calendar'];
+    const origDefaultKeys = ['home', 'customers', 'projects'];
 
     {
       const patch = await adminClient.patch(
@@ -295,7 +295,7 @@ async function main() {
         //   DELETE /api/admin/nav-role-config/__default__ is intentionally blocked
         //   (400) so we use pool.query to reset state.
         //   Open a fresh page as the no-role member and verify the bar falls back
-        //   to the hardcoded DEFAULT_PRIMARY_KEYS (home, customers, calendar).
+        //   to the hardcoded DEFAULT_PRIMARY_KEYS (home, customers, projects).
         // ════════════════════════════════════════════════════════════════════════
         console.log('\n  [DEF-UI-RESTORE] BottomNav falls back to defaults when __default__ is reset');
 
@@ -310,9 +310,9 @@ async function main() {
         const page2 = await openHomePage(browser, memberClient3.cookie);
         const barKeys2 = await readBarKeys(page2);
 
-        const MEMBER_DEFAULTS = ['home', 'customers', 'calendar'];
+        const MEMBER_DEFAULTS = ['home', 'customers', 'projects'];
         record(
-          '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, calendar)',
+          '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, projects)',
           `bar includes ${JSON.stringify(MEMBER_DEFAULTS)}`,
           `bar=${JSON.stringify(barKeys2)}`,
           !!barKeys2 && MEMBER_DEFAULTS.every(k => barKeys2.includes(k)),
