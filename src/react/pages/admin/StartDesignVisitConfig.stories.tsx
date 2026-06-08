@@ -19,7 +19,7 @@ const meta: Meta<typeof StartDesignVisitConfig> = {
           'Config block for the **Start design visit wizard** handler type. ' +
           'Exposes a default duration field, two lead-status selectors ' +
           '(in-progress status set when the wizard opens; submitted status set on submit), ' +
-          'optional Terms & Conditions text (≤4000 chars), and a Google Calendar toggle. ' +
+          'and optional Terms & Conditions text (≤4000 chars). ' +
           'The two-phase status callout in the block explains the open → submit flow.',
       },
     },

@@ -13,7 +13,7 @@ const meta: Meta<typeof DeliveryWindowConfig> = {
       description: {
         component:
           'Config block for the **Schedule delivery window** handler type. ' +
-          'Exposes an optional default title (≤120 chars) and a Google Calendar toggle. ' +
+          'Exposes an optional default title (≤120 chars). ' +
           'When the action is clicked on a card, a modal opens for the operator to pick ' +
           'a start and end date/time for the delivery window.',
       },
@@ -41,7 +41,7 @@ export const Blank: Story = {
       description: {
         story:
           'Handler editor with "Schedule delivery window" pre-selected and an empty config. ' +
-          'The title field is optional; Google Calendar is on by default.',
+          'The title field is optional.',
       },
     },
   },
@@ -56,27 +56,6 @@ export const Prefilled: Story = {
         story:
           'Same block with an existing defaultTitle value loaded — mirrors the ' +
           '"Change action" flow where the editor opens with the saved config pre-populated.',
-      },
-    },
-  },
-};
-
-export const CalendarOff: Story = {
-  name: 'Google Calendar off',
-  render: () => {
-    const [type, setType] = useState('schedule_delivery_window');
-    return (
-      <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Delivery ready · Default action">
-        <DeliveryWindowConfig defaultTitle="Delivery window" addToGoogleCalendar={false} />
-      </ModalChrome>
-    );
-  },
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Same block with the Google Calendar toggle pre-set to off. ' +
-          'Useful for teams that do not use Google Calendar integration.',
       },
     },
   },

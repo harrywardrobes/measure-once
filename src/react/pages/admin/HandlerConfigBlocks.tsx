@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
@@ -102,25 +100,21 @@ export type VisitType =
 export interface ScheduleVisitConfigValue {
   visitType: VisitType;
   defaultDurationMin: number | '';
-  addToGoogleCalendar: boolean;
 }
 
 export interface ScheduleVisitConfigProps {
   defaultVisitType?: VisitType;
   defaultDurationMin?: number | '';
-  addToGoogleCalendar?: boolean;
   onChange?: (value: ScheduleVisitConfigValue) => void;
 }
 
 export function ScheduleVisitConfig({
   defaultVisitType = 'survey',
   defaultDurationMin: initialDur = 60,
-  addToGoogleCalendar: initialGcal = true,
   onChange,
 }: ScheduleVisitConfigProps) {
   const [visitType, setVisitType] = useState<VisitType>(defaultVisitType);
   const [dur, setDur]             = useState<number | ''>(initialDur);
-  const [gcal, setGcal]           = useState(initialGcal);
 
   const durNum   = dur === '' ? NaN : Number(dur);
   const durError =
@@ -128,8 +122,8 @@ export function ScheduleVisitConfig({
       ? 'Must be between 5 and 1440 minutes.'
       : '';
 
-  const notify = (vt: VisitType, d: number | '', g: boolean) => {
-    onChange?.({ visitType: vt, defaultDurationMin: d, addToGoogleCalendar: g });
+  const notify = (vt: VisitType, d: number | '') => {
+    onChange?.({ visitType: vt, defaultDurationMin: d });
   };
 
   const VISIT_TYPES: { value: VisitType; label: string }[] = [
@@ -152,7 +146,7 @@ export function ScheduleVisitConfig({
           onChange={e => {
             const vt = e.target.value as VisitType;
             setVisitType(vt);
-            notify(vt, dur, gcal);
+            notify(vt, dur);
           }}
         >
           {VISIT_TYPES.map(t => (
@@ -175,20 +169,10 @@ export function ScheduleVisitConfig({
           onChange={e => {
             const d: number | '' = e.target.value === '' ? '' : Number(e.target.value);
             setDur(d);
-            notify(visitType, d, gcal);
+            notify(visitType, d);
           }}
         />
       </Box>
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={gcal}
-            onChange={e => { setGcal(e.target.checked); notify(visitType, dur, e.target.checked); }}
-          />
-        }
-        label={<Typography variant="body2">Also add to Google Calendar</Typography>}
-      />
     </Stack>
   );
 }
@@ -271,7 +255,6 @@ export interface StartDesignVisitConfigValue {
   intermediateLeadStatus: string;
   submittedLeadStatus: string;
   termsAndConditions: string;
-  addToGoogleCalendar: boolean;
 }
 
 export interface StartDesignVisitConfigProps {
@@ -279,7 +262,6 @@ export interface StartDesignVisitConfigProps {
   intermediateLeadStatus?: string;
   submittedLeadStatus?: string;
   termsAndConditions?: string;
-  addToGoogleCalendar?: boolean;
   leadStatuses?: LeadStatusOption[];
   substatuses?: SubstatusOption[];
   /** True when the stored intermediateLeadStatus key no longer exists in the current lead status list. */
@@ -294,7 +276,6 @@ export function StartDesignVisitConfig({
   intermediateLeadStatus: initialIntermediate = '',
   submittedLeadStatus: initialSubmitted = '',
   termsAndConditions: initialTerms = '',
-  addToGoogleCalendar: initialGcal = true,
   leadStatuses = [],
   substatuses = [],
   intermediateLeadStatusInvalid = false,
@@ -305,7 +286,6 @@ export function StartDesignVisitConfig({
   const [intermediate, setIntermediate] = useState(initialIntermediate);
   const [submitted,    setSubmitted]    = useState(initialSubmitted);
   const [terms,        setTerms]        = useState(initialTerms);
-  const [gcal,         setGcal]         = useState(initialGcal);
 
   const durNum   = dur === '' ? NaN : Number(dur);
   const durError =
@@ -318,13 +298,11 @@ export function StartDesignVisitConfig({
     inter: string,
     sub: string,
     t: string,
-    g: boolean,
   ) => onChange?.({
     defaultDurationMin:     d,
     intermediateLeadStatus: inter,
     submittedLeadStatus:    sub,
     termsAndConditions:     t,
-    addToGoogleCalendar:    g,
   });
 
   return (
@@ -341,7 +319,7 @@ export function StartDesignVisitConfig({
           onChange={e => {
             const d: number | '' = e.target.value === '' ? '' : Number(e.target.value);
             setDur(d);
-            notify(d, intermediate, submitted, terms, gcal);
+            notify(d, intermediate, submitted, terms);
           }}
         />
       </Box>
@@ -359,7 +337,7 @@ export function StartDesignVisitConfig({
           error={intermediateLeadStatusInvalid}
           onChange={e => {
             setIntermediate(e.target.value);
-            notify(dur, e.target.value, submitted, terms, gcal);
+            notify(dur, e.target.value, submitted, terms);
           }}
           SelectDisplayProps={{ 'data-testid': 'intermediate-ls-select-trigger' } as React.HTMLAttributes<HTMLDivElement>}
         >
@@ -403,7 +381,7 @@ export function StartDesignVisitConfig({
           error={submittedLeadStatusInvalid}
           onChange={e => {
             setSubmitted(e.target.value);
-            notify(dur, intermediate, e.target.value, terms, gcal);
+            notify(dur, intermediate, e.target.value, terms);
           }}
           SelectDisplayProps={{ 'data-testid': 'submitted-ls-select-trigger' } as React.HTMLAttributes<HTMLDivElement>}
         >
@@ -453,21 +431,10 @@ export function StartDesignVisitConfig({
           slotProps={{ htmlInput: { maxLength: 4000 } }}
           onChange={e => {
             setTerms(e.target.value);
-            notify(dur, intermediate, submitted, e.target.value, gcal);
+            notify(dur, intermediate, submitted, e.target.value);
           }}
         />
       </Box>
-
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={gcal}
-            onChange={e => { setGcal(e.target.checked); notify(dur, intermediate, submitted, terms, e.target.checked); }}
-          />
-        }
-        label={<Typography variant="body2">Also add to Google Calendar</Typography>}
-      />
     </Stack>
   );
 }
@@ -476,24 +443,20 @@ export function StartDesignVisitConfig({
 
 export interface DeliveryWindowConfigValue {
   defaultTitle: string;
-  addToGoogleCalendar: boolean;
 }
 
 export interface DeliveryWindowConfigProps {
   defaultTitle?: string;
-  addToGoogleCalendar?: boolean;
   onChange?: (value: DeliveryWindowConfigValue) => void;
 }
 
 export function DeliveryWindowConfig({
   defaultTitle: initialTitle = '',
-  addToGoogleCalendar: initialGcal = true,
   onChange,
 }: DeliveryWindowConfigProps) {
   const [title, setTitle] = useState(initialTitle);
-  const [gcal,  setGcal]  = useState(initialGcal);
 
-  const notify = (t: string, g: boolean) => onChange?.({ defaultTitle: t, addToGoogleCalendar: g });
+  const notify = (t: string) => onChange?.({ defaultTitle: t });
 
   return (
     <Stack spacing={1.5}>
@@ -508,19 +471,9 @@ export function DeliveryWindowConfig({
           placeholder="e.g. Delivery window"
           value={title}
           slotProps={{ htmlInput: { maxLength: 120 } }}
-          onChange={e => { setTitle(e.target.value); notify(e.target.value, gcal); }}
+          onChange={e => { setTitle(e.target.value); notify(e.target.value); }}
         />
       </Box>
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={gcal}
-            onChange={e => { setGcal(e.target.checked); notify(title, e.target.checked); }}
-          />
-        }
-        label={<Typography variant="body2">Also add to Google Calendar</Typography>}
-      />
     </Stack>
   );
 }
@@ -530,25 +483,21 @@ export function DeliveryWindowConfig({
 export interface InstallationSlotConfigValue {
   defaultDurationMin: number | '';
   defaultTitle: string;
-  addToGoogleCalendar: boolean;
 }
 
 export interface InstallationSlotConfigProps {
   defaultDurationMin?: number | '';
   defaultTitle?: string;
-  addToGoogleCalendar?: boolean;
   onChange?: (value: InstallationSlotConfigValue) => void;
 }
 
 export function InstallationSlotConfig({
   defaultDurationMin: initialDur = 240,
   defaultTitle: initialTitle = '',
-  addToGoogleCalendar: initialGcal = true,
   onChange,
 }: InstallationSlotConfigProps) {
   const [dur,   setDur]   = useState<number | ''>(initialDur);
   const [title, setTitle] = useState(initialTitle);
-  const [gcal,  setGcal]  = useState(initialGcal);
 
   const durNum   = dur === '' ? NaN : Number(dur);
   const durError =
@@ -556,8 +505,8 @@ export function InstallationSlotConfig({
       ? 'Must be between 5 and 1440 minutes.'
       : '';
 
-  const notify = (d: number | '', t: string, g: boolean) =>
-    onChange?.({ defaultDurationMin: d, defaultTitle: t, addToGoogleCalendar: g });
+  const notify = (d: number | '', t: string) =>
+    onChange?.({ defaultDurationMin: d, defaultTitle: t });
 
   return (
     <Stack spacing={1.5}>
@@ -576,7 +525,7 @@ export function InstallationSlotConfig({
           onChange={e => {
             const d: number | '' = e.target.value === '' ? '' : Number(e.target.value);
             setDur(d);
-            notify(d, title, gcal);
+            notify(d, title);
           }}
         />
       </Box>
@@ -591,19 +540,9 @@ export function InstallationSlotConfig({
           placeholder="e.g. Installation"
           value={title}
           slotProps={{ htmlInput: { maxLength: 120 } }}
-          onChange={e => { setTitle(e.target.value); notify(dur, e.target.value, gcal); }}
+          onChange={e => { setTitle(e.target.value); notify(dur, e.target.value); }}
         />
       </Box>
-      <FormControlLabel
-        control={
-          <Checkbox
-            size="small"
-            checked={gcal}
-            onChange={e => { setGcal(e.target.checked); notify(dur, title, e.target.checked); }}
-          />
-        }
-        label={<Typography variant="body2">Also add to Google Calendar</Typography>}
-      />
     </Stack>
   );
 }

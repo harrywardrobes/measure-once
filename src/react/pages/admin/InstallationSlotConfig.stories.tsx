@@ -13,8 +13,8 @@ const meta: Meta<typeof InstallationSlotConfig> = {
       description: {
         component:
           'Config block for the **Schedule installation slot** handler type. ' +
-          'Exposes an optional default duration (5–1440 min), an optional default title ' +
-          '(≤120 chars), and a Google Calendar toggle. ' +
+          'Exposes an optional default duration (5–1440 min) and an optional default title ' +
+          '(≤120 chars). ' +
           'When the action is clicked on a card, a modal opens for the operator to pick ' +
           'a start time; the saved duration is pre-filled.',
       },
@@ -48,8 +48,8 @@ export const Blank: Story = {
       description: {
         story:
           'Handler editor with "Schedule installation slot" pre-selected and default ' +
-          'config (240-minute duration, no title). All three fields — duration, title, ' +
-          'and Google Calendar toggle — are editable.',
+          'config (240-minute duration, no title). Both fields — duration and title — ' +
+          'are editable.',
       },
     },
   },
@@ -86,31 +86,6 @@ export const DurationValidationError: Story = {
           'Shows the inline error state when the duration field contains a value ' +
           'outside the 5–1440-minute range (here 9999). The field turns red and ' +
           'displays "Must be between 5 and 1440 minutes."',
-      },
-    },
-  },
-};
-
-export const CalendarOff: Story = {
-  name: 'Google Calendar off',
-  render: () => {
-    const [type, setType] = useState('schedule_installation_slot');
-    return (
-      <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
-        <InstallationSlotConfig
-          defaultDurationMin={240}
-          defaultTitle="Installation"
-          addToGoogleCalendar={false}
-        />
-      </ModalChrome>
-    );
-  },
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Same block with the Google Calendar toggle pre-set to off — for teams ' +
-          'that do not use Google Calendar integration.',
       },
     },
   },

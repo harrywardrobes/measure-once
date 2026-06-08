@@ -28,8 +28,6 @@ describe('ScheduleVisitConfig', () => {
     const { container } = render(<ScheduleVisitConfig />);
     const durInput = getDurationInput(container);
     expect(durInput.value).toBe('60');
-    const gcal = screen.getByRole('checkbox');
-    expect(gcal).toBeChecked();
     // Default visitType is 'survey' — its label should be displayed in the combobox
     expect(screen.getByRole('combobox')).toHaveTextContent('Survey');
   });
@@ -39,11 +37,9 @@ describe('ScheduleVisitConfig', () => {
       <ScheduleVisitConfig
         defaultVisitType="installation"
         defaultDurationMin={120}
-        addToGoogleCalendar={false}
       />,
     );
     expect(getDurationInput(container).value).toBe('120');
-    expect(screen.getByRole('checkbox')).not.toBeChecked();
     // Supplied visitType 'installation' should be visible in the combobox
     expect(screen.getByRole('combobox')).toHaveTextContent('Installation');
   });
@@ -68,15 +64,6 @@ describe('ScheduleVisitConfig', () => {
     fireEvent.change(getDurationInput(container), { target: { value: '' } });
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ defaultDurationMin: '' }),
-    );
-  });
-
-  it('calls onChange with updated gcal flag when checkbox toggled', () => {
-    const onChange = vi.fn();
-    render(<ScheduleVisitConfig addToGoogleCalendar={true} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ addToGoogleCalendar: false }),
     );
   });
 
@@ -189,10 +176,9 @@ describe('StartDesignVisitConfig', () => {
     { key: 'sub_x', label: 'Sub X', statusKey: 'ls_a' },
   ];
 
-  it('renders with default props (90 min, gcal checked, no status pre-selected)', () => {
+  it('renders with default props (90 min, no status pre-selected)', () => {
     const { container } = render(<StartDesignVisitConfig />);
     expect(getDurationInput(container).value).toBe('90');
-    expect(screen.getByRole('checkbox')).toBeChecked();
     // Both status selects should show the empty "— none —" placeholder
     const combos = screen.getAllByRole('combobox');
     expect(combos[0]).toHaveTextContent('— none —');
@@ -203,7 +189,6 @@ describe('StartDesignVisitConfig', () => {
     const { container } = render(
       <StartDesignVisitConfig
         defaultDurationMin={120}
-        addToGoogleCalendar={false}
         termsAndConditions="My terms"
         intermediateLeadStatus="ls_a"
         submittedLeadStatus="sub_x"
@@ -212,7 +197,6 @@ describe('StartDesignVisitConfig', () => {
       />,
     );
     expect(getDurationInput(container).value).toBe('120');
-    expect(screen.getByRole('checkbox')).not.toBeChecked();
     expect(screen.getByDisplayValue('My terms')).toBeInTheDocument();
     // Initial status selections should be visible in the comboboxes
     const combos = screen.getAllByRole('combobox');
@@ -243,17 +227,6 @@ describe('StartDesignVisitConfig', () => {
     fireEvent.change(termsInput, { target: { value: 'New terms' } });
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ termsAndConditions: 'New terms' }),
-    );
-  });
-
-  it('calls onChange when gcal checkbox toggled', () => {
-    const onChange = vi.fn();
-    render(
-      <StartDesignVisitConfig addToGoogleCalendar={true} onChange={onChange} />,
-    );
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ addToGoogleCalendar: false }),
     );
   });
 
@@ -362,38 +335,26 @@ describe('StartDesignVisitConfig', () => {
 // ── DeliveryWindowConfig ─────────────────────────────────────────────────────
 
 describe('DeliveryWindowConfig', () => {
-  it('renders with default (empty title, gcal checked)', () => {
+  it('renders with default (empty title)', () => {
     render(<DeliveryWindowConfig />);
     const input = screen.getByRole('textbox');
     expect(input).toHaveValue('');
-    expect(screen.getByRole('checkbox')).toBeChecked();
   });
 
   it('renders with supplied initial props', () => {
     render(
       <DeliveryWindowConfig
         defaultTitle="Delivery"
-        addToGoogleCalendar={false}
       />,
     );
     expect(screen.getByRole('textbox')).toHaveValue('Delivery');
-    expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 
   it('calls onChange with correct shape when title changes', () => {
     const onChange = vi.fn();
-    render(<DeliveryWindowConfig defaultTitle="" addToGoogleCalendar={true} onChange={onChange} />);
+    render(<DeliveryWindowConfig defaultTitle="" onChange={onChange} />);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Window' } });
-    expect(onChange).toHaveBeenCalledWith({ defaultTitle: 'Window', addToGoogleCalendar: true });
-  });
-
-  it('calls onChange with updated gcal flag when checkbox toggled', () => {
-    const onChange = vi.fn();
-    render(<DeliveryWindowConfig addToGoogleCalendar={true} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ addToGoogleCalendar: false }),
-    );
+    expect(onChange).toHaveBeenCalledWith({ defaultTitle: 'Window' });
   });
 
   it('includes placeholder text on the title field', () => {
@@ -405,13 +366,12 @@ describe('DeliveryWindowConfig', () => {
 // ── InstallationSlotConfig ───────────────────────────────────────────────────
 
 describe('InstallationSlotConfig', () => {
-  it('renders with default props (240 min, empty title, gcal checked)', () => {
+  it('renders with default props (240 min, empty title)', () => {
     const { container } = render(<InstallationSlotConfig />);
     expect(getDurationInput(container).value).toBe('240');
     const textInputs = screen.getAllByRole('textbox');
     expect(textInputs).toHaveLength(1);
     expect(textInputs[0]).toHaveValue('');
-    expect(screen.getByRole('checkbox')).toBeChecked();
   });
 
   it('renders with supplied initial props', () => {
@@ -419,12 +379,10 @@ describe('InstallationSlotConfig', () => {
       <InstallationSlotConfig
         defaultDurationMin={480}
         defaultTitle="Full day install"
-        addToGoogleCalendar={false}
       />,
     );
     expect(getDurationInput(container).value).toBe('480');
     expect(screen.getByRole('textbox')).toHaveValue('Full day install');
-    expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 
   it('calls onChange with correct shape when duration changes', () => {
@@ -441,20 +399,11 @@ describe('InstallationSlotConfig', () => {
   it('calls onChange with correct shape when title changes', () => {
     const onChange = vi.fn();
     render(
-      <InstallationSlotConfig defaultTitle="" onChange={onChange} addToGoogleCalendar={true} />,
+      <InstallationSlotConfig defaultTitle="" onChange={onChange} />,
     );
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Install day' } });
     expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultTitle: 'Install day', addToGoogleCalendar: true }),
-    );
-  });
-
-  it('calls onChange with updated gcal flag when checkbox toggled', () => {
-    const onChange = vi.fn();
-    render(<InstallationSlotConfig addToGoogleCalendar={true} onChange={onChange} />);
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ addToGoogleCalendar: false }),
+      expect.objectContaining({ defaultTitle: 'Install day' }),
     );
   });
 

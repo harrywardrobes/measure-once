@@ -345,7 +345,6 @@ function HandlerEditorModal({
   const [svVal,  setSvVal]  = useState<ScheduleVisitConfigValue>({
     visitType:           (initConfig.visitType as VisitType) ?? 'survey',
     defaultDurationMin:  initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 60,
-    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
   });
   const [msgVal,  setMsgVal]  = useState<ShowMessageConfigValue>({
     title:   String(initConfig.title   ?? ''),
@@ -356,16 +355,13 @@ function HandlerEditorModal({
     intermediateLeadStatus: String(initConfig.intermediateLeadStatus ?? ''),
     submittedLeadStatus:    String(initConfig.submittedLeadStatus    ?? ''),
     termsAndConditions:     String(initConfig.termsAndConditions     ?? ''),
-    addToGoogleCalendar:    initConfig.addToGoogleCalendar !== false,
   });
   const [dwVal,   setDwVal]   = useState<DeliveryWindowConfigValue>({
     defaultTitle:        String(initConfig.defaultTitle ?? ''),
-    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
   });
   const [isVal,   setIsVal]   = useState<InstallationSlotConfigValue>({
     defaultDurationMin:  initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 240,
     defaultTitle:        String(initConfig.defaultTitle ?? ''),
-    addToGoogleCalendar: initConfig.addToGoogleCalendar !== false,
   });
   const [jsonCfg,      setJsonCfg]      = useState(JSON.stringify(initConfig, null, 2));
   const [editError,    setEditError]    = useState('');
@@ -445,7 +441,6 @@ function HandlerEditorModal({
       }
       cfg = { visitType: svVal.visitType };
       if (dur !== '' && !isNaN(n) && n > 0) cfg.defaultDurationMin = n;
-      cfg.addToGoogleCalendar = svVal.addToGoogleCalendar;
 
     } else if (handlerType === 'show_message') {
       const msg = msgVal.message.trim();
@@ -464,12 +459,10 @@ function HandlerEditorModal({
       if (sdvVal.intermediateLeadStatus) cfg.intermediateLeadStatus = sdvVal.intermediateLeadStatus;
       if (sdvVal.submittedLeadStatus)    cfg.submittedLeadStatus    = sdvVal.submittedLeadStatus;
       if (sdvVal.termsAndConditions)     cfg.termsAndConditions     = sdvVal.termsAndConditions;
-      cfg.addToGoogleCalendar = sdvVal.addToGoogleCalendar;
 
     } else if (handlerType === 'schedule_delivery_window') {
       cfg = {};
       if (dwVal.defaultTitle.trim()) cfg.defaultTitle = dwVal.defaultTitle.trim();
-      cfg.addToGoogleCalendar = dwVal.addToGoogleCalendar;
 
     } else if (handlerType === 'schedule_installation_slot') {
       const dur = isVal.defaultDurationMin;
@@ -480,7 +473,6 @@ function HandlerEditorModal({
       cfg = {};
       if (dur !== '' && !isNaN(n)) cfg.defaultDurationMin = n;
       if (isVal.defaultTitle.trim()) cfg.defaultTitle = isVal.defaultTitle.trim();
-      cfg.addToGoogleCalendar = isVal.addToGoogleCalendar;
 
     } else {
       const txt = jsonCfg.trim() || '{}';
@@ -608,7 +600,6 @@ function HandlerEditorModal({
               <ScheduleVisitConfig
                 defaultVisitType={svVal.visitType}
                 defaultDurationMin={svVal.defaultDurationMin}
-                addToGoogleCalendar={svVal.addToGoogleCalendar}
                 onChange={setSvVal}
               />
             )}
@@ -625,7 +616,6 @@ function HandlerEditorModal({
                 intermediateLeadStatus={sdvVal.intermediateLeadStatus}
                 submittedLeadStatus={sdvVal.submittedLeadStatus}
                 termsAndConditions={sdvVal.termsAndConditions}
-                addToGoogleCalendar={sdvVal.addToGoogleCalendar}
                 leadStatuses={sdvLeadStatuses}
                 substatuses={sdvSubstatuses}
                 intermediateLeadStatusInvalid={sdvInvalidIntermediate}
@@ -636,7 +626,6 @@ function HandlerEditorModal({
             {showDw && (
               <DeliveryWindowConfig
                 defaultTitle={dwVal.defaultTitle}
-                addToGoogleCalendar={dwVal.addToGoogleCalendar}
                 onChange={setDwVal}
               />
             )}
@@ -644,7 +633,6 @@ function HandlerEditorModal({
               <InstallationSlotConfig
                 defaultDurationMin={isVal.defaultDurationMin}
                 defaultTitle={isVal.defaultTitle}
-                addToGoogleCalendar={isVal.addToGoogleCalendar}
                 onChange={setIsVal}
               />
             )}

@@ -13,8 +13,7 @@ const meta: Meta<typeof ScheduleVisitConfig> = {
       description: {
         component:
           'Config block for the **Schedule visit** handler type. ' +
-          'Exposes a visit-type selector, an optional default duration field (5–1440 min), ' +
-          'and a Google Calendar toggle. ' +
+          'Exposes a visit-type selector and an optional default duration field (5–1440 min). ' +
           'Rendered inside the "Add / Change action" editor modal in ActionHandlersPage.',
       },
     },
@@ -41,8 +40,8 @@ export const Blank: Story = {
       description: {
         story:
           'Handler editor with "Schedule visit" pre-selected and default config ' +
-          '(visit type = Survey, duration = 60 min, Google Calendar on). ' +
-          'The visit type selector, duration field, and calendar toggle are all editable.',
+          '(visit type = Survey, duration = 60 min). ' +
+          'The visit type selector and duration field are both editable.',
       },
     },
   },

@@ -26,11 +26,11 @@ There are five handler types. Each maps to its own config block component in
 
 | Handler type | Component | Config keys | Side effects when clicked |
 |---|---|---|---|
-| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*†, `addToGoogleCalendar` | Opens the scheduling modal pre-set to the chosen visit type and duration |
+| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*† | Opens the scheduling modal pre-set to the chosen visit type and duration |
 | **Show message** | `ShowMessageConfig` | `title`\*, `message`† | Displays a read-only popup — no API call, no status change |
-| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`†, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\*, `addToGoogleCalendar` | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
-| **Schedule delivery window** | `DeliveryWindowConfig` | `defaultTitle`\*, `addToGoogleCalendar` | Opens the delivery-window picker modal |
-| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*†, `defaultTitle`\*, `addToGoogleCalendar` | Opens the installation-slot picker modal pre-filled with the saved duration |
+| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`†, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\* | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
+| **Schedule delivery window** | `DeliveryWindowConfig` | `defaultTitle`\* | Opens the delivery-window picker modal |
+| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*†, `defaultTitle`\* | Opens the installation-slot picker modal pre-filled with the saved duration |
 
 \* Optional field — the block still saves and works if this value is left blank.  
 † Validated field — `defaultDurationMin` must be a whole number between 5 and 1440 (minutes) when provided; `message` is required and cannot be left blank.
@@ -67,8 +67,7 @@ pipeline conventions.
 ## ScheduleVisit
 
 Lets the admin choose the visit type (Survey, Installation, Remedial, Workshop, Design
-visit, or Other), an optional default duration in minutes (5–1440), and whether to
-create a Google Calendar event automatically.
+visit, or Other) and an optional default duration in minutes (5–1440).
 
 <Canvas of={ScheduleVisitStories.Blank} />
 <Canvas of={ScheduleVisitStories.Prefilled} />
@@ -104,9 +103,8 @@ the error state when the field is submitted empty.
 ## StartDesignVisit
 
 The most configurable handler type. In addition to the two-phase status fields described
-above, the admin can set a default duration (minutes) for the visit, paste in optional
-Terms & Conditions text (≤4000 chars, shown to the customer on the sign-off page), and
-toggle Google Calendar creation.
+above, the admin can set a default duration (minutes) for the visit and paste in optional
+Terms & Conditions text (≤4000 chars, shown to the customer on the sign-off page).
 
 <Canvas of={StartDesignVisitStories.Blank} />
 <Canvas of={StartDesignVisitStories.WithTermsAndConditions} />
@@ -123,18 +121,10 @@ The story below shows the inline error state that appears when the field holds a
 ## DeliveryWindow
 
 Opens a date/time range picker so the operator can record when a delivery is expected.
-Config is minimal: an optional default event title (≤120 chars) and the Google Calendar
-toggle.
+Config is minimal: an optional default event title (≤120 chars).
 
 <Canvas of={DeliveryWindowStories.Blank} />
 <Canvas of={DeliveryWindowStories.Prefilled} />
-
-### Validation & edge cases
-
-The story below shows the block with the Google Calendar toggle switched off — useful for
-teams that do not use the Google Calendar integration.
-
-<Canvas of={DeliveryWindowStories.CalendarOff} />
 
 ---
 
@@ -142,8 +132,7 @@ teams that do not use the Google Calendar integration.
 
 Similar to DeliveryWindow but designed for booking an installation. The operator picks a
 start time; the saved default duration is pre-filled in the picker. Config keys: optional
-default duration (5–1440 min), optional default title (≤120 chars), and the Google
-Calendar toggle.
+default duration (5–1440 min) and optional default title (≤120 chars).
 
 <Canvas of={InstallationSlotStories.Blank} />
 <Canvas of={InstallationSlotStories.Prefilled} />
@@ -151,8 +140,6 @@ Calendar toggle.
 ### Validation & edge cases
 
 `defaultDurationMin` is validated on save — it must be a whole number between 5 and 1440.
-The first story below shows the inline error state for an out-of-range value; the second
-shows the block with the Google Calendar toggle switched off.
+The story below shows the inline error state for an out-of-range value.
 
 <Canvas of={InstallationSlotStories.DurationValidationError} />
-<Canvas of={InstallationSlotStories.CalendarOff} />
