@@ -17,7 +17,7 @@ import type { DateRange } from '@mui/x-date-pickers-pro/models';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
-import { PATCH, POST } from '../../utils/api';
+import { PATCH, POST, isGoogleAuthError } from '../../utils/api';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -123,8 +123,10 @@ export function GenericVisitEditModal(props: Props) {
               end: { dateTime: end.toDate().toISOString() },
             });
           } catch (gcalErr) {
-            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`${label} scheduled; Google Calendar add failed: ${msg}`, true);
+            const gcalMsg = isGoogleAuthError(gcalErr)
+              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+              : gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`${label} scheduled; Google Calendar add failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
@@ -157,8 +159,10 @@ export function GenericVisitEditModal(props: Props) {
               end: { dateTime: end.toDate().toISOString() },
             });
           } catch (gcalErr) {
-            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`${label} updated; Google Calendar update failed: ${msg}`, true);
+            const gcalMsg = isGoogleAuthError(gcalErr)
+              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+              : gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`${label} updated; Google Calendar update failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;

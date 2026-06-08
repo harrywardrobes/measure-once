@@ -19,7 +19,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
-import { POST, PATCH } from '../../utils/api';
+import { POST, PATCH, isGoogleAuthError } from '../../utils/api';
 
 interface CreateProps {
   mode?: 'create';
@@ -144,8 +144,10 @@ export function DeliveryWindowModal(props: Props) {
               end: { dateTime: end.toDate().toISOString() },
             });
           } catch (gcalErr) {
-            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Delivery window updated; Google Calendar update failed: ${msg}`, true);
+            const gcalMsg = isGoogleAuthError(gcalErr)
+              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+              : gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`Delivery window updated; Google Calendar update failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
@@ -177,8 +179,10 @@ export function DeliveryWindowModal(props: Props) {
               end: { dateTime: end.toDate().toISOString() },
             });
           } catch (gcalErr) {
-            const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Delivery window saved; Google Calendar add failed: ${msg}`, true);
+            const gcalMsg = isGoogleAuthError(gcalErr)
+              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+              : gcalErr instanceof Error ? gcalErr.message : 'error';
+            w.showToast?.(`Delivery window saved; Google Calendar add failed: ${gcalMsg}`, true);
             handleClose();
             (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
             props.onSaved?.();

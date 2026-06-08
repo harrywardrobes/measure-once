@@ -17,7 +17,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST } from '../../utils/api';
+import { POST, isGoogleAuthError } from '../../utils/api';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -121,9 +121,11 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
             end:         { dateTime: end.toISOString() },
           });
         } catch (gcalErr) {
-          const msg = gcalErr instanceof Error ? gcalErr.message : 'error';
+          const gcalMsg = isGoogleAuthError(gcalErr)
+            ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+            : gcalErr instanceof Error ? gcalErr.message : 'error';
           const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-          w.showToast?.(`Visit saved; Google Calendar add failed: ${msg}`, true);
+          w.showToast?.(`Visit saved; Google Calendar add failed: ${gcalMsg}`, true);
           handleClose();
           (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
           return;

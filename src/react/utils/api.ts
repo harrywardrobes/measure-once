@@ -72,3 +72,8 @@ export function DELETE<T = unknown>(path: string): Promise<T> {
 export function PUT<T = unknown>(path: string, body?: unknown): Promise<T> {
   return apiFetch<T>('PUT', path, body);
 }
+
+export function isGoogleAuthError(e: unknown): boolean {
+  const code = (e as { code?: string })?.code;
+  return code === 'GOOGLE_AUTH' || code === 'GOOGLE_ERROR';
+}
