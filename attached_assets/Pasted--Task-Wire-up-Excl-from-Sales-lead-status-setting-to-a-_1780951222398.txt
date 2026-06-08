@@ -1,0 +1,32 @@
+## Task: Wire up "Excl. from Sales" lead status setting to a toggle on the Customers page
+
+### Context
+In `src/react/pages/admin/SettingsPage.tsx`, each lead status row has an "Excl. from Sales" checkbox that sets `excluded_from_sales: boolean` on the status object. This field is already stored in the DB and available on every status object throughout the app.
+
+In `src/react/pages/CustomersPage.tsx`, the status filter chip row and the native <Select> both currently hard-filter out excluded statuses:
+  - Line ~1469: `.filter((s) => !s.excluded_from_sales)` (native select options)
+  - Line ~1499: `.filter((s) => !s.excluded_from_sales)` (chip row)
+
+There is also an "archived" toggle button (id="archived-toggle", around line 1596) using a plain MUI `<Button>` with `aria-pressed`. This is not particularly user-friendly.
+
+There is a reusable `<Toggle />` component at `src/react/components/Toggle.tsx` that renders a styled CSS switch (class `ss-toggle`). It accepts `checked`, `onChange`, `title`, `disabled`, and `className` props.
+
+### What to build
+
+1. **Replace the existing archived Button toggle** with a labelled `<Toggle />` component to match the style used elsewhere. Wrap it in a `<Stack direction="row" spacing={0.5} alignItems="center">` containing a `<Typography variant="body2">` label ("Show archived") and the `<Toggle />`. Keep all existing `onClick` / state logic identical — only the visual component changes.
+
+2. **Add a new "Include sales-excluded" toggle** directly alongside the archived toggle (same toolbar row). 
+   - Add state: `const [showExcluded, setShowExcluded] = useState(false);`
+   - When `showExcluded` is `false` (default), keep the existing `.filter((s) => !s.excluded_from_sales)` behaviour — excluded statuses are hidden from the chip row and select.
+   - When `showExcluded` is `true`, remove those filters so all statuses appear.
+   - Render it as a labelled `<Toggle />` identical in style to the archived toggle above: a `<Stack direction="row" spacing={0.5} alignItems="center">` with a `<Typography variant="body2">` label ("Incl. excluded") and the `<Toggle checked={showExcluded} onChange={setShowExcluded} title="Show lead statuses excluded from sales" />`.
+   - When toggled off, if the currently selected `leadStatus` belongs to an excluded status, reset `leadStatus` to `''` and `substatus` to `''` and `page` to `1`.
+
+3. **Do not change any server-side code**, data fetching, or other pages. The change is purely presentational/filtering within `CustomersPage.tsx`.
+
+4. **Imports**: import `Toggle` from `'../components/Toggle'` (adjust relative path as needed). MUI `Typography` and `Stack` are already imported.
+
+### Style notes
+- Both toggles should sit in the same horizontal `<Stack>` row as the search box and sort select, right-aligned.
+- Keep `whiteSpace: 'nowrap'` and `flexShrink: 0` on the wrapping Stack so they don't collapse on small screens.
+- Match the spacing/alignment of the existing toolbar controls.
