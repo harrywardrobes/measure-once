@@ -20,6 +20,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../hooks/useOfflineFailures';
+import { useToast } from '../contexts/ToastContext';
 import type { QueueCounts, QueueEntry, OfflineArea } from '../lib/offlineQueue';
 
 // ── Pending-sync indicator ───────────────────────────────────────────────────────
@@ -143,11 +144,16 @@ export default function SyncPill(props: SyncPillProps) {
 
   const [open, setOpen] = useState(!!props.defaultOpen);
   const [confirmDiscardAll, setConfirmDiscardAll] = useState(false);
+  const showToast = useToast();
 
   const downloadPdf = () => {
     const list = failures;
     if (list.length === 0) return;
-    void import('../lib/failuresPdf').then((m) => m.downloadFailuresPdf(list));
+    const generatedAt = Date.now();
+    void import('../lib/failuresPdf').then((m) => {
+      m.downloadFailuresPdf(list, generatedAt);
+      showToast(`Saved ${m.failuresPdfFilename(generatedAt)} — your changes are safe to discard.`);
+    });
   };
 
   const { pending, syncing, failed } = counts;
