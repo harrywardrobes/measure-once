@@ -53,6 +53,11 @@ function draftKey(contactId: string): string {
   return `mo-contact-edit-${contactId}`;
 }
 
+function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number'> {
+  const { phone, mobilephone, hs_whatsapp_phone_number, ...safeValues } = values;
+  return safeValues;
+}
+
 function activePhoneField(values: FormValues): ActivePhoneField {
   if (values.phone)                   return 'phone';
   if (values.mobilephone)             return 'mobilephone';
@@ -93,22 +98,23 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   useEffect(() => {
     if (!open) return;
     setError(null);
+    const baseValues = toFormValues(contact);
     try {
       const raw = localStorage.getItem(draftKey(contact.id));
       if (raw) {
-        const parsed = JSON.parse(raw) as FormValues;
-        setValues(parsed);
+        const parsed = JSON.parse(raw) as Partial<FormValues>;
+        setValues({ ...baseValues, ...parsed });
         return;
       }
     } catch { /* noop — fall through to fresh values */ }
-    setValues(toFormValues(contact));
+    setValues(baseValues);
   }, [open, contact]);
 
   // Persist draft whenever form values change while the modal is open.
   useEffect(() => {
     if (!open) return;
     try {
-      localStorage.setItem(draftKey(contact.id), JSON.stringify(values));
+      localStorage.setItem(draftKey(contact.id), JSON.stringify(toPersistedDraft(values)));
     } catch { /* noop */ }
   }, [values, open, contact.id]);
 
