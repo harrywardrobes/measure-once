@@ -4835,6 +4835,26 @@ app.patch('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, asyn
   }
 });
 
+// POST /api/email-templates/render — render a stored template with caller-supplied
+// variable values and return { subject, body_text }. Available to all authenticated
+// users (not admin-only) so in-product UIs can pre-populate editable email fields
+// from the admin-customisable template rather than a hardcoded client-side string.
+app.post('/api/email-templates/render', isAuthenticated, async (req, res) => {
+  const { key, vars } = req.body || {};
+  if (!TEMPLATE_KEYS.includes(key)) {
+    return res.status(404).json({ error: 'Unknown email template key.' });
+  }
+  try {
+    const template = await getEmailTemplate(key);
+    if (!template) return res.status(404).json({ error: 'Template not found.' });
+    const rendered = renderEmail(template, { textVars: vars || {} });
+    res.json({ subject: rendered.subject, body_text: rendered.text });
+  } catch (e) {
+    logger.error({ err: e.message }, 'POST /api/email-templates/render error:');
+    res.status(500).json({ error: 'Could not render template.' });
+  }
+});
+
 // POST /api/admin/email-templates/:key/preview — render draft fields with sample
 // variable values and return { subject, text, html } without saving anything.
 // Mirrors the exact send-path semantics: when body_html is empty the html field

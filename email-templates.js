@@ -219,6 +219,26 @@ const TEMPLATE_DEFS = {
     body_html: '',
     footer_text: 'Warm regards,\nThe team',
   },
+
+  arrange_visit_no_answer: {
+    label: 'Arrange visit — no answer',
+    description: 'Sent to a customer when we call to book a visit but get no answer, asking for their availability.',
+    variables: ['firstName', 'visitLabel'],
+    subject: 'Booking your {{visitLabel}} — getting in touch',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      'Thanks for your interest in booking a {{visitLabel}} with us. I tried to give you a call but wasn\'t able to reach you.',
+      '',
+      'Could you let us know your availability over the next week? If you can share which days and evenings work best for you, we can either call you back at a convenient time or lock in a date for your {{visitLabel}}.',
+      '',
+      'Just reply to this email and we\'ll get it arranged.',
+      '',
+      'Best regards',
+    ].join('\n'),
+    body_html: '',
+    footer_text: '',
+  },
 };
 
 const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFS);
@@ -342,6 +362,10 @@ const SAMPLE_VARS = {
   photo_review_rough_estimate: {
     firstName: 'Jane',
     priceRange: '£5,000 – £8,000',
+  },
+  arrange_visit_no_answer: {
+    firstName: 'Jane',
+    visitLabel: 'design visit',
   },
 };
 

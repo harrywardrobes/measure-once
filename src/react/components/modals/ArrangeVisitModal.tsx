@@ -108,11 +108,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
   const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
 
+  // Pre-fetched no-answer template from the server (admin-editable). Populated
+  // alongside the contact-info load so clicking "No answer" has no extra delay.
+  const [noAnswerTemplate, setNoAnswerTemplate] = useState<{ subject: string; body_text: string } | null>(null);
+
   useEffect(() => {
     if (!open) return;
 
     setLoadError('');
     setActionError('');
+    setNoAnswerTemplate(null);
 
     const hasDraft = draft.step && draft.step !== 'loading' && draft.step !== 'done';
     if (hasDraft) {
@@ -139,6 +144,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
           setStep(prev => prev === 'loading' ? 'call' : prev);
           saveDraft(key, { step: 'call', address: d.contactAddress || '', bookedSlotIso: null, emailSubject: '', emailBody: '' });
         }
+
+        // Pre-fetch the no-answer email template using the actual contact name
+        // and visit type so it reflects any admin edits to the template.
+        const firstName = (d.contactName || '').split(' ')[0] || 'there';
+        const vLabel = visitLabel(d.visitType ?? 'design');
+        POST('/api/email-templates/render', {
+          key: 'arrange_visit_no_answer',
+          vars: { firstName, visitLabel: vLabel },
+        })
+          .then((t: unknown) => setNoAnswerTemplate(t as { subject: string; body_text: string }))
+          .catch(() => { /* silently ignore — buildNoAnswerEmail fallback used */ });
       })
       .catch((e: Error) => {
         if (!hasDraft) {
@@ -382,11 +398,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
                 onClick={() => {
                   setActionError('');
                   if (!emailSubject && !emailBody) {
-                    const name = contactInfo?.contactName || ctx.contactName || 'there';
-                    const vLabel = visitLabel(contactInfo?.visitType ?? 'design');
-                    const { subject, body } = buildNoAnswerEmail(name, vLabel);
-                    setEmailSubject(subject);
-                    setEmailBody(body);
+                    if (noAnswerTemplate) {
+                      setEmailSubject(noAnswerTemplate.subject);
+                      setEmailBody(noAnswerTemplate.body_text);
+                    } else {
+                      const name = contactInfo?.contactName || ctx.contactName || 'there';
+                      const vLabel = visitLabel(contactInfo?.visitType ?? 'design');
+                      const { subject, body } = buildNoAnswerEmail(name, vLabel);
+                      setEmailSubject(subject);
+                      setEmailBody(body);
+                    }
                   }
                   setStep('email');
                 }}
