@@ -18,7 +18,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST } from '../../utils/api';
+import { POST, ApiError } from '../../utils/api';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -257,7 +257,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       setStep('done');
       onClose();
     } catch (e) {
-      setActionError((e as Error).message || 'Could not send email.');
+      if ((e as ApiError).code === 'GOOGLE_AUTH') {
+        setActionError('GOOGLE_AUTH');
+      } else {
+        setActionError((e as Error).message || 'Could not send email.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -427,7 +431,25 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
                   />
                 ))}
                 {actionError && (
-                  <Alert severity="error">{actionError}</Alert>
+                  <Alert severity="error">
+                    {actionError === 'GOOGLE_AUTH' ? (
+                      <>
+                        Your Google account isn't connected.{' '}
+                        <Button
+                          component="a"
+                          href="/profile"
+                          size="small"
+                          color="inherit"
+                          sx={{ p: 0, minWidth: 0, fontWeight: 600, verticalAlign: 'baseline', textDecoration: 'underline' }}
+                        >
+                          Go to your profile
+                        </Button>{' '}
+                        to connect it, then try again.
+                      </>
+                    ) : (
+                      actionError
+                    )}
+                  </Alert>
                 )}
               </Stack>
             </DialogContent>
