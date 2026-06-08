@@ -21,7 +21,7 @@ import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
 import Alert from '@mui/material/Alert';
-import { sendOrQueue } from '../lib/offlineQueue';
+import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -459,6 +459,32 @@ export function CustomerDetailPage() {
     window.addEventListener('mo:google-auth-disconnected', handler);
     return () => window.removeEventListener('mo:google-auth-disconnected', handler);
   }, []);
+
+  // ── Refresh after an offline conflict is resolved (Restore server copy) ─────
+  // Resolving a conflict by restoring the server values replays a write but the
+  // on-screen record still shows the queued edit. When that resolution targets
+  // the contact in view, re-fetch the affected section so the screen reflects
+  // the restored values without a manual reload. (The structured read cache is
+  // evicted by resolveConflict, so the re-fetch below repopulates it.)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<ConflictResolvedDetail>).detail;
+      if (!detail) return;
+      const m = detail.route?.match(/\/customers\/(\d+)/);
+      const routeContact = m ? m[1] : null;
+      // Skip conflicts that clearly belong to a different customer.
+      if (routeContact && routeContact !== contactId) return;
+      if (detail.area === 'customer' || detail.area === 'photo') {
+        void fetchContact().then((c) => { if (c) setContact(c); }).catch(() => { /* best-effort */ });
+      } else if (detail.area === 'visit') {
+        void fetchDesignVisits();
+        void fetchVisits();
+      }
+    };
+    window.addEventListener(CONFLICT_RESOLVED_EVENT, handler);
+    return () => window.removeEventListener(CONFLICT_RESOLVED_EVENT, handler);
+  }, [contactId, fetchContact, fetchDesignVisits, fetchVisits]);
 
   // ── Lead-status quick-set window bridge ─────────────────────────────────────
   // window.quickSetLeadStatus / window._quickSetLeadStatusWithSub are called by

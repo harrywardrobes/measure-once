@@ -195,6 +195,23 @@ export async function readRecord<T>(store: CacheStore, id: string | number): Pro
   }
 }
 
+/**
+ * Delete a single cached record by id. Used after an offline sync conflict is
+ * resolved by restoring the server copy: the structured read cache still holds
+ * the queued edit, so dropping it lets the next fetch repopulate with the
+ * restored values (and stops an offline read from showing the overwritten edit).
+ */
+export async function evictCachedRecord(store: CacheStore, id: string | number): Promise<void> {
+  const dbp = getDb();
+  if (!dbp || id === undefined || id === null) return;
+  try {
+    const db = await dbp;
+    await db.delete(store, String(id));
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Store a small freshness/bookkeeping value. */
 export async function setMeta(key: string, value: unknown): Promise<void> {
   const dbp = getDb();

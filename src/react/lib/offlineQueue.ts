@@ -29,9 +29,12 @@ import {
   conflictAdd,
   conflictGetAll,
   conflictDelete,
+  evictCachedRecord,
   getMeta,
   setMeta,
 } from './offlineDb';
+import type { CacheStore } from './offlineDb';
+import { resolveConflictRoute } from './conflictRoute';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -392,6 +395,52 @@ export interface ResolveConflictResult {
 }
 
 /**
+ * Window event fired after a conflict is resolved by restoring server values
+ * (whole-record or per-field). Open pages listen for it to re-fetch the affected
+ * record so the screen reflects the restored values without a manual reload.
+ */
+export const CONFLICT_RESOLVED_EVENT = 'mo:offline-conflict-resolved';
+
+export interface ConflictResolvedDetail {
+  area: OfflineArea;
+  recordKey?: string;
+  /** The write URL the restore replayed against. */
+  url: string;
+  /** In-app deep link to the affected record, or null when none can be derived. */
+  route: string | null;
+}
+
+/**
+ * Map a resolved conflict to the structured read-cache entry that still holds
+ * the queued edit, so it can be evicted after a restore. Prefers the stable
+ * `recordKey` (`contact:`/`visit:`/`design-visit:`/`dv:`) and falls back to
+ * parsing the write URL. Returns `null` when no cache entry can be derived.
+ */
+function cacheTargetForConflict(conflict: ConflictEntry): { store: CacheStore; id: string } | null {
+  const rk = conflict.recordKey;
+  if (rk) {
+    const idx = rk.indexOf(':');
+    if (idx > 0) {
+      const type = rk.slice(0, idx);
+      const id = rk.slice(idx + 1).trim();
+      if (id) {
+        if (type === 'contact' || type === 'customer') return { store: 'customers', id };
+        if (type === 'visit') return { store: 'visits', id: `v:${id}` };
+        if (type === 'dv' || type === 'design-visit') return { store: 'visits', id: `dv:${id}` };
+      }
+    }
+  }
+  const decode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const cm = conflict.url.match(/\/api\/contacts\/([^/?#]+)/);
+  if (cm) return { store: 'customers', id: decode(cm[1]) };
+  const dm = conflict.url.match(/\/api\/design-visits\/([^/?#]+)/);
+  if (dm) return { store: 'visits', id: `dv:${decode(dm[1])}` };
+  const vm = conflict.url.match(/\/api\/visits\/([^/?#]+)/);
+  if (vm) return { store: 'visits', id: `v:${decode(vm[1])}` };
+  return null;
+}
+
+/**
  * Resolve a persisted conflict.
  *
  * Pass `resolvedBody === null` to keep the queued edit (just clears the
@@ -417,6 +466,22 @@ export async function resolveConflict(
   });
   if (res.ok || res.queued) {
     await clearConflict(conflict.id);
+    // The page the user is looking at (and the structured read cache) still
+    // shows the queued edit. Drop the stale cached copy so the next fetch
+    // repopulates with the restored values, and notify any open page to
+    // re-fetch the affected record without a manual reload.
+    const target = cacheTargetForConflict(conflict);
+    if (target) await evictCachedRecord(target.store, target.id);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent<ConflictResolvedDetail>(CONFLICT_RESOLVED_EVENT, {
+        detail: {
+          area: conflict.area,
+          recordKey: conflict.recordKey,
+          url: conflict.url,
+          route: resolveConflictRoute(conflict),
+        },
+      }));
+    }
   }
   return { ok: res.ok, queued: res.queued, status: res.status };
 }
