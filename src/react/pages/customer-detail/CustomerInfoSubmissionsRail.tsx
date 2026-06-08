@@ -304,6 +304,92 @@ export function PendingReviewActions({ entry }: { entry: PendingPhotoReviewEntry
   );
 }
 
+// ── Bulk photo-review retry / discard actions ─────────────────────────────────
+
+/**
+ * Bulk **Retry all** / **Discard all** controls for the customer-info
+ * submissions rail. Renders only when 2+ queued photo-review outcomes for this
+ * contact are `failed`, so a field user recovering from a long offline stint can
+ * clear the whole backlog at once instead of one card at a time. Mirrors
+ * `BulkVisitActions` in `DesignVisitsList.tsx`, reusing the same retry/remove
+ * queue APIs.
+ *
+ * - **Retry all** re-queues every failed entry (`retryEntry`) with no extra
+ *   confirmation — the periodic flush picks them up.
+ * - **Discard all** gates the permanent removal behind `window.showBottomConfirm`
+ *   before calling `removeEntry` for each. Discarding only drops the unsynced
+ *   review outcomes from the outbox — the submission rows on the server stay
+ *   untouched.
+ */
+export function BulkReviewActions({ entries }: { entries: PendingPhotoReviewEntry[] }) {
+  const [busy, setBusy] = useState(false);
+  const failed = entries.filter(e => e.status === 'failed');
+
+  const handleRetryAll = useCallback(async () => {
+    if (busy) return;
+    const ids = failed.map(e => e.id);
+    if (!ids.length) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await Promise.all(ids.map(id => engine.retryEntry(id)));
+    } catch {
+      /* best-effort — the periodic flush will pick them up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, failed]);
+
+  const handleDiscardAll = useCallback(() => {
+    if (busy) return;
+    const ids = failed.map(e => e.id);
+    if (!ids.length) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await Promise.all(ids.map(id => mod.removeEntry(id)));
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      `Discard all ${ids.length} unsynced photo reviews? The outcomes saved on this device will be lost — the submissions on the server stay as they are.`,
+      doDiscard,
+    );
+  }, [busy, failed]);
+
+  if (failed.length < 2) return null;
+
+  return (
+    <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Button
+        size="small"
+        variant="outlined"
+        disabled={busy}
+        onClick={handleRetryAll}
+        sx={{ fontSize: '0.75rem', py: 0.3 }}
+        data-testid="photo-review-retry-all"
+      >
+        Retry all
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        disabled={busy}
+        onClick={handleDiscardAll}
+        sx={{ fontSize: '0.75rem', py: 0.3 }}
+        data-testid="photo-review-discard-all"
+      >
+        Discard all
+      </Button>
+    </Stack>
+  );
+}
+
 // ── Submission card ───────────────────────────────────────────────────────────
 
 type ConflictTarget = 'copy' | 'open';
@@ -852,6 +938,12 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
             </Typography>
           )}
         </Typography>
+        {/* Bulk retry/discard sits in the header so it's reachable even when the
+            rail is collapsed. Stop click propagation so the buttons don't toggle
+            the section open/closed. */}
+        <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
+          <BulkReviewActions entries={Array.from(pendingReviews.values())} />
+        </Box>
         {open
           ? <ExpandLessIcon fontSize="small" sx={{ color: 'text.disabled' }} />
           : <ExpandMoreIcon fontSize="small" sx={{ color: 'text.disabled' }} />
