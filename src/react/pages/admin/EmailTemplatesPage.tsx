@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -267,6 +267,27 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [hadDraft] = useState<boolean>(() => loadDraft(template.key) !== null);
   const [saving, setSaving] = useState(false);
 
+  // ── Token analysis ────────────────────────────────────────────────────────
+  const { unknownTokens, unusedVariables } = useMemo(() => {
+    const TOKEN_RE = /\{\{(\w+)\}\}/g;
+    const combined = [
+      fields.subject,
+      fields.body_text,
+      fields.body_html,
+      fields.footer_text,
+    ].join('\n');
+    const found = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = TOKEN_RE.exec(combined)) !== null) {
+      found.add(m[1]);
+    }
+    const knownSet = new Set(template.variables);
+    return {
+      unknownTokens: [...found].filter((t) => !knownSet.has(t)),
+      unusedVariables: template.variables.filter((v) => !found.has(v)),
+    };
+  }, [fields, template.variables]);
+
   useEffect(() => {
     try {
       localStorage.setItem(draftKey(template.key), JSON.stringify(fields));
@@ -349,6 +370,40 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
             {hadDraft && (
               <Alert severity="info">
                 Restored an unsaved draft from your last edit. Save to apply, or cancel to discard it.
+              </Alert>
+            )}
+
+            {unknownTokens.length > 0 && (
+              <Alert severity="warning">
+                <strong>
+                  Unknown variable{unknownTokens.length > 1 ? 's' : ''}:
+                </strong>{' '}
+                {unknownTokens.map((t) => `{{${t}}}`).join(', ')}
+                {' '}— these will render as literal text in the sent email. Check for typos.
+              </Alert>
+            )}
+
+            {unusedVariables.length > 0 && (
+              <Alert severity="info" icon={false}
+                sx={{ color: 'text.secondary', bgcolor: 'transparent', px: 0, py: 0.5 }}
+              >
+                <Typography variant="caption">
+                  Not used:{' '}
+                  {unusedVariables.map((v) => (
+                    <Box
+                      key={v}
+                      component="span"
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.78rem',
+                        bgcolor: 'action.hover',
+                        borderRadius: 0.5,
+                        px: 0.5,
+                        mr: 0.5,
+                      }}
+                    >{`{{${v}}}`}</Box>
+                  ))}
+                </Typography>
               </Alert>
             )}
 
