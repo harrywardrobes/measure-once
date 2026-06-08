@@ -2,54 +2,54 @@
 /**
  * check-mount-id-conflicts.mjs
  *
- * Four-pass static check for React mount-point wiring in public/*.html.
+ * Four-pass static check for React mount-point wiring in views/*.ejs.
  *
  * Pass 1 — Duplicate-mount detection:
  *   Every id in the MOUNTS table in src/react/main.tsx must appear in at most
- *   ONE HTML page under public/.  When the same mount id shows up in two
- *   different pages (e.g. sales.html accidentally reusing id="tab-customers"
- *   that belongs to customers.html), mountKnown() will render the wrong React
+ *   ONE EJS view under views/.  When the same mount id shows up in two
+ *   different views (e.g. sales.ejs accidentally reusing id="tab-customers"
+ *   that belongs to customers.ejs), mountKnown() will render the wrong React
  *   island into the structural element on the wrong page, making the intended
  *   island invisible.
  *
  * Pass 2 — Missing-mount detection:
- *   Every HTML page that loads /react/main.js must also declare at least one
+ *   Every EJS view that loads /react/main.js must also declare at least one
  *   element id that is present in the MOUNTS table.  A page that loads the
  *   bundle but has no matching mount element loads dead JS and likely indicates
  *   a mis-wired new page or a forgotten container element.
  *
  * Pass 3 — Error-page container check (aggregate):
  *   Every id in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) must
- *   appear in at least one HTML file under public/.  Because error/restricted
+ *   appear in at least one EJS view under views/.  Because error/restricted
  *   pages may carry other valid MOUNTS ids (chrome mounts, etc.), Pass 2
  *   would not catch a typo or accidental removal of the page's own container
  *   id — the React component would silently never mount.  This pass makes
  *   the check targeted: each BOOTSTRAP_ONLY_IDS entry is verified individually
- *   against the full set of HTML files, regardless of what other ids the page
+ *   against the full set of EJS views, regardless of what other ids the page
  *   declares.
  *
  * Pass 4 — Error-page canonical-file check (annotation required + per-file):
  *   Every BOOTSTRAP_ONLY_IDS entry in publicIslands.ts MUST carry an inline
- *   comment declaring its canonical HTML file, e.g.:
- *     'not-found-root',  // public/404.html — 404 page, rendered after auth
+ *   comment declaring its canonical EJS view, e.g.:
+ *     'not-found-root',  // views/404.ejs — 404 page, rendered after auth
  *   Pass 4 first fails for any entry that is missing this annotation, then
  *   verifies that every annotated id is present in THAT SPECIFIC file — not
- *   just somewhere in public/.  This catches the case where a typo (e.g.
+ *   just somewhere in views/.  This catches the case where a typo (e.g.
  *   "not-found-roots") is introduced in the correct file while the original id
- *   happens to survive in another HTML file, allowing Pass 3 to pass silently.
+ *   happens to survive in another EJS view, allowing Pass 3 to pass silently.
  *
  *   Convention: when adding a new error/restricted page to BOOTSTRAP_ONLY_IDS,
- *   you MUST add a `// public/<filename>.html — <description>` annotation on
+ *   you MUST add a `// views/<filename>.ejs — <description>` annotation on
  *   the same line as the id string.  Omitting it is a CI failure.
  *
  * Exit codes:
  *   0 — no issues found
- *   1 — one or more mount ids appear in multiple HTML files (Pass 1), or
- *       one or more pages load main.js without any mount element (Pass 2), or
- *       one or more BOOTSTRAP_ONLY_IDS entries are absent from all HTML files
+ *   1 — one or more mount ids appear in multiple EJS views (Pass 1), or
+ *       one or more views load main.js without any mount element (Pass 2), or
+ *       one or more BOOTSTRAP_ONLY_IDS entries are absent from all EJS views
  *       (Pass 3), or
  *       one or more BOOTSTRAP_ONLY_IDS entries lack a canonical-file annotation
- *       or are absent from their declared canonical HTML file (Pass 4)
+ *       or are absent from their declared canonical EJS view (Pass 4)
  *
  * Usage:
  *   node scripts/check-mount-id-conflicts.mjs
@@ -135,11 +135,11 @@ for (const htmlFile of htmlFiles) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Report conflicts (mount ids that appear in more than one HTML file)
+// 3. Report conflicts (mount ids that appear in more than one EJS view)
 // ---------------------------------------------------------------------------
 
 console.log(
-  `[check-mount-id-conflicts] Scanned ${htmlFiles.length} HTML file(s) ` +
+  `[check-mount-id-conflicts] Scanned ${htmlFiles.length} EJS view(s) ` +
   `against ${mountIds.size} React mount id(s).`,
 );
 
@@ -162,23 +162,23 @@ if (conflicts.length === 0) {
     }
   }
   process.stderr.write(
-    '\nEach React mount id must appear in exactly one HTML page.\n' +
-    'When the same id appears in multiple pages, mountKnown() will render\n' +
+    '\nEach React mount id must appear in exactly one EJS view.\n' +
+    'When the same id appears in multiple views, mountKnown() will render\n' +
     'the React island into whichever element it finds first, making the\n' +
     'correct page\'s island invisible.\n\n' +
-    'Fix: rename the element id in the HTML file that should NOT be the\n' +
+    'Fix: rename the element id in the EJS view that should NOT be the\n' +
     'mount target, so it no longer collides with the MOUNTS table in\n' +
     'src/react/main.tsx.\n',
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pass 2: Every HTML page that loads main.js must have at least one mount id
+// Pass 2: Every EJS view that loads main.js must have at least one mount id
 // ---------------------------------------------------------------------------
 //
-// Suppression: pages where mount elements are injected dynamically (e.g. by
+// Suppression: views where mount elements are injected dynamically (e.g. by
 // chrome.js) can opt out of this check by adding a comment anywhere in the
-// HTML file:
+// EJS view:
 //
 //   <!-- main-js-no-mount-ok: <reason> -->
 //
@@ -214,27 +214,27 @@ if (missingMounts.length === 0) {
     process.stderr.write(`  ${f} loads /react/main.js but declares no element with a MOUNTS id\n`);
   }
   process.stderr.write(
-    '\nEvery HTML page that loads /react/main.js must contain at least one\n' +
+    '\nEvery EJS view that loads /react/main.js must contain at least one\n' +
     'element whose id matches an entry in the MOUNTS table in\n' +
-    'src/react/main.tsx.  A page with no mount element loads dead JS and\n' +
+    'src/react/main.tsx.  A view with no mount element loads dead JS and\n' +
     'likely has a missing or mis-named container element.\n\n' +
     'Fix: add the correct mount container element (e.g.\n' +
     '  <div id="react-my-page"></div>\n' +
-    ') to the HTML page, and ensure its id is registered in the MOUNTS\n' +
+    ') to the EJS view, and ensure its id is registered in the MOUNTS\n' +
     'table in src/react/main.tsx.\n',
   );
 }
 
 // ---------------------------------------------------------------------------
-// Pass 3: Every BOOTSTRAP_ONLY_IDS entry must appear in at least one HTML file
+// Pass 3: Every BOOTSTRAP_ONLY_IDS entry must appear in at least one EJS view
 // ---------------------------------------------------------------------------
 //
-// Pass 2 only checks that a page loading main.js has *some* valid MOUNTS id.
-// Error/restricted pages (like access-restricted.html) carry chrome mounts
+// Pass 2 only checks that a view loading main.js has *some* valid MOUNTS id.
+// Error/restricted pages (like access-restricted.ejs) carry chrome mounts
 // alongside their own container id, so Pass 2 would not catch a typo or
 // accidental removal of the specific container id for the error component.
-// Pass 3 checks each BOOTSTRAP_ONLY_IDS entry individually against all HTML
-// files, ensuring the container element is actually present.
+// Pass 3 checks each BOOTSTRAP_ONLY_IDS entry individually against all EJS
+// views, ensuring the container element is actually present.
 
 /**
  * Extracts the string values from a `new Set([ 'a', 'b', … ])` declaration
@@ -299,11 +299,11 @@ if (!pass3ParseError && !bootstrapOnlyIds) {
 
 // Build a combined HTML source string for a quick membership test.
 // We already read all files above; re-read here for clarity (files are small).
-/** @type {string[]} ids whose container element is missing from every HTML file */
+/** @type {string[]} ids whose container element is missing from every EJS view */
 const bootstrapIdsMissingFromHtml = [];
 
 if (!pass3ParseError) {
-  // Collect every id="…" value found across all HTML files.
+  // Collect every id="…" value found across all EJS views.
   const allHtmlIds = new Set();
   for (const htmlFile of htmlFiles) {
     const src = readFileSync(htmlFile, 'utf8');
@@ -349,7 +349,7 @@ if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
 
 // ---------------------------------------------------------------------------
 // Pass 4: Every BOOTSTRAP_ONLY_IDS entry must have a canonical-file annotation
-//         AND the id must be present in THAT SPECIFIC HTML file.
+//         AND the id must be present in THAT SPECIFIC EJS view.
 // ---------------------------------------------------------------------------
 //
 // Pass 4a — Annotation required:
