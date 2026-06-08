@@ -38,6 +38,8 @@ const FAVICON_SVG = resolve(PUBLIC_DIR, 'favicon.svg');
 
 // Brand palette (mirrors src/react/theme.ts BRAND_COLORS).
 const PLUM = '#200842';
+const PAPER = '#F6F1E7';
+const ORCHID = '#8B2BFF';
 
 mkdirSync(ICONS_DIR, { recursive: true });
 
@@ -99,6 +101,39 @@ function writeFaviconPng(file, size) {
 
 writeFaviconPng('favicon-16.png', 16);
 writeFaviconPng('favicon-32.png', 32);
+
+/**
+ * Generate the 1200x630 Open Graph / social-share preview image.
+ *
+ * Composites the wood-grain brand mark above the "Measure Once" wordmark on
+ * the plum brand field, with a thin orchid accent rule. This is the image link
+ * unfurls (Slack, WhatsApp, iMessage, etc.) show when a Measure Once URL is
+ * shared. Committed to public/og-image.png (NOT gitignored).
+ */
+function writeOgImage() {
+  const out = resolve(PUBLIC_DIR, 'og-image.png');
+  execFileSync('convert', [
+    '-size', '1200x630',
+    `xc:${PLUM}`,
+    // Wood-grain mark, centred and shifted up to leave room for the wordmark.
+    '(', SOURCE_MARK, '-resize', '260x260', ')',
+    '-gravity', 'center', '-geometry', '+0-110', '-compose', 'over', '-composite',
+    // "Measure Once" wordmark in paper.
+    '-gravity', 'center',
+    '-font', 'DejaVu-Sans-Bold', '-fill', PAPER,
+    '-pointsize', '108', '-kerning', '2',
+    '-annotate', '+0+95', 'Measure Once',
+    // Orchid accent rule + tagline beneath the wordmark.
+    '-fill', ORCHID, '-pointsize', '26', '-kerning', '8',
+    '-annotate', '+0+185', 'HARRY WARDROBES',
+    '-depth', '8',
+    '-define', 'png:color-type=6',
+    out,
+  ]);
+  console.log('[pwa-icons] wrote public/og-image.png (1200x630)');
+}
+
+writeOgImage();
 
 // Multi-resolution .ico fallback for legacy browsers that ignore SVG/PNG icons.
 const ICO_OUT = resolve(PUBLIC_DIR, 'favicon.ico');

@@ -215,7 +215,17 @@ app.get('/customer-info/:token', (req, res) => {
 });
 
 // Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
-app.get('/login', (_req, res) => res.render('login', { title: 'Sign in · Measure Once' }));
+app.get('/login', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.render('login', {
+    title: 'Sign in · Measure Once',
+    description: 'Sign in to your Measure Once project dashboard.',
+    ogTitle: 'Measure Once',
+    ogDescription: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.',
+    ogUrl: `${baseUrl}/login`,
+    ogImage: `${baseUrl}/og-image.png`,
+  });
+});
 app.get('/set-password', (_req, res) => res.render('set-password', { title: 'Set password · Measure Once' }));
 app.get('/onboarding', (_req, res) => res.render('onboarding', { title: 'Complete your profile · Measure Once' }));
 
