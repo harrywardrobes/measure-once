@@ -1,0 +1,31 @@
+Root cause found: this app uses **full server round-trip navigation** (plain `<a href="/customers">` anchors triggering fresh page loads of separate EJS views), not client-side routing — so when offline, clicking to a new page hangs on the browser fetching a fresh HTML document that can't be reached, with zero caching to fall back on. Here's the prompt:
+
+---
+
+**Replit prompt:**
+
+> Fix navigation hanging/failing when the app is offline — e.g. clicking through to the Customers page does nothing or hangs indefinitely with no signal control returns to the user.
+>
+> **Root cause**: This app uses full server-rendered page navigation, not client-side routing. Links like `href="/customers"` (`src/react/components/GlobalHeader.tsx:354`, `BottomNav.tsx:302`/`385`) are plain anchor tags with no `onClick`/router — clicking them triggers a fresh `GET /customers` request for a new HTML document (separate EJS views per page in `views/`). When offline, that document fetch fails/hangs at the browser level *before any React code runs* — there's currently no service worker or cache to serve a fallback, so the user is stuck.
+>
+> Compounding this: pages are also lazy-loaded as separate JS chunks (`src/react/main.tsx:54-76`, e.g. `CustomersPage-*.js`). Even if the HTML shell were cached, the page's JS chunk still needs fetching — without a cache, that `import()` rejects and the `Suspense` fallback skeleton (`CustomersPageSkeleton`, `main.tsx:217`) just spins forever with no retry/error UI.
+>
+> **What to build:**
+>
+> 1. **Add a service worker that caches the app shell, page documents, and JS/CSS chunks** using a cache-first-with-network-fallback (or stale-while-revalidate) strategy:
+>    - Precache the core static assets (`main.js`, CSS, fonts, icons) on install.
+>    - Cache the HTML documents for the major pages (`/`, `/customers`, `/projects`, etc. — check `server.js` route list for the full set of EJS-rendered pages) and their corresponding lazy-loaded chunks (`public/react/chunks/*.js`) as they're visited, so revisiting them works offline.
+>    - On a failed navigation fetch (offline), serve the cached version of that document/chunk if available, rather than letting the browser hang on a failed network request.
+>
+> 2. **Add a PWA manifest** (`public/manifest.json`) so the app can register/control its own caching lifecycle properly (this is also a prerequisite for any future offline work).
+>
+> 3. **Add a clear "offline" UI state**: detect connectivity via `navigator.onLine` + the `online`/`offline` window events, and:
+>    - Show a visible banner/indicator when offline so users understand why navigation might behave differently or show stale data.
+>    - For pages/chunks that genuinely aren't cached yet (first-ever visit while offline), show a friendly "you're offline and this page hasn't been loaded before — reconnect to view it" message instead of an indefinite spinner. Wrap the lazy `import()` failure (in `main.tsx`'s `React.lazy` calls) with a retry-aware error boundary that surfaces this message rather than hanging in `Suspense`.
+>
+> 4. **Test thoroughly**: use browser devtools to go offline, then:
+>    - Navigate to a previously-visited page (e.g. Customers) — it should load instantly from cache, not hang.
+>    - Navigate to a page never visited this session — it should show the friendly offline message, not spin forever.
+>    - Reconnect — confirm the app detects this (via the `online` event) and recovers gracefully (e.g. removes the offline banner, allows fresh data fetches).
+>
+> Keep the scope to **fixing navigation/page-load reliability while offline** — this is a prerequisite for, but distinct from, full offline data editing/sync (a separate larger project). Don't attempt to convert the app to client-side routing as part of this fix; caching the existing server-rendered documents and chunks is the more contained and lower-risk approach.
