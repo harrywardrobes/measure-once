@@ -25,8 +25,11 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import EditIcon from '@mui/icons-material/Edit';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import { ContactEditModal } from './customer-detail/ContactEditModal';
+import type { Contact } from './customer-detail/types';
 import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { PhotosReceivedBadge } from '../components/PhotosReceivedBadge';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
@@ -449,6 +452,7 @@ function ProjectCard({
   rooms,
   platformUsers,
   canAssign,
+  canEdit,
   workflow,
   qb,
   cardActionHandlerFor,
@@ -457,11 +461,13 @@ function ProjectCard({
   onOpenFitterPicker,
   onNavigate,
   onOpenInvoice,
+  onOpenEdit,
 }: {
   contact: ProjectContact;
   rooms: RoomWithIdx[];
   platformUsers: ProjectPlatformUser[];
   canAssign: boolean;
+  canEdit: boolean;
   workflow: ProjectWorkflowDef | undefined;
   qb?: QBState;
   cardActionHandlerFor: (
@@ -479,6 +485,7 @@ function ProjectCard({
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
   onNavigate: (contactId: string, roomIdx: number) => void;
   onOpenInvoice: (firstId: string, allIds: string[]) => void;
+  onOpenEdit: (contactId: string) => void;
 }) {
   const name = getContactName(contact);
   const earliestInstall =
@@ -559,7 +566,7 @@ function ProjectCard({
     >
       {/* Card header */}
       <Box sx={{ p: '12px 14px 10px', borderBottom: `1px solid ${BRAND_COLORS.stone}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
           <Typography
             sx={{
               fontSize: '0.975rem',
@@ -575,6 +582,22 @@ function ProjectCard({
           >
             {name}
           </Typography>
+          {canEdit && (
+            <IconButton
+              size="small"
+              aria-label="Edit contact name"
+              title="Edit contact"
+              onClick={(e) => { e.stopPropagation(); onOpenEdit(contact.id); }}
+              sx={{
+                flexShrink: 0,
+                p: '3px',
+                color: BRAND_COLORS.ink4,
+                '&:hover': { color: BRAND_COLORS.ink2, background: BRAND_COLORS.stone },
+              }}
+            >
+              <EditIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          )}
           {installLabel && (
             <Typography
               sx={{
@@ -876,6 +899,7 @@ export function ProjectsPage() {
     roomAssignmentsStale,
     draftVisitIds,
     updateRoomAssignment,
+    updateContactProperties,
   } = useProjectsData();
 
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
@@ -939,6 +963,35 @@ export function ProjectsPage() {
     setInvDrawerAllIds(allIds);
     setInvDrawerOpen(true);
   }, []);
+
+  // Contact edit modal state — holds the full contact fetched from the API.
+  // We fetch on demand so the modal always shows up-to-date values and the
+  // PATCH sends all fields (not just the subset stored in ProjectContact).
+  const [editContactData, setEditContactData] = useState<Contact | null>(null);
+
+  const handleOpenEdit = useCallback(async (contactId: string) => {
+    try {
+      const res = await fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (res.status === 401) { window.location.href = '/login'; return; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as Contact;
+      setEditContactData(data);
+    } catch {
+      setToast({ msg: 'Could not load contact details', error: true });
+    }
+  }, []);
+
+  const handleContactSaved = useCallback((updated: Contact) => {
+    updateContactProperties(updated.id, {
+      firstname: updated.properties.firstname,
+      lastname:  updated.properties.lastname,
+      email:     updated.properties.email,
+      zip:       updated.properties.zip,
+    });
+    setEditContactData(null);
+  }, [updateContactProperties]);
 
   const qb = useQBInvoices();
   useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1191,6 +1244,7 @@ export function ProjectsPage() {
                     rooms={rooms}
                     platformUsers={platformUsers}
                     canAssign={canAssign}
+                    canEdit={canAssign}
                     workflow={workflow}
                     qb={qb}
                     cardActionHandlerFor={cardActionHandlerFor}
@@ -1199,6 +1253,7 @@ export function ProjectsPage() {
                     onOpenFitterPicker={handleOpenPicker}
                     onNavigate={handleNavigate}
                     onOpenInvoice={handleOpenInvoice}
+                    onOpenEdit={handleOpenEdit}
                   />
                 ))}
               </React.Fragment>
@@ -1217,6 +1272,7 @@ export function ProjectsPage() {
             rooms={rooms}
             platformUsers={platformUsers}
             canAssign={canAssign}
+            canEdit={canAssign}
             workflow={workflow}
             qb={qb}
             cardActionHandlerFor={cardActionHandlerFor}
@@ -1225,6 +1281,7 @@ export function ProjectsPage() {
             onOpenFitterPicker={handleOpenPicker}
             onNavigate={handleNavigate}
             onOpenInvoice={handleOpenInvoice}
+            onOpenEdit={handleOpenEdit}
           />
         ))}
       </>
@@ -1624,6 +1681,16 @@ export function ProjectsPage() {
         isAdmin={isAdmin}
         onSaved={qb.refresh}
       />
+
+      {/* Contact edit modal — only opens after the full contact is fetched */}
+      {editContactData && (
+        <ContactEditModal
+          contact={editContactData}
+          open={true}
+          onClose={() => setEditContactData(null)}
+          onSaved={handleContactSaved}
+        />
+      )}
     </Box>
   );
 }

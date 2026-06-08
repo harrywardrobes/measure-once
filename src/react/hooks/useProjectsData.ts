@@ -58,6 +58,7 @@ export interface ProjectsData {
   draftVisitIds: Record<string, number | string>;
   refresh: () => void;
   updateRoomAssignment: (contactId: string, roomIdx: number, fitterId: string | null) => void;
+  updateContactProperties: (contactId: string, props: Partial<ProjectContact['properties']>) => void;
 }
 
 declare global {
@@ -301,6 +302,20 @@ export function useProjectsData(): ProjectsData {
     [],
   );
 
+  // ── Optimistic contact-properties patch ────────────────────────────────────
+  const updateContactProperties = useCallback(
+    (contactId: string, props: Partial<ProjectContact['properties']>) => {
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contactId
+            ? { ...c, properties: { ...c.properties, ...props } }
+            : c,
+        ),
+      );
+    },
+    [],
+  );
+
   return {
     loading,
     error,
@@ -313,5 +328,6 @@ export function useProjectsData(): ProjectsData {
     draftVisitIds,
     refresh,
     updateRoomAssignment,
+    updateContactProperties,
   };
 }
