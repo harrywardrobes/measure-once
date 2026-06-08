@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import Alert from '@mui/material/Alert';
+import BrokenImageIcon from '@mui/icons-material/BrokenImage';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -19,6 +20,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SendIcon from '@mui/icons-material/Send';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
@@ -441,6 +443,67 @@ export function BulkReviewActions({ entries }: { entries: PendingPhotoReviewEntr
   );
 }
 
+// ── Submission photo thumbnail ─────────────────────────────────────────────────
+
+/**
+ * Renders a single submission photo thumbnail.  When the image fails to load
+ * a neutral placeholder fills the same 1:1 tile — no layout shift.  The
+ * placeholder copy distinguishes between offline (photo was not cached) and
+ * online (URL is genuinely broken / unavailable).
+ */
+function SubmissionPhoto({ url, index }: { url: string; index: number }) {
+  const [errored, setErrored] = useState(false);
+  const offline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+  if (errored) {
+    const Icon = offline ? WifiOffIcon : BrokenImageIcon;
+    const caption = offline ? 'Not saved for offline viewing' : 'Photo unavailable';
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          aspectRatio: '1',
+          borderRadius: 1.5,
+          bgcolor: 'grey.100',
+          border: '1px solid',
+          borderColor: 'divider',
+          p: 0.5,
+          gap: 0.5,
+        }}
+        aria-label={caption}
+        title={caption}
+      >
+        <Icon sx={{ fontSize: 22, color: 'text.disabled' }} />
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.disabled',
+            fontSize: '0.6rem',
+            textAlign: 'center',
+            lineHeight: 1.2,
+          }}
+        >
+          {caption}
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      component="img"
+      src={url}
+      alt={`Photo ${index + 1}`}
+      sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      loading="lazy"
+      onError={() => setErrored(true)}
+    />
+  );
+}
+
 // ── Submission card ───────────────────────────────────────────────────────────
 
 type ConflictTarget = 'copy' | 'open';
@@ -832,13 +895,7 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
                           borderColor: 'divider',
                         }}
                       >
-                        <Box
-                          component="img"
-                          src={url}
-                          alt={`Photo ${i + 1}`}
-                          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                          loading="lazy"
-                        />
+                        <SubmissionPhoto url={url} index={i} />
                       </Box>
                     ))}
                   </Box>
