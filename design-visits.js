@@ -2069,11 +2069,34 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
 router.post('/api/design-visits/sign-image-urls', isAuthenticated, requirePrivilege('member'), express.json({ limit: '256kb' }), async (req, res) => {
   const keys = Array.isArray(req.body?.storageKeys) ? req.body.storageKeys : null;
   if (!keys) return res.status(400).json({ error: 'storageKeys array is required' });
-  const urls = {};
-  for (const k of keys) {
-    if (typeof k === 'string' && dvUploads.isOpaqueKey(k)) {
-      urls[k] = dvUploads.signImageUrl(k);
+
+  const opaqueKeys = keys.filter(k => typeof k === 'string' && dvUploads.isOpaqueKey(k));
+
+  // Members may only re-sign keys they own (uploaded by them, or committed to a
+  // visit they created). Managers and admins may re-sign any valid key.
+  if (opaqueKeys.length > 0 && getRequestPrivilegeLevel(req) === 'member') {
+    const userId = String(req.user?.claims?.sub ?? '');
+    const owned = await pool.query(
+      `SELECT storage_key FROM design_visit_pending_uploads
+       WHERE storage_key = ANY($1) AND created_by = $2
+       UNION
+       SELECT dvri.storage_key
+       FROM design_visit_room_images dvri
+       JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+       JOIN design_visits dv       ON dv.id  = dvr.design_visit_id
+       WHERE dvri.storage_key = ANY($1) AND dv.created_by = $2`,
+      [opaqueKeys, userId],
+    );
+    const ownedSet = new Set(owned.rows.map(r => r.storage_key));
+    const foreign = opaqueKeys.filter(k => !ownedSet.has(k));
+    if (foreign.length) {
+      return res.status(403).json({ error: 'Forbidden: one or more image keys are not accessible to this user' });
     }
+  }
+
+  const urls = {};
+  for (const k of opaqueKeys) {
+    urls[k] = dvUploads.signImageUrl(k);
   }
   return res.json({ urls });
 });
