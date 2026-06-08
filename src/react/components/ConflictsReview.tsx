@@ -22,6 +22,7 @@ import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
 import type { ConflictEntry, OfflineArea, ResolveConflictResult } from '../lib/offlineQueue';
 import { resolveConflictRoute } from '../lib/conflictRoute';
 import { explainConflict } from '../lib/syncErrorMessages';
+import { fmtGbp } from '../pages/customer-detail/types';
 
 // ── Offline sync-conflict review ─────────────────────────────────────────────────
 // When a queued offline edit replays onto a record that changed on the server,
@@ -127,6 +128,90 @@ function valuesEqual(a: unknown, b: unknown): boolean {
   }
 }
 
+/** Shared styling for a side-by-side diff cell: the chosen side is emphasised,
+ *  the discarded side is dimmed and struck through (only when the value changed). */
+function diffCellSx(changed: boolean, side: FieldChoice, choice: FieldChoice) {
+  return {
+    wordBreak: 'break-word' as const,
+    fontWeight: changed && choice === side ? 600 : 400,
+    color: changed && choice !== side ? 'text.secondary' : 'text.primary',
+    textDecoration: changed && choice !== side ? 'line-through' : 'none',
+  };
+}
+
+// ── Room-by-room diff (design-visit `rooms`) ─────────────────────────────────────
+// A design visit's `rooms` is an array of per-room objects; shown as a raw JSON
+// blob it's unreadable, so we normalise each room to a handful of human-readable
+// attributes and compare them side by side. The queued edit uses the write shape
+// (camelCase: `roomName`, `doorStyleId`, `widthMm`…) while the server snapshot
+// uses the read shape (snake_case: `room_name`, `door_style_name`, `width_mm`…),
+// so every accessor falls back across both. Door style is special: the edit body
+// carries only the numeric id, the server snapshot carries both the id and the
+// resolved name — so we *compare* by id but *display* the friendly name when the
+// server has it (the edit side can only show `Style #<id>`).
+
+interface NormalizedRoom {
+  name: string;
+  doorStyle: string;
+  dimensions: string;
+  units: string;
+  price: string;
+}
+
+function roomField(room: unknown, camel: string, snake: string): unknown {
+  if (!room || typeof room !== 'object' || Array.isArray(room)) return undefined;
+  const r = room as Record<string, unknown>;
+  if (r[camel] != null && r[camel] !== '') return r[camel];
+  if (r[snake] != null && r[snake] !== '') return r[snake];
+  return undefined;
+}
+
+function formatPence(value: unknown): string {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `£${fmtGbp(n)}`;
+}
+
+function formatDimensions(room: unknown): string {
+  const w = roomField(room, 'widthMm', 'width_mm');
+  const h = roomField(room, 'heightMm', 'height_mm');
+  const d = roomField(room, 'depthMm', 'depth_mm');
+  if (w == null && h == null && d == null) return '—';
+  const part = (v: unknown) => (v == null ? '—' : String(v));
+  return `${part(w)} × ${part(h)} × ${part(d)} mm`;
+}
+
+function normalizeRoom(room: unknown): NormalizedRoom {
+  const name = roomField(room, 'roomName', 'room_name');
+  const doorName = roomField(room, 'doorStyleName', 'door_style_name');
+  const doorId = roomField(room, 'doorStyleId', 'door_style_id');
+  const units = roomField(room, 'unitCount', 'unit_count');
+  return {
+    name: name == null ? '' : String(name),
+    doorStyle:
+      doorName != null ? String(doorName) : doorId != null ? `Style #${doorId}` : '—',
+    dimensions: formatDimensions(room),
+    units: units == null ? '—' : String(units),
+    price: formatPence(roomField(room, 'unitPricePence', 'unit_price_pence')),
+  };
+}
+
+/** Compare a single room attribute across the two raw rooms, using the
+ *  underlying value (e.g. door-style *id*, not the displayed name). */
+function roomAttrChanged(a: unknown, s: unknown, key: 'door' | 'dim' | 'units' | 'price'): boolean {
+  const str = (v: unknown) => (v == null ? '' : String(v));
+  switch (key) {
+    case 'door':
+      return str(roomField(a, 'doorStyleId', 'door_style_id')) !== str(roomField(s, 'doorStyleId', 'door_style_id'));
+    case 'units':
+      return str(roomField(a, 'unitCount', 'unit_count')) !== str(roomField(s, 'unitCount', 'unit_count'));
+    case 'price':
+      return str(roomField(a, 'unitPricePence', 'unit_price_pence')) !== str(roomField(s, 'unitPricePence', 'unit_price_pence'));
+    case 'dim':
+      return formatDimensions(a) !== formatDimensions(s);
+  }
+}
+
 // ── Write-shape ↔ read-shape key normalisation ──────────────────────────────────
 // A queued edit's body uses the *write* field names the endpoint accepts, while
 // the server snapshot uses the *read* field names it returns. For most areas
@@ -185,6 +270,10 @@ export interface FieldDiffRow {
   label: string;
   attempted: unknown;
   server: unknown;
+  /** Raw (un-projected) server value, looked up by write→read key. Used by the
+   *  rich room-by-room renderer, which needs server-only fields like
+   *  `door_style_name` that the projection drops. */
+  serverRaw: unknown;
   changed: boolean;
 }
 
@@ -207,12 +296,14 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
     // Resolve the server value via write→read key normalisation (handles the
     // design-visit camelCase↔snake_case gap) and project it onto the attempted
     // shape so the comparison and the displayed "Server copy" line up.
-    const serverValue = projectServerValue(attempted[key], lookupServerValue(server, key));
+    const rawServerValue = lookupServerValue(server, key);
+    const serverValue = projectServerValue(attempted[key], rawServerValue);
     rows.push({
       key,
       label: humanizeKey(key),
       attempted: attempted[key],
       server: serverValue,
+      serverRaw: rawServerValue,
       changed: !valuesEqual(attempted[key], serverValue),
     });
   }
@@ -255,6 +346,125 @@ export function buildRestoreBody(
 
 /** Per-field resolution choice. `mine` keeps the queued edit; `server` restores. */
 type FieldChoice = 'mine' | 'server';
+
+const ROOM_ATTR_DEFS: Array<{ key: 'door' | 'dim' | 'units' | 'price'; label: string; field: keyof NormalizedRoom }> = [
+  { key: 'door', label: 'Door style', field: 'doorStyle' },
+  { key: 'dim', label: 'Dimensions (W × H × D)', field: 'dimensions' },
+  { key: 'units', label: 'Units', field: 'units' },
+  { key: 'price', label: 'Unit price', field: 'price' },
+];
+
+/** One room's side-by-side comparison. Rooms are paired by position: a room
+ *  present on only one side reads as added (your edit) or removed (server). */
+function RoomDiffBlock({
+  index,
+  attemptedRaw,
+  serverRaw,
+  choice,
+}: {
+  index: number;
+  attemptedRaw: unknown;
+  serverRaw: unknown;
+  choice: FieldChoice;
+}) {
+  const hasA = attemptedRaw != null;
+  const hasS = serverRaw != null;
+  const a = hasA ? normalizeRoom(attemptedRaw) : null;
+  const s = hasS ? normalizeRoom(serverRaw) : null;
+  const added = hasA && !hasS;
+  const removed = hasS && !hasA;
+
+  const attrs = ROOM_ATTR_DEFS.map((def) => ({
+    ...def,
+    mine: a ? a[def.field] : '—',
+    server: s ? s[def.field] : '—',
+    // A whole-room add/remove marks every attribute as changed; otherwise compare
+    // the underlying values (door style by id, not the displayed name).
+    changed: added || removed ? true : roomAttrChanged(attemptedRaw, serverRaw, def.key),
+  }));
+  const anyChanged = added || removed || attrs.some((x) => x.changed);
+
+  const title = a?.name || s?.name || '';
+  const status = added ? 'Added in your edit' : removed ? 'Only on server' : anyChanged ? 'Changed' : 'No changes';
+
+  return (
+    <Box
+      data-testid="conflict-room"
+      data-room-changed={anyChanged ? 'true' : 'false'}
+      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}
+    >
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+          {`Room ${index + 1}`}{title ? `: ${title}` : ''}
+        </Typography>
+        <Chip
+          size="small"
+          label={status}
+          variant="outlined"
+          color={added || removed ? 'warning' : anyChanged ? 'primary' : 'default'}
+          sx={{ height: 18, fontSize: 10, flexShrink: 0 }}
+        />
+      </Stack>
+      {anyChanged ? (
+        attrs.map((attr) => (
+          <Box key={attr.key} sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mt: 0.5 }}>
+            <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
+              {attr.label}
+            </Typography>
+            <Typography variant="body2" sx={diffCellSx(attr.changed, 'mine', choice)}>
+              {attr.mine}
+            </Typography>
+            <Typography variant="body2" sx={diffCellSx(attr.changed, 'server', choice)}>
+              {attr.server}
+            </Typography>
+          </Box>
+        ))
+      ) : (
+        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 0.25 }}>
+          No changes
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/** Render a design-visit `rooms` array as a legible room-by-room comparison
+ *  instead of a truncated JSON blob. `attempted` is the queued edit's rooms;
+ *  `server` is the raw server snapshot's rooms (kept un-projected so server-only
+ *  fields like `door_style_name` survive for display). */
+function RoomsDiff({
+  attempted,
+  server,
+  choice,
+}: {
+  attempted: unknown;
+  server: unknown;
+  choice: FieldChoice;
+}) {
+  const aRooms = Array.isArray(attempted) ? attempted : [];
+  const sRooms = Array.isArray(server) ? server : [];
+  const count = Math.max(aRooms.length, sRooms.length);
+  if (count === 0) {
+    return (
+      <Typography variant="body2" data-testid="conflict-rooms-empty" sx={{ color: 'text.disabled' }}>
+        No rooms
+      </Typography>
+    );
+  }
+  return (
+    <Stack spacing={1} data-testid="conflict-rooms-diff" sx={{ gridColumn: '1 / -1', mt: 0.5 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <RoomDiffBlock
+          key={i}
+          index={i}
+          attemptedRaw={aRooms[i] ?? null}
+          serverRaw={sRooms[i] ?? null}
+          choice={choice}
+        />
+      ))}
+    </Stack>
+  );
+}
 
 function FieldDiffSection({
   rows,
@@ -331,28 +541,18 @@ function FieldDiffSection({
                 <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
                   {row.label}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    wordBreak: 'break-word',
-                    fontWeight: row.changed && choice === 'mine' ? 600 : 400,
-                    color: row.changed && choice === 'server' ? 'text.secondary' : 'text.primary',
-                    textDecoration: row.changed && choice === 'server' ? 'line-through' : 'none',
-                  }}
-                >
-                  {formatFieldValue(row.attempted)}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    wordBreak: 'break-word',
-                    fontWeight: row.changed && choice === 'server' ? 600 : 400,
-                    color: row.changed && choice === 'mine' ? 'text.secondary' : 'text.primary',
-                    textDecoration: row.changed && choice === 'mine' ? 'line-through' : 'none',
-                  }}
-                >
-                  {formatFieldValue(row.server)}
-                </Typography>
+                {row.key === 'rooms' ? (
+                  <RoomsDiff attempted={row.attempted} server={row.serverRaw} choice={choice} />
+                ) : (
+                  <>
+                    <Typography variant="body2" sx={diffCellSx(row.changed, 'mine', choice)}>
+                      {formatFieldValue(row.attempted)}
+                    </Typography>
+                    <Typography variant="body2" sx={diffCellSx(row.changed, 'server', choice)}>
+                      {formatFieldValue(row.server)}
+                    </Typography>
+                  </>
+                )}
                 {row.changed && (
                   <ToggleButtonGroup
                     exclusive

@@ -28,6 +28,12 @@ const SAMPLE: ConflictEntry[] = [
       notes: 'Customer ready to proceed with the kitchen.',
       appointmentDate: '2026-06-12',
       estimateTotal: 8200,
+      // Write shape: camelCase, door style by id. Room 1 changed (units + price),
+      // Room 2 (Utility) added in this edit but absent on the server.
+      rooms: [
+        { roomName: 'Kitchen', doorStyleId: 3, widthMm: 3200, heightMm: 2400, depthMm: 600, unitCount: 12, unitPricePence: 145000 },
+        { roomName: 'Utility', doorStyleId: 3, widthMm: 1800, heightMm: 2400, depthMm: 600, unitCount: 5, unitPricePence: 62000 },
+      ],
     },
     serverData: {
       contact_id: '4071',
@@ -38,6 +44,10 @@ const SAMPLE: ConflictEntry[] = [
         notes: 'Customer ready to proceed with the kitchen.',
         appointmentDate: '2026-06-10',
         estimateTotal: 7500,
+        // Read shape: snake_case, door style carries both id and resolved name.
+        rooms: [
+          { room_name: 'Kitchen', door_style_id: 3, door_style_name: 'Shaker White', width_mm: 3200, height_mm: 2400, depth_mm: 600, unit_count: 10, unit_price_pence: 139000 },
+        ],
       },
     },
     resolution: 'last_write_wins',
