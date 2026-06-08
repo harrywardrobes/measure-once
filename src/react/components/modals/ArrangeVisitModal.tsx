@@ -121,21 +121,31 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       if (draft.address) setAddress(draft.address);
       if (draft.bookedSlotIso) setBookedSlot(dayjs(draft.bookedSlotIso));
       if (draft.slotIso) setSlots(draft.slotIso.map(s => (s ? dayjs(s) : null)));
-      return;
+      // Fall through: still fetch contactInfo in the background so phone
+      // numbers are populated even when restoring from a saved draft.
+    } else {
+      setStep('loading');
     }
 
-    setStep('loading');
     POST('/api/card-actions/arrange-visit', { contactId: ctx.contactId })
       .then((data: unknown) => {
         const d = data as ContactInfo;
         setContactInfo(d);
-        setAddress(d.contactAddress || '');
-        setStep('call');
-        saveDraft(key, { step: 'call', address: d.contactAddress || '', slotIso: [null, null, null], bookedSlotIso: null });
+        if (!hasDraft) {
+          // Fresh open: initialise address and step from the API response.
+          setAddress(d.contactAddress || '');
+          setStep('call');
+          saveDraft(key, { step: 'call', address: d.contactAddress || '', slotIso: [null, null, null], bookedSlotIso: null });
+        }
       })
       .catch((e: Error) => {
-        setLoadError(e.message || 'Could not load contact info.');
-        setStep('call');
+        if (!hasDraft) {
+          // Fresh open: show the error and advance past the loading spinner.
+          setLoadError(e.message || 'Could not load contact info.');
+          setStep('call');
+        }
+        // Draft restore: phone numbers just won't appear if the API is
+        // unreachable; the user can still proceed with their saved state.
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

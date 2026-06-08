@@ -22,7 +22,7 @@ export default meta;
 type Story = StoryObj<typeof ArrangeVisitModal>;
 
 export const CallStepDesign: Story = {
-  name: 'Call step — design visit',
+  name: 'Call step — draft restored, landline only',
   decorators: [
     (Story) => {
       if (typeof window !== 'undefined') {
@@ -54,7 +54,7 @@ export const CallStepDesign: Story = {
 };
 
 export const MobileOnly: Story = {
-  name: 'Call step — mobile number only',
+  name: 'Call step — draft restored, mobile only',
   decorators: [
     (Story) => {
       if (typeof window !== 'undefined') {
@@ -86,7 +86,7 @@ export const MobileOnly: Story = {
 };
 
 export const BothNumbers: Story = {
-  name: 'Call step — landline and mobile',
+  name: 'Call step — draft restored, landline and mobile',
   decorators: [
     (Story) => {
       if (typeof window !== 'undefined') {

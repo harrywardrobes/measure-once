@@ -1596,7 +1596,7 @@ export function CustomersPage(): React.ReactElement {
             label="Sort by"
           />
 
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
             <Typography variant="body2">Show archived</Typography>
             <Toggle
               checked={showArchived}
@@ -1613,7 +1613,7 @@ export function CustomersPage(): React.ReactElement {
             />
           </Stack>
 
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
             {(() => {
               const counts = store.counts || {};
               const hiddenCount = !showExcluded
