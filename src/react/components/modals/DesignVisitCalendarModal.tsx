@@ -16,6 +16,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST, calendarErrorMessage } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -63,6 +64,7 @@ function clearDraft(key: string): void {
 }
 
 export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props) {
+  const showToast = useToast();
   const cfg = handler.config || {};
   const defaultDuration = (cfg.defaultDurationMin as number) || 60;
   const defaultTitle =
@@ -143,8 +145,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
         end: { dateTime: end.toISOString() },
       });
 
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Visit scheduled to the shared calendar', false);
+      showToast('Visit scheduled to the shared calendar', false);
       clearDraft(key);
       handleDismiss();
     } catch (e) {

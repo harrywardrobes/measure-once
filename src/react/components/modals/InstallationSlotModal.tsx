@@ -19,6 +19,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
 import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 interface CreateProps {
   mode?: 'create';
@@ -49,6 +50,7 @@ interface EditProps {
 type Props = CreateProps | CreateDirectProps | EditProps;
 
 export function InstallationSlotModal(props: Props) {
+  const showToast = useToast();
   const isEdit = props.mode === 'edit';
   const isCreateDirect = props.mode === 'create-direct';
   const visit = isEdit ? props.visit : undefined;
@@ -125,7 +127,6 @@ export function InstallationSlotModal(props: Props) {
     const end = new Date(start.getTime() + durationInt * 60000);
 
     setSubmitting(true);
-    const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
       if (isEdit && visit) {
         // Offline-aware edit. When offline / on a network error the visit update
@@ -156,7 +157,7 @@ export function InstallationSlotModal(props: Props) {
           throw new Error((res.data as { error?: string })?.error || 'Could not save.');
         }
         if (res.queued) {
-          w.showToast?.('Installation slot update saved offline — it will sync when you reconnect', false);
+          showToast('Installation slot update saved offline — it will sync when you reconnect', false);
           handleClose();
           props.onSaved?.();
           return;
@@ -175,14 +176,14 @@ export function InstallationSlotModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Installation slot updated; Google Calendar update failed: ${gcalMsg}`, true);
+            showToast(`Installation slot updated; Google Calendar update failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
           }
         }
 
-        w.showToast?.('Installation slot updated', false);
+        showToast('Installation slot updated', false);
         handleClose();
         props.onSaved?.();
       } else if (isCreateDirect) {
@@ -210,7 +211,7 @@ export function InstallationSlotModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Installation slot saved; Google Calendar add failed: ${gcalMsg}`, true);
+            showToast(`Installation slot saved; Google Calendar add failed: ${gcalMsg}`, true);
             handleClose();
             (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
             props.onSaved?.();
@@ -218,7 +219,7 @@ export function InstallationSlotModal(props: Props) {
           }
         }
 
-        w.showToast?.('Installation slot scheduled', false);
+        showToast('Installation slot scheduled', false);
         handleClose();
         (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
         props.onSaved?.();
@@ -239,7 +240,7 @@ export function InstallationSlotModal(props: Props) {
           return;
         }
 
-        w.showToast?.('Installation slot scheduled to the shared calendar', false);
+        showToast('Installation slot scheduled to the shared calendar', false);
         handleClose();
         props.onSaved?.();
       }

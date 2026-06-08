@@ -20,6 +20,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
 import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 interface CreateProps {
   mode?: 'create';
@@ -50,6 +51,7 @@ interface EditProps {
 type Props = CreateProps | CreateDirectProps | EditProps;
 
 export function DeliveryWindowModal(props: Props) {
+  const showToast = useToast();
   const isEdit = props.mode === 'edit';
   const isCreateDirect = props.mode === 'create-direct';
   const visit = isEdit ? props.visit : undefined;
@@ -120,7 +122,6 @@ export function DeliveryWindowModal(props: Props) {
     if (!start || !start.isValid() || !end || !end.isValid()) return;
 
     setSubmitting(true);
-    const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
       if (isEdit && visit) {
         // Offline-aware edit. When offline / on a network error the visit update
@@ -151,7 +152,7 @@ export function DeliveryWindowModal(props: Props) {
           throw new Error((res.data as { error?: string })?.error || 'Could not save.');
         }
         if (res.queued) {
-          w.showToast?.('Delivery window update saved offline — it will sync when you reconnect', false);
+          showToast('Delivery window update saved offline — it will sync when you reconnect', false);
           handleClose();
           props.onSaved?.();
           return;
@@ -170,14 +171,14 @@ export function DeliveryWindowModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Delivery window updated; Google Calendar update failed: ${gcalMsg}`, true);
+            showToast(`Delivery window updated; Google Calendar update failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
           }
         }
 
-        w.showToast?.('Delivery window updated', false);
+        showToast('Delivery window updated', false);
         handleClose();
         props.onSaved?.();
       } else if (isCreateDirect) {
@@ -205,7 +206,7 @@ export function DeliveryWindowModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`Delivery window saved; Google Calendar add failed: ${gcalMsg}`, true);
+            showToast(`Delivery window saved; Google Calendar add failed: ${gcalMsg}`, true);
             handleClose();
             (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
             props.onSaved?.();
@@ -213,7 +214,7 @@ export function DeliveryWindowModal(props: Props) {
           }
         }
 
-        w.showToast?.('Delivery window scheduled', false);
+        showToast('Delivery window scheduled', false);
         handleClose();
         (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
         props.onSaved?.();
@@ -234,7 +235,7 @@ export function DeliveryWindowModal(props: Props) {
           return;
         }
 
-        w.showToast?.('Delivery window scheduled to the shared calendar', false);
+        showToast('Delivery window scheduled to the shared calendar', false);
         handleClose();
         props.onSaved?.();
       }

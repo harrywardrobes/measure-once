@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 interface FollowUpProps {
   handler: CardActionHandlerData;
@@ -69,6 +70,7 @@ interface Props {
 
 export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
   const cfg = handler.config || {};
+  const showToast = useToast();
   const [summary, setSummary] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -92,8 +94,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
         summary: summary.trim(),
         notePrefix: (cfg.notePrefix as string) || '',
       });
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Note saved to HubSpot', false);
+      showToast('Note saved to HubSpot', false);
       setSavedSummary(summary.trim());
       setSummary('');
       handleClose();

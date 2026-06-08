@@ -17,6 +17,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -108,6 +109,7 @@ function formatExpiry(expiresAt: string): string {
 }
 
 export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Props) {
+  const showToast = useToast();
   const [phase, setPhase] = useState<Phase>('checking');
   const [linkStatus, setLinkStatus] = useState<LinkStatus | null>(null);
   const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(null);
@@ -209,8 +211,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to send');
       setPhase('sent');
-      const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
-      w.showToast?.('Email sent to customer', false);
+      showToast('Email sent to customer', false);
     } catch (e) {
       setError((e as Error).message);
     } finally {

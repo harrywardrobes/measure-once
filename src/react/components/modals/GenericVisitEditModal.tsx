@@ -18,6 +18,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
 import { PATCH, POST, isGoogleAuthError } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -55,6 +56,7 @@ interface CreateProps {
 type Props = EditProps | CreateProps;
 
 export function GenericVisitEditModal(props: Props) {
+  const showToast = useToast();
   const isCreate = props.mode === 'create';
   const isEdit = !isCreate;
 
@@ -99,7 +101,6 @@ export function GenericVisitEditModal(props: Props) {
     if (!end.isAfter(start)) { setError('End must be after start.'); return; }
 
     setSubmitting(true);
-    const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
       if (isCreate) {
         await POST('/api/visits', {
@@ -126,14 +127,14 @@ export function GenericVisitEditModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`${label} scheduled; Google Calendar add failed: ${gcalMsg}`, true);
+            showToast(`${label} scheduled; Google Calendar add failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
           }
         }
 
-        w.showToast?.(`${label} scheduled`, false);
+        showToast(`${label} scheduled`, false);
         handleClose();
         props.onSaved?.();
       } else {
@@ -166,7 +167,7 @@ export function GenericVisitEditModal(props: Props) {
           throw new Error((res.data as { error?: string })?.error || 'Could not save.');
         }
         if (res.queued) {
-          w.showToast?.(`${label} update saved offline — it will sync when you reconnect`, false);
+          showToast(`${label} update saved offline — it will sync when you reconnect`, false);
           handleClose();
           props.onSaved?.();
           return;
@@ -185,14 +186,14 @@ export function GenericVisitEditModal(props: Props) {
             const gcalMsg = isGoogleAuthError(gcalErr)
               ? "Google account isn't connected — reconnect in your profile to sync Calendar."
               : gcalErr instanceof Error ? gcalErr.message : 'error';
-            w.showToast?.(`${label} updated; Google Calendar update failed: ${gcalMsg}`, true);
+            showToast(`${label} updated; Google Calendar update failed: ${gcalMsg}`, true);
             handleClose();
             props.onSaved?.();
             return;
           }
         }
 
-        w.showToast?.(`${label} updated`, false);
+        showToast(`${label} updated`, false);
         handleClose();
         props.onSaved?.();
       }
