@@ -232,6 +232,20 @@ export async function removeEntry(id: number): Promise<void> {
 }
 
 /**
+ * Remove every non-syncing queued entry tagged with `dedupeKey`. Used when a
+ * write for that record just succeeded directly, so any earlier queued write for
+ * the same record is now superseded and must not replay. Entries mid-flight
+ * (`syncing`) are left alone — the sync engine owns their lifecycle.
+ */
+export async function removeQueuedByDedupeKey(dedupeKey: string): Promise<void> {
+  const all = await outboxGetAll<QueueEntry>();
+  const stale = all.filter((e) => e.dedupeKey === dedupeKey && e.status !== 'syncing');
+  if (!stale.length) return;
+  for (const e of stale) await outboxDelete(e.id);
+  _notify();
+}
+
+/**
  * Counts by lifecycle bucket for the pending-sync indicator. `pending` includes
  * entries awaiting their first attempt or a backoff retry; `failed` are those
  * that exhausted their retry budget and need attention.
@@ -306,7 +320,14 @@ export async function sendOrQueue(input: EnqueueInput): Promise<SendOrQueueResul
       }
       const r = await fetch(input.url, init);
       const data = await r.json().catch(() => ({}));
-      if (r.ok) return { queued: false, ok: true, status: r.status, data };
+      if (r.ok) {
+        // This write succeeded immediately and supersedes any write already
+        // queued for the same record (e.g. resuming a failed/pending edit while
+        // back online). Drop those stale entries so they don't replay later and
+        // overwrite the copy we just saved.
+        if (input.dedupeKey) await removeQueuedByDedupeKey(input.dedupeKey);
+        return { queued: false, ok: true, status: r.status, data };
+      }
       if (r.status >= 500 || r.status === 429 || r.status === 408) {
         await enqueue(input);
         return { queued: true, ok: false, status: r.status, data };

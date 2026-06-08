@@ -221,6 +221,60 @@ interface WizardState {
   existingVisit: ExistingVisit | null;
 }
 
+/**
+ * Build an {@link ExistingVisit} the wizard can prefill from a **queued** edit
+ * payload (the wizard's own submit body) instead of the stale server copy, so a
+ * user resumes their unsynced changes. The wizard's prefill helpers read the
+ * server-style snake_case keys for step-1 fields and accept either casing for
+ * rooms, so we map the payload's camelCase keys across here.
+ *
+ * `version`/`updated_at` carry the conflict base the original queued edit was
+ * built on, so re-saving keeps the same base (and the same record/dedupe key)
+ * rather than re-reading a fresher server version. Returns `null` when the body
+ * can't be read, letting the caller fall back to the server copy.
+ */
+function queuedBodyToExistingVisit(
+  body: Record<string, unknown> | null,
+  visitId: number,
+  baseVersion: number | null,
+  baseUpdatedAt: string | null,
+): ExistingVisit | null {
+  if (!body || typeof body !== 'object') return null;
+  // Shape check: a real queued design-visit edit always carries a `rooms` array
+  // (the wizard submits at least one room). A body without it is empty/corrupt,
+  // so signal "can't read" and let the caller fall back to the server copy.
+  if (!Array.isArray(body.rooms)) return null;
+  const rooms = body.rooms as Array<Record<string, unknown>>;
+  return {
+    id: visitId,
+    version: baseVersion,
+    updated_at: baseUpdatedAt,
+    visit_date: typeof body.visitDate === 'string' ? body.visitDate : undefined,
+    duration_min: typeof body.durationMin === 'number' ? body.durationMin : undefined,
+    location: typeof body.location === 'string' ? body.location : undefined,
+    handle_id: (body.handleId as string | number | null | undefined) ?? null,
+    furniture_range_id: (body.furnitureRangeId as string | number | null | undefined) ?? null,
+    notes: typeof body.notes === 'string' ? body.notes : undefined,
+    terms_accepted: !!body.termsAccepted,
+    rooms: rooms.map(r => ({
+      roomName:       typeof r.roomName === 'string' ? r.roomName : '',
+      doorStyleId:    (r.doorStyleId as string | number | undefined) ?? '',
+      widthMm:        typeof r.widthMm === 'number' ? r.widthMm : null,
+      heightMm:       typeof r.heightMm === 'number' ? r.heightMm : null,
+      depthMm:        typeof r.depthMm === 'number' ? r.depthMm : null,
+      unitCount:      typeof r.unitCount === 'number' ? r.unitCount : 1,
+      unitPricePence: typeof r.unitPricePence === 'number' ? r.unitPricePence : 0,
+      notes:          typeof r.notes === 'string' ? r.notes : '',
+      images: Array.isArray(r.images)
+        ? (r.images as Array<Record<string, unknown>>).map(i => ({
+            storageKey: typeof i.storageKey === 'string' ? i.storageKey : '',
+            mimeType:   typeof i.mimeType === 'string' ? i.mimeType : undefined,
+          }))
+        : [],
+    })),
+  };
+}
+
 /** Parse a `#design-visit-<id>` deep-link fragment into a numeric visit id. */
 function visitIdFromHash(hash: string): number | null {
   const m = hash.match(/^#design-visit-(\d+)$/);
@@ -345,28 +399,28 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
       contactName:  detail.contact_name  || '',
       contactEmail: detail.contact_email || '',
     };
+
+    // If this visit has unsynced changes queued on this device, resume from that
+    // payload so the user continues from their own edits rather than the stale
+    // server copy. Saving re-uses the same record/dedupe key, replacing the
+    // queued entry instead of adding a second conflicting edit. Fall back to the
+    // server copy when the queued body can't be read.
+    const pending = pendingEditByVisitId.get(id);
+    let existingVisit: ExistingVisit = detail as unknown as ExistingVisit;
+    if (pending && pending.status !== 'synced') {
+      const resumed = queuedBodyToExistingVisit(
+        pending.queuedBody, id, pending.baseVersion, pending.baseUpdatedAt,
+      );
+      if (resumed) existingVisit = resumed;
+    }
+
     setEditingId(id);
-    setWizardState({ handler: { config: {} }, ctx, existingVisit: detail as unknown as ExistingVisit });
-  }, [visits, details, contactId]);
+    setWizardState({ handler: { config: {} }, ctx, existingVisit });
+  }, [visits, details, contactId, pendingEditByVisitId]);
 
   const handleEdit = useCallback((id: number) => {
-    // A queued (pending/syncing/failed) edit for this same visit means an
-    // earlier set of changes hasn't reached the server yet. Editing the server
-    // copy now risks overwriting those queued changes once both replay, so warn
-    // and let the user wait for sync or knowingly proceed on the stale copy.
-    const pending = pendingEditByVisitId.get(id);
-    if (pending && pending.status !== 'synced') {
-      const detail = pending.status === 'failed'
-        ? "This visit has changes that failed to sync and haven't reached the server yet."
-        : "This visit has changes saved on this device that haven't synced to the server yet.";
-      window.showBottomConfirm(
-        `${detail} Editing now means you'll change the server copy, which could overwrite those unsynced changes once they upload. Edit anyway?`,
-        () => openWizardForEdit(id),
-      );
-      return;
-    }
     openWizardForEdit(id);
-  }, [pendingEditByVisitId, openWizardForEdit]);
+  }, [openWizardForEdit]);
 
   return (
     <>
@@ -446,9 +500,13 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                       style={sxSecondaryBtn}
                       disabled={editingId === v.id}
                       data-cah-loading={editingId === v.id ? '1' : undefined}
+                      data-testid="dv-edit-btn"
                       onClick={() => handleEdit(v.id)}
                     >
-                      Edit
+                      {(() => {
+                        const pe = pendingEditByVisitId.get(v.id);
+                        return pe && pe.status !== 'synced' ? 'Resume changes' : 'Edit';
+                      })()}
                     </button>
                   )}
                   {isAdmin && canRevise && (

@@ -34,6 +34,16 @@ export interface PendingVisitEntry {
   /** Estimate total derived from the queued room lines, in pence. */
   estimateTotalPence: number;
   lastError?: string;
+  /**
+   * The raw queued request body (the wizard's submit payload). Exposed so an
+   * edit can be resumed from the user's unsynced changes rather than the stale
+   * server copy. `null` when the entry carries no JSON body (e.g. multipart).
+   */
+  queuedBody: Record<string, unknown> | null;
+  /** Server `version` this queued edit was based on (for conflict detection). */
+  baseVersion: number | null;
+  /** Server `updated_at` this queued edit was based on (ISO string). */
+  baseUpdatedAt: string | null;
 }
 
 function parseEntry(e: QueueEntry): PendingVisitEntry | null {
@@ -42,7 +52,12 @@ function parseEntry(e: QueueEntry): PendingVisitEntry | null {
   if (e.area !== 'visit') return null;
   if (!e.url.startsWith('/api/design-visits')) return null;
 
-  const body = (e.body ?? {}) as Record<string, unknown>;
+  // Preserve raw-body semantics: `rawBody` is null when the entry carries no
+  // readable JSON body (e.g. a multipart write), so resume can fall back to the
+  // server copy rather than prefilling from an empty object. `body` is a safe
+  // accessor only for deriving the summary fields below.
+  const rawBody = e.body && typeof e.body === 'object' ? (e.body as Record<string, unknown>) : null;
+  const body = (rawBody ?? {}) as Record<string, unknown>;
   const rooms = Array.isArray(body.rooms) ? (body.rooms as Array<Record<string, unknown>>) : [];
   const estimateTotalPence = rooms.reduce(
     (s, r) => s + (Number(r.unitPricePence) || 0) * (Number(r.unitCount) || 0),
@@ -66,6 +81,9 @@ function parseEntry(e: QueueEntry): PendingVisitEntry | null {
     createdAt: e.createdAt,
     estimateTotalPence,
     lastError: e.lastError,
+    queuedBody: rawBody,
+    baseVersion: typeof e.baseVersion === 'number' ? e.baseVersion : null,
+    baseUpdatedAt: typeof e.baseUpdatedAt === 'string' ? e.baseUpdatedAt : null,
   };
 }
 

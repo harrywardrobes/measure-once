@@ -12,6 +12,9 @@ const baseEntry: PendingVisitEntry = {
   visitDate: new Date('2026-06-08T10:30:00Z').toISOString(),
   createdAt: Date.parse('2026-06-08T10:30:00Z'),
   estimateTotalPence: 480000,
+  queuedBody: null,
+  baseVersion: null,
+  baseUpdatedAt: null,
 };
 
 const meta: Meta<typeof PendingVisitCard> = {
