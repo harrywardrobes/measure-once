@@ -530,49 +530,67 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
     const lastName  = (props.lastname  || '').trim();
     const name = [firstName, lastName].filter(Boolean).join(' ') || email;
 
-    const existingResult = await pool.query(
-      `SELECT id FROM customer_info_submissions
-       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
-       ORDER BY created_at DESC`,
-      [cid]
-    );
-    const existingRows = existingResult.rows;
-    const isResend = existingRows.length > 0;
-
     const rawToken  = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
     const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
 
-    if (isResend) {
-      const keepId = existingRows[0].id;
-      await pool.query(
-        `UPDATE customer_info_submissions
-         SET token_hash = $1, expires_at = $2, form_link = $3
-         WHERE id = $4`,
-        [tokenHash, expiresAt.toISOString(), formLink, keepId]
+    // Serialise concurrent generate-link requests for the same contact with a
+    // per-contact advisory lock held for the duration of the transaction.
+    // This prevents two simultaneous requests from both observing "no active
+    // row" and both inserting a fresh bearer token for the same contact.
+    const genClient = await pool.connect();
+    let isResend;
+    try {
+      await genClient.query('BEGIN');
+      await genClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
+
+      const existingResult = await genClient.query(
+        `SELECT id FROM customer_info_submissions
+         WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
+         ORDER BY created_at DESC`,
+        [cid]
       );
-      if (existingRows.length > 1) {
-        const staleIds = existingRows.slice(1).map(r => r.id);
-        await pool.query(
+      const existingRows = existingResult.rows;
+      isResend = existingRows.length > 0;
+
+      if (isResend) {
+        const keepId = existingRows[0].id;
+        await genClient.query(
           `UPDATE customer_info_submissions
-           SET expires_at = NOW()
-           WHERE id = ANY($1::int[])`,
-          [staleIds]
+           SET token_hash = $1, expires_at = $2, form_link = $3
+           WHERE id = $4`,
+          [tokenHash, expiresAt.toISOString(), formLink, keepId]
         );
-        logger.info(`[customer-info] Expired ${staleIds.length} stale duplicate link(s) for contact ${cid}`);
+        if (existingRows.length > 1) {
+          const staleIds = existingRows.slice(1).map(r => r.id);
+          await genClient.query(
+            `UPDATE customer_info_submissions
+             SET expires_at = NOW()
+             WHERE id = ANY($1::int[])`,
+            [staleIds]
+          );
+          logger.info(`[customer-info] Expired ${staleIds.length} stale duplicate link(s) for contact ${cid}`);
+        }
+        logger.info(`[customer-info] Refreshed existing link (id=${keepId}) for contact ${cid} (isResend=true)`);
+      } else {
+        await genClient.query(
+          `INSERT INTO customer_info_submissions
+             (contact_id, contact_name, contact_email, token_hash, expires_at,
+              masked_email, masked_phone, form_link)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [cid, name, email, tokenHash, expiresAt.toISOString(),
+           maskEmail(email), maskPhone(phone), formLink]
+        );
+        logger.info(`[customer-info] Created new link for contact ${cid} (isResend=false)`);
       }
-      logger.info(`[customer-info] Refreshed existing link (id=${keepId}) for contact ${cid} (isResend=true)`);
-    } else {
-      await pool.query(
-        `INSERT INTO customer_info_submissions
-           (contact_id, contact_name, contact_email, token_hash, expires_at,
-            masked_email, masked_phone, form_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [cid, name, email, tokenHash, expiresAt.toISOString(),
-         maskEmail(email), maskPhone(phone), formLink]
-      );
-      logger.info(`[customer-info] Created new link for contact ${cid} (isResend=false)`);
+
+      await genClient.query('COMMIT');
+    } catch (err) {
+      await genClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      genClient.release();
     }
 
     res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken, isResend });
@@ -632,26 +650,41 @@ router.post('/api/card-actions/upload-photos-and-info',
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
 
-    const expireResult = await pool.query(
-      `UPDATE customer_info_submissions
-       SET expires_at = NOW()
-       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
-      [cid]
-    );
-    if (expireResult.rowCount > 0) {
-      logger.info(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
-    }
-
     const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
 
-    await pool.query(
-      `INSERT INTO customer_info_submissions
-         (contact_id, contact_name, contact_email, token_hash, expires_at,
-          masked_email, masked_phone, form_link)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [cid, name, email, tokenHash, expiresAt.toISOString(),
-       maskEmail(email), maskPhone(phone), formLink]
-    );
+    // Atomically expire any existing active links and insert the new one so
+    // concurrent send-invite requests cannot leave two live bearer tokens.
+    const uploadClient = await pool.connect();
+    try {
+      await uploadClient.query('BEGIN');
+      await uploadClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
+
+      const expireResult = await uploadClient.query(
+        `UPDATE customer_info_submissions
+         SET expires_at = NOW()
+         WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+        [cid]
+      );
+      if (expireResult.rowCount > 0) {
+        logger.info(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
+      }
+
+      await uploadClient.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at,
+            masked_email, masked_phone, form_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [cid, name, email, tokenHash, expiresAt.toISOString(),
+         maskEmail(email), maskPhone(phone), formLink]
+      );
+
+      await uploadClient.query('COMMIT');
+    } catch (err) {
+      await uploadClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      uploadClient.release();
+    }
 
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
@@ -785,6 +818,20 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
       ]
     );
 
+    // Expire every other active-pending link for this contact so a spare bearer
+    // token that was issued before this submission cannot be used to submit a
+    // second, fraudulent response after the legitimate one has gone through.
+    const siblingResult = await client.query(
+      `UPDATE customer_info_submissions
+       SET expires_at = NOW()
+       WHERE contact_id = $1 AND id != $2
+         AND submitted_at IS NULL AND expires_at > NOW()`,
+      [row.contact_id, row.id]
+    );
+    if (siblingResult.rowCount > 0) {
+      logger.info(`[customer-info] Expired ${siblingResult.rowCount} sibling link(s) for contact ${row.contact_id} after submission`);
+    }
+
     await client.query('COMMIT');
 
     // Fetch fresh row for emails (outside the transaction — lock is released).
@@ -891,24 +938,40 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
   const freshExpiry = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
   const formLink   = `${appBaseUrl()}/customer-info/${encodeURIComponent(freshRaw)}`;
 
-  const expireResult = await pool.query(
-    `UPDATE customer_info_submissions
-     SET expires_at = NOW()
-     WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
-    [row.contact_id]
-  );
-  if (expireResult.rowCount > 0) {
-    logger.info(`[customer-info] Self-serve resend: expired ${expireResult.rowCount} active link(s) for contact ${row.contact_id} before inserting new one`);
-  }
+  // Atomically expire any existing active links and insert the new one.
+  // The advisory lock serialises concurrent self-serve resend requests for the
+  // same contact so only one fresh bearer token is issued at a time.
+  const resendExpClient = await pool.connect();
+  try {
+    await resendExpClient.query('BEGIN');
+    await resendExpClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [row.contact_id]);
 
-  await pool.query(
-    `INSERT INTO customer_info_submissions
-       (contact_id, contact_name, contact_email, token_hash, expires_at,
-        masked_email, masked_phone, form_link)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [row.contact_id, row.contact_name, row.contact_email, freshHash,
-     freshExpiry.toISOString(), row.masked_email, row.masked_phone, formLink]
-  );
+    const expireResult = await resendExpClient.query(
+      `UPDATE customer_info_submissions
+       SET expires_at = NOW()
+       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+      [row.contact_id]
+    );
+    if (expireResult.rowCount > 0) {
+      logger.info(`[customer-info] Self-serve resend: expired ${expireResult.rowCount} active link(s) for contact ${row.contact_id} before inserting new one`);
+    }
+
+    await resendExpClient.query(
+      `INSERT INTO customer_info_submissions
+         (contact_id, contact_name, contact_email, token_hash, expires_at,
+          masked_email, masked_phone, form_link)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [row.contact_id, row.contact_name, row.contact_email, freshHash,
+       freshExpiry.toISOString(), row.masked_email, row.masked_phone, formLink]
+    );
+
+    await resendExpClient.query('COMMIT');
+  } catch (err) {
+    await resendExpClient.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    resendExpClient.release();
+  }
 
   // 6. Log the resend (stores token_hash only — never the raw token).
   await pool.query(
@@ -1063,14 +1126,39 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
     const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
     const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
 
-    await pool.query(
-      `INSERT INTO customer_info_submissions
-         (contact_id, contact_name, contact_email, token_hash, expires_at,
-          masked_email, masked_phone, form_link)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [cid, name, email, tokenHash, expiresAt.toISOString(),
-       maskEmail(email), maskPhone(phone), formLink]
-    );
+    // Atomically expire any existing active links and insert the new one so
+    // concurrent staff resend requests cannot leave two live bearer tokens.
+    const staffResendClient = await pool.connect();
+    try {
+      await staffResendClient.query('BEGIN');
+      await staffResendClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
+
+      const staffExpireResult = await staffResendClient.query(
+        `UPDATE customer_info_submissions
+         SET expires_at = NOW()
+         WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+        [cid]
+      );
+      if (staffExpireResult.rowCount > 0) {
+        logger.info(`[customer-info] Resend: expired ${staffExpireResult.rowCount} active link(s) for contact ${cid} before inserting new one`);
+      }
+
+      await staffResendClient.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at,
+            masked_email, masked_phone, form_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [cid, name, email, tokenHash, expiresAt.toISOString(),
+         maskEmail(email), maskPhone(phone), formLink]
+      );
+
+      await staffResendClient.query('COMMIT');
+    } catch (err) {
+      await staffResendClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      staffResendClient.release();
+    }
 
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
@@ -1082,12 +1170,28 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
 // Authenticated (member+): list all submissions for a contact
 // Viewers are intentionally excluded — the response includes form_link,
 // signed photo URLs, and corrected contact details that a viewer must not see.
+// form_link (a public bearer credential) is only returned to manager/admin
+// users — a regular member can view submission history but cannot extract the
+// live bearer URL to impersonate the customer on the public form.
 // GET /api/customer-info/by-contact/:contactId
 router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const cid = String(req.params.contactId || '').trim();
   if (!cid || !/^\d+$/.test(cid)) {
     return res.status(400).json({ error: 'Invalid contactId.' });
   }
+
+  // Re-query the acting user's privilege so it is always up-to-date after a
+  // role change (the session-cached value lags until the next login).
+  const userId = req.user?.claims?.sub;
+  let canSeeFormLink = false;
+  try {
+    const privR = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+    const level = privR.rows[0]?.privilege_level || 'member';
+    canSeeFormLink = level === 'manager' || level === 'admin';
+  } catch {
+    // If the privilege lookup fails, default to not exposing the bearer link.
+  }
+
   const r = await pool.query(
     `SELECT id, contact_name, contact_email, created_at, expires_at, submitted_at,
             corrected_email, corrected_mobile, address_line1, city, postcode,
@@ -1102,6 +1206,8 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
     ...row,
     email_skipped_count: row.email_skipped_count ?? 0,
     photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
+    // Strip the bearer link from the response for non-manager/admin callers.
+    form_link: canSeeFormLink ? row.form_link : undefined,
   }));
   res.json(rows);
 });

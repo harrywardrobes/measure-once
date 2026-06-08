@@ -279,68 +279,126 @@ router.post('/api/card-actions/review-customer-photos',
     const subId = Number(submissionId);
     const range = outcome === 'rough_estimate_sent' ? (priceRange || '').trim().slice(0, 200) : null;
 
-    // Verify submission belongs to this contact and exists
+    // Use a transaction with a row-level lock on the submission to serialise
+    // concurrent review requests.  The duplicate-outcome check and the outcome
+    // INSERT both happen inside the transaction, so two parallel requests for
+    // the same submission cannot both pass the check before either inserts.
+    // The UNIQUE constraint on photo_review_outcomes(submission_id) added by
+    // migration 1749200000011 provides an additional database backstop.
     let submission;
+    let subject, body, htmlBody, toEmail;
+    const reviewerId = req.user?.claims?.sub || req.user?.id || 'unknown';
+
+    const reviewClient = await pool.connect();
     try {
-      const r = await pool.query(
-        `SELECT id, contact_id, contact_name, contact_email, corrected_email, submitted_at
-         FROM customer_info_submissions
-         WHERE id = $1 AND contact_id = $2`,
-        [subId, cid]
-      );
-      if (!r.rows.length) {
+      await reviewClient.query('BEGIN');
+
+      // Lock the submission row for the duration of the transaction.
+      let lockR;
+      try {
+        lockR = await reviewClient.query(
+          `SELECT id, contact_id, contact_name, contact_email, corrected_email, submitted_at
+           FROM customer_info_submissions
+           WHERE id = $1 AND contact_id = $2
+           FOR UPDATE`,
+          [subId, cid]
+        );
+      } catch (err) {
+        await reviewClient.query('ROLLBACK');
+        logger.error({ err: err.message }, '[photo-reviews] Submission lock error:');
+        return res.status(500).json({ error: 'Could not lock submission.' });
+      }
+
+      if (!lockR.rows.length) {
+        await reviewClient.query('ROLLBACK');
         return res.status(404).json({ error: 'Submission not found.' });
       }
-      submission = r.rows[0];
-    } catch (err) {
-      logger.error({ err: err.message }, '[photo-reviews] Submission lookup error:');
-      return res.status(500).json({ error: 'Could not look up submission.' });
-    }
+      submission = lockR.rows[0];
 
-    if (!submission.submitted_at) {
-      return res.status(400).json({ error: 'Submission has not been submitted yet.' });
-    }
+      if (!submission.submitted_at) {
+        await reviewClient.query('ROLLBACK');
+        return res.status(400).json({ error: 'Submission has not been submitted yet.' });
+      }
 
-    // Check not already reviewed
-    try {
-      const dup = await pool.query(
-        `SELECT id FROM photo_review_outcomes WHERE submission_id = $1 LIMIT 1`,
-        [subId]
-      );
+      // Check for an existing outcome inside the transaction — the row lock
+      // above ensures no concurrent request can insert one between this check
+      // and our own INSERT below.
+      let dup;
+      try {
+        dup = await reviewClient.query(
+          `SELECT id FROM photo_review_outcomes WHERE submission_id = $1 LIMIT 1`,
+          [subId]
+        );
+      } catch (err) {
+        await reviewClient.query('ROLLBACK');
+        logger.error({ err: err.message }, '[photo-reviews] Duplicate review check error:');
+        return res.status(500).json({ error: 'Could not check for duplicate review.' });
+      }
+
       if (dup.rows.length) {
+        await reviewClient.query('ROLLBACK');
         return res.status(409).json({ error: 'This submission has already been reviewed.' });
       }
+
+      toEmail = submission.corrected_email || submission.contact_email;
+      if (!toEmail) {
+        await reviewClient.query('ROLLBACK');
+        return res.status(400).json({ error: 'No email address on record for this customer.' });
+      }
+
+      // Compose the outcome email from the admin-editable template.
+      const firstName = submission.contact_name ? submission.contact_name.split(' ')[0] : '';
+      const templateKey = outcome === 'not_suitable'
+        ? 'photo_review_not_suitable'
+        : 'photo_review_rough_estimate';
+      const tmpl = await getEmailTemplate(templateKey);
+      const rendered = renderEmail(tmpl, {
+        textVars: { firstName, priceRange: range || '' },
+        htmlVars: { firstName: escapeHtml(firstName), priceRange: escapeHtml(range || '') },
+      });
+      subject = rendered.subject.slice(0, 500);
+      body    = rendered.text.slice(0, 10000);
+      // Only pass rendered HTML when the template actually defines a body_html;
+      // otherwise sendReviewEmail derives HTML from the text (preserving the
+      // original behaviour for the default text-only photo-review templates).
+      htmlBody = (tmpl && tmpl.body_html && tmpl.body_html.trim()) ? rendered.html : undefined;
+
+      // Insert the outcome record inside the transaction before sending any
+      // external side-effects.  This is the serialisation point: if a
+      // concurrent request already inserted (or if the UNIQUE constraint fires
+      // on a race that bypasses the lock), this INSERT will fail and we return
+      // 409 without sending a duplicate email.
+      try {
+        await reviewClient.query(
+          `INSERT INTO photo_review_outcomes
+             (submission_id, contact_id, outcome, price_range, email_subject, email_body, reviewed_by_user_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [subId, cid, outcome, range, subject, body, reviewerId]
+        );
+      } catch (err) {
+        await reviewClient.query('ROLLBACK');
+        // Unique-constraint violation means a concurrent request already recorded the outcome.
+        if (err.code === '23505') {
+          return res.status(409).json({ error: 'This submission has already been reviewed.' });
+        }
+        logger.error({ err: err.message }, '[photo-reviews] Failed to insert review outcome:');
+        return res.status(500).json({ error: 'Could not record review outcome.' });
+      }
+
+      await reviewClient.query('COMMIT');
     } catch (err) {
-      logger.error({ err: err.message }, '[photo-reviews] Duplicate review check error:');
-      return res.status(500).json({ error: 'Could not check for duplicate review.' });
+      await reviewClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      reviewClient.release();
     }
 
-    const toEmail = submission.corrected_email || submission.contact_email;
-    if (!toEmail) {
-      return res.status(400).json({ error: 'No email address on record for this customer.' });
-    }
-
-    // Compose the outcome email from the admin-editable template.
-    const firstName = submission.contact_name ? submission.contact_name.split(' ')[0] : '';
-    const templateKey = outcome === 'not_suitable'
-      ? 'photo_review_not_suitable'
-      : 'photo_review_rough_estimate';
-    const tmpl = await getEmailTemplate(templateKey);
-    const rendered = renderEmail(tmpl, {
-      textVars: { firstName, priceRange: range || '' },
-      htmlVars: { firstName: escapeHtml(firstName), priceRange: escapeHtml(range || '') },
-    });
-    const subject = rendered.subject.slice(0, 500);
-    const body    = rendered.text.slice(0, 10000);
-    // Only pass rendered HTML when the template actually defines a body_html;
-    // otherwise sendReviewEmail derives HTML from the text (preserving the
-    // original behaviour for the default text-only photo-review templates).
-    const htmlBody = (tmpl && tmpl.body_html && tmpl.body_html.trim()) ? rendered.html : undefined;
-
-    // Send email
+    // Send email after the outcome is durably committed — if the email fails
+    // the outcome is already recorded and no duplicate will be sent on retry.
     try {
       await sendReviewEmail(toEmail, subject, body, htmlBody);
     } catch (err) {
+      logger.error({ err: err.message }, '[photo-reviews] Failed to send review email (outcome already recorded):');
       return res.status(502).json({ error: 'Failed to send email: ' + err.message });
     }
 
@@ -356,19 +414,6 @@ router.post('/api/card-actions/review-customer-photos',
       } catch (err) {
         logger.error({ err: err.message }, '[photo-reviews] HubSpot update failed (non-fatal):');
       }
-    }
-
-    // Record outcome
-    try {
-      const reviewerId = req.user?.claims?.sub || req.user?.id || 'unknown';
-      await pool.query(
-        `INSERT INTO photo_review_outcomes
-           (submission_id, contact_id, outcome, price_range, email_subject, email_body, reviewed_by_user_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [subId, cid, outcome, range, subject, body, reviewerId]
-      );
-    } catch (err) {
-      logger.error({ err: err.message }, '[photo-reviews] Failed to record review outcome (non-fatal):');
     }
 
     return res.json({ ok: true });

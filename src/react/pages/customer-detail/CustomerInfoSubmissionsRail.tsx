@@ -937,7 +937,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [fromCache, setFromCache]     = useState(false);
   const [open, setOpen]               = useState(true);
   const [deepLinkId, setDeepLinkId]   = useState<number | null>(null);
-  const { isViewer }                  = usePrivilege();
+  const { isViewer, isManager, isAdmin } = usePrivilege();
   const pendingReviews                = useOfflinePhotoReviewEntries(contactId);
 
   const loadSubmissions = useCallback(() => {
@@ -1097,7 +1097,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
                 key={sub.id}
                 sub={sub}
                 contactId={contactId}
-                canResend={!isViewer}
+                canResend={isManager || isAdmin}
                 onResendSuccess={loadSubmissions}
                 isSuperseded={activeIds.has(sub.id) && index > 0}
                 autoExpand={sub.id === deepLinkId}
