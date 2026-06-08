@@ -5,6 +5,8 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const logger = require('./logger');
+const { runMigrations } = require('./db-migrate');
 const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
@@ -17,9 +19,9 @@ const {
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
-const { router: visitsRouter, ensureVisitsTable } = require('./visits');
-const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
-const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
+const { router: visitsRouter } = require('./visits');
+const { router: designVisitsRouter } = require('./design-visits');
+const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
 const app = express();
@@ -75,11 +77,11 @@ app.post('/api/hubspot/webhook',
     const secret = getCredential('client_secret');
     if (!secret) {
       if (process.env.NODE_ENV === 'production') {
-        console.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — rejecting webhook (production)');
+        logger.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — rejecting webhook (production)');
         return res.status(400).json({ error: 'Webhook signature verification not configured.' });
       }
       // Dev/staging: skip verification with a warning.
-      console.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — skipping signature verification (non-production dev convenience)');
+      logger.warn('[hs-webhook] HUBSPOT_CLIENT_SECRET not set — skipping signature verification (non-production dev convenience)');
     } else {
       // Verify HubSpot v3 HMAC signature.
       // Spec: HMAC-SHA256 of "{METHOD}{full URL}{raw body}{timestamp}", base64-encoded.
@@ -292,14 +294,12 @@ async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300
         ? hinted
         : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
       if (process.env.DEBUG_HUBSPOT) {
-        console.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms',
-          attempt + 1, err.response?.status || 'network', backoff);
+        logger.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms', attempt + 1, err.response?.status || 'network', backoff);
       }
       await sleep(backoff);
     }
   }
-  console.error('[hubspot-retry] all %d attempts exhausted endpoint=POST /crm/v3/objects/contacts/search finalStatus=%s',
-    maxAttempts, lastErr?.response?.status || 'network');
+  logger.error('[hubspot-retry] all %d attempts exhausted endpoint=POST /crm/v3/objects/contacts/search finalStatus=%s', maxAttempts, lastErr?.response?.status || 'network');
   throw lastErr;
 }
 
@@ -348,15 +348,13 @@ async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, max
         ? hinted
         : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
       if (process.env.DEBUG_HUBSPOT) {
-        console.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s',
-          attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
+        logger.warn('[hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s', attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
       }
       await sleep(backoff);
     }
   }
   const shortUrl = url.startsWith(HS) ? url.slice(HS.length) : url;
-  console.error('[hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s',
-    maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
+  logger.error('[hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s', maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
   throw lastErr;
 }
 
@@ -435,10 +433,10 @@ async function ensureHubSpotProperties() {
         { ...prop, groupName: 'contactinformation' },
         { headers: getHubSpotHeaders() }
       );
-      console.log(`  Created HubSpot property: ${prop.name}`);
+      logger.info(`  Created HubSpot property: ${prop.name}`);
     } catch (e) {
       if (e.response?.status !== 409) {
-        console.warn(`  Could not create property ${prop.name}: ${e.response?.data?.message || e.message}`);
+        logger.warn(`  Could not create property ${prop.name}: ${e.response?.data?.message || e.message}`);
       }
     }
   }
@@ -611,7 +609,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
         }
       );
     } catch (hsErr) {
-      console.error('[localdata] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
+      logger.error({ err: hsErr.message }, '[localdata] HubSpot PATCH failed after retries (non-fatal):');
     }
     clearContactCache();
     res.json({ success: true });
@@ -697,8 +695,7 @@ async function getSharedContactsCache() {
   if (_allContactsLastGood) {
     if (process.env.DEBUG_HUBSPOT) {
       const status = outcome.err?.response?.status;
-      console.warn('[contacts-all] HubSpot fetch failed (status=%s); serving stale contacts age=%dms',
-        status || 'network', Date.now() - _allContactsLastGood.fetchedAt);
+      logger.warn('[contacts-all] HubSpot fetch failed (status=%s); serving stale contacts age=%dms', status || 'network', Date.now() - _allContactsLastGood.fetchedAt);
     }
     return { contacts: _allContactsLastGood.contacts, stale: true };
   }
@@ -710,8 +707,7 @@ async function getSharedContactsCache() {
   // route already handles the 502 path cleanly.
   if (process.env.DEBUG_HUBSPOT) {
     const status = outcome.err?.response?.status;
-    console.warn('[contacts-all] HubSpot fetch failed (status=%s) and no stale snapshot available',
-      status || 'network');
+    logger.warn('[contacts-all] HubSpot fetch failed (status=%s) and no stale snapshot available', status || 'network');
   }
   return { contacts: [], stale: true, unavailable: true, _err: outcome.err };
 }
@@ -774,7 +770,7 @@ app.patch('/api/contacts/:id/rooms/:roomIdx/fitter', isAuthenticated, requireMan
       );
     } catch (hsErr) {
       syncFailed = true;
-      console.error('[rooms-fitter] HubSpot PATCH failed after retries (non-fatal):', hsErr.message);
+      logger.error({ err: hsErr.message }, '[rooms-fitter] HubSpot PATCH failed after retries (non-fatal):');
     }
 
     // Bust shared cache so next /api/localdata/all and /api/contacts-all reflect the new assignment
@@ -1093,7 +1089,7 @@ app.post('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req
     const allSubs = [...existing.filter(s => HS_WATCHED_PROPS.includes(s.propertyName)), ...created];
     return res.json({ ok: true, webhookUrl, subscriptions: allSubs, created: created.length });
   } catch (e) {
-    console.error('[hs-webhook] POST /api/admin/hubspot-webhook error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, '[hs-webhook] POST /api/admin/hubspot-webhook error:');
     return res.status(502).json({ error: e.response?.data?.message || e.message });
   }
 });
@@ -1116,12 +1112,12 @@ app.delete('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (r
       axios.delete(
         `${HS}/webhooks/v3/${encodeURIComponent(appId)}/subscriptions/${encodeURIComponent(s.id)}`,
         { headers: getHubSpotHeaders(), timeout: 10000 }
-      ).catch(err => console.warn('[hs-webhook] delete subscription error:', err.response?.data || err.message))
+      ).catch(err => logger.warn({ err: err.response?.data || err.message }, '[hs-webhook] delete subscription error:'))
     ));
 
     return res.json({ ok: true, deleted: toDelete.length });
   } catch (e) {
-    console.error('[hs-webhook] DELETE /api/admin/hubspot-webhook error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, '[hs-webhook] DELETE /api/admin/hubspot-webhook error:');
     return res.status(502).json({ error: e.response?.data?.message || e.message });
   }
 });
@@ -1246,7 +1242,7 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('PATCH /api/deals/:id HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'PATCH /api/deals/:id HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -1298,7 +1294,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
         contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
       }
     } catch (dbErr) {
-      console.warn('[contacts-all] could not read dev_mode_enabled:', dbErr.message);
+      logger.warn({ err: dbErr.message }, '[contacts-all] could not read dev_mode_enabled:');
     }
 
     // Server-side excluded_from_sales filter — only applied for Sales-board
@@ -1318,7 +1314,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
           });
         }
       } catch (dbErr) {
-        console.warn('[contacts-all] could not load excluded lead statuses:', dbErr.message);
+        logger.warn({ err: dbErr.message }, '[contacts-all] could not load excluded lead statuses:');
       }
     }
 
@@ -1543,8 +1539,7 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
   if (Date.now() < _leadStatusCountsCooldownUntil) {
     if (_leadStatusCountsLastGood) {
       if (process.env.DEBUG_HUBSPOT) {
-        console.warn('[lead-status-counts] cooldown active for %dms more; serving stale counts',
-          _leadStatusCountsCooldownUntil - Date.now());
+        logger.warn('[lead-status-counts] cooldown active for %dms more; serving stale counts', _leadStatusCountsCooldownUntil - Date.now());
       }
       res.setHeader('X-Cache-Status', 'stale');
       return res.json(_leadStatusCountsLastGood.counts);
@@ -1568,7 +1563,7 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
         if (err.response?.status === 429) {
           _leadStatusCountsCooldownUntil = Date.now() + LEAD_STATUS_COUNTS_COOLDOWN_MS;
           if (process.env.DEBUG_HUBSPOT) {
-            console.warn('[lead-status-counts] 429 wave detected; cooldown engaged for %ds', LEAD_STATUS_COUNTS_COOLDOWN_MS / 1000);
+            logger.warn('[lead-status-counts] 429 wave detected; cooldown engaged for %ds', LEAD_STATUS_COUNTS_COOLDOWN_MS / 1000);
           }
         }
         return { ok: false, err };
@@ -1593,8 +1588,7 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
   const status = e.response?.status;
   if (_leadStatusCountsLastGood && Date.now() - _leadStatusCountsLastGood.fetchedAt < LEAD_STATUS_COUNTS_STALE_MAX_MS) {
     if (process.env.DEBUG_HUBSPOT) {
-      console.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms',
-        status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
+      logger.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms', status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
     }
     res.setHeader('X-Cache-Status', 'stale');
     return res.json(_leadStatusCountsLastGood.counts);
@@ -1691,7 +1685,7 @@ app.get('/api/open-leads', async (req, res) => {
         _openLeadsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
         return { ok: true, results: allResults, total: allResults.length };
       } catch (err) {
-        console.error('[open-leads] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
+        logger.error('[open-leads] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
         return { ok: false, err };
       } finally {
         setImmediate(() => { _openLeadsInFlight = null; });
@@ -1709,7 +1703,7 @@ app.get('/api/open-leads', async (req, res) => {
   // Fetch failed — serve stale cache if available rather than surfacing an error.
   if (_openLeadsCache) {
     if (process.env.DEBUG_HUBSPOT) {
-      console.warn('[open-leads] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _openLeadsCache.fetchedAt);
+      logger.warn('[open-leads] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _openLeadsCache.fetchedAt);
     }
     res.setHeader('X-Cache-Status', 'stale');
     return res.json({ results: _openLeadsCache.results, total: _openLeadsCache.total });
@@ -1739,7 +1733,7 @@ async function applyProjectContactsDevModeFilter(results) {
       return results.filter(c => c.properties?.hw_test_user === 'true');
     }
   } catch (dbErr) {
-    console.warn('[project-contacts] could not read dev_mode_enabled:', dbErr.message);
+    logger.warn({ err: dbErr.message }, '[project-contacts] could not read dev_mode_enabled:');
   }
   return results;
 }
@@ -1813,7 +1807,7 @@ app.get('/api/project-contacts', async (req, res) => {
         _projectContactsCache = { results: allResults, total: allResults.length, fetchedAt: Date.now() };
         return { ok: true, results: allResults, total: allResults.length };
       } catch (err) {
-        console.error('[project-contacts] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
+        logger.error('[project-contacts] HubSpot fetch error (status=%s): %s', err.response?.status || 'network', err.message);
         return { ok: false, err };
       } finally {
         setImmediate(() => { _projectContactsInFlight = null; });
@@ -1832,7 +1826,7 @@ app.get('/api/project-contacts', async (req, res) => {
   // Fetch failed — serve stale cache if available rather than surfacing an error.
   if (_projectContactsCache) {
     if (process.env.DEBUG_HUBSPOT) {
-      console.warn('[project-contacts] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _projectContactsCache.fetchedAt);
+      logger.warn('[project-contacts] HubSpot fetch failed; serving stale cache age=%dms', Date.now() - _projectContactsCache.fetchedAt);
     }
     const results = await applyProjectContactsDevModeFilter(_projectContactsCache.results);
     res.setHeader('X-Cache-Status', 'stale');
@@ -2090,7 +2084,7 @@ app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
     );
     res.json(noteR.data);
   } catch (e) {
-    console.error('GET /api/deals/:id/notes HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'GET /api/deals/:id/notes HubSpot error:');
     res.json({ results: [] });
   }
 });
@@ -2174,7 +2168,7 @@ app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member')
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('POST /api/deals/:id/checklist HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'POST /api/deals/:id/checklist HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2209,11 +2203,9 @@ function getSharedCalendarId() {
   return id;
 }
 
-console.log(
-  (process.env.GOOGLE_SHARED_CALENDAR_ID || '').trim()
+logger.info((process.env.GOOGLE_SHARED_CALENDAR_ID || '').trim()
     ? '[calendar] Shared calendar configured (GOOGLE_SHARED_CALENDAR_ID is set).'
-    : '[calendar] WARNING: GOOGLE_SHARED_CALENDAR_ID is not set — scheduling actions will return a configuration error until it is set.'
-);
+    : '[calendar] WARNING: GOOGLE_SHARED_CALENDAR_ID is not set — scheduling actions will return a configuration error until it is set.');
 
 function classifyGoogleError(e) {
   const msg = (e.message || '').toLowerCase();
@@ -2388,7 +2380,7 @@ app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
     );
     res.json(noteR.data);
   } catch (e) {
-    console.error('GET /api/contacts/:id/notes HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'GET /api/contacts/:id/notes HubSpot error:');
     res.json({ results: [] });
   }
 });
@@ -2433,7 +2425,7 @@ app.post('/api/contacts/:id/workflow', isAuthenticated, requirePrivilege('member
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('POST /api/contacts/:id/workflow HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/:id/workflow HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2475,7 +2467,7 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('POST /api/deals/:id/workflow HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'POST /api/deals/:id/workflow HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2505,7 +2497,7 @@ app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
     );
     res.json(taskR.data);
   } catch (e) {
-    console.error('GET /api/contacts/:id/tasks HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'GET /api/contacts/:id/tasks HubSpot error:');
     res.json({ results: [] });
   }
 });
@@ -2532,7 +2524,7 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
       );
       assocResults = assocR.data?.results || [];
     } catch (e) {
-      console.error('POST /api/contacts/urgency assoc batch error:', e.response?.data || e.message);
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/urgency assoc batch error:');
       return res.json({ urgency });
     }
 
@@ -2564,7 +2556,7 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
         );
         for (const t of (taskR.data?.results || [])) tasksById.set(String(t.id), t);
       } catch (e) {
-        console.error('POST /api/contacts/urgency task batch error (chunk skipped):', e.response?.data || e.message);
+        logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/urgency task batch error (chunk skipped):');
       }
     }
 
@@ -2635,7 +2627,7 @@ app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'),
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('POST /api/contacts/:id/tasks HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/:id/tasks HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2682,7 +2674,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), require
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('PATCH /api/tasks/:id HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'PATCH /api/tasks/:id HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2718,7 +2710,7 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requir
     if (status === 429) {
       return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
     }
-    console.error('DELETE /api/tasks/:id HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'DELETE /api/tasks/:id HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
 });
@@ -2798,7 +2790,7 @@ app.get('/api/workflow-stages', isAuthenticated, async (req, res) => {
     _workflowStagesCache = { data, expiresAt: Date.now() + WORKFLOW_STAGES_CACHE_TTL_MS };
     res.json(data);
   } catch (e) {
-    console.error('GET /api/workflow-stages HubSpot error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'GET /api/workflow-stages HubSpot error:');
     res.json({});
   }
 });
@@ -2858,7 +2850,7 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
     const r = await pool.query('SELECT prefs FROM users WHERE id = $1', [userId]);
     res.json(r.rows[0]?.prefs || {});
   } catch (e) {
-    console.error('GET /api/users/me/prefs error:', e);
+    logger.error({ err: e }, 'GET /api/users/me/prefs error:');
     res.status(500).json({ error: 'Failed to load preferences' });
   }
 });
@@ -2914,7 +2906,7 @@ app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req,
     if (r.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json(r.rows[0].prefs);
   } catch (e) {
-    console.error('PATCH /api/users/me/prefs error:', e);
+    logger.error({ err: e }, 'PATCH /api/users/me/prefs error:');
     res.status(500).json({ error: 'Failed to save preferences' });
   }
 });
@@ -3025,92 +3017,10 @@ function actorDisplayName(claims) {
 }
 
 async function ensureTradesTable() {
-  await _tradesPool.query(`
-    CREATE TABLE IF NOT EXISTS trade_contacts (
-      id             SERIAL PRIMARY KEY,
-      name           VARCHAR NOT NULL,
-      trade_type     VARCHAR NOT NULL,
-      phone          VARCHAR,
-      email          VARCHAR,
-      areas_served   TEXT,
-      company_name   VARCHAR,
-      timescale      VARCHAR,
-      invoice_method VARCHAR,
-      payment_terms  VARCHAR,
-      notes          TEXT,
-      created_by     VARCHAR,
-      created_at     TIMESTAMP DEFAULT NOW()
-    );
-  `);
-  await _tradesPool.query(`
-    CREATE TABLE IF NOT EXISTS trade_companies (
-      id             SERIAL PRIMARY KEY,
-      company_name   VARCHAR NOT NULL,
-      trade_type     VARCHAR NOT NULL,
-      areas_served   TEXT,
-      timescale      VARCHAR,
-      invoice_method VARCHAR,
-      payment_terms  VARCHAR,
-      notes          TEXT,
-      created_by     VARCHAR,
-      created_at     TIMESTAMP DEFAULT NOW(),
-      legacy_id      INTEGER
-    );
-  `);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS created_by_name VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS updated_by_name VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS timescale_updated_at TIMESTAMP`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS website VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_companies ADD COLUMN IF NOT EXISTS company_phone VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_company_contacts ADD COLUMN IF NOT EXISTS preferred_contact VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_company_submissions ADD COLUMN IF NOT EXISTS website VARCHAR`);
-  await _tradesPool.query(`ALTER TABLE trade_company_submissions ADD COLUMN IF NOT EXISTS company_phone VARCHAR`);
-  await _tradesPool.query(`
-    CREATE TABLE IF NOT EXISTS trade_audit_log (
-      id         SERIAL PRIMARY KEY,
-      company_id INTEGER NOT NULL REFERENCES trade_companies(id) ON DELETE CASCADE,
-      actor_id   VARCHAR,
-      actor_name VARCHAR,
-      action     VARCHAR NOT NULL,
-      changed_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
-  await _tradesPool.query(`
-    CREATE TABLE IF NOT EXISTS trade_company_contacts (
-      id         SERIAL PRIMARY KEY,
-      company_id INTEGER NOT NULL REFERENCES trade_companies(id) ON DELETE CASCADE,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      name       VARCHAR NOT NULL,
-      role       VARCHAR,
-      phone      VARCHAR,
-      email      VARCHAR
-    );
-  `);
-  await _tradesPool.query(`
-    CREATE TABLE IF NOT EXISTS trade_company_submissions (
-      id               SERIAL PRIMARY KEY,
-      company_name     VARCHAR NOT NULL,
-      trade_type       VARCHAR NOT NULL,
-      areas_served     TEXT,
-      timescale        VARCHAR,
-      invoice_method   VARCHAR,
-      payment_terms    VARCHAR,
-      notes            TEXT,
-      contacts         JSONB NOT NULL DEFAULT '[]',
-      submitter_id     VARCHAR,
-      submitter_email  VARCHAR,
-      submitter_name   VARCHAR,
-      status           VARCHAR NOT NULL DEFAULT 'pending',
-      reviewer_id      VARCHAR,
-      reviewer_email   VARCHAR,
-      reviewer_name    VARCHAR,
-      rejection_reason TEXT,
-      created_at       TIMESTAMP DEFAULT NOW(),
-      reviewed_at      TIMESTAMP
-    );
-  `);
+  // Schema (trade_contacts/companies/contacts/submissions/audit + added columns)
+  // is created by migrations. This boot step performs the one-time legacy data
+  // migration: moving rows from the old trade_contacts table into the
+  // company-first model and backfilling the audit log for pre-audit companies.
   const { rows: unmigratedRows } = await _tradesPool.query(`
     SELECT * FROM trade_contacts
     WHERE id NOT IN (
@@ -3177,7 +3087,7 @@ app.get('/admin', async (req, res) => {
       const r = await pool.query('SELECT privilege_level FROM users WHERE id = $1', [userId]);
       admin = r.rows[0]?.privilege_level === 'admin';
     } catch (e) {
-      console.error('GET /admin admin check failed:', e);
+      logger.error({ err: e }, 'GET /admin admin check failed:');
     }
   }
   if (!admin) {
@@ -3464,7 +3374,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, as
         }
       }
     } catch (e) {
-      console.error('phone-directory: team lookup failed:', e.message);
+      logger.error({ err: e.message }, 'phone-directory: team lookup failed:');
     }
 
     // Trades: company_phone + each contact phone.
@@ -3493,7 +3403,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, as
         });
       }
     } catch (e) {
-      console.error('phone-directory: trades lookup failed:', e.message);
+      logger.error({ err: e.message }, 'phone-directory: trades lookup failed:');
     }
 
     // Customers: HubSpot contacts (phone + mobilephone). If HubSpot is not
@@ -3514,7 +3424,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, as
           }
         }
       } catch (e) {
-        console.error('phone-directory: customer lookup failed:', e.message);
+        logger.error({ err: e.message }, 'phone-directory: customer lookup failed:');
       }
     }
 
@@ -3913,34 +3823,6 @@ app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req,
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
 app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Measure Once', description: 'Submit and explore ideas, feature requests, and feedback for your Measure Once workspace.' }));
 
-async function ensureIdeasTables() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ideas (
-      id             SERIAL PRIMARY KEY,
-      author_user_id VARCHAR NOT NULL,
-      body           TEXT NOT NULL,
-      created_at     TIMESTAMP DEFAULT NOW()
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS idea_comments (
-      id             SERIAL PRIMARY KEY,
-      idea_id        INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
-      author_user_id VARCHAR NOT NULL,
-      body           TEXT NOT NULL,
-      created_at     TIMESTAMP DEFAULT NOW()
-    );
-  `);
-  await pool.query(`ALTER TABLE ideas ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
-  await pool.query(`ALTER TABLE idea_comments ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS idea_votes (
-      idea_id  INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
-      user_id  VARCHAR NOT NULL,
-      CONSTRAINT idea_votes_pk PRIMARY KEY (idea_id, user_id)
-    );
-  `);
-}
 
 app.get('/api/ideas', async (req, res) => {
   try {
@@ -3969,7 +3851,7 @@ app.get('/api/ideas', async (req, res) => {
       user_voted:    r.user_voted === 1,
     })));
   } catch (e) {
-    console.error('GET /api/ideas error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/ideas error:');
     res.status(500).json({ error: 'Could not load ideas.' });
   }
 });
@@ -3994,7 +3876,7 @@ app.post('/api/ideas', async (req, res) => {
       user_voted:    false,
     });
   } catch (e) {
-    console.error('POST /api/ideas error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/ideas error:');
     res.status(500).json({ error: 'Could not save idea.' });
   }
 });
@@ -4031,7 +3913,7 @@ app.post('/api/ideas/:id/vote', isAuthenticated, async (req, res) => {
     res.json({ vote_count: rows[0].vote_count, user_voted });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('POST /api/ideas/:id/vote error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/ideas/:id/vote error:');
     res.status(500).json({ error: 'Could not update vote.' });
   } finally {
     client.release();
@@ -4058,7 +3940,7 @@ app.get('/api/ideas/:id/comments', async (req, res) => {
       author_name: [r.first_name, r.last_name].filter(Boolean).join(' ') || r.author_email || 'Unknown',
     })));
   } catch (e) {
-    console.error('GET /api/ideas/:id/comments error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/ideas/:id/comments error:');
     res.status(500).json({ error: 'Could not load comments.' });
   }
 });
@@ -4084,7 +3966,7 @@ app.post('/api/ideas/:id/comments', async (req, res) => {
       author_name: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email || 'Unknown',
     });
   } catch (e) {
-    console.error('POST /api/ideas/:id/comments error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/ideas/:id/comments error:');
     res.status(500).json({ error: 'Could not save comment.' });
   }
 });
@@ -4106,7 +3988,7 @@ app.delete('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => 
     res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('DELETE /api/ideas/:id error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/ideas/:id error:');
     res.status(500).json({ error: 'Could not delete idea.' });
   } finally {
     client.release();
@@ -4137,7 +4019,7 @@ app.patch('/api/ideas/:id', isAuthenticated, requireAdmin, async (req, res) => {
     res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('PATCH /api/ideas/:id error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/ideas/:id error:');
     res.status(500).json({ error: 'Could not update idea.' });
   } finally {
     client.release();
@@ -4165,7 +4047,7 @@ app.delete('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, 
     res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('DELETE /api/ideas/:id/comments/:commentId error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/ideas/:id/comments/:commentId error:');
     res.status(500).json({ error: 'Could not delete comment.' });
   } finally {
     client.release();
@@ -4200,7 +4082,7 @@ app.patch('/api/ideas/:id/comments/:commentId', isAuthenticated, requireAdmin, a
     res.json({ id: after.id, body: after.body, edited_at: after.edited_at });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('PATCH /api/ideas/:id/comments/:commentId error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/ideas/:id/comments/:commentId error:');
     res.status(500).json({ error: 'Could not update comment.' });
   } finally {
     client.release();
@@ -4324,24 +4206,9 @@ async function generateUniqueShorthand(label, excludeKey) {
 }
 
 async function ensureLeadStatusTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS lead_status_config (
-      key                 TEXT PRIMARY KEY,
-      label               TEXT NOT NULL,
-      sort_order          INT  NOT NULL DEFAULT 0,
-      excluded_from_sales BOOLEAN NOT NULL DEFAULT FALSE
-    )
-  `);
-  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS stage VARCHAR(32)`);
-  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS is_null_row BOOLEAN NOT NULL DEFAULT FALSE`);
-  // Stable 4-char shorthand per lead status. Nullable so the null-sentinel row
-  // (is_null_row=TRUE) can stay without one; a partial UNIQUE index keeps
-  // non-null values unique.
-  await pool.query(`ALTER TABLE lead_status_config ADD COLUMN IF NOT EXISTS shorthand CHAR(4)`);
-  await pool.query(
-    `CREATE UNIQUE INDEX IF NOT EXISTS lead_status_config_shorthand_uniq
-       ON lead_status_config(shorthand) WHERE shorthand IS NOT NULL`
-  );
+  // Schema (lead_status_config + columns + shorthand unique index) is created by
+  // migrations. This boot step seeds data: the null-status sentinel, stage
+  // backfill for known seed keys, and initial statuses from HubSpot or defaults.
 
   // Ensure the sentinel null-status row exists (never overwrite an admin-changed label).
   await pool.query(
@@ -4381,11 +4248,11 @@ async function ensureLeadStatusTable() {
             [key, o.label || key, o.displayOrder ?? i, EXCLUDED_DEFAULTS.has(key)]
           );
         }
-        console.log(`  Lead status config seeded from HubSpot (${options.length} statuses)`);
+        logger.info(`  Lead status config seeded from HubSpot (${options.length} statuses)`);
         return;
       }
     } catch (e) {
-      console.warn('  Could not fetch hs_lead_status from HubSpot, falling back to defaults:', e.response?.data?.message || e.message);
+      logger.warn({ err: e.response?.data?.message || e.message }, '  Could not fetch hs_lead_status from HubSpot, falling back to defaults:');
     }
   }
 
@@ -4406,7 +4273,7 @@ async function ensureLeadStatusTable() {
       [s.key, s.label, s.sort_order, s.excluded_from_sales]
     );
   }
-  console.log('  Lead status config seeded with defaults (no HubSpot token)');
+  logger.info('  Lead status config seeded with defaults (no HubSpot token)');
 }
 
 // Backfill 4-char shorthand for any non-sentinel row that doesn't have one yet.
@@ -4423,10 +4290,10 @@ async function backfillLeadStatusShorthands() {
       const sh = await generateUniqueShorthand(r.label, r.key);
       await pool.query('UPDATE lead_status_config SET shorthand = $1 WHERE key = $2', [sh, r.key]);
     } catch (e) {
-      console.warn(`  Could not backfill shorthand for lead status ${r.key}:`, e.message);
+      logger.warn({ err: e.message }, `  Could not backfill shorthand for lead status ${r.key}:`);
     }
   }
-  console.log(`  Backfilled shorthand for ${rows.length} lead status(es).`);
+  logger.info(`  Backfilled shorthand for ${rows.length} lead status(es).`);
 }
 
 // Public authenticated: full ordered list for all frontend pages
@@ -4438,7 +4305,7 @@ app.get('/api/lead-statuses', isAuthenticated, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/lead-statuses error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/lead-statuses error:');
     res.status(500).json({ error: 'Could not load lead statuses.' });
   }
 });
@@ -4451,7 +4318,7 @@ app.get('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, r
     );
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/admin/lead-statuses error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/lead-statuses error:');
     res.status(500).json({ error: 'Could not load lead statuses.' });
   }
 });
@@ -4495,7 +4362,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
     for (const client of _hsWebhookSseClients) {
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
-    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
+    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
   } catch (e) {
     if (e.code === '23505') {
       // Could be key collision or shorthand collision — distinguish by constraint name.
@@ -4504,7 +4371,7 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       }
       return res.status(409).json({ error: 'A status with that key already exists.' });
     }
-    console.error('POST /api/admin/lead-statuses error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/admin/lead-statuses error:');
     res.status(500).json({ error: 'Could not add lead status.' });
   }
 });
@@ -4582,7 +4449,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
     for (const client of _hsWebhookSseClients) {
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
-    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
+    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
   } catch (e) {
     if (e.code === '23505') {
       if (String(e.constraint || '').includes('shorthand')) {
@@ -4590,7 +4457,7 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       }
       return res.status(409).json({ error: 'A status with that key already exists.' });
     }
-    console.error('PATCH /api/admin/lead-statuses/:key error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/lead-statuses/:key error:');
     res.status(500).json({ error: 'Could not update lead status.' });
   }
 });
@@ -4608,13 +4475,7 @@ const PAGE_FILTER_CONFIG_DEFAULTS = {
 };
 
 async function ensurePageFilterConfigTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS page_filter_config (
-      key        TEXT PRIMARY KEY,
-      value      TEXT NOT NULL,
-      updated_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
+  // Schema created by migrations; this boot step seeds default rows.
   for (const [key, def] of Object.entries(PAGE_FILTER_CONFIG_DEFAULTS)) {
     await pool.query(
       `INSERT INTO page_filter_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING`,
@@ -4657,7 +4518,7 @@ app.get('/api/page-filter-config', isAuthenticated, async (req, res) => {
     const config = await getPageFilterConfig();
     res.json(config);
   } catch (e) {
-    console.error('GET /api/page-filter-config error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/page-filter-config error:');
     res.status(500).json({ error: 'Could not load page filter config.' });
   }
 });
@@ -4672,7 +4533,7 @@ app.get('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async (r
     }
     res.json(result);
   } catch (e) {
-    console.error('GET /api/admin/page-filter-config error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/page-filter-config error:');
     res.status(500).json({ error: 'Could not load page filter config.' });
   }
 });
@@ -4710,7 +4571,7 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
     _invalidatePageFilterConfig();
     res.json(results);
   } catch (e) {
-    console.error('PATCH /api/admin/page-filter-config error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/page-filter-config error:');
     res.status(500).json({ error: 'Could not update page filter config.' });
   }
 });
@@ -4742,7 +4603,7 @@ app.get('/api/admin/email-templates', isAuthenticated, requireAdmin, async (req,
     );
     res.json(r.rows.map(_emailTemplateWithMeta));
   } catch (e) {
-    console.error('GET /api/admin/email-templates error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/email-templates error:');
     res.status(500).json({ error: 'Could not load email templates.' });
   }
 });
@@ -4764,7 +4625,7 @@ app.get('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, async 
     }
     res.json(_emailTemplateWithMeta(r.rows[0]));
   } catch (e) {
-    console.error('GET /api/admin/email-templates/:key error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/email-templates/:key error:');
     res.status(500).json({ error: 'Could not load email template.' });
   }
 });
@@ -4805,7 +4666,7 @@ app.patch('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, asyn
     await logAdminAction(adminEmail, 'update_email_template', null, `Updated email template: ${key}`);
     res.json(_emailTemplateWithMeta(r.rows[0]));
   } catch (e) {
-    console.error('PATCH /api/admin/email-templates/:key error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/email-templates/:key error:');
     res.status(500).json({ error: 'Could not update email template.' });
   }
 });
@@ -4854,24 +4715,6 @@ app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmi
 // per-contact PATCH error after retries), an entry is written here so admins
 // can see what was missed and re-trigger the clear manually.
 
-async function ensureSubstatusClearFailuresTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS substatus_clear_failures (
-      id            SERIAL PRIMARY KEY,
-      failed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_key   TEXT NOT NULL,
-      failure_type  TEXT NOT NULL,  -- 'search' | 'patch'
-      contact_id    TEXT,           -- populated for 'patch' failures
-      error_message TEXT,
-      resolved      BOOLEAN NOT NULL DEFAULT FALSE,
-      resolved_at   TIMESTAMPTZ
-    )
-  `);
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS substatus_clear_failures_deleted_key_idx
-       ON substatus_clear_failures (deleted_key, resolved)`
-  );
-}
 
 async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId, errorMessage }) {
   try {
@@ -4881,7 +4724,7 @@ async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId
       [deletedKey, failureType, contactId || null, errorMessage || null]
     );
   } catch (dbErr) {
-    console.error('[substatus-clear] Failed to persist failure record:', dbErr.message);
+    logger.error({ err: dbErr.message }, '[substatus-clear] Failed to persist failure record:');
   }
 }
 
@@ -4923,7 +4766,7 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
         } catch (patchErr) {
           failed++;
           const errMsg = patchErr.response?.data?.message || patchErr.message;
-          console.warn(`${label} PATCH contact ${cid} failed:`, errMsg);
+          logger.warn({ err: errMsg }, `${label} PATCH contact ${cid} failed:`);
           await _recordSubstatusClearFailure({
             deletedKey,
             failureType: 'patch',
@@ -4934,11 +4777,11 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
       }
     } while (after);
     if (cleared > 0 || failed > 0) {
-      console.log(`${label} cleared=${cleared} failed=${failed}`);
+      logger.info(`${label} cleared=${cleared} failed=${failed}`);
     }
   } catch (e) {
     const errMsg = e.response?.data?.message || e.message;
-    console.warn(`${label} search failed:`, errMsg);
+    logger.warn({ err: errMsg }, `${label} search failed:`);
     await _recordSubstatusClearFailure({
       deletedKey,
       failureType: 'search',
@@ -4983,15 +4826,15 @@ async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) 
           cleared++;
         } catch (patchErr) {
           failed++;
-          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+          logger.warn({ err: patchErr.response?.data?.message || patchErr.message }, `${label} PATCH contact ${cid} failed:`);
         }
       }
     } while (after);
     if (cleared > 0 || failed > 0) {
-      console.log(`${label} cleared=${cleared} failed=${failed}`);
+      logger.info(`${label} cleared=${cleared} failed=${failed}`);
     }
   } catch (e) {
-    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+    logger.warn({ err: e.response?.data?.message || e.message }, `${label} search failed:`);
   }
 }
 
@@ -5035,15 +4878,15 @@ async function backfillMisspelledAwphSubstatus() {
           patched++;
         } catch (patchErr) {
           failed++;
-          console.warn(`${label} PATCH contact ${cid} failed:`, patchErr.response?.data?.message || patchErr.message);
+          logger.warn({ err: patchErr.response?.data?.message || patchErr.message }, `${label} PATCH contact ${cid} failed:`);
         }
       }
     } while (after);
     if (patched > 0 || failed > 0) {
-      console.log(`${label} patched=${patched} failed=${failed}`);
+      logger.info(`${label} patched=${patched} failed=${failed}`);
     }
   } catch (e) {
-    console.warn(`${label} search failed:`, e.response?.data?.message || e.message);
+    logger.warn({ err: e.response?.data?.message || e.message }, `${label} search failed:`);
   }
 }
 
@@ -5076,10 +4919,10 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     for (const client of _hsWebhookSseClients) {
       try { client.write(_lsscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
-    syncLeadStatusesToHubSpot().catch(e => console.warn('HubSpot lead-status sync failed:', e.response?.data?.message || e.message));
-    clearOrphanedSubstatusesForDeletedStatus(key).catch(e => console.warn('Orphaned substatus clear failed:', e.message));
+    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
+    clearOrphanedSubstatusesForDeletedStatus(key).catch(e => logger.warn({ err: e.message }, 'Orphaned substatus clear failed:'));
   } catch (e) {
-    console.error('DELETE /api/admin/lead-statuses/:key error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/admin/lead-statuses/:key error:');
     res.status(500).json({ error: 'Could not delete lead status.' });
   }
 });
@@ -5111,7 +4954,7 @@ app.get('/api/admin/substatus-clear-failures', isAuthenticated, requireAdmin, as
     );
     res.json({ failures: rows });
   } catch (e) {
-    console.error('GET /api/admin/substatus-clear-failures error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/substatus-clear-failures error:');
     res.status(500).json({ error: 'Could not load substatus clear failures.' });
   }
 });
@@ -5133,10 +4976,10 @@ app.post('/api/admin/substatus-clear-failures/retry', isAuthenticated, requireAd
     );
     res.json({ ok: true, message: `Re-triggering substatus clear for key "${deletedKey}".` });
     clearOrphanedSubstatusesForDeletedStatus(deletedKey).catch(e =>
-      console.warn('Orphaned substatus clear (manual retry) failed:', e.message)
+      logger.warn({ err: e.message }, 'Orphaned substatus clear (manual retry) failed:')
     );
   } catch (e) {
-    console.error('POST /api/admin/substatus-clear-failures/retry error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/admin/substatus-clear-failures/retry error:');
     res.status(500).json({ error: 'Could not retry substatus clear.' });
   }
 });
@@ -5154,7 +4997,7 @@ app.delete('/api/admin/substatus-clear-failures/:id', isAuthenticated, requireAd
     if (rowCount === 0) return res.status(404).json({ error: 'Record not found or already resolved.' });
     res.json({ ok: true });
   } catch (e) {
-    console.error('DELETE /api/admin/substatus-clear-failures/:id error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/admin/substatus-clear-failures/:id error:');
     res.status(500).json({ error: 'Could not dismiss failure record.' });
   }
 });
@@ -5166,17 +5009,6 @@ app.delete('/api/admin/substatus-clear-failures/:id', isAuthenticated, requireAd
 // '' (empty) is a valid key for "no substage / null status".
 const STAGE_ACTION_STAGE_KEYS = new Set(['sales', 'designvisit', 'survey']);
 
-async function ensureStageActionLabelsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS stage_action_labels (
-      stage_key   TEXT NOT NULL,
-      status_key  TEXT NOT NULL,
-      label       TEXT NOT NULL,
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (stage_key, status_key)
-    )
-  `);
-}
 
 // Maps the uppercase lead_status_config.stage to the lowercase card stage key.
 const STAGE_ACTION_STAGE_MAP = {
@@ -5233,7 +5065,7 @@ app.get('/api/stage-action-labels', isAuthenticated, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/stage-action-labels error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/stage-action-labels error:');
     res.status(500).json({ error: 'Could not load stage action labels.' });
   }
 });
@@ -5245,7 +5077,7 @@ app.get('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
     );
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/admin/stage-action-labels error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/stage-action-labels error:');
     res.status(500).json({ error: 'Could not load stage action labels.' });
   }
 });
@@ -5279,7 +5111,7 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
     );
     res.json(rows[0]);
   } catch (e) {
-    console.error('PUT /api/admin/stage-action-labels error:', e.message);
+    logger.error({ err: e.message }, 'PUT /api/admin/stage-action-labels error:');
     res.status(500).json({ error: 'Could not save stage action label.' });
   }
 });
@@ -5301,7 +5133,7 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
     );
     res.json({ ok: true });
   } catch (e) {
-    console.error('DELETE /api/admin/stage-action-labels error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/admin/stage-action-labels error:');
     res.status(500).json({ error: 'Could not delete stage action label.' });
   }
 });
@@ -5313,47 +5145,6 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
 // values are namespaced as `${STATUS_KEY}__${SUBSTATUS_KEY}` so the single
 // HubSpot dropdown can list options for every parent lead status without
 // collisions.
-async function ensureLeadSubstatusesTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS lead_substatuses (
-      id            SERIAL PRIMARY KEY,
-      status_key    TEXT NOT NULL,
-      substatus_key TEXT NOT NULL,
-      label         TEXT NOT NULL,
-      action_label  TEXT NOT NULL DEFAULT '',
-      sort_order    INT  NOT NULL DEFAULT 0,
-      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (status_key, substatus_key)
-    )
-  `);
-  // Real FK so deleting a lead_status_config row that still has substatuses is
-  // blocked at the DB layer (Postgres 23503). ON DELETE NO ACTION is intentional:
-  // the admin must remove or reassign dependent substatuses first.
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'lead_substatuses_status_key_fk'
-      ) THEN
-        -- Drop orphans that would block the ALTER. None are expected, but a
-        -- pre-existing data anomaly should not crash boot.
-        DELETE FROM lead_substatuses s
-          WHERE NOT EXISTS (
-            SELECT 1 FROM lead_status_config c WHERE c.key = s.status_key
-          );
-        ALTER TABLE lead_substatuses
-          ADD CONSTRAINT lead_substatuses_status_key_fk
-          FOREIGN KEY (status_key) REFERENCES lead_status_config(key);
-      END IF;
-    END$$;
-  `);
-  // default_handler_type — admin-configurable override for ensureSubstatusHandlerBindings.
-  // Added after initial table creation; safe to run on every boot.
-  await pool.query(`
-    ALTER TABLE lead_substatuses
-      ADD COLUMN IF NOT EXISTS default_handler_type TEXT NOT NULL DEFAULT ''
-  `);
-}
 
 // ── hw_test_user HubSpot property ─────────────────────────────────────────────
 // Registers a boolean contact property used to mark dev/test contacts.
@@ -5369,7 +5160,7 @@ async function ensureHwTestUserProperty() {
     return; // already exists
   } catch (e) {
     if (e.response?.status !== 404) {
-      console.warn('  hw_test_user probe failed:', e.response?.data?.message || e.message);
+      logger.warn({ err: e.response?.data?.message || e.message }, '  hw_test_user probe failed:');
       return;
     }
   }
@@ -5390,10 +5181,10 @@ async function ensureHwTestUserProperty() {
       },
       { headers: getHubSpotHeaders() }
     );
-    console.log('  Created HubSpot property: hw_test_user');
+    logger.info('  Created HubSpot property: hw_test_user');
   } catch (e) {
     if (e.response?.status !== 409) {
-      console.warn('  Could not create hw_test_user:', e.response?.data?.message || e.message);
+      logger.warn({ err: e.response?.data?.message || e.message }, '  Could not create hw_test_user:');
     }
   }
 }
@@ -5410,7 +5201,7 @@ app.get('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (req
     const devMode = rows.length > 0 ? rows[0].value === 'true' : false;
     res.json({ devMode });
   } catch (e) {
-    console.error('GET /api/admin/hubspot/dev-mode error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/hubspot/dev-mode error:');
     res.status(500).json({ error: 'Could not read dev-mode setting.' });
   }
 });
@@ -5430,7 +5221,7 @@ app.post('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (re
     await logAdminAction(adminEmail, 'set_dev_mode', null, `devMode=${devMode}`);
     res.json({ ok: true, devMode });
   } catch (e) {
-    console.error('POST /api/admin/hubspot/dev-mode error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/admin/hubspot/dev-mode error:');
     res.status(500).json({ error: 'Could not save dev-mode setting.' });
   }
 });
@@ -5520,7 +5311,7 @@ async function ensureHwLeadSubstatusProperty() {
     return; // already exists
   } catch (e) {
     if (e.response?.status !== 404) {
-      console.warn('  hw_lead_substatus probe failed:', e.response?.data?.message || e.message);
+      logger.warn({ err: e.response?.data?.message || e.message }, '  hw_lead_substatus probe failed:');
       return;
     }
   }
@@ -5538,9 +5329,9 @@ async function ensureHwLeadSubstatusProperty() {
       },
       { headers: getHubSpotHeaders() }
     );
-    console.log('  Created HubSpot property: hw_lead_substatus');
+    logger.info('  Created HubSpot property: hw_lead_substatus');
   } catch (e) {
-    console.warn('  Could not create hw_lead_substatus:', e.response?.data?.message || e.message);
+    logger.warn({ err: e.response?.data?.message || e.message }, '  Could not create hw_lead_substatus:');
   }
 }
 
@@ -5645,7 +5436,7 @@ app.get('/api/lead-substatuses', isAuthenticated, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/lead-substatuses error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/lead-substatuses error:');
     res.status(500).json({ error: 'Could not load lead sub-statuses.' });
   }
 });
@@ -5659,7 +5450,7 @@ app.get('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req
     );
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/admin/lead-substatuses error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/lead-substatuses error:');
     res.status(500).json({ error: 'Could not load lead sub-statuses.' });
   }
 });
@@ -5679,14 +5470,14 @@ app.post('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (re
       await syncLeadSubstatusesToHubSpot();
     } catch (se) {
       hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      console.warn('  hw_lead_substatus sync failed after create:', hubspotSyncWarning);
+      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after create:');
     }
     res.status(201).json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
     }
-    console.error('POST /api/admin/lead-substatuses error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/admin/lead-substatuses error:');
     res.status(500).json({ error: 'Could not create sub-status.' });
   }
 });
@@ -5718,7 +5509,7 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
       await syncLeadSubstatusesToHubSpot();
     } catch (se) {
       hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      console.warn('  hw_lead_substatus sync failed after update:', hubspotSyncWarning);
+      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after update:');
     }
     // If default_handler_type was updated, run auto-binding immediately so the
     // new binding takes effect without a server restart.
@@ -5727,7 +5518,7 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
       try {
         newBindingsCreated = await ensureSubstatusHandlerBindings();
       } catch (be) {
-        console.warn('  ensureSubstatusHandlerBindings failed after default_handler_type update:', be.message);
+        logger.warn({ err: be.message }, '  ensureSubstatusHandlerBindings failed after default_handler_type update:');
       }
     }
     const sseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
@@ -5742,7 +5533,7 @@ app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asyn
     if (e.code === '23505') {
       return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
     }
-    console.error('PATCH /api/admin/lead-substatuses error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/lead-substatuses error:');
     res.status(500).json({ error: 'Could not update sub-status.' });
   }
 });
@@ -5762,12 +5553,12 @@ app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, asy
       await syncLeadSubstatusesToHubSpot();
     } catch (se) {
       hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      console.warn('  hw_lead_substatus sync failed after delete:', hubspotSyncWarning);
+      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after delete:');
     }
     res.json(hubspotSyncWarning ? { ok: true, hubspotSyncWarning } : { ok: true });
-    clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey).catch(e => console.warn('Orphaned substatus clear (substatus delete) failed:', e.message));
+    clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey).catch(e => logger.warn({ err: e.message }, 'Orphaned substatus clear (substatus delete) failed:'));
   } catch (e) {
-    console.error('DELETE /api/admin/lead-substatuses error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/admin/lead-substatuses error:');
     res.status(500).json({ error: 'Could not delete sub-status.' });
   }
 });
@@ -5778,7 +5569,7 @@ app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdm
     res.json({ ok: true });
   } catch (e) {
     const msg = e.response?.data?.message || e.message || 'HubSpot sync failed.';
-    console.warn('  hw_lead_substatus manual re-sync failed:', msg);
+    logger.warn({ err: msg }, '  hw_lead_substatus manual re-sync failed:');
     res.status(502).json({ error: msg });
   }
 });
@@ -5992,58 +5783,6 @@ function _validateHandlerBinding(b) {
   return { value: { stage_key: stage, status_key: status, substatus_id: null } };
 }
 
-async function ensureCardActionHandlersTables() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS card_action_handlers (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      type        TEXT NOT NULL,
-      config      JSONB NOT NULL DEFAULT '{}'::jsonb,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS card_action_handler_bindings (
-      id            SERIAL PRIMARY KEY,
-      handler_id    INT  NOT NULL REFERENCES card_action_handlers(id) ON DELETE CASCADE,
-      stage_key     TEXT,
-      status_key    TEXT,
-      substatus_id  INT  REFERENCES lead_substatuses(id) ON DELETE CASCADE,
-      CHECK (
-        (stage_key IS NOT NULL AND substatus_id IS NULL) OR
-        (stage_key IS NULL AND substatus_id IS NOT NULL)
-      )
-    )
-  `);
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS cahb_label_uniq
-      ON card_action_handler_bindings (stage_key, status_key)
-      WHERE substatus_id IS NULL
-  `);
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS cahb_substatus_uniq
-      ON card_action_handler_bindings (substatus_id)
-      WHERE substatus_id IS NOT NULL
-  `);
-  // Remove the cahb_status_key_fk constraint if it was ever added (it was
-  // introduced in an earlier version but is incompatible with the existing
-  // key-case contract: lead_status_config.key is uppercase while
-  // card_action_handler_bindings.status_key is lowercase).
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_type = 'FOREIGN KEY'
-          AND table_name = 'card_action_handler_bindings'
-          AND constraint_name = 'cahb_status_key_fk'
-      ) THEN
-        ALTER TABLE card_action_handler_bindings DROP CONSTRAINT cahb_status_key_fk;
-      END IF;
-    END $$
-  `);
-}
 
 async function checkDuplicateHandlerBindings() {
   const labelDups = await pool.query(`
@@ -6064,14 +5803,14 @@ async function checkDuplicateHandlerBindings() {
   `);
   const total = labelDups.rows.length + substatusDups.rows.length;
   if (total === 0) return;
-  console.warn(`[WARN] card_action_handler_bindings: ${total} duplicate slot(s) detected.`);
+  logger.warn(`[WARN] card_action_handler_bindings: ${total} duplicate slot(s) detected.`);
   for (const r of labelDups.rows) {
-    console.warn(`  [DUPLICATE] label slot stage_key=${r.stage_key} status_key=${r.status_key} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
+    logger.warn(`  [DUPLICATE] label slot stage_key=${r.stage_key} status_key=${r.status_key} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
   }
   for (const r of substatusDups.rows) {
-    console.warn(`  [DUPLICATE] substatus slot substatus_id=${r.substatus_id} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
+    logger.warn(`  [DUPLICATE] substatus slot substatus_id=${r.substatus_id} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
   }
-  console.warn('  Use GET /api/admin/card-action-handlers/conflicts (admin) or the conflict resolver in admin.html to clean these up.');
+  logger.warn('  Use GET /api/admin/card-action-handlers/conflicts (admin) or the conflict resolver in admin.html to clean these up.');
 }
 
 async function _loadHandlerWithBindings(id) {
@@ -6152,7 +5891,7 @@ app.get('/api/card-action-handlers', isAuthenticated, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(Object.values(byId));
   } catch (e) {
-    console.error('GET /api/card-action-handlers error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/card-action-handlers error:');
     res.status(500).json({ error: 'Could not load card action handlers.' });
   }
 });
@@ -6176,7 +5915,7 @@ app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async 
     }
     res.json(Object.values(byId));
   } catch (e) {
-    console.error('GET /api/admin/card-action-handlers error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/card-action-handlers error:');
     res.status(500).json({ error: 'Could not load card action handlers.' });
   }
 });
@@ -6227,7 +5966,7 @@ app.get('/api/admin/card-action-handlers/conflicts', isAuthenticated, requireAdm
     ];
     res.json({ conflicts, total: conflicts.length });
   } catch (e) {
-    console.error('GET /api/admin/card-action-handlers/conflicts error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/card-action-handlers/conflicts error:');
     res.status(500).json({ error: 'Could not load handler binding conflicts.' });
   }
 });
@@ -6263,7 +6002,7 @@ app.post('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async
     await client.query('ROLLBACK').catch(() => {});
     if (e._userError) return res.status(400).json({ error: e.message });
     if (e.code === '23505') return res.status(409).json({ error: 'A handler is already bound to that slot.' });
-    console.error('POST /api/admin/card-action-handlers error:', e.message);
+    logger.error({ err: e.message }, 'POST /api/admin/card-action-handlers error:');
     res.status(500).json({ error: 'Could not create handler.' });
   } finally {
     client.release();
@@ -6320,7 +6059,7 @@ app.patch('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, 
     await client.query('ROLLBACK').catch(() => {});
     if (e._userError) return res.status(400).json({ error: e.message });
     if (e.code === '23505') return res.status(409).json({ error: 'A handler is already bound to that slot.' });
-    console.error('PATCH /api/admin/card-action-handlers error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/card-action-handlers error:');
     res.status(500).json({ error: 'Could not update handler.' });
   } finally {
     client.release();
@@ -6335,7 +6074,7 @@ app.delete('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin,
     if (!r.rows.length) return res.status(404).json({ error: 'Handler not found.' });
     res.json({ ok: true });
   } catch (e) {
-    console.error('DELETE /api/admin/card-action-handlers error:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/admin/card-action-handlers error:');
     res.status(500).json({ error: 'Could not delete handler.' });
   }
 });
@@ -6369,7 +6108,7 @@ app.post('/api/card-actions/phone-call-summary',
       if (status === 429) {
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
-      console.error('POST /api/card-actions/phone-call-summary error:', e.response?.data || e.message);
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/phone-call-summary error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }
@@ -6406,7 +6145,7 @@ app.post('/api/card-actions/arrange-visit',
       if (status === 429) {
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
-      console.error('POST /api/card-actions/arrange-visit error:', e.response?.data || e.message);
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/arrange-visit error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }
@@ -6454,7 +6193,7 @@ app.post('/api/card-actions/arrange-visit/outcome',
       if (status === 429) {
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
-      console.error('POST /api/card-actions/arrange-visit/outcome error:', e.response?.data || e.message);
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/arrange-visit/outcome error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }
@@ -6531,7 +6270,7 @@ app.get('/api/whatsapp/templates', isAuthenticated, requireAdmin, requireWhatsAp
     if (status === 401 || status === 403) {
       return res.status(502).json({ error: 'Meta API rejected the request — check your WHATSAPP_ACCESS_TOKEN.' });
     }
-    console.error('GET /api/whatsapp/templates error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'GET /api/whatsapp/templates error:');
     res.status(502).json({ error: e.response?.data?.error?.message || 'Could not fetch WhatsApp templates.' });
   }
 });
@@ -6574,7 +6313,7 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
     const status = e.response?.status;
     if (status === 404) return res.status(404).json({ error: 'Contact not found in HubSpot.' });
     if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — check the token.' });
-    console.error('WhatsApp send — HubSpot contact lookup error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'WhatsApp send — HubSpot contact lookup error:');
     return res.status(502).json({ error: 'Could not verify contact phone number with HubSpot.' });
   }
 
@@ -6634,7 +6373,7 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
       `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, template_params, message_text)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [safeContactId, req.user.id, mode, tplName, tplParams, messageText]
-    ).catch(e => console.error('whatsapp_messages insert error:', e.message));
+    ).catch(e => logger.error({ err: e.message }, 'whatsapp_messages insert error:'));
 
     res.json({ ok: true });
   } catch (e) {
@@ -6654,26 +6393,12 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
     if (metaCode === 131026) {
       return res.status(422).json({ error: 'That phone number is not registered on WhatsApp.', code: 'NOT_ON_WHATSAPP' });
     }
-    console.error('POST /api/whatsapp/send error:', metaErr || e.message);
+    logger.error({ err: metaErr || e.message }, 'POST /api/whatsapp/send error:');
     res.status(502).json({ error: metaMsg || 'Failed to send WhatsApp message.' });
   }
 });
 
 // ── WhatsApp Message Log ──────────────────────────────────────────────────────
-async function ensureWhatsAppMessagesTable() {
-  await pool.query(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
-    id              SERIAL PRIMARY KEY,
-    contact_id      TEXT        NOT NULL,
-    sender_user_id  VARCHAR     NOT NULL REFERENCES users(id),
-    mode            TEXT        NOT NULL CHECK (mode IN ('template','freeform')),
-    template_name   TEXT,
-    template_params TEXT,
-    message_text    TEXT,
-    sent_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await pool.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS template_params TEXT`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS whatsapp_messages_contact_idx ON whatsapp_messages(contact_id, sent_at DESC)`);
-}
 
 app.get('/api/whatsapp/history/:contactId', isAuthenticated, requireAdmin, async (req, res) => {
   const { contactId } = req.params;
@@ -6693,7 +6418,7 @@ app.get('/api/whatsapp/history/:contactId', isAuthenticated, requireAdmin, async
     );
     res.json({ messages: rows });
   } catch (e) {
-    console.error('GET /api/whatsapp/history error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/whatsapp/history error:');
     res.status(500).json({ error: 'Could not load WhatsApp history.' });
   }
 });
@@ -6705,15 +6430,7 @@ const WORKSHOP_SETTINGS_DEFAULTS = [
 ];
 
 async function ensureWorkshopSettingsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS workshop_settings (
-      key        TEXT PRIMARY KEY,
-      label      TEXT NOT NULL,
-      value      TEXT NOT NULL DEFAULT '',
-      updated_at TIMESTAMP DEFAULT NOW(),
-      updated_by TEXT
-    )
-  `);
+  // Schema created by migrations; this boot step seeds default rows.
   for (const row of WORKSHOP_SETTINGS_DEFAULTS) {
     await pool.query(
       `INSERT INTO workshop_settings (key, label, value)
@@ -6731,7 +6448,7 @@ app.get('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (re
     );
     res.json(rows);
   } catch (e) {
-    console.error('GET /api/admin/workshop-settings error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/workshop-settings error:');
     res.status(500).json({ error: 'Could not load workshop settings.' });
   }
 });
@@ -6758,30 +6475,11 @@ app.patch('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (
     );
     res.json({ ok: true });
   } catch (e) {
-    console.error('PATCH /api/admin/workshop-settings error:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/admin/workshop-settings error:');
     res.status(500).json({ error: 'Could not save workshop setting.' });
   }
 });
 
-async function ensureAppSettingsTable() {
-  await pool.query(`CREATE TABLE IF NOT EXISTS app_settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  )`);
-  await pool.query(
-    `INSERT INTO app_settings (key, value) VALUES ('dev_mode_enabled', 'false') ON CONFLICT (key) DO NOTHING`
-  );
-}
-
-async function ensureSearchSettingsTable() {
-  await pool.query(`CREATE TABLE IF NOT EXISTS search_settings (
-    id INTEGER PRIMARY KEY DEFAULT 1,
-    disabled_actions JSONB NOT NULL DEFAULT '[]',
-    hint_placeholder TEXT NOT NULL DEFAULT '',
-    action_order JSONB NOT NULL DEFAULT '[]'
-  )`);
-  await pool.query(`INSERT INTO search_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
-}
 
 app.get('/api/search-settings', isAuthenticated, async (req, res) => {
   try {
@@ -6790,7 +6488,7 @@ app.get('/api/search-settings', isAuthenticated, async (req, res) => {
     );
     res.json(rows[0] || { disabled_actions: [], hint_placeholder: '', action_order: [] });
   } catch (e) {
-    console.error('GET /api/search-settings error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/search-settings error:');
     res.status(500).json({ error: 'Could not load search settings.' });
   }
 });
@@ -6802,7 +6500,7 @@ app.get('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     );
     res.json(rows[0] || { disabled_actions: [], hint_placeholder: '', action_order: [] });
   } catch (e) {
-    console.error('GET /api/admin/search-settings error:', e.message);
+    logger.error({ err: e.message }, 'GET /api/admin/search-settings error:');
     res.status(500).json({ error: 'Could not load search settings.' });
   }
 });
@@ -6822,7 +6520,7 @@ app.put('/api/admin/search-settings', isAuthenticated, requireAdmin, async (req,
     );
     res.json({ ok: true });
   } catch (e) {
-    console.error('PUT /api/admin/search-settings error:', e.message);
+    logger.error({ err: e.message }, 'PUT /api/admin/search-settings error:');
     res.status(500).json({ error: 'Could not save search settings.' });
   }
 });
@@ -6843,7 +6541,7 @@ async function cleanupStaleHubSpotCredentialRows() {
   );
   if (rowCount > 0) {
     const removed = rows.map(r => r.key).join(', ');
-    console.log(`  [migration] Removed ${rowCount} stale HubSpot credential row(s) from admin_settings.`);
+    logger.info(`  [migration] Removed ${rowCount} stale HubSpot credential row(s) from admin_settings.`);
     await logAdminAction(
       '[system]',
       'startup_migration',
@@ -6855,11 +6553,22 @@ async function cleanupStaleHubSpotCredentialRows() {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
+  // Run database migrations FIRST so the full schema exists before auth/session
+  // setup or any route handling. A migration failure is fatal — the process must
+  // not start serving against an unknown/partial schema.
+  try {
+    await runMigrations();
+    logger.info('  Database migrations applied');
+  } catch (e) {
+    logger.error({ err: e }, '  Database migrations failed — aborting startup');
+    process.exit(1);
+  }
+
   try {
     const ok = await setupAuth(app);
-    if (ok) console.log('  Auth (email + password) initialized');
+    if (ok) logger.info('  Auth (email + password) initialized');
   } catch (e) {
-    console.error('  Auth setup failed:', e.message);
+    logger.error({ err: e.message }, '  Auth setup failed:');
   }
 
   // 404 catch-all must be registered AFTER setupAuth so auth routes are matched first.
@@ -6892,10 +6601,10 @@ async function cleanupStaleHubSpotCredentialRows() {
         })(srcDir);
         if (newestSrcMtime > bundleMtime) {
           const rel = path.relative(__dirname, newestSrcFile);
-          console.warn(`[STALE BUNDLE] public/react/main.js is older than ${rel} — run npm run build:react`);
+          logger.warn(`[STALE BUNDLE] public/react/main.js is older than ${rel} — run npm run build:react`);
         }
       } else {
-        console.warn('[STALE BUNDLE] public/react/main.js not found — run npm run build:react');
+        logger.warn('[STALE BUNDLE] public/react/main.js not found — run npm run build:react');
       }
     } catch (e) {
       // Non-fatal: a warning failure must not prevent startup.
@@ -6903,69 +6612,52 @@ async function cleanupStaleHubSpotCredentialRows() {
   }
 
   app.listen(PORT, HOST, async () => {
-    console.log(`\n  Measure Once`);
-    console.log(`  Running at: http://localhost:${PORT}\n`);
+    logger.info(`\n  Measure Once`);
+    logger.info(`  Running at: http://localhost:${PORT}\n`);
     if (process.env.DEBUG_HUBSPOT) {
-      console.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');
+      logger.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');
     }
     await ensureHubSpotProperties();
-    try { await ensureVisitsTable(); console.log('  Visits table ready'); }
-    catch (e) { console.error('  Visits table setup failed:', e.message); }
-    try { await ensureTradesTable(); console.log('  Trades table ready'); }
-    catch (e) { console.error('  Trades table setup failed:', e.message); }
-    try { await ensureIdeasTables(); console.log('  Ideas tables ready'); }
-    catch (e) { console.error('  Ideas tables setup failed:', e.message); }
-    try { await ensureLeadStatusTable(); console.log('  Lead status config table ready'); }
-    catch (e) { console.error('  Lead status table setup failed:', e.message); }
-    try { await ensureSubstatusClearFailuresTable(); console.log('  Substatus clear failures table ready'); }
-    catch (e) { console.error('  Substatus clear failures table setup failed:', e.message); }
+    // NOTE: all table / column / index DDL is now owned by the migration
+    // framework (see migrations/ and runMigrations() at the top of this IIFE).
+    // The steps below perform non-DDL boot work only: HubSpot property sync,
+    // one-time data backfills/migrations, default seeds, retention cleanup,
+    // and handler auto-binding.
+    try { await ensureTradesTable(); }
+    catch (e) { logger.error({ err: e }, '  Trades legacy data migration failed'); }
+    try { await ensureLeadStatusTable(); }
+    catch (e) { logger.error({ err: e }, '  Lead status seed failed'); }
     try { await backfillLeadStatusShorthands(); }
-    catch (e) { console.error('  Lead status shorthand backfill failed:', e.message); }
-    try { await ensureStageActionLabelsTable(); console.log('  Stage action labels table ready'); }
-    catch (e) { console.error('  Stage action labels table setup failed:', e.message); }
-    try { await seedStageActionLabelsDefaults(); console.log('  Stage action labels defaults seeded'); }
-    catch (e) { console.error('  Stage action labels seed failed:', e.message); }
-    try { await ensureLeadSubstatusesTable(); console.log('  Lead sub-statuses table ready'); }
-    catch (e) { console.error('  Lead sub-statuses table setup failed:', e.message); }
-    try { await ensureAppSettingsTable(); console.log('  App settings table ready'); }
-    catch (e) { console.error('  App settings table setup failed:', e.message); }
-    try { await ensureHwTestUserProperty(); console.log('  hw_test_user HubSpot property ready'); }
-    catch (e) { console.error('  hw_test_user property setup failed:', e.message); }
-    try { await ensureHwLeadSubstatusProperty(); console.log('  hw_lead_substatus HubSpot property ready'); }
-    catch (e) { console.error('  hw_lead_substatus property setup failed:', e.message); }
-    try { await syncLeadSubstatusesToHubSpot(); console.log('  hw_lead_substatus options synced'); }
-    catch (e) { console.warn('  hw_lead_substatus sync skipped:', e.response?.data?.message || e.message); }
-    try { await ensureCardActionHandlersTables(); console.log('  Card action handlers tables ready'); }
-    catch (e) { console.error('  Card action handlers tables setup failed:', e.message); }
+    catch (e) { logger.error({ err: e }, '  Lead status shorthand backfill failed'); }
+    try { await seedStageActionLabelsDefaults(); }
+    catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
+    try { await ensureHwTestUserProperty(); }
+    catch (e) { logger.error({ err: e }, '  hw_test_user property setup failed'); }
+    try { await ensureHwLeadSubstatusProperty(); }
+    catch (e) { logger.error({ err: e }, '  hw_lead_substatus property setup failed'); }
+    try { await syncLeadSubstatusesToHubSpot(); }
+    catch (e) { logger.warn({ err: e }, '  hw_lead_substatus sync skipped'); }
     try { await checkDuplicateHandlerBindings(); }
-    catch (e) { console.error('  Card action handler duplicate-binding check failed:', e.message); }
-    try { await ensureSearchSettingsTable(); console.log('  Search settings table ready'); }
-    catch (e) { console.error('  Search settings table setup failed:', e.message); }
-    try { await ensureWorkshopSettingsTable(); console.log('  Workshop settings table ready'); }
-    catch (e) { console.error('  Workshop settings table setup failed:', e.message); }
-    try { await ensureWhatsAppMessagesTable(); console.log('  WhatsApp messages table ready'); }
-    catch (e) { console.error('  WhatsApp messages table setup failed:', e.message); }
-    try { await ensureDesignVisitTables(); console.log('  Design visit tables ready'); }
-    catch (e) { console.error('  Design visit tables setup failed:', e.message); }
-    try { await ensureCustomerInfoSubmissionsTable(); console.log('  Customer info submissions table ready'); }
-    catch (e) { console.error('  Customer info submissions table setup failed:', e.message); }
-    try { await ensureResendLogTable(); console.log('  Customer info resend log table ready'); }
-    catch (e) { console.error('  Customer info resend log table setup failed:', e.message); }
-    backfillMaskedEmails().catch(e => console.warn('  masked_email backfill error:', e.message));
-    logNullFormLinkCount().catch(e => console.warn('  null form_link count error:', e.message));
-    try { await ensurePhotoReviewOutcomesTable(); console.log('  Photo review outcomes table ready'); }
-    catch (e) { console.error('  Photo review outcomes table setup failed:', e.message); }
-    backfillMisspelledAwphSubstatus().catch(e => console.warn('  AWPH substatus backfill error:', e.message));
+    catch (e) { logger.error({ err: e }, '  Card action handler duplicate-binding check failed'); }
+    try { await ensureWorkshopSettingsTable(); }
+    catch (e) { logger.error({ err: e }, '  Workshop settings seed failed'); }
+    try { await ensureResendLogTable(); }
+    catch (e) { logger.error({ err: e }, '  Customer info resend log cleanup failed'); }
+    backfillMaskedEmails().catch(e => logger.warn({ err: e }, '  masked_email backfill error'));
+    logNullFormLinkCount().catch(e => logger.warn({ err: e }, '  null form_link count error'));
+    try { await ensurePhotoReviewOutcomesTable(); }
+    catch (e) { logger.error({ err: e }, '  Photo review outcomes backfill failed'); }
+    backfillMisspelledAwphSubstatus().catch(e => logger.warn({ err: e }, '  AWPH substatus backfill error'));
     try { await ensureDefaultReviewHandlerBinding(); }
-    catch (e) { console.error('  Default review handler binding setup failed:', e.message); }
+    catch (e) { logger.error({ err: e }, '  Default review handler binding setup failed'); }
     try { await ensureSubstatusHandlerBindings(); }
-    catch (e) { console.error('  Substatus handler auto-binding failed:', e.message); }
-    try { await ensurePageFilterConfigTable(); console.log('  Page filter config table ready'); }
-    catch (e) { console.error('  Page filter config table setup failed:', e.message); }
-    try { await ensureEmailTemplatesTable(); console.log('  Email templates table ready'); }
-    catch (e) { console.error('  Email templates table setup failed:', e.message); }
+    catch (e) { logger.error({ err: e }, '  Substatus handler auto-binding failed'); }
+    try { await ensurePageFilterConfigTable(); }
+    catch (e) { logger.error({ err: e }, '  Page filter config seed failed'); }
+    try { await ensureEmailTemplatesTable(); }
+    catch (e) { logger.error({ err: e }, '  Email templates seed failed'); }
     try { await cleanupStaleHubSpotCredentialRows(); }
-    catch (e) { console.error('  HubSpot credential row cleanup failed:', e.message); }
+    catch (e) { logger.error({ err: e }, '  HubSpot credential row cleanup failed'); }
     scheduleConflictDigest();
   });
 })();

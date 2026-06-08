@@ -73,6 +73,43 @@ Open [http://localhost:3456](http://localhost:3456)
 
 ---
 
+## Database migrations
+
+The schema is built and upgraded entirely by ordered, versioned migration files
+in `migrations/` using [`node-pg-migrate`](https://salsita.github.io/node-pg-migrate/).
+There are no `ensureXTable()`/`CREATE TABLE` calls scattered through the app any
+more — `runMigrations()` (in `db-migrate.js`) runs every pending migration on
+boot, before auth/session setup, so the database is always current.
+
+Migrations use raw SQL (`pgm.sql`) so the project's plain `pg` query style is
+preserved end to end.
+
+```bash
+# Apply all pending migrations (also runs automatically on boot)
+npm run db:migrate
+
+# Roll back the most recent migration
+npm run db:migrate:down
+
+# Roll back then re-apply the most recent migration (handy while iterating)
+npm run db:migrate:redo
+
+# Scaffold a new migration file in migrations/
+npm run db:migrate:create -- my_change_name
+```
+
+Guidelines:
+- Migrations are immutable once merged — never edit an applied migration; add a
+  new one to change the schema.
+- Keep them ordered (the numeric timestamp prefix defines run order) and
+  idempotent-safe where practical (`IF NOT EXISTS`, etc.).
+- New sync-relevant tables should carry `updated_at` + `version` columns and the
+  auto-update trigger (see `migrations/*_sync-readiness.js` for the pattern).
+- Tests that spin up isolated databases apply the full migration set via
+  `scripts/with-test-db.js`; no schema is created at boot by application code.
+
+---
+
 ## Deploying to a server
 
 The app is a standard Node.js/Express app. Deploy to any host that supports Node.js (Railway, Render, DigitalOcean, etc.).

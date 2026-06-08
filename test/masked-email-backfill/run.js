@@ -120,8 +120,8 @@ async function main() {
   // Point customer-info.js pool at the test DB before requiring the module.
   process.env.DATABASE_URL = connStr;
 
-  const { backfillMaskedEmails, ensureCustomerInfoSubmissionsTable } =
-    require('../../customer-info');
+  const { backfillMaskedEmails } = require('../../customer-info');
+  const { runMigrations } = require('../../db-migrate');
 
   const runId     = Math.random().toString(36).slice(2, 8);
   const contactId = `privtest-backfill-${runId}`;
@@ -135,7 +135,7 @@ async function main() {
 
   let exitCode = 1;
   try {
-    await ensureCustomerInfoSubmissionsTable();
+    await runMigrations();
     await waitForTable(pool, 'customer_info_submissions');
     await cleanup(pool, contactId);
 

@@ -38,6 +38,21 @@ Project management dashboard (HubSpot CRM integration).
 - Node.js 20 + Express; single `server.js` serves API and static assets.
 - Static frontend in `public/` (vanilla JS + Tailwind CDN) being progressively
   migrated to React + MUI islands in `src/react/`.
+- PostgreSQL accessed with raw `pg`. Schema is owned by ordered, versioned
+  `node-pg-migrate` files in `migrations/` (no `ensureXTable()`/`CREATE TABLE`
+  in app code). `runMigrations()` in `db-migrate.js` runs pending migrations on
+  boot before auth/session setup.
+
+## Database migrations
+- Apply: `npm run db:migrate` (also auto-runs on boot). Roll back one:
+  `npm run db:migrate:down`. Redo last: `npm run db:migrate:redo`. New file:
+  `npm run db:migrate:create -- name`.
+- Migrations use raw SQL (`pgm.sql`). Never edit an applied/merged migration —
+  add a new one. Order is the numeric timestamp prefix.
+- New sync-relevant tables must carry `updated_at` + `version` + the auto-update
+  trigger (see `migrations/*_sync-readiness.js`).
+- Isolated test DBs apply the full migration set via `scripts/with-test-db.js`;
+  application code creates no schema at boot.
 
 ## Replit Setup
 - Workflow: `Start application` runs `npm start`.

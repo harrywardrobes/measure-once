@@ -2,6 +2,7 @@
 // DB table, send-link route, public form routes (token-gated), photo upload,
 // admin notification emails, HubSpot lead-status update, and dashboard viewer.
 
+const logger = require('./logger');
 const express    = require('express');
 const crypto     = require('crypto');
 const multer     = require('multer');
@@ -122,91 +123,9 @@ function maskPhone(phone) {
 }
 
 // ── DB schema ─────────────────────────────────────────────────────────────────
-async function ensureCustomerInfoSubmissionsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS customer_info_submissions (
-      id               SERIAL PRIMARY KEY,
-      contact_id       TEXT NOT NULL,
-      contact_name     TEXT,
-      contact_email    TEXT,
-      token_hash       TEXT NOT NULL UNIQUE,
-      expires_at       TIMESTAMPTZ NOT NULL,
-      submitted_at     TIMESTAMPTZ,
-      masked_email     TEXT,
-      masked_phone     TEXT,
-      corrected_email  TEXT,
-      corrected_mobile TEXT,
-      address_line1    TEXT,
-      city             TEXT,
-      postcode         TEXT,
-      room_count       TEXT,
-      room_notes       TEXT,
-      photo_keys       JSONB NOT NULL DEFAULT '[]'::jsonb,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS cis_contact_id_idx ON customer_info_submissions (contact_id)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS cis_token_hash_idx ON customer_info_submissions (token_hash)
-  `);
-  await pool.query(`
-    ALTER TABLE customer_info_submissions
-    ADD COLUMN IF NOT EXISTS email_skipped_count INTEGER NOT NULL DEFAULT 0
-  `);
-  // form_link stores the full invite URL so staff can copy/open it from the
-  // dashboard rail.  Added after initial launch — rows created before this
-  // migration have form_link = NULL and cannot be backfilled (only the
-  // token_hash is stored, not the raw token, so the URL is unrecoverable).
-  // The staff-resend route writes form_link on every resend, so the
-  // Copy/Open buttons will appear after the first staff-initiated resend.
-  await pool.query(`
-    ALTER TABLE customer_info_submissions
-    ADD COLUMN IF NOT EXISTS form_link TEXT
-  `);
-
-  // One-time cleanup: for any contact that has more than one active pending
-  // row, expire all but the newest one (highest created_at).  This repairs
-  // duplicate rows that were inserted before the self-serve resend path was
-  // fixed to expire existing active links before inserting a new one.
-  const dedupResult = await pool.query(`
-    UPDATE customer_info_submissions
-    SET expires_at = NOW()
-    WHERE id IN (
-      SELECT id FROM (
-        SELECT id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY contact_id
-                 ORDER BY created_at DESC
-               ) AS rn
-        FROM customer_info_submissions
-        WHERE expires_at > NOW()
-          AND submitted_at IS NULL
-      ) ranked
-      WHERE rn > 1
-    )
-  `);
-  if (dedupResult.rowCount > 0) {
-    console.log(`[customer-info] Migration: expired ${dedupResult.rowCount} duplicate active pending link(s)`);
-  }
-}
-
 async function ensureResendLogTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS customer_info_resend_log (
-      id           SERIAL PRIMARY KEY,
-      token_hash   TEXT NOT NULL,
-      requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS cirl_token_hash_idx ON customer_info_resend_log (token_hash)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS cirl_requested_at_idx ON customer_info_resend_log (requested_at)
-  `);
-  // Cleanup: delete rows older than 48 hours to keep the table small
+  // Schema created by migrations; this boot step performs retention cleanup:
+  // delete rows older than 48 hours to keep the table small.
   await pool.query(`DELETE FROM customer_info_resend_log WHERE requested_at < NOW() - INTERVAL '48 hours'`);
 }
 
@@ -214,8 +133,8 @@ async function ensureResendLogTable() {
 async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('[customer-info] SMTP not configured — skipping invite email.');
-    console.warn(`[customer-info] Form link (manual delivery): ${formLink}`);
+    logger.warn('[customer-info] SMTP not configured — skipping invite email.');
+    logger.warn(`[customer-info] Form link (manual delivery): ${formLink}`);
     return;
   }
   const from    = buildFromHeader();
@@ -233,9 +152,9 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
       text,
       html,
     });
-    console.log(`[customer-info] Invite email sent to ${contactEmail}`);
+    logger.info(`[customer-info] Invite email sent to ${contactEmail}`);
   } catch (err) {
-    console.error('[customer-info] Failed to send invite email:', err.message);
+    logger.error({ err: err.message }, '[customer-info] Failed to send invite email:');
   }
 }
 
@@ -244,7 +163,7 @@ async function sendAdminNotificationEmail(submission) {
   if (!admins.length) return;
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('[customer-info] SMTP not configured — skipping admin notification email.');
+    logger.warn('[customer-info] SMTP not configured — skipping admin notification email.');
     return;
   }
   const from    = buildFromHeader();
@@ -275,7 +194,7 @@ async function sendAdminNotificationEmail(submission) {
         const rawValue = Array.isArray(res.value) ? res.value[0] : res.value;
         const buffer = Buffer.from(rawValue);
         if (buffer.length > MAX_ATTACHMENT_BYTES) {
-          console.warn(`[customer-info] Skipping attachment for ${key}: ${buffer.length} bytes exceeds 8 MB limit`);
+          logger.warn(`[customer-info] Skipping attachment for ${key}: ${buffer.length} bytes exceeds 8 MB limit`);
           skippedCount++;
           continue;
         }
@@ -285,7 +204,7 @@ async function sendAdminNotificationEmail(submission) {
           contentType,
         });
       } catch (err) {
-        console.warn(`[customer-info] Skipping attachment for key ${key}:`, err.message);
+        logger.warn({ err: err.message }, `[customer-info] Skipping attachment for key ${key}:`);
         skippedCount++;
       }
     }
@@ -324,7 +243,7 @@ async function sendAdminNotificationEmail(submission) {
         [skippedCount, submissionId]
       );
     } catch (dbErr) {
-      console.warn('[customer-info] Could not persist email_skipped_count:', dbErr.message);
+      logger.warn({ err: dbErr.message }, '[customer-info] Could not persist email_skipped_count:');
     }
   }
 
@@ -355,16 +274,16 @@ async function sendAdminNotificationEmail(submission) {
       text,
       html,
     });
-    console.log(`[customer-info] Admin notification sent for contact ${contact_email}`);
+    logger.info(`[customer-info] Admin notification sent for contact ${contact_email}`);
   } catch (err) {
-    console.error('[customer-info] Failed to send admin notification email:', err.message);
+    logger.error({ err: err.message }, '[customer-info] Failed to send admin notification email:');
   }
 }
 
 async function sendCustomerThankYouEmail(contactEmail, contactName) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('[customer-info] SMTP not configured — skipping thank-you email.');
+    logger.warn('[customer-info] SMTP not configured — skipping thank-you email.');
     return;
   }
   const from    = buildFromHeader();
@@ -383,9 +302,9 @@ async function sendCustomerThankYouEmail(contactEmail, contactName) {
       text,
       html,
     });
-    console.log(`[customer-info] Thank-you email sent to ${contactEmail}`);
+    logger.info(`[customer-info] Thank-you email sent to ${contactEmail}`);
   } catch (err) {
-    console.error('[customer-info] Failed to send thank-you email:', err.message);
+    logger.error({ err: err.message }, '[customer-info] Failed to send thank-you email:');
   }
 }
 
@@ -445,7 +364,7 @@ const FRIENDLY_UPLOAD_MSG = 'Photo upload is temporarily unavailable. Please try
 
 function _friendlyStorageError(err) {
   if (/bucket|object storage/i.test(err.message)) {
-    console.error('[customer-info] Storage config error (original):', err.message);
+    logger.error({ err: err.message }, '[customer-info] Storage config error (original):');
     return new Error(FRIENDLY_UPLOAD_MSG);
   }
   return err;
@@ -515,7 +434,7 @@ async function lookupToken(rawToken) {
 async function verifyTurnstileForResend(token, ip) {
   if (!process.env.TURNSTILE_SECRET_KEY) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production — rejecting resend request.');
+      logger.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production — rejecting resend request.');
       return { ok: false };
     }
     return { ok: true }; // dev bypass when key not configured
@@ -533,7 +452,7 @@ async function verifyTurnstileForResend(token, ip) {
     );
     return { ok: !!r.data?.success };
   } catch (err) {
-    console.error('[customer-info] Turnstile verification error:', err.message);
+    logger.error({ err: err.message }, '[customer-info] Turnstile verification error:');
     return { ok: false };
   }
 }
@@ -597,7 +516,7 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
     try {
       contact = await fetchContactFromHubSpot(cid);
     } catch (err) {
-      console.error('[customer-info] Failed to fetch contact from HubSpot:', err.message);
+      logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
       return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
     }
 
@@ -641,9 +560,9 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
            WHERE id = ANY($1::int[])`,
           [staleIds]
         );
-        console.log(`[customer-info] Expired ${staleIds.length} stale duplicate link(s) for contact ${cid}`);
+        logger.info(`[customer-info] Expired ${staleIds.length} stale duplicate link(s) for contact ${cid}`);
       }
-      console.log(`[customer-info] Refreshed existing link (id=${keepId}) for contact ${cid} (isResend=true)`);
+      logger.info(`[customer-info] Refreshed existing link (id=${keepId}) for contact ${cid} (isResend=true)`);
     } else {
       await pool.query(
         `INSERT INTO customer_info_submissions
@@ -653,7 +572,7 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
         [cid, name, email, tokenHash, expiresAt.toISOString(),
          maskEmail(email), maskPhone(phone), formLink]
       );
-      console.log(`[customer-info] Created new link for contact ${cid} (isResend=false)`);
+      logger.info(`[customer-info] Created new link for contact ${cid} (isResend=false)`);
     }
 
     res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken, isResend });
@@ -695,7 +614,7 @@ router.post('/api/card-actions/upload-photos-and-info',
     try {
       contact = await fetchContactFromHubSpot(cid);
     } catch (err) {
-      console.error('[customer-info] Failed to fetch contact from HubSpot:', err.message);
+      logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
       return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
     }
 
@@ -720,7 +639,7 @@ router.post('/api/card-actions/upload-photos-and-info',
       [cid]
     );
     if (expireResult.rowCount > 0) {
-      console.log(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
+      logger.info(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
     }
 
     const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
@@ -893,7 +812,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
       await updateHubSpotSubstatus(lockedContactId, 'AWAITING_PHOTOS__AWPH_RECEIVED');
     }
   } catch (err) {
-    console.error('[customer-info] HubSpot update failed (non-fatal):', err.message);
+    logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
   }
 
   // Bust the project-contacts cache so the board refetch gets fresh HubSpot data
@@ -909,13 +828,13 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
 
   // Send emails (non-fatal)
   try { await sendAdminNotificationEmail(fresh); } catch (e) {
-    console.error('[customer-info] Admin notification failed:', e.message);
+    logger.error({ err: e.message }, '[customer-info] Admin notification failed:');
   }
   try {
     const emailTo = fresh.corrected_email || fresh.contact_email;
     if (emailTo) await sendCustomerThankYouEmail(emailTo, fresh.contact_name);
   } catch (e) {
-    console.error('[customer-info] Thank-you email failed:', e.message);
+    logger.error({ err: e.message }, '[customer-info] Thank-you email failed:');
   }
 
   res.json({ ok: true });
@@ -979,7 +898,7 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
     [row.contact_id]
   );
   if (expireResult.rowCount > 0) {
-    console.log(`[customer-info] Self-serve resend: expired ${expireResult.rowCount} active link(s) for contact ${row.contact_id} before inserting new one`);
+    logger.info(`[customer-info] Self-serve resend: expired ${expireResult.rowCount} active link(s) for contact ${row.contact_id} before inserting new one`);
   }
 
   await pool.query(
@@ -1000,7 +919,7 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
   // 7. Send invitation email.
   await sendCustomerInviteEmail(row.contact_email, row.masked_email || maskEmail(row.contact_email || ''), formLink);
 
-  console.log(`[customer-info] Self-serve resend issued for contact ${row.contact_id}`);
+  logger.info(`[customer-info] Self-serve resend issued for contact ${row.contact_id}`);
   res.json({ ok: true, maskedEmail: row.masked_email || '' });
 });
 
@@ -1028,7 +947,7 @@ router.post('/api/customer-info/:token/photos',
         const key = await uploadPhotoBufferToStorage(file.buffer, file.mimetype);
         keys.push(key);
       } catch (err) {
-        console.error('[customer-info] Photo upload failed:', err.message);
+        logger.error({ err: err.message }, '[customer-info] Photo upload failed:');
         const isStorageConfigErr = /bucket|object storage/i.test(err.message);
         const userMsg = isStorageConfigErr
           ? 'Photo uploads are temporarily unavailable. Please contact us and we\'ll be in touch to collect your photos another way.'
@@ -1074,7 +993,7 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
     res.set('Cache-Control', 'private, max-age=3600');
     res.send(buf);
   } catch (err) {
-    console.error('[customer-info] Failed to serve photo:', err.message);
+    logger.error({ err: err.message }, '[customer-info] Failed to serve photo:');
     res.status(500).json({ error: 'Failed to serve image.' });
   }
 });
@@ -1116,7 +1035,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
         );
       }
       await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
-      console.log(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
+      logger.info(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
       return res.json({ ok: true });
     }
 
@@ -1125,7 +1044,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
     try {
       contact = await fetchContactFromHubSpot(cid);
     } catch (err) {
-      console.error('[customer-info] Failed to fetch contact from HubSpot:', err.message);
+      logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
       return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
     }
 
@@ -1155,7 +1074,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
 
     await sendCustomerInviteEmail(email, maskEmail(email), formLink);
 
-    console.log(`[customer-info] Resent invite link for contact ${cid}`);
+    logger.info(`[customer-info] Resent invite link for contact ${cid}`);
     res.json({ ok: true });
   }
 );
@@ -1204,7 +1123,7 @@ async function backfillMaskedEmails() {
       AND (masked_email IS NULL OR masked_email ~ '@\\*{3}\\.')
   `);
   if (rows.length === 0) return;
-  console.log(`${label} ${rows.length} row(s) need masked_email backfill`);
+  logger.info(`${label} ${rows.length} row(s) need masked_email backfill`);
   let updated = 0;
   let failed  = 0;
   for (const row of rows) {
@@ -1217,10 +1136,10 @@ async function backfillMaskedEmails() {
       updated++;
     } catch (e) {
       failed++;
-      console.warn(`${label} failed to update row ${row.id}:`, e.message);
+      logger.warn({ err: e.message }, `${label} failed to update row ${row.id}:`);
     }
   }
-  console.log(`${label} done — updated ${updated}, failed ${failed}`);
+  logger.info(`${label} done — updated ${updated}, failed ${failed}`);
 }
 
 // Boot-time diagnostic: count active-pending rows with no stored form_link.
@@ -1239,19 +1158,16 @@ async function logNullFormLinkCount() {
     `);
     const cnt = parseInt(rows[0].cnt, 10);
     if (cnt > 0) {
-      console.log(
-        `${label} ${cnt} active-pending submission(s) have no stored form_link ` +
-        `(pre-migration rows — Copy/Open buttons will appear after the first staff resend).`
-      );
+      logger.info(`${label} ${cnt} active-pending submission(s) have no stored form_link ` +
+        `(pre-migration rows — Copy/Open buttons will appear after the first staff resend).`);
     }
   } catch (e) {
-    console.warn(`${label} could not count null form_link rows:`, e.message);
+    logger.warn({ err: e.message }, `${label} could not count null form_link rows:`);
   }
 }
 
 module.exports = {
   router,
-  ensureCustomerInfoSubmissionsTable,
   ensureResendLogTable,
   backfillMaskedEmails,
   logNullFormLinkCount,

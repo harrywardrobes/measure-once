@@ -1,3 +1,4 @@
+const logger = require('./logger');
 const express = require('express');
 const axios   = require('axios');
 const crypto  = require('crypto');
@@ -36,35 +37,12 @@ function getQuickBooksRedirectUri() {
 }
 
 // ── DB ─────────────────────────────────────────────────────────────────────────
-async function initDB() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS qb_tokens (
-      id            SERIAL PRIMARY KEY,
-      access_token  TEXT   NOT NULL,
-      refresh_token TEXT   NOT NULL,
-      realm_id      TEXT   NOT NULL,
-      expires_at    BIGINT NOT NULL,
-      updated_at    TIMESTAMP DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS qb_send_log (
-      id         SERIAL PRIMARY KEY,
-      user_id    TEXT        NOT NULL,
-      sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS qb_send_log_user_sent
-      ON qb_send_log (user_id, sent_at)
-  `);
-}
-initDB().catch(e => console.warn('QB DB init:', e.message));
+// Schema (qb_tokens, qb_send_log + index) is created by migrations on boot.
 
 // Purge rows older than 1 hour every 30 minutes to keep the table small.
 setInterval(() => {
   pool.query(`DELETE FROM qb_send_log WHERE sent_at < NOW() - INTERVAL '1 hour'`)
-    .catch(e => console.warn('QB send log cleanup:', e.message));
+    .catch(e => logger.warn({ err: e.message }, 'QB send log cleanup:'));
 }, 30 * 60 * 1000);
 
 // Returns true and records the attempt if under the limit; false if over limit.
@@ -160,7 +138,7 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
     await persistTokens({ ...r.data, realm_id: realmId });
     res.redirect('/?qb=connected');
   } catch (e) {
-    console.error('QB OAuth callback error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB OAuth callback error:');
     res.redirect('/?qb=error');
   }
 });
@@ -202,7 +180,7 @@ router.get('/api/quickbooks/invoices', isAuthenticated, requireAdmin, quickbooks
     }));
     res.json({ invoices });
   } catch (e) {
-    console.error('QB invoices error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB invoices error:');
     const isDb = !!(e.severity || e.routine || e.code === 'ECONNREFUSED' || e.code === 'ENOTFOUND');
     res.status(503).json({ error: e.message, code: isDb ? 'DB_ERROR' : 'QB_ERROR' });
   }
@@ -241,7 +219,7 @@ router.get('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickbo
       lines,
     });
   } catch (e) {
-    console.error('QB invoice detail error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB invoice detail error:');
     res.status(503).json({ error: e.message });
   }
 });
@@ -274,7 +252,7 @@ router.post('/api/quickbooks/invoice/:id', isAuthenticated, requireAdmin, quickb
     const inv = r.data.Invoice;
     res.json({ success: true, syncToken: inv.SyncToken });
   } catch (e) {
-    console.error('QB invoice update error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB invoice update error:');
     res.status(503).json({ error: e.response?.data?.Fault?.Error?.[0]?.Message || e.message });
   }
 });
@@ -301,7 +279,7 @@ router.get('/api/quickbooks/invoice/:id/pdf', isAuthenticated, requireAdmin, qui
     res.set('Content-Disposition', `attachment; filename="invoice-${req.params.id}.pdf"`);
     res.send(r.data);
   } catch (e) {
-    console.error('QB PDF error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB PDF error:');
     res.status(503).json({ error: e.message });
   }
 });
@@ -316,7 +294,7 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, a
       return res.status(429).json({ error: 'Too many invoice send requests. Please wait before sending again.' });
     }
   } catch (e) {
-    console.error('QB send rate-limit check failed:', e.message);
+    logger.error({ err: e.message }, 'QB send rate-limit check failed:');
     return res.status(500).json({ error: 'Could not verify send rate limit.' });
   }
 
@@ -344,7 +322,7 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, a
     );
     res.json({ success: true });
   } catch (e) {
-    console.error('QB send error:', e.response?.data || e.message);
+    logger.error({ err: e.response?.data || e.message }, 'QB send error:');
     res.status(503).json({ error: e.response?.data?.Fault?.Error?.[0]?.Message || e.message });
   }
 });

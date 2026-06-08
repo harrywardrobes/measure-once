@@ -128,7 +128,7 @@ function startMockQb() {
   });
 }
 
-async function seedVisit(pool, runId, { qbEstimateId }) {
+async function seedVisit(pool, runId, { qbEstimateId, createdBy }) {
   // Seed contact (HubSpot-side) is not strictly required for the QB block —
   // runSubmitSideEffects only checks visit.rooms.length. We still set
   // contact_id so generated payloads look realistic.
@@ -141,7 +141,7 @@ async function seedVisit(pool, runId, { qbEstimateId }) {
              $2, NOW(), 90, 'Test location', 'note', TRUE,
              'revision_requested', $3, $4)
      RETURNING id`,
-    [CUSTOMER_ID, `privtest-qb-${runId}@privtest.local`, qbEstimateId, qbEstimateId ? `DOC${qbEstimateId}` : null]
+    [CUSTOMER_ID, String(createdBy), qbEstimateId, qbEstimateId ? `DOC${qbEstimateId}` : null]
   );
   const visitId = insertVisit.rows[0].id;
   await pool.query(
@@ -179,7 +179,8 @@ async function cleanup(pool, runId) {
   await pool.query(`DELETE FROM qb_tokens WHERE realm_id = $1`, [REALM_ID]);
   // Visits cascade their rooms/images via FK.
   await pool.query(
-    `DELETE FROM design_visits WHERE created_by LIKE 'privtest-qb-%'`
+    `DELETE FROM design_visits WHERE contact_id = $1`,
+    [CUSTOMER_ID]
   );
 }
 
@@ -272,7 +273,7 @@ async function main() {
     mock.state.estimates[PRIOR_A] = {
       Id: PRIOR_A, SyncToken: '7', TxnStatus: 'Pending', DocNumber: `DOC${PRIOR_A}`,
     };
-    const visitId = await seedVisit(pool, runId, { qbEstimateId: PRIOR_A });
+    const visitId = await seedVisit(pool, runId, { qbEstimateId: PRIOR_A, createdBy: member.id });
     mock.state.posts.length = 0;
     mock.state.gets.length  = 0;
 

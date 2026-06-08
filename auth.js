@@ -2,6 +2,7 @@
 // Sessions are still managed by passport + connect-pg-simple, and req.user
 // keeps its shape (`{ claims: { sub, email, ... }, expires_at, privilege_level,
 // onboarding_status }`) so the rest of the app continues to work unchanged.
+const logger = require('./logger');
 const fs = require('fs');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
@@ -45,7 +46,7 @@ async function verifyCaptchaToken(token, ip) {
       // Fail closed: captcha is a required abuse control in production.
       // An operator must set TURNSTILE_SECRET_KEY before public auth endpoints
       // become reachable.
-      console.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production but is not set — rejecting public auth request.');
+      logger.error('[SECURITY] TURNSTILE_SECRET_KEY is required in production but is not set — rejecting public auth request.');
       return { ok: false, reason: 'captcha-not-configured' };
     }
     return { ok: true, skipped: true };
@@ -54,7 +55,7 @@ async function verifyCaptchaToken(token, ip) {
   // No token supplied — fail closed. The widget must complete before the form
   // can be submitted; omitting the token is a strong signal of automation.
   if (!token || typeof token !== 'string' || !token.trim()) {
-    console.warn('  Turnstile: no token supplied — rejecting request');
+    logger.warn('  Turnstile: no token supplied — rejecting request');
     return { ok: false, reason: 'missing-input-response' };
   }
 
@@ -84,7 +85,7 @@ async function verifyCaptchaToken(token, ip) {
   } catch (e) {
     // Cloudflare unreachable — fail closed; a verification outage must not open
     // the door to automated credential-stuffing or flood attacks.
-    console.warn('  Turnstile: Cloudflare unreachable, rejecting request —', e.message);
+    logger.warn({ err: e.message }, '  Turnstile: Cloudflare unreachable, rejecting request —');
     return { ok: false, reason: 'cloudflare-unreachable' };
   }
 }
@@ -166,7 +167,7 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
 
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('  SMTP not configured — skipping admin notification email.');
+    logger.warn('  SMTP not configured — skipping admin notification email.');
     return;
   }
 
@@ -199,17 +200,17 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
         <p>Log in to the admin panel to approve or reject the request.</p>
       `,
     });
-    console.log(`  Admin notification sent for access request: ${email}`);
+    logger.info(`  Admin notification sent for access request: ${email}`);
   } catch (err) {
-    console.error('  Failed to send admin notification email:', err.message);
+    logger.error({ err: err.message }, '  Failed to send admin notification email:');
   }
 }
 
 async function sendSetPasswordEmail(email, token, { resend = false, reset = false } = {}) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
-    console.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
+    logger.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
+    logger.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
     return;
   }
   const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
@@ -231,16 +232,16 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
       text,
       html,
     });
-    console.log(`  Set-password email sent to ${email}`);
+    logger.info(`  Set-password email sent to ${email}`);
   } catch (err) {
-    console.error('  Failed to send set-password email:', err.message);
+    logger.error({ err: err.message }, '  Failed to send set-password email:');
   }
 }
 
 async function notifyUserOfPhotoApproval(email) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn(`  SMTP not configured — skipping photo-approval email for ${email}.`);
+    logger.warn(`  SMTP not configured — skipping photo-approval email for ${email}.`);
     return 'skipped';
   }
   const profileUrl = `${appBaseUrl()}/profile`;
@@ -264,10 +265,10 @@ async function notifyUserOfPhotoApproval(email) {
         <p><a href="${profileUrl}">${profileUrl}</a></p>
       `,
     });
-    console.log(`  Photo-approval email sent to ${email}`);
+    logger.info(`  Photo-approval email sent to ${email}`);
     return 'sent';
   } catch (err) {
-    console.error('  Failed to send photo-approval email:', err.message);
+    logger.error({ err: err.message }, '  Failed to send photo-approval email:');
     return 'failed';
   }
 }
@@ -275,7 +276,7 @@ async function notifyUserOfPhotoApproval(email) {
 async function notifyUserOfPhotoRejection(email) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn(`  SMTP not configured — skipping photo-rejection email for ${email}.`);
+    logger.warn(`  SMTP not configured — skipping photo-rejection email for ${email}.`);
     return 'skipped';
   }
   const profileUrl = `${appBaseUrl()}/profile`;
@@ -302,10 +303,10 @@ async function notifyUserOfPhotoRejection(email) {
         <p>If you have any questions, please contact your administrator.</p>
       `,
     });
-    console.log(`  Photo-rejection email sent to ${email}`);
+    logger.info(`  Photo-rejection email sent to ${email}`);
     return 'sent';
   } catch (err) {
-    console.error('  Failed to send photo-rejection email:', err.message);
+    logger.error({ err: err.message }, '  Failed to send photo-rejection email:');
     return 'failed';
   }
 }
@@ -346,250 +347,12 @@ const loginLimiter = rateLimit({
 
 // ── Schema bootstrap ─────────────────────────────────────────────────────────
 async function ensureAuthTables() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      sid VARCHAR PRIMARY KEY,
-      sess JSONB NOT NULL,
-      expire TIMESTAMP NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON sessions (expire);
-    CREATE TABLE IF NOT EXISTS users (
-      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      email VARCHAR UNIQUE,
-      first_name VARCHAR,
-      last_name VARCHAR,
-      profile_image_url VARCHAR,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS allowed_emails (
-      email VARCHAR PRIMARY KEY,
-      approved_at TIMESTAMP DEFAULT NOW(),
-      note VARCHAR
-    );
-    -- Tracks which ADMIN_EMAILS addresses have been bootstrapped into
-    -- allowed_emails. Once an email is recorded here, restarts will not
-    -- re-add it to allowed_emails even if an admin later revokes it.
-    CREATE TABLE IF NOT EXISTS bootstrap_admin_emails (
-      email VARCHAR PRIMARY KEY,
-      seeded_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS account_requests (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR NOT NULL,
-      email VARCHAR NOT NULL,
-      status VARCHAR NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS "IDX_account_requests_email" ON account_requests (email);
-  `);
-  await pool.query(`
-    DELETE FROM account_requests a
-      USING account_requests b
-      WHERE a.id > b.id AND a.email = b.email;
-    CREATE UNIQUE INDEX IF NOT EXISTS "IDX_account_requests_email_unique" ON account_requests (email);
-  `);
-
-  await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS job_role TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS privilege_level TEXT NOT NULL DEFAULT 'member';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_status TEXT NOT NULL DEFAULT 'active';
-  `);
-
-  /* Existing users (migrated from Replit Auth) are treated as already-active
-     so they don't get pushed through the new "Complete your profile" flow,
-     but they will still need to set a password via the emailed link before
-     they can sign in again. */
-  await pool.query(`
-    UPDATE users SET onboarding_status = 'active'
-     WHERE onboarding_status IS NULL OR onboarding_status NOT IN ('active','more_info_required');
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS password_set_tokens (
-      token_hash TEXT PRIMARY KEY,
-      email      VARCHAR NOT NULL,
-      expires_at TIMESTAMP NOT NULL,
-      used_at    TIMESTAMP,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_email" ON password_set_tokens (email);
-    CREATE INDEX IF NOT EXISTS "IDX_password_set_tokens_expire" ON password_set_tokens (expires_at);
-    ALTER TABLE password_set_tokens ADD COLUMN IF NOT EXISTS purpose TEXT;
-  `);
-
-  await pool.query(`
-    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS metadata JSONB;
-  `);
-
-  await pool.query(`
-    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS pending_profile_updates JSONB;
-  `);
-
-  await pool.query(`
-    ALTER TABLE allowed_emails ADD COLUMN IF NOT EXISTS conflict_created_at TIMESTAMPTZ;
-  `);
-
-  // One-time backfill: stamp conflict_created_at for any pre-existing unresolved conflicts
-  // that pre-date this migration.  We use COALESCE(u.updated_at, u.created_at) as the best
-  // available approximation of when the conflict was first created — this is exactly the same
-  // value the old stale checks used, so behaviour is preserved for legacy rows while preventing
-  // future profile edits from resetting the timer.
-  await pool.query(`
-    UPDATE allowed_emails ae
-       SET conflict_created_at = COALESCE(u.updated_at, u.created_at, NOW())
-      FROM users u
-     WHERE LOWER(u.email) = ae.email
-       AND ae.pending_profile_updates IS NOT NULL
-       AND ae.conflict_created_at IS NULL
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_settings (
-      key VARCHAR PRIMARY KEY,
-      value JSONB NOT NULL,
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
-
-  await pool.query(`
-    DO $$
-    BEGIN
-      CREATE TABLE IF NOT EXISTS job_roles (
-        job_id         SERIAL PRIMARY KEY,
-        name           VARCHAR NOT NULL UNIQUE,
-        privilege_level TEXT    NOT NULL DEFAULT 'member',
-        created_at     TIMESTAMP DEFAULT NOW()
-      );
-
-      BEGIN
-        ALTER TABLE job_roles ADD COLUMN job_id SERIAL;
-      EXCEPTION WHEN duplicate_column THEN NULL;
-      END;
-
-      BEGIN
-        ALTER TABLE job_roles ADD COLUMN privilege_level TEXT NOT NULL DEFAULT 'member';
-      EXCEPTION WHEN duplicate_column THEN NULL;
-      END;
-
-      IF EXISTS (
-        SELECT 1
-        FROM   information_schema.key_column_usage kcu
-        JOIN   information_schema.table_constraints tc
-               ON  tc.constraint_name = kcu.constraint_name
-               AND tc.table_name      = kcu.table_name
-        WHERE  tc.table_name      = 'job_roles'
-          AND  tc.constraint_type = 'PRIMARY KEY'
-          AND  kcu.column_name    = 'name'
-      ) THEN
-        ALTER TABLE job_roles DROP CONSTRAINT job_roles_pkey;
-        ALTER TABLE job_roles ADD  PRIMARY KEY (job_id);
-        BEGIN
-          ALTER TABLE job_roles ADD CONSTRAINT job_roles_name_key UNIQUE (name);
-        EXCEPTION WHEN duplicate_table THEN NULL;
-        END;
-      END IF;
-
-      INSERT INTO job_roles (name, privilege_level) VALUES
-        ('Site Manager', 'manager'),
-        ('Fitter',       'member'),
-        ('Sales',        'member'),
-        ('Admin',        'admin'),
-        ('Office',       'manager')
-      ON CONFLICT (name) DO NOTHING;
-
-      UPDATE job_roles SET privilege_level = 'admin'   WHERE name = 'Admin'        AND privilege_level = 'member';
-      UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Office'       AND privilege_level = 'member';
-      UPDATE job_roles SET privilege_level = 'manager' WHERE name = 'Site Manager' AND privilege_level = 'member';
-    END
-    $$;
-  `);
-
-  await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_photo  TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS custom_photo   TEXT;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_version  TIMESTAMPTZ;
-  `);
-
-  await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS prefs JSONB NOT NULL DEFAULT '{}';
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS admin_audit_log (
-      id SERIAL PRIMARY KEY,
-      acted_at TIMESTAMP DEFAULT NOW(),
-      admin_email VARCHAR NOT NULL,
-      action_type VARCHAR NOT NULL,
-      target_email VARCHAR,
-      details TEXT
-    );
-    CREATE INDEX IF NOT EXISTS "IDX_admin_audit_log_acted_at" ON admin_audit_log (acted_at DESC);
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS role_permissions (
-      permission_key  VARCHAR NOT NULL,
-      privilege_level VARCHAR NOT NULL,
-      allowed         BOOLEAN NOT NULL DEFAULT false,
-      PRIMARY KEY (permission_key, privilege_level)
-    );
-  `);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS nav_role_configs (
-      role_name    TEXT PRIMARY KEY,
-      primary_keys JSONB NOT NULL DEFAULT '["home","customers","projects"]',
-      updated_at   TIMESTAMP DEFAULT NOW()
-    );
-    ALTER TABLE nav_role_configs ADD COLUMN IF NOT EXISTS is_customized BOOLEAN NOT NULL DEFAULT FALSE;
-    INSERT INTO nav_role_configs (role_name, primary_keys) VALUES
-      ('__default__',  '["home","customers","projects"]'),
-      ('Fitter',       '["home","customers","projects"]'),
-      ('Site Manager', '["home","sales","projects"]'),
-      ('Sales',        '["home","customers","projects"]'),
-      ('Admin',        '["home","sales","projects"]'),
-      ('Office',       '["home","sales","projects"]')
-    ON CONFLICT (role_name) DO NOTHING;
-    -- One-time migration: the in-app Calendar page was retired (Google Calendar
-    -- is now the single source of truth). Replace any stored "calendar" nav key
-    -- with "projects" so no saved layout references the removed page. Element-wise
-    -- and order-preserving; runs unconditionally (even for is_customized=TRUE) so
-    -- admin-customised layouts are repaired too. A row that already contained
-    -- "projects" alongside "calendar" collapses to a duplicate and is rejected by
-    -- the client-side VALID_NAV_KEYS check, which then falls back to defaults.
-    UPDATE nav_role_configs
-      SET primary_keys = (
-        SELECT jsonb_agg(
-          CASE WHEN elem = '"calendar"'::jsonb THEN '"projects"'::jsonb ELSE elem END
-          ORDER BY ord
-        )
-        FROM jsonb_array_elements(primary_keys) WITH ORDINALITY AS arr(elem, ord)
-      )
-    WHERE primary_keys @> '"calendar"';
-    -- One-time migration: fix any existing __default__ row that still contains
-    -- the invalid "trades" key (seeded before task #1892 corrected it).
-    -- Runs unconditionally so it repairs the row even if is_customized=true
-    -- (an admin who saved a layout containing "trades" would otherwise still
-    -- have their default rejected by the client-side VALID_NAV_KEYS check).
-    UPDATE nav_role_configs
-      SET primary_keys = '["home","customers","projects"]'
-    WHERE role_name = '__default__'
-      AND primary_keys @> '"trades"';
-    -- One-time migration: mark pre-existing customised rows as is_customized=TRUE.
-    -- Before task #1892 added the is_customized column, the PATCH endpoint saved
-    -- custom primary_keys without setting is_customized, leaving rows with
-    -- is_customized=FALSE but non-default primary_keys. The role-config lookup
-    -- only returns keys when is_customized=TRUE, so those customisations were
-    -- silently ignored after the column was introduced. Any non-default row
-    -- whose keys differ from the column default was explicitly set by an admin.
-    UPDATE nav_role_configs
-      SET is_customized = TRUE
-    WHERE is_customized = FALSE
-      AND role_name != '__default__'
-      AND primary_keys != '["home","customers","projects"]'::jsonb;
-  `);
+  // Schema (sessions, users, allowed_emails, account_requests,
+  // password_set_tokens, bootstrap_admin_emails, job_roles, nav_role_configs
+  // …) plus their idempotent seeds/backfills are created by migrations on boot.
+  // This boot step performs only the runtime ADMIN_EMAILS bootstrap below, which
+  // depends on the process.env.ADMIN_EMAILS value and cannot live in a static
+  // migration.
 
   // Seed admin emails from env var + create user rows for them so the very
   // first admin can sign in once they set a password via the emailed link.
@@ -632,11 +395,11 @@ async function cleanupExpiredRateLimitRecords() {
   try {
     const result = await pool.query(`DELETE FROM rate_limit.sessions WHERE expires_at < NOW()`);
     if (result.rowCount > 0) {
-      console.log(`[rate-limit cleanup] Removed ${result.rowCount} expired session(s).`);
+      logger.info(`[rate-limit cleanup] Removed ${result.rowCount} expired session(s).`);
     }
   } catch (err) {
     if (err.code !== '42P01') {
-      console.error('[rate-limit cleanup] Failed to prune expired records:', err.message);
+      logger.error({ err: err.message }, '[rate-limit cleanup] Failed to prune expired records:');
     }
   }
 }
@@ -650,10 +413,10 @@ async function cleanupExpiredSessions() {
   try {
     const result = await pool.query(`DELETE FROM sessions WHERE expire < NOW()`);
     if (result.rowCount > 0) {
-      console.log(`[session cleanup] Removed ${result.rowCount} expired session(s).`);
+      logger.info(`[session cleanup] Removed ${result.rowCount} expired session(s).`);
     }
   } catch (err) {
-    console.error('[session cleanup] Failed to prune expired sessions:', err.message);
+    logger.error({ err: err.message }, '[session cleanup] Failed to prune expired sessions:');
   }
 }
 
@@ -664,9 +427,9 @@ async function cleanupExpiredPasswordTokens() {
     const r = await pool.query(
       `DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days' AND used_at IS NULL`
     );
-    if (r.rowCount > 0) console.log(`[password-token cleanup] Removed ${r.rowCount} expired unconsumed token(s).`);
+    if (r.rowCount > 0) logger.info(`[password-token cleanup] Removed ${r.rowCount} expired unconsumed token(s).`);
   } catch (err) {
-    console.error('[password-token cleanup] Failed:', err.message);
+    logger.error({ err: err.message }, '[password-token cleanup] Failed:');
   }
 }
 
@@ -688,7 +451,7 @@ async function logAdminAction(adminEmail, actionType, targetEmail, details) {
     );
     return true;
   } catch (err) {
-    console.error('Failed to write admin audit log:', err.message);
+    logger.error({ err: err.message }, 'Failed to write admin audit log:');
     return false;
   }
 }
@@ -982,11 +745,9 @@ async function setupAuth(app) {
   // public auth endpoint (/api/login, /api/forgot-password, /api/request-access)
   // runs with no bot challenge, leaving only rate limits as abuse protection.
   if (!process.env.TURNSTILE_SECRET_KEY || !process.env.TURNSTILE_SITE_KEY) {
-    console.warn(
-      '[SECURITY] TURNSTILE_SECRET_KEY and/or TURNSTILE_SITE_KEY are not set. ' +
+    logger.warn('[SECURITY] TURNSTILE_SECRET_KEY and/or TURNSTILE_SITE_KEY are not set. ' +
       'Captcha protection is disabled on all public auth endpoints. ' +
-      'Set both secrets in production to enable bot and credential-stuffing protection.'
-    );
+      'Set both secrets in production to enable bot and credential-stuffing protection.');
   }
 
   passport.serializeUser((user, cb) => cb(null, user));
@@ -1026,7 +787,7 @@ async function setupAuth(app) {
         next: sessionUser.onboarding_status === 'more_info_required' ? '/onboarding' : '/',
       });
     } catch (e) {
-      console.error('Login failed:', e.message);
+      logger.error({ err: e.message }, 'Login failed:');
       res.status(500).json({ error: 'Could not sign in. Please try again later.' });
     }
   });
@@ -1098,7 +859,7 @@ async function setupAuth(app) {
           [name, email]
         );
         if (insertResult.rowCount > 0) {
-          console.log(`  Access request: ${name} <${email}>`);
+          logger.info(`  Access request: ${name} <${email}>`);
           const createdAt = insertResult.rows[0].created_at;
           notifyAdminsOfAccessRequest(name, email, createdAt).catch(() => {});
         }
@@ -1109,7 +870,7 @@ async function setupAuth(app) {
         res.redirect('/login?access_requested=1');
       }
     } catch (e) {
-      console.error('request-access failed:', e.message);
+      logger.error({ err: e.message }, 'request-access failed:');
       res.status(500).json({ error: 'Could not submit request. Please try again later.' });
     }
   });
@@ -1131,16 +892,16 @@ async function setupAuth(app) {
         try {
           const token = await issuePasswordSetToken(email, { purpose: 'reset' });
           await sendSetPasswordEmail(email, token, { reset: true });
-          console.log(`  Password reset link issued for ${email}`);
+          logger.info(`  Password reset link issued for ${email}`);
         } catch (mailErr) {
-          console.error('  Failed to issue/send password reset email:', mailErr.message);
+          logger.error({ err: mailErr.message }, '  Failed to issue/send password reset email:');
         }
       } else {
-        console.log(`  Password reset requested for unknown email: ${email}`);
+        logger.info(`  Password reset requested for unknown email: ${email}`);
       }
       res.json({ ok: true });
     } catch (e) {
-      console.error('forgot-password failed:', e.message);
+      logger.error({ err: e.message }, 'forgot-password failed:');
       res.json({ ok: true });
     }
   });
@@ -1242,14 +1003,14 @@ async function setupAuth(app) {
           [String(userId), currentSid, lower]
         );
         if (del.rowCount) {
-          console.log(`[set-password] Cleared ${del.rowCount} other session(s) for ${lower}.`);
+          logger.info(`[set-password] Cleared ${del.rowCount} other session(s) for ${lower}.`);
         }
       }
       await client.query('COMMIT');
       res.json({ ok: true });
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('set-password failed:', e.message);
+      logger.error({ err: e.message }, 'set-password failed:');
       res.status(500).json({ error: 'Could not set password. Please try again.' });
     } finally {
       client.release();
@@ -1308,13 +1069,13 @@ async function setupAuth(app) {
         [String(dbUser.id), currentSid, email]
       );
       if (del.rowCount) {
-        console.log(`[change-password] Cleared ${del.rowCount} other session(s) for ${email}.`);
+        logger.info(`[change-password] Cleared ${del.rowCount} other session(s) for ${email}.`);
       }
       await client.query('COMMIT');
       res.json({ ok: true, otherSessionsCleared: del.rowCount || 0 });
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('change-password failed:', e.message);
+      logger.error({ err: e.message }, 'change-password failed:');
       res.status(500).json({ error: 'Could not change password. Please try again.' });
     } finally {
       client.release();
@@ -1481,7 +1242,7 @@ async function setupAuth(app) {
       res.json({ ok: true });
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('onboarding-complete failed:', e.message);
+      logger.error({ err: e.message }, 'onboarding-complete failed:');
       res.status(500).json({ error: 'Could not save your profile. Please try again.' });
     } finally {
       client.release();
@@ -1576,7 +1337,7 @@ async function setupAuth(app) {
         const token = await issuePasswordSetToken(email);
         await sendSetPasswordEmail(email, token);
       } catch (mailErr) {
-        console.error('  Failed to issue/send set-password email after approval:', mailErr.message);
+        logger.error({ err: mailErr.message }, '  Failed to issue/send set-password email after approval:');
       }
 
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
@@ -1685,7 +1446,7 @@ async function setupAuth(app) {
         const token = await issuePasswordSetToken(email);
         await sendSetPasswordEmail(email, token);
       } catch (mailErr) {
-        console.error('  Failed to issue/send set-password email after add-allowed:', mailErr.message);
+        logger.error({ err: mailErr.message }, '  Failed to issue/send set-password email after add-allowed:');
       }
 
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
@@ -1751,7 +1512,7 @@ async function setupAuth(app) {
       await logAdminAction(adminEmail, 'resend_set_password_email', email, null);
       res.json({ ok: true });
     } catch (e) {
-      console.error('resend set-password failed:', e.message);
+      logger.error({ err: e.message }, 'resend set-password failed:');
       res.status(500).json({ error: 'Could not send the email. Please try again.' });
     }
   });
@@ -1791,7 +1552,7 @@ async function setupAuth(app) {
       await logAdminAction(adminEmail, 'force_password_reset', email, null);
       res.json({ ok: true });
     } catch (e) {
-      console.error('force password reset failed:', e.message);
+      logger.error({ err: e.message }, 'force password reset failed:');
       res.status(500).json({ error: 'Could not force password reset. Please try again.' });
     }
   });
@@ -1888,7 +1649,7 @@ async function setupAuth(app) {
       res.json({ ok: true });
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error('resolve-profile-conflicts failed:', e.message);
+      logger.error({ err: e.message }, 'resolve-profile-conflicts failed:');
       res.status(500).json({ error: 'Could not resolve conflicts. Please try again.' });
     } finally {
       client.release();
@@ -1943,7 +1704,7 @@ async function setupAuth(app) {
         hasCustomPhoto:  u.has_custom_photo  || false,
       })));
     } catch (e) {
-      console.error('GET /api/platform-users failed:', e.message);
+      logger.error({ err: e.message }, 'GET /api/platform-users failed:');
       res.status(500).json({ error: 'Failed to load users' });
     }
   });
@@ -2216,7 +1977,7 @@ async function setupAuth(app) {
                 );
               }
             } catch (e) {
-              console.error('Failed to invalidate sessions after role change:', e.message);
+              logger.error({ err: e.message }, 'Failed to invalidate sessions after role change:');
             }
           }
         }
@@ -2747,7 +2508,7 @@ async function sendConflictDigest() {
       <p>Review and resolve conflicts in the <a href="${escapeHtml(adminUrl)}">admin panel → Team tab</a>.</p>
     `,
   });
-  console.log(`[conflict-digest] Sent digest to ${adminEmails.length} admin(s) — ${count} conflict(s) (stale after ${staleDays} days).`);
+  logger.info(`[conflict-digest] Sent digest to ${adminEmails.length} admin(s) — ${count} conflict(s) (stale after ${staleDays} days).`);
   return true;
 }
 
@@ -2780,7 +2541,7 @@ async function runConflictDigestIfDue() {
       );
     }
   } catch (e) {
-    console.error('[conflict-digest] Error:', e.message);
+    logger.error({ err: e.message }, '[conflict-digest] Error:');
   }
 }
 

@@ -1,6 +1,7 @@
 // design-visits.js — start_design_visit card action handler
 // DB tables, admin catalogue routes, design visit CRUD, public sign-off routes.
 
+const logger = require('./logger');
 const express   = require('express');
 const crypto    = require('crypto');
 const axios     = require('axios').create({ timeout: 12000 });
@@ -30,7 +31,7 @@ function _deleteLocalHandleImage(imageUrl) {
   if (path.dirname(resolved) !== path.resolve(HANDLES_UPLOAD_DIR)) return;
   fs.unlink(resolved, err => {
     if (err && err.code !== 'ENOENT') {
-      console.warn('[design-visits] Failed to delete handle image', resolved, err.message);
+      logger.warn({ detail: resolved, err: err.message }, '[design-visits] Failed to delete handle image');
     }
   });
 }
@@ -46,7 +47,7 @@ function _deleteLocalDoorStyleImage(imageUrl) {
   if (path.dirname(resolved) !== path.resolve(DOOR_STYLES_UPLOAD_DIR)) return;
   fs.unlink(resolved, err => {
     if (err && err.code !== 'ENOENT') {
-      console.warn('[design-visits] Failed to delete door-style image', resolved, err.message);
+      logger.warn({ detail: resolved, err: err.message }, '[design-visits] Failed to delete door-style image');
     }
   });
 }
@@ -189,16 +190,14 @@ async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, max
       const hinted = retryAfterMs(err);
       const backoff = hinted != null ? hinted : Math.min(baseDelayMs * Math.pow(2, attempt), maxDelayMs);
       if (process.env.DEBUG_HUBSPOT) {
-        console.warn('[design-visits/hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s',
-          attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
+        logger.warn('[design-visits/hubspot-retry] attempt=%d status=%s backoff=%dms endpoint=%s %s', attempt + 1, err.response?.status || 'network', backoff, method.toUpperCase(), url);
       }
       await sleep(backoff);
     }
   }
   const base = hubspotApiBase();
   const shortUrl = url.startsWith(base) ? url.slice(base.length) : url;
-  console.error('[design-visits/hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s',
-    maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
+  logger.error('[design-visits/hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s', maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
   throw lastErr;
 }
 function adminEmails() {
@@ -255,156 +254,6 @@ function checkDesignVisitRateLimit(userId) {
 }
 
 // ── DB schema ─────────────────────────────────────────────────────────────────
-async function ensureDesignVisitTables() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS terms_conditions_versions (
-      id             SERIAL PRIMARY KEY,
-      version_number INT NOT NULL,
-      terms_text     TEXT NOT NULL,
-      created_by     TEXT,
-      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS tcv_version_number_idx ON terms_conditions_versions (version_number)`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_handles (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      description TEXT,
-      image_url   TEXT,
-      sort_order  INT  NOT NULL DEFAULT 0,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`ALTER TABLE design_visit_handles ADD COLUMN IF NOT EXISTS style TEXT`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_furniture_ranges (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      description TEXT,
-      sort_order  INT  NOT NULL DEFAULT 0,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_door_styles (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      image_url   TEXT,
-      sort_order  INT  NOT NULL DEFAULT 0,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visits (
-      id                   SERIAL PRIMARY KEY,
-      contact_id           TEXT NOT NULL,
-      contact_name         TEXT,
-      contact_email        TEXT,
-      created_by           TEXT NOT NULL,
-      handle_id            INT  REFERENCES design_visit_handles(id) ON DELETE SET NULL,
-      furniture_range_id   INT  REFERENCES design_visit_furniture_ranges(id) ON DELETE SET NULL,
-      visit_date           TIMESTAMPTZ,
-      duration_min         INT  NOT NULL DEFAULT 90,
-      location             TEXT,
-      notes                TEXT,
-      terms_accepted       BOOLEAN NOT NULL DEFAULT FALSE,
-      status               TEXT NOT NULL DEFAULT 'draft',
-      qb_estimate_id       TEXT,
-      qb_estimate_doc_num  TEXT,
-      signoff_token_hash   TEXT,
-      signoff_expires_at   TIMESTAMPTZ,
-      signed_off_at        TIMESTAMPTZ,
-      revision_note        TEXT,
-      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`ALTER TABLE design_visits ADD COLUMN IF NOT EXISTS qb_estimate_history JSONB NOT NULL DEFAULT '[]'::jsonb`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_contact_id_idx ON design_visits (contact_id)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS design_visits_status_idx ON design_visits (status)`);
-  // Track sign-off token hashes that have been invalidated because the designer
-  // re-opened the visit. Lets the public sign-off route distinguish a genuine
-  // 404 (unknown token) from a stale-but-recognised link so the customer sees a
-  // "your designer is making changes" notice instead of an error page.
-  await pool.query(`
-    ALTER TABLE design_visits
-      ADD COLUMN IF NOT EXISTS superseded_signoff_token_hashes TEXT[]
-        NOT NULL DEFAULT ARRAY[]::TEXT[]
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS design_visits_superseded_token_hashes_idx
-      ON design_visits USING GIN (superseded_signoff_token_hashes)
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_rooms (
-      id               SERIAL PRIMARY KEY,
-      design_visit_id  INT NOT NULL REFERENCES design_visits(id) ON DELETE CASCADE,
-      room_name        TEXT NOT NULL,
-      door_style_id    INT REFERENCES design_visit_door_styles(id) ON DELETE SET NULL,
-      width_mm         INT,
-      height_mm        INT,
-      depth_mm         INT,
-      unit_count       INT NOT NULL DEFAULT 1,
-      unit_price_pence INT NOT NULL DEFAULT 0,
-      notes            TEXT,
-      sort_order       INT NOT NULL DEFAULT 0,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS design_visit_rooms_visit_id_idx ON design_visit_rooms (design_visit_id)`);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_room_images (
-      id          SERIAL PRIMARY KEY,
-      room_id     INT  NOT NULL REFERENCES design_visit_rooms(id) ON DELETE CASCADE,
-      storage_key TEXT NOT NULL,
-      mime_type   TEXT,
-      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS dvri_room_id_idx ON design_visit_room_images (room_id)`);
-
-  // Tracks opaque storage keys that have been uploaded but not yet saved to a visit,
-  // so that the delete endpoint can verify the caller owns the key.
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS design_visit_pending_uploads (
-      storage_key TEXT PRIMARY KEY,
-      created_by  TEXT NOT NULL,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  // Add terms_condition_version_id FK column if not present (idempotent migration)
-  await pool.query(`
-    ALTER TABLE design_visits
-      ADD COLUMN IF NOT EXISTS terms_condition_version_id INT
-        REFERENCES terms_conditions_versions(id) ON DELETE SET NULL
-  `);
-
-  // Seed: if versions table is empty but admin_settings has terms text, insert version 1
-  try {
-    const countR = await pool.query(`SELECT COUNT(*) FROM terms_conditions_versions`);
-    if (parseInt(countR.rows[0].count, 10) === 0) {
-      const settingsR = await pool.query(`SELECT value FROM admin_settings WHERE key='design_visit_terms'`);
-      const existingText = settingsR.rows[0]?.value?.text || '';
-      if (existingText.trim()) {
-        await pool.query(
-          `INSERT INTO terms_conditions_versions (version_number, terms_text, created_by)
-           VALUES (1, $1, 'system')`,
-          [existingText]
-        );
-        console.log('[design-visits] Seeded terms version 1 from existing admin_settings.');
-      }
-    }
-  } catch (seedErr) {
-    console.warn('[design-visits] Terms version seed failed (non-fatal):', seedErr.message);
-  }
-}
-
 // ── BroadcastChannel event helper ─────────────────────────────────────────────
 // For server-side we can't use real BroadcastChannel; we signal via SSE or
 // simply rely on the admin UI's manual channel post. The server routes set a
@@ -549,7 +398,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         { properties: { hs_lead_status: submittedLeadStatus } }
       );
     } catch (e) {
-      console.warn('[design-visits] HubSpot lead status update failed:', e.message);
+      logger.warn({ err: e.message }, '[design-visits] HubSpot lead status update failed:');
     }
   }
 
@@ -582,7 +431,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         }
       );
     } catch (e) {
-      console.warn('[design-visits] HubSpot note creation failed:', e.message);
+      logger.warn({ err: e.message }, '[design-visits] HubSpot note creation failed:');
     }
   }
 
@@ -664,11 +513,11 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
               updated = true;
             }
           } else {
-            console.warn(`[design-visits] QB estimate ${priorId} not updatable (TxnStatus=${existing?.TxnStatus || 'unknown'}); creating replacement.`);
+            logger.warn(`[design-visits] QB estimate ${priorId} not updatable (TxnStatus=${existing?.TxnStatus || 'unknown'}); creating replacement.`);
           }
         } catch (e) {
           // 404 / deleted / voided / token issue — fall back to create.
-          console.warn(`[design-visits] QB estimate ${priorId} fetch/update failed (${e.response?.status || ''} ${e.message}); creating replacement.`);
+          logger.warn(`[design-visits] QB estimate ${priorId} fetch/update failed (${e.response?.status || ''} ${e.message}); creating replacement.`);
         }
       }
 
@@ -713,7 +562,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
       }
     }
   } catch (e) {
-    console.warn('[design-visits] QuickBooks estimate sync failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] QuickBooks estimate sync failed:');
   }
 
   // 5. Customer confirmation email (non-fatal)
@@ -803,7 +652,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
       });
     }
   } catch (e) {
-    console.warn('[design-visits] Customer email send failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] Customer email send failed:');
   }
 
   // 6. Team notification email (non-fatal)
@@ -867,7 +716,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
       });
     }
   } catch (e) {
-    console.warn('[design-visits] Team notification email failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] Team notification email failed:');
   }
 
   return { rawToken, expiresAt };
@@ -1524,13 +1373,13 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     try {
       await submitDesignVisitAndSync(visitId, handlerConfig || {}, req.user);
     } catch (e) {
-      console.error('[design-visits] Side effect chain error:', e.message);
+      logger.error({ err: e.message }, '[design-visits] Side effect chain error:');
     }
 
     res.status(201).json({ ok: true, designVisitId: visitId });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('[design-visits] POST /api/design-visits error:', e.message);
+    logger.error({ err: e.message }, '[design-visits] POST /api/design-visits error:');
     res.status(500).json({ error: 'Could not save design visit.' });
   } finally {
     client.release();
@@ -1754,13 +1603,13 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     try {
       await submitDesignVisitAndSync(id, handlerConfig || {}, req.user);
     } catch (e) {
-      console.error('[design-visits] Side effect chain error on PUT:', e.message);
+      logger.error({ err: e.message }, '[design-visits] Side effect chain error on PUT:');
     }
 
     res.json({ ok: true, designVisitId: id });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('[design-visits] PUT /api/design-visits/:id error:', e.message);
+    logger.error({ err: e.message }, '[design-visits] PUT /api/design-visits/:id error:');
     res.status(500).json({ error: 'Could not update design visit.' });
   } finally {
     client.release();
@@ -1776,15 +1625,15 @@ function _bestEffortDeleteDesignVisitStorageObject(storageKey) {
   const keyPreview = String(storageKey || '').slice(0, 80);
   try {
     if (!storageKey || typeof storageKey !== 'string') {
-      console.log(`[design-visits] storage delete skip (empty key)`);
+      logger.info(`[design-visits] storage delete skip (empty key)`);
       return;
     }
     if (/^data:/i.test(storageKey)) {
-      console.log(`[design-visits] storage delete skip (inline data URI) key=${keyPreview}`);
+      logger.info(`[design-visits] storage delete skip (inline data URI) key=${keyPreview}`);
       return;
     }
     if (/^https?:\/\//i.test(storageKey)) {
-      console.log(`[design-visits] storage delete skip (external url) key=${keyPreview}`);
+      logger.info(`[design-visits] storage delete skip (external url) key=${keyPreview}`);
       return;
     }
     if (storageKey.startsWith('/uploads/')) {
@@ -1793,16 +1642,16 @@ function _bestEffortDeleteDesignVisitStorageObject(storageKey) {
       const resolved = path.resolve(filePath);
       const uploadsRoot = path.resolve(path.join(__dirname, 'public', 'uploads'));
       if (!resolved.startsWith(uploadsRoot + path.sep)) {
-        console.warn(`[design-visits] storage delete refuse (path escapes uploads) key=${keyPreview}`);
+        logger.warn(`[design-visits] storage delete refuse (path escapes uploads) key=${keyPreview}`);
         return;
       }
       fs.unlink(resolved, err => {
         if (err && err.code === 'ENOENT') {
-          console.log(`[design-visits] storage delete skip (file missing) key=${keyPreview}`);
+          logger.info(`[design-visits] storage delete skip (file missing) key=${keyPreview}`);
         } else if (err) {
-          console.warn(`[design-visits] storage delete fail key=${keyPreview} err=${err.message}`);
+          logger.warn(`[design-visits] storage delete fail key=${keyPreview} err=${err.message}`);
         } else {
-          console.log(`[design-visits] storage delete ok key=${keyPreview}`);
+          logger.info(`[design-visits] storage delete ok key=${keyPreview}`);
         }
       });
       return;
@@ -1811,15 +1660,15 @@ function _bestEffortDeleteDesignVisitStorageObject(storageKey) {
       // Cloud-storage key — fire-and-forget delete from the bucket. Failures
       // are logged but never block DB cleanup.
       dvUploads.deleteOpaqueKey(storageKey).then(
-        () => console.log(`[design-visits] storage delete ok (cloud) key=${keyPreview}`),
-        err => console.warn(`[design-visits] storage delete fail (cloud) key=${keyPreview} err=${err.message}`)
+        () => logger.info(`[design-visits] storage delete ok (cloud) key=${keyPreview}`),
+        err => logger.warn(`[design-visits] storage delete fail (cloud) key=${keyPreview} err=${err.message}`)
       );
       return;
     }
     // Anything else — log so external cleanup tooling has a trail to follow.
-    console.log(`[design-visits] storage delete skip (unrecognised key shape) key=${keyPreview}`);
+    logger.info(`[design-visits] storage delete skip (unrecognised key shape) key=${keyPreview}`);
   } catch (e) {
-    console.warn(`[design-visits] storage delete fail key=${keyPreview} err=${e.message}`);
+    logger.warn(`[design-visits] storage delete fail key=${keyPreview} err=${e.message}`);
   }
 }
 
@@ -1840,7 +1689,7 @@ router.delete('/api/design-visits/:id', isAuthenticated, requireAdmin, async (re
       );
       storageKeys = k.rows.map(r => r.storage_key).filter(Boolean);
     } catch (lookupErr) {
-      console.warn('[design-visits] storage_key lookup failed before delete:', lookupErr.message);
+      logger.warn({ err: lookupErr.message }, '[design-visits] storage_key lookup failed before delete:');
     }
 
     const r = await pool.query(`DELETE FROM design_visits WHERE id=$1 RETURNING id`, [id]);
@@ -1881,7 +1730,7 @@ router.post('/api/design-visits/:id/submit', isAuthenticated, requirePrivilege('
     await submitDesignVisitAndSync(id, req.body?.handlerConfig || {}, req.user);
     res.json({ ok: true });
   } catch (e) {
-    console.error('[design-visits] POST /api/design-visits/:id/submit error:', e.message);
+    logger.error({ err: e.message }, '[design-visits] POST /api/design-visits/:id/submit error:');
     res.status(500).json({ error: e.message });
   }
 });
@@ -2045,7 +1894,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
       terms,
     });
   } catch (e) {
-    console.error('[design-visits] GET sign-off error:', e.message);
+    logger.error({ err: e.message }, '[design-visits] GET sign-off error:');
     res.status(500).json({ error: 'Could not load visit.' });
   }
 });
@@ -2147,7 +1996,7 @@ router.post('/api/design-visits/sign-off/:token', async (req, res) => {
     res.json({ success: true, status: action === 'approve' ? 'signed_off' : 'revision_requested' });
   } catch (e) {
     try { await client.query('ROLLBACK'); } catch {}
-    console.error('[design-visits] POST sign-off error:', e.message);
+    logger.error({ err: e.message }, '[design-visits] POST sign-off error:');
     res.status(500).json({ error: 'Could not process sign-off.' });
   } finally {
     client.release();
@@ -2171,7 +2020,7 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
         `INSERT INTO design_visit_pending_uploads (storage_key, created_by)
          VALUES ($1, $2) ON CONFLICT (storage_key) DO NOTHING`,
         [out.storageKey, String(callerId)],
-      ).catch(err => console.warn('[design-visits] pending upload insert failed (non-fatal):', err.message));
+      ).catch(err => logger.warn({ err: err.message }, '[design-visits] pending upload insert failed (non-fatal):'));
     }
     return res.json({
       storageKey: out.storageKey,
@@ -2181,7 +2030,7 @@ router.post('/api/design-visits/uploads', isAuthenticated, requirePrivilege('mem
     });
   } catch (e) {
     const status = e.statusCode || 500;
-    console.warn('[design-visits] upload failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] upload failed:');
     return res.status(status).json({ error: e.message || 'Upload failed' });
   }
 });
@@ -2215,7 +2064,7 @@ router.delete('/api/design-visits/uploads/:storageKey', isAuthenticated, require
         return res.status(403).json({ error: 'Forbidden' });
       }
     } catch (e) {
-      console.warn('[design-visits] upload ownership check failed:', e.message);
+      logger.warn({ err: e.message }, '[design-visits] upload ownership check failed:');
       return res.status(500).json({ error: 'Ownership check failed' });
     }
   }
@@ -2223,12 +2072,12 @@ router.delete('/api/design-visits/uploads/:storageKey', isAuthenticated, require
     await dvUploads.deleteOpaqueKey(key);
     // Clean up the pending-upload tracking row if it exists.
     pool.query(`DELETE FROM design_visit_pending_uploads WHERE storage_key=$1`, [key])
-      .catch(err => console.warn('[design-visits] pending upload cleanup failed (non-fatal):', err.message));
+      .catch(err => logger.warn({ err: err.message }, '[design-visits] pending upload cleanup failed (non-fatal):'));
     const kp = key.slice(0, 40);
-    console.log(`[design-visits] upload delete ok key=${kp} user=${req.user?.email || '?'}`);
+    logger.info(`[design-visits] upload delete ok key=${kp} user=${req.user?.email || '?'}`);
     return res.status(204).send();
   } catch (e) {
-    console.warn('[design-visits] upload delete failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] upload delete failed:');
     return res.status(500).json({ error: 'Delete failed' });
   }
 });
@@ -2259,9 +2108,9 @@ router.get('/api/design-visit-images/:key', async (req, res) => {
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.send(buf);
   } catch (e) {
-    console.warn('[design-visits] image fetch failed:', e.message);
+    logger.warn({ err: e.message }, '[design-visits] image fetch failed:');
     return res.status(500).send('Error');
   }
 });
 
-module.exports = { router: router, ensureDesignVisitTables };
+module.exports = { router: router };

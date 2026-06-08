@@ -1,6 +1,7 @@
 // photo-reviews.js — review_customer_photos card action handler
 // DB table, fetch-submission route, execute-review route.
 
+const logger = require('./logger');
 const express    = require('express');
 const crypto     = require('crypto');
 const { Pool }   = require('pg');
@@ -68,25 +69,7 @@ function escapeHtml(str) {
 
 // ── DB schema ─────────────────────────────────────────────────────────────────
 async function ensurePhotoReviewOutcomesTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS photo_review_outcomes (
-      id                  SERIAL PRIMARY KEY,
-      submission_id       INT  NOT NULL REFERENCES customer_info_submissions(id) ON DELETE CASCADE,
-      contact_id          TEXT NOT NULL,
-      outcome             TEXT NOT NULL CHECK (outcome IN ('not_suitable', 'rough_estimate_sent')),
-      price_range         TEXT,
-      email_subject       TEXT NOT NULL,
-      email_body          TEXT NOT NULL,
-      reviewed_by_user_id TEXT NOT NULL,
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS pro_submission_id_idx ON photo_review_outcomes (submission_id)
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS pro_contact_id_idx ON photo_review_outcomes (contact_id)
-  `);
+  // Schema created by migrations; this boot step runs the one-time data repair below.
 
   // One-time migration: rename the misspelled substatus_key 'AWPH_RECIEVED' to the
   // canonical 'AWPH_RECEIVED'.  The row was originally seeded with the typo by an
@@ -137,14 +120,14 @@ async function ensurePhotoReviewOutcomesTable() {
           }
           // Delete typo row (ON DELETE CASCADE removes any remaining binding).
           await client.query(`DELETE FROM lead_substatuses WHERE id = $1`, [typoId]);
-          console.log('[photo-reviews] Migration: removed duplicate AWPH_RECIEVED row; canonical AWPH_RECEIVED retained.');
+          logger.info('[photo-reviews] Migration: removed duplicate AWPH_RECIEVED row; canonical AWPH_RECEIVED retained.');
         } else {
           // Only typo row exists — rename in place (no conflict possible).
           await client.query(
             `UPDATE lead_substatuses SET substatus_key = 'AWPH_RECEIVED' WHERE id = $1`,
             [typoId]
           );
-          console.log('[photo-reviews] Migration: renamed AWPH_RECIEVED → AWPH_RECEIVED.');
+          logger.info('[photo-reviews] Migration: renamed AWPH_RECIEVED → AWPH_RECEIVED.');
         }
       }
 
@@ -182,7 +165,7 @@ async function ensureLeadStatusExists(key, label) {
 async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
   const transport = createMailTransport();
   if (!transport) {
-    console.warn('[photo-reviews] SMTP not configured — skipping review outcome email.');
+    logger.warn('[photo-reviews] SMTP not configured — skipping review outcome email.');
     return;
   }
   const from    = buildFromHeader();
@@ -201,9 +184,9 @@ async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
       text:    textBody,
       html,
     });
-    console.log(`[photo-reviews] Review outcome email sent to ${toEmail}`);
+    logger.info(`[photo-reviews] Review outcome email sent to ${toEmail}`);
   } catch (err) {
-    console.error('[photo-reviews] Failed to send review outcome email:', err.message);
+    logger.error({ err: err.message }, '[photo-reviews] Failed to send review outcome email:');
     throw err;
   }
 }
@@ -260,7 +243,7 @@ router.get('/api/card-actions/review-customer-photos/:contactId',
         },
       });
     } catch (err) {
-      console.error('[photo-reviews] GET error:', err.message);
+      logger.error({ err: err.message }, '[photo-reviews] GET error:');
       return res.status(500).json({ error: 'Could not fetch submission.' });
     }
   }
@@ -305,7 +288,7 @@ router.post('/api/card-actions/review-customer-photos',
       }
       submission = r.rows[0];
     } catch (err) {
-      console.error('[photo-reviews] Submission lookup error:', err.message);
+      logger.error({ err: err.message }, '[photo-reviews] Submission lookup error:');
       return res.status(500).json({ error: 'Could not look up submission.' });
     }
 
@@ -323,7 +306,7 @@ router.post('/api/card-actions/review-customer-photos',
         return res.status(409).json({ error: 'This submission has already been reviewed.' });
       }
     } catch (err) {
-      console.error('[photo-reviews] Duplicate review check error:', err.message);
+      logger.error({ err: err.message }, '[photo-reviews] Duplicate review check error:');
       return res.status(500).json({ error: 'Could not check for duplicate review.' });
     }
 
@@ -366,7 +349,7 @@ router.post('/api/card-actions/review-customer-photos',
         await updateHubSpotLeadStatus(cid, hsStatus);
         await clearHubSpotSubstatus(cid);
       } catch (err) {
-        console.error('[photo-reviews] HubSpot update failed (non-fatal):', err.message);
+        logger.error({ err: err.message }, '[photo-reviews] HubSpot update failed (non-fatal):');
       }
     }
 
@@ -380,7 +363,7 @@ router.post('/api/card-actions/review-customer-photos',
         [subId, cid, outcome, range, subject, body, reviewerId]
       );
     } catch (err) {
-      console.error('[photo-reviews] Failed to record review outcome (non-fatal):', err.message);
+      logger.error({ err: err.message }, '[photo-reviews] Failed to record review outcome (non-fatal):');
     }
 
     return res.json({ ok: true });
@@ -438,7 +421,7 @@ async function ensureDefaultReviewHandlerBinding() {
      ON CONFLICT DO NOTHING`,
     [handlerId, substatusId]
   );
-  console.log('[photo-reviews] Default review_customer_photos handler bound to AWPH_RECEIVED substatus.');
+  logger.info('[photo-reviews] Default review_customer_photos handler bound to AWPH_RECEIVED substatus.');
 }
 
 // ── Substatus → handler-type mapping ─────────────────────────────────────────
@@ -610,13 +593,11 @@ async function ensureSubstatusHandlerBindings() {
       [handlerId, row.id]
     );
     seeded++;
-    console.log(
-      `[card-action-seeds] Bound ${type} handler to substatus ${row.status_key}/${row.substatus_key} ("${row.action_label}")`
-    );
+    logger.info(`[card-action-seeds] Bound ${type} handler to substatus ${row.status_key}/${row.substatus_key} ("${row.action_label}")`);
   }
 
   if (seeded > 0) {
-    console.log(`[card-action-seeds] Auto-bound ${seeded} substatus handler(s).`);
+    logger.info(`[card-action-seeds] Auto-bound ${seeded} substatus handler(s).`);
   }
   return seeded;
 }

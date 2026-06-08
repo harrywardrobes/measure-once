@@ -17,6 +17,8 @@
 const { spawn }  = require('child_process');
 const { Client } = require('pg');
 const crypto     = require('crypto');
+const { runMigrations } = require('../db-migrate');
+const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 
 // TTL for orphan temp databases. Databases older than this are pruned on startup.
 const PRUNE_TTL_MS = parseInt(process.env.TEST_DB_PRUNE_TTL_MS || '', 10) || 2 * 60 * 60 * 1000; // 2 hours
@@ -91,6 +93,44 @@ async function main() {
   const testDbUrl = parsed.toString();
 
   console.log(`[with-test-db] created temp DB: ${tempDbName}`);
+
+  // Build the schema in the fresh temp DB the same way production does — by
+  // running the ordered migrations. Suites seed rows before they spawn the app
+  // server, so the tables must already exist; we can't rely on the child
+  // server's own boot-time runMigrations() (it runs too late for the seed step).
+  await runMigrations({ databaseUrl: testDbUrl });
+  console.log('[with-test-db] migrations applied to temp DB');
+
+  // Pre-create the `rate_limit` schema (owned by @acpr/rate-limit-postgresql).
+  // The store constructor fires its own migrations asynchronously and is NOT
+  // awaited, so a freshly-spawned server can receive a login before the schema
+  // exists — surfacing as `function rate_limit.ind_increment(...) does not
+  // exist`. We trigger the same migration here and poll until the function is
+  // present so every suite starts against a fully-ready database.
+  new PostgresStoreIndividualIP({ connectionString: testDbUrl }, 'warmup');
+  {
+    const probe = new Client({ connectionString: testDbUrl });
+    await probe.connect();
+    const deadline = Date.now() + 15000;
+    let ready = false;
+    while (Date.now() < deadline) {
+      const r = await probe.query(
+        `SELECT EXISTS (
+           SELECT 1 FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'rate_limit' AND p.proname = 'ind_increment'
+         ) AS ok`
+      );
+      if (r.rows[0] && r.rows[0].ok) { ready = true; break; }
+      await new Promise(res => setTimeout(res, 150));
+    }
+    await probe.end();
+    if (!ready) {
+      console.warn('[with-test-db] rate_limit schema not ready after 15s — continuing anyway');
+    } else {
+      console.log('[with-test-db] rate_limit schema ready');
+    }
+  }
 
   const cleanup = async () => {
     console.log(`[with-test-db] dropping temp DB: ${tempDbName}`);

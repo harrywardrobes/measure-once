@@ -12,6 +12,7 @@
 // ensureEmailTemplatesTable() upserts seed rows with ON CONFLICT (key) DO
 // NOTHING, so existing edited rows are never overwritten.
 
+const logger = require('./logger');
 const { Pool } = require('pg');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -224,18 +225,7 @@ const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFS);
 
 // ── Schema + seed ─────────────────────────────────────────────────────────────
 async function ensureEmailTemplatesTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS email_templates (
-      id          SERIAL PRIMARY KEY,
-      key         TEXT UNIQUE NOT NULL,
-      subject     TEXT NOT NULL DEFAULT '',
-      body_text   TEXT NOT NULL DEFAULT '',
-      body_html   TEXT NOT NULL DEFAULT '',
-      footer_text TEXT NOT NULL DEFAULT '',
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_by  TEXT
-    )
-  `);
+  // Schema created by migrations; this boot step seeds default template rows.
   for (const [key, def] of Object.entries(TEMPLATE_DEFS)) {
     await pool.query(
       `INSERT INTO email_templates (key, subject, body_text, body_html, footer_text)
@@ -276,7 +266,7 @@ async function getEmailTemplate(key) {
     );
     row = r.rows[0] || null;
   } catch (err) {
-    console.error(`[email-templates] Failed to load template "${key}":`, err.message);
+    logger.error({ err: err.message }, `[email-templates] Failed to load template "${key}":`);
   }
 
   const value = row || _fallback(key);

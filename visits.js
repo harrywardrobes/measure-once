@@ -1,3 +1,4 @@
+const logger = require('./logger');
 const express = require('express');
 const { Pool } = require('pg');
 const { isAuthenticated, requirePrivilege } = require('./auth');
@@ -12,32 +13,6 @@ const visitsRateLimiter = visitsReadLimiter;
 
 const VALID_TYPES = ['design', 'survey', 'installation', 'delivery', 'remedial', 'workshop', 'other'];
 const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];
-
-async function ensureVisitsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS visits (
-      id              SERIAL PRIMARY KEY,
-      created_by      VARCHAR NOT NULL,
-      customer_id     VARCHAR,
-      customer_name   VARCHAR,
-      type            VARCHAR NOT NULL,
-      title           VARCHAR,
-      start_at        TIMESTAMPTZ NOT NULL,
-      end_at          TIMESTAMPTZ NOT NULL,
-      is_workshop     BOOLEAN NOT NULL DEFAULT FALSE,
-      notes           TEXT,
-      location        VARCHAR,
-      google_event_id VARCHAR,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS visits_start_at_idx ON visits (start_at)`);
-  await pool.query(`
-    ALTER TABLE visits ADD COLUMN IF NOT EXISTS assignee_id   VARCHAR;
-    ALTER TABLE visits ADD COLUMN IF NOT EXISTS assignee_role VARCHAR;
-  `);
-}
 
 /**
  * Convert a raw PostgreSQL row from the `visits` table into the camelCase
@@ -157,7 +132,7 @@ router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) =
     const r = await pool.query(sql, [to.toISOString(), from.toISOString()]);
     res.json(r.rows.map(mapDatabaseRowToVisit));
   } catch (e) {
-    console.error('GET /api/visits failed:', e.message);
+    logger.error({ err: e.message }, 'GET /api/visits failed:');
     res.status(500).json({ error: 'Failed to load visits' });
   }
 });
@@ -185,7 +160,7 @@ router.post('/api/visits', isAuthenticated, requirePrivilege('member'), async (r
     );
     res.json(mapDatabaseRowToVisit(r.rows[0]));
   } catch (e) {
-    console.error('POST /api/visits failed:', e.message);
+    logger.error({ err: e.message }, 'POST /api/visits failed:');
     res.status(500).json({ error: 'Failed to create visit' });
   }
 });
@@ -207,7 +182,7 @@ router.patch('/api/visits/:id', isAuthenticated, requirePrivilege('member'), asy
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(mapDatabaseRowToVisit(r.rows[0]));
   } catch (e) {
-    console.error('PATCH /api/visits failed:', e.message);
+    logger.error({ err: e.message }, 'PATCH /api/visits failed:');
     res.status(500).json({ error: 'Failed to update visit' });
   }
 });
@@ -220,9 +195,9 @@ router.delete('/api/visits/:id', isAuthenticated, requirePrivilege('member'), as
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
   } catch (e) {
-    console.error('DELETE /api/visits failed:', e.message);
+    logger.error({ err: e.message }, 'DELETE /api/visits failed:');
     res.status(500).json({ error: 'Failed to delete visit' });
   }
 });
 
-module.exports = { router, ensureVisitsTable };
+module.exports = { router };
