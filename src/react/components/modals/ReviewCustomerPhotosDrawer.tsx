@@ -12,7 +12,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { cacheRecord } from '../../lib/offlineDb';
+import { cacheRecord, readRecord } from '../../lib/offlineDb';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -122,6 +122,9 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
   const [step, setStep] = useState<Step>('loading');
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [fetchError, setFetchError] = useState('');
+  // True when the submission is rendered from the offline IndexedDB cache
+  // because the network fetch failed (e.g. the device is offline).
+  const [fromCache, setFromCache] = useState(false);
 
   const [priceRange, setPriceRange] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
@@ -136,6 +139,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     setStep('loading');
     setSubmission(null);
     setFetchError('');
+    setFromCache(false);
     setSubmitError('');
     setPriceRange('');
     setEmailSubject('');
@@ -157,7 +161,16 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
         void cacheRecord('photos', ctx.contactId, d.submission);
         setStep('review');
       })
-      .catch(e => {
+      .catch(async e => {
+        // Offline fallback: render the saved submission from IndexedDB instead
+        // of an error state when the network fetch fails.
+        const cached = await readRecord<Submission>('photos', ctx.contactId);
+        if (cached) {
+          setSubmission(cached);
+          setFromCache(true);
+          setStep('review');
+          return;
+        }
         setFetchError((e as Error).message);
         setStep('loading');
       });
@@ -322,6 +335,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Review step */}
           {step === 'review' && submission && (
             <Stack spacing={2.5}>
+              {fromCache && (
+                <Alert severity="info" data-testid="review-photos-offline-banner">
+                  You&apos;re offline — showing saved data from your last visit. This submission may be out of date.
+                </Alert>
+              )}
               <Box>
                 <Typography variant="overline" color="text.disabled" sx={{ display: 'block', mb: 1 }}>
                   Submitted details

@@ -19,7 +19,8 @@ import {
 } from './customer-detail/types';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
-import { cacheRecord, cacheRecords } from '../lib/offlineDb';
+import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
+import Alert from '@mui/material/Alert';
 import { sendOrQueue } from '../lib/offlineQueue';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -93,6 +94,9 @@ export function CustomerDetailPage() {
 
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
+  // True when any section on the page is rendered from the offline IndexedDB
+  // cache because its network fetch failed (e.g. the device is offline).
+  const [fromCache,    setFromCache]    = useState(false);
 
   const [designVisits, setDesignVisits] = useState<DesignVisit[]>([]);
   const [dvLoading,    setDvLoading]    = useState(false);
@@ -144,10 +148,24 @@ export function CustomerDetailPage() {
 
 
   const fetchContact = useCallback(async (): Promise<Contact | null> => {
-    const c = await apiFetch<Contact>(`/api/contacts/${contactId}`);
+    let c: Contact | null = null;
+    let fromNetwork = false;
+    try {
+      c = await apiFetch<Contact>(`/api/contacts/${contactId}`);
+      fromNetwork = true;
+    } catch (e) {
+      // Offline fallback: render the saved customer from IndexedDB instead of
+      // an error state. Re-throw only when there's nothing cached to show.
+      const cached = await readRecord<Contact>('customers', contactId);
+      if (!cached) throw e;
+      c = cached;
+      setFromCache(true);
+    }
     if (!c?.id) return null;
     // Write-through to the offline store (best-effort, never blocks the UI).
-    void cacheRecord('customers', contactId, c);
+    // Only re-stamp when fetched from the network — caching cached data is a no-op
+    // beyond refreshing the timestamp, which we don't want for stale offline reads.
+    if (fromNetwork) void cacheRecord('customers', contactId, c);
     // Sync globals
     const g = window as unknown as Record<string, unknown>;
     const st = ((g.state as Record<string, unknown>) || {});
@@ -175,7 +193,19 @@ export function CustomerDetailPage() {
       setDesignVisits(Array.isArray(v) ? v : []);
       if (Array.isArray(v)) void cacheRecords('visits', v, (dv) => `dv:${dv.id}`);
     } catch {
-      setDvError('load-error');
+      // Offline fallback: read saved design visits for this contact from the
+      // cache (the `visits` store mixes design + calendar visits; design visits
+      // are the records carrying a `contact_id`).
+      const cached = await readRecords<DesignVisit>('visits');
+      const mine = cached.filter(
+        (d) => d && typeof d === 'object' && 'contact_id' in d && String(d.contact_id) === contactId,
+      );
+      if (mine.length > 0) {
+        setDesignVisits(mine);
+        setFromCache(true);
+      } else {
+        setDvError('load-error');
+      }
     } finally {
       setDvLoading(false);
     }
@@ -194,7 +224,20 @@ export function CustomerDetailPage() {
       setUpcomingVisits(filtered.filter(v => new Date(v.endAt).getTime() >= now));
       setPastVisits(filtered.filter(v => new Date(v.endAt).getTime() < now).reverse());
       void cacheRecords('visits', filtered, (v) => `v:${v.id}`);
-    } catch { /* noop */ } finally { setVisitsLoading(false); }
+    } catch {
+      // Offline fallback: read saved calendar visits from the cache (calendar
+      // visits carry an `endAt`; design visits in the same store do not).
+      const cached = await readRecords<Visit>('visits');
+      const mine = cached.filter(
+        (v) => v && typeof v === 'object' && 'endAt' in v && (!v.customerId || v.customerId === contactId),
+      );
+      if (mine.length > 0) {
+        const now = Date.now();
+        setUpcomingVisits(mine.filter(v => new Date(v.endAt).getTime() >= now));
+        setPastVisits(mine.filter(v => new Date(v.endAt).getTime() < now).reverse());
+        setFromCache(true);
+      }
+    } finally { setVisitsLoading(false); }
   }, [contactId]);
 
   const fetchGoogleEmails = useCallback(async (email: string) => {
@@ -233,6 +276,7 @@ export function CustomerDetailPage() {
     }
     setLoading(true);
     setError(null);
+    setFromCache(false);
     try {
       const [, c] = await Promise.all([
         fetchLeadStatuses(),
@@ -637,6 +681,12 @@ export function CustomerDetailPage() {
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="workflow-inner">
+
+        {fromCache && (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="customer-detail-offline-banner">
+            You&apos;re offline — showing saved data from your last visit. Some details may be out of date.
+          </Alert>
+        )}
 
         {/* Customer info submissions (upload_photos_and_info handler) */}
         <CustomerInfoSubmissionsRail contactId={contactId} />

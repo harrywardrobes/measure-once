@@ -1,5 +1,5 @@
 import React from 'react';
-import { cacheRecords } from '../lib/offlineDb';
+import { cacheRecords, readRecords } from '../lib/offlineDb';
 
 export type PaginatedContact = {
   id: string;
@@ -42,6 +42,9 @@ export type UsePaginatedContactsResult = {
   loading: boolean;
   error: string | null;
   contactsStale: boolean;
+  /** True when the list is rendered from the offline IndexedDB cache because the
+   *  network fetch failed (e.g. the device is offline). */
+  fromCache: boolean;
   page: number;
   setPage: (p: number) => void;
 };
@@ -108,6 +111,7 @@ export function usePaginatedContacts(
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [contactsStale, setContactsStale] = React.useState<boolean>(false);
+  const [fromCache, setFromCache] = React.useState<boolean>(false);
 
   const pendingContactsStaleRef = React.useRef<boolean | null>(null);
 
@@ -139,6 +143,7 @@ export function usePaginatedContacts(
 
     setLoading(true);
     setError(null);
+    setFromCache(false);
     if (document.hidden) {
       pendingContactsStaleRef.current = false;
     } else {
@@ -182,6 +187,27 @@ export function usePaginatedContacts(
         onFetchSuccessRef.current?.();
       } catch (e) {
         if (cancelled) return;
+        // Offline fallback: instead of showing an error, render saved customers
+        // from the IndexedDB cache when the network fetch fails. The cache holds
+        // every customer viewed/listed recently regardless of the current filter
+        // or page, so we surface it as a single best-effort "saved data" view.
+        const cached = await readRecords<PaginatedContact>('customers');
+        if (cancelled) return;
+        if (cached.length > 0) {
+          setContacts(cached);
+          setTotal(cached.length);
+          setTotalPages(1);
+          setFromCache(true);
+          setError(null);
+          if (document.hidden) {
+            pendingContactsStaleRef.current = false;
+          } else {
+            pendingContactsStaleRef.current = null;
+            setContactsStale(false);
+          }
+          setLoading(false);
+          return;
+        }
         if (document.hidden) {
           pendingContactsStaleRef.current = false;
         } else {
@@ -201,5 +227,5 @@ export function usePaginatedContacts(
     };
   }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize]);
 
-  return { contacts, total, totalPages, loading, error, contactsStale, page: effectivePage, setPage };
+  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, page: effectivePage, setPage };
 }

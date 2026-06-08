@@ -870,6 +870,7 @@ export function CustomersPage(): React.ReactElement {
     loading,
     error,
     contactsStale,
+    fromCache,
     page,
     setPage,
   } = usePaginatedContacts(
@@ -1521,6 +1522,12 @@ export function CustomersPage(): React.ReactElement {
         </Stack>
 
         {error ? <Alert severity="error">{error}</Alert> : null}
+
+        {!loading && fromCache ? (
+          <Alert severity="info" sx={{ py: 0 }} data-testid="contacts-offline-banner">
+            You&apos;re offline — showing saved customers from your last visit. This list may be out of date.
+          </Alert>
+        ) : null}
 
         {!loading && contactsStale ? (
           <Alert severity="warning" sx={{ py: 0 }} id="contacts-stale-banner">
