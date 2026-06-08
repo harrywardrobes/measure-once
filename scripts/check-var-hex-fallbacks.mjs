@@ -11,8 +11,8 @@
  *
  * Files scanned
  * -------------
- * • public/*.js and public/*.html
- *   (excludes the generated public/react/ and public/storybook/ dirs)
+ * • public/*.js (excludes the generated public/react/ and public/storybook/ dirs)
+ * • views/*.ejs (the server-rendered EJS view markup)
  * • src/react/**\/*.ts and src/react/**\/*.tsx
  *   (excludes *.stories.*, *.d.ts, and theme.ts — the canonical hex source)
  *
@@ -58,7 +58,7 @@ const VAR_HEX_RE = /var\(--[^,)]+,\s*#[0-9a-fA-F]{3,8}(?![0-9a-fA-F])/;
 /** Suppression comment that exempts a line from this check. */
 const SUPPRESSION_RE = /(?:\/\/|\/\*)\s*var-hex-ok\s*:/;
 
-// ─── Collect public/*.js and public/*.html ────────────────────────────────────
+// ─── Collect public/*.js ───────────────────────────────────────────────────────
 
 const PUBLIC_DIR = join(ROOT, 'public');
 const EXCLUDED_PUBLIC_DIRS = new Set(['react', 'storybook']);
@@ -70,11 +70,21 @@ function findPublicFiles(dir) {
       if (dir === PUBLIC_DIR && EXCLUDED_PUBLIC_DIRS.has(entry.name)) continue;
       results.push(...findPublicFiles(join(dir, entry.name)));
     } else if (entry.isFile()) {
-      const ext = extname(entry.name);
-      if (ext === '.js' || ext === '.html') results.push(join(dir, entry.name));
+      if (extname(entry.name) === '.js') results.push(join(dir, entry.name));
     }
   }
   return results.sort();
+}
+
+// ─── Collect views/*.ejs ───────────────────────────────────────────────────────
+
+const VIEWS_DIR = join(ROOT, 'views');
+
+function findViewFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.ejs'))
+    .map(entry => join(dir, entry.name))
+    .sort();
 }
 
 // ─── Collect src/react/**/*.ts and *.tsx ─────────────────────────────────────
@@ -105,8 +115,9 @@ function findReactFiles(dir) {
 // ─── Scan ─────────────────────────────────────────────────────────────────────
 
 const publicFiles = findPublicFiles(PUBLIC_DIR);
+const viewFiles   = findViewFiles(VIEWS_DIR);
 const reactFiles  = findReactFiles(SRC_DIR);
-const allFiles    = [...publicFiles, ...reactFiles];
+const allFiles    = [...publicFiles, ...viewFiles, ...reactFiles];
 
 /** @type {Array<{file: string, line: number, text: string}>} */
 const violations = [];
@@ -125,8 +136,8 @@ for (const filePath of allFiles) {
 }
 
 console.log(
-  `[check-var-hex-fallbacks] Scanned ${publicFiles.length} public file(s) ` +
-  `and ${reactFiles.length} React file(s).`,
+  `[check-var-hex-fallbacks] Scanned ${publicFiles.length} public file(s), ` +
+  `${viewFiles.length} EJS view(s), and ${reactFiles.length} React file(s).`,
 );
 
 if (violations.length === 0) {

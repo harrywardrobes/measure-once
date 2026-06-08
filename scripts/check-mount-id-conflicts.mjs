@@ -112,7 +112,7 @@ const htmlFiles = readdirSync(viewsDir)
   .filter(f => f.endsWith('.ejs'))
   .map(f => join(viewsDir, f));
 
-// For each mount id → array of html files that contain it
+// For each mount id → array of EJS view files that contain it
 /** @type {Map<string, string[]>} */
 const idToFiles = new Map([...mountIds].map(id => [id, []]));
 

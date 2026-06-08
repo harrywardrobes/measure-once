@@ -2,18 +2,18 @@
 /**
  * check-storybook-output-clean.mjs
  *
- * Asserts that no application files — HTML pages such as admin.html /
- * customers.html, or JS modules such as workflow.js / chrome.js — were
- * copied into the Storybook output root.
+ * Asserts that no application files from public/ — for example the React
+ * bundle, page stylesheets, fonts, or images — were copied into the
+ * Storybook output root.
  *
  * This guards the `viteFinal: config.publicDir = false` hook in
  * .storybook/main.ts against accidental regression (e.g. removing viteFinal,
  * changing the output dir, or a Storybook upgrade that changes default
  * behaviour).
  *
- * The set of application files to check for is derived at runtime from
- * public/*.html and public/*.js so the list stays accurate as pages are
- * added or removed.
+ * The set of application files to check for is derived at runtime from the
+ * .html and .js entries directly under public/ so the list stays accurate as
+ * the public/ surface changes.
  *
  * By default the script builds Storybook into a temporary directory and
  * inspects that.  When the flag --out-dir <path> is supplied (or the env var

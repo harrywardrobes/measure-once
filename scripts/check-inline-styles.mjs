@@ -2,17 +2,17 @@
 /**
  * check-inline-styles.mjs
  *
- * Scans every public/*.html file for inline `style="…"` attributes and fails
- * if any are found.  Inline styles belong in a stylesheet, not in HTML markup.
- * This check enforces that convention across every page and catches regressions
- * automatically in CI.
+ * Scans every views/*.ejs file for inline `style="…"` attributes and fails
+ * if any are found.  Inline styles belong in a stylesheet, not in view markup.
+ * This check enforces that convention across every EJS view and catches
+ * regressions automatically in CI.
  *
  * Lines inside <script>…</script> blocks are skipped because those contain JS
  * source code where `style=` appears in string literals, not as HTML attributes.
  *
  * Algorithm
  * ---------
- * 1. Read each public/*.html file line by line.
+ * 1. Read each views/*.ejs file line by line.
  * 2. Track whether the current line is inside a <script>…</script> block:
  *    a. A line containing </script> ends script mode before the line is checked,
  *       so any HTML content after the closing tag is still scanned.
@@ -38,11 +38,11 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
-const publicDir = join(ROOT, 'public');
-const htmlFiles = readdirSync(publicDir)
-  .filter(f => f.endsWith('.html'))
+const viewsDir = join(ROOT, 'views');
+const htmlFiles = readdirSync(viewsDir)
+  .filter(f => f.endsWith('.ejs'))
   .sort()
-  .map(f => join(publicDir, f));
+  .map(f => join(viewsDir, f));
 
 /** @type {Array<{file: string, line: number, text: string}>} */
 const violations = [];
@@ -89,7 +89,7 @@ for (const htmlFile of htmlFiles) {
 }
 
 console.log(
-  `[check-inline-styles] Scanned ${filesScanned} HTML file(s) under public/.`,
+  `[check-inline-styles] Scanned ${filesScanned} EJS view(s) under views/.`,
 );
 
 if (violations.length === 0) {
@@ -104,7 +104,7 @@ for (const { file, line, text } of violations) {
   process.stderr.write(`  ${file}:${line}\n    ${text}\n\n`);
 }
 process.stderr.write(
-  'Inline style attributes must live in a stylesheet, not in HTML markup.\n' +
+  'Inline style attributes must live in a stylesheet, not in EJS view markup.\n' +
   'Move the styles to public/app-styles.css (or a page-specific <style> block)\n' +
   'and replace the attribute with a class name or scoped ID rule.\n\n',
 );
