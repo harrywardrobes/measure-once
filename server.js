@@ -6412,21 +6412,31 @@ app.post('/api/card-actions/arrange-visit/outcome',
     const outcome   = String(req.body?.outcome   || '');
     const visitType = String(req.body?.visitType || 'design').toLowerCase();
 
-    const OUTCOME_STATUS = {
-      booked:        visitType === 'survey' ? 'SRSC_AGREED'     : 'DSSC_AGREED',
-      email_sent:    visitType === 'survey' ? 'SRSC_SUGGESTED'  : 'DSSC_SUGGESTED',
-      not_proceeding: 'not_suitable',
+    const OUTCOME_MAP = {
+      booked: {
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SRSC_AGREED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DSSC_AGREED' },
+      },
+      email_sent: {
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SRSC_SUGGESTED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DSSC_SUGGESTED' },
+      },
+      not_proceeding: {
+        survey: { hs_lead_status: 'NOT_SUITABLE', hw_lead_substatus: '' },
+        design: { hs_lead_status: 'NOT_SUITABLE', hw_lead_substatus: '' },
+      },
     };
 
-    const newStatus = OUTCOME_STATUS[outcome];
-    if (!newStatus) return res.status(400).json({ error: 'outcome must be one of: booked, email_sent, not_proceeding.' });
+    const outcomeEntry = OUTCOME_MAP[outcome];
+    if (!outcomeEntry) return res.status(400).json({ error: 'outcome must be one of: booked, email_sent, not_proceeding.' });
+    const { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } = outcomeEntry[visitType] || outcomeEntry['design'];
 
     try {
       await hubspotRequestWithRetry('patch',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-        { properties: { hs_lead_status: newStatus } }
+        { properties: { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } }
       );
-      res.json({ ok: true, newStatus });
+      res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {

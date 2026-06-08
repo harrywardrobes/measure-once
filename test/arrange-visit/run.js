@@ -281,33 +281,37 @@ async function main() {
   console.log('\n  — outcome → HubSpot status mapping (B) —');
 
   const OUTCOME_CASES = [
-    { outcome: 'booked',          visitType: 'survey', expectedStatus: 'SRSC_AGREED' },
-    { outcome: 'booked',          visitType: 'design', expectedStatus: 'DSSC_AGREED' },
-    { outcome: 'email_sent',      visitType: 'survey', expectedStatus: 'SRSC_SUGGESTED' },
-    { outcome: 'email_sent',      visitType: 'design', expectedStatus: 'DSSC_SUGGESTED' },
-    { outcome: 'not_proceeding',  visitType: 'survey', expectedStatus: 'not_suitable' },
-    { outcome: 'not_proceeding',  visitType: 'design', expectedStatus: 'not_suitable' },
+    { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SRSC_AGREED' },
+    { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DSSC_AGREED' },
+    { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SRSC_SUGGESTED' },
+    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DSSC_SUGGESTED' },
+    { outcome: 'not_proceeding', visitType: 'survey', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
+    { outcome: 'not_proceeding', visitType: 'design', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
   ];
 
-  for (const { outcome, visitType, expectedStatus } of OUTCOME_CASES) {
+  for (const { outcome, visitType, expectedLeadStatus, expectedSubStatus } of OUTCOME_CASES) {
     lastPatch = null;
     const r = await memberClient.post('/api/card-actions/arrange-visit/outcome', {
       contactId: '111111',
       outcome,
       visitType,
     });
-    // The route responds with { ok: true, newStatus } and also PATCHes HubSpot.
-    // Verify both the response body and the value sent to the fake stub.
-    const responseStatus = r.json?.newStatus;
-    const patchedStatus  = lastPatch?.body?.properties?.hs_lead_status;
+    // The route responds with { ok: true, hs_lead_status, hw_lead_substatus } and also PATCHes HubSpot.
+    // Verify both the response body and the values sent to the fake stub.
+    const responseLeadStatus = r.json?.hs_lead_status;
+    const responseSubStatus  = r.json?.hw_lead_substatus;
+    const patchedLeadStatus  = lastPatch?.body?.properties?.hs_lead_status;
+    const patchedSubStatus   = lastPatch?.body?.properties?.hw_lead_substatus;
     const ok = r.status === 200
       && r.json?.ok === true
-      && responseStatus === expectedStatus
-      && patchedStatus  === expectedStatus;
+      && responseLeadStatus === expectedLeadStatus
+      && responseSubStatus  === expectedSubStatus
+      && patchedLeadStatus  === expectedLeadStatus
+      && patchedSubStatus   === expectedSubStatus;
     record(
-      `(B) outcome=${outcome} visitType=${visitType} → ${expectedStatus}`,
-      `200 ok=true newStatus=${expectedStatus} patched=${expectedStatus}`,
-      `HTTP ${r.status} newStatus=${responseStatus} patched=${patchedStatus}`,
+      `(B) outcome=${outcome} visitType=${visitType} → hs_lead_status=${expectedLeadStatus} hw_lead_substatus=${expectedSubStatus}`,
+      `200 ok=true hs_lead_status=${expectedLeadStatus} hw_lead_substatus=${expectedSubStatus} patched_lead=${expectedLeadStatus} patched_sub=${expectedSubStatus}`,
+      `HTTP ${r.status} hs_lead_status=${responseLeadStatus} hw_lead_substatus=${responseSubStatus} patched_lead=${patchedLeadStatus} patched_sub=${patchedSubStatus}`,
       ok,
       r.status !== 200 ? r.text : '',
     );
@@ -376,8 +380,9 @@ async function writeReport(runId, findings) {
     '- **(A.bad)** Non-numeric `contactId` → 400.',
     '  Guards the `!/^\\d+$/.test(contactId)` input validation.',
     '- **(B.1-6)** All six valid outcome × visitType combinations map to the',
-    '  correct HubSpot `hs_lead_status` key. Both the JSON response (`newStatus`)',
-    '  and the value actually sent in the PATCH body to HubSpot are verified.',
+    '  correct HubSpot `hs_lead_status` (parent) and `hw_lead_substatus` (sub-status)',
+    '  values. Both the JSON response and the values actually sent in the PATCH body',
+    '  to HubSpot are verified for both properties.',
     '- **(B.bad)** Unknown `outcome` value → 400.',
     '  Guards the `OUTCOME_STATUS[outcome]` lookup validation.',
   ];
