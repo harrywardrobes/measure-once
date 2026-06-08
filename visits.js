@@ -39,7 +39,8 @@ const VALID_ROLES = ['designer', 'surveyor', 'fitter', 'manager'];
  *   assigneeRole: string | null,
  *   googleEventId: string | null,
  *   createdAt: string,
- *   updatedAt: string
+ *   updatedAt: string,
+ *   version: number
  * }}
  */
 function mapDatabaseRowToVisit(r) {
@@ -59,7 +60,8 @@ function mapDatabaseRowToVisit(r) {
     assigneeRole:   r.assignee_role || null,
     googleEventId:  r.google_event_id,
     createdAt:      r.created_at.toISOString(),
-    updatedAt:      r.updated_at.toISOString()
+    updatedAt:      r.updated_at.toISOString(),
+    version:        r.version
   };
 }
 
@@ -134,6 +136,22 @@ router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) =
   } catch (e) {
     logger.error({ err: e.message }, 'GET /api/visits failed:');
     res.status(500).json({ error: 'Failed to load visits' });
+  }
+});
+
+// Single-record GET. Returns the same camelCase shape as the list route,
+// including `version` and `updatedAt` so offline edits can carry a base for
+// optimistic-concurrency conflict detection (see syncEngine.detectConflict).
+router.get('/api/visits/:id', isAuthenticated, visitsRateLimiter, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const r = await pool.query('SELECT * FROM visits WHERE id=$1', [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(mapDatabaseRowToVisit(r.rows[0]));
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/visits/:id failed:');
+    res.status(500).json({ error: 'Failed to load visit' });
   }
 });
 

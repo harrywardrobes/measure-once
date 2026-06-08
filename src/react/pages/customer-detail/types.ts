@@ -106,6 +106,8 @@ export interface Visit {
   assigneeId?: string;
   assigneeRole?: string;
   googleEventId?: string | null;
+  updatedAt?: string;
+  version?: number;
 }
 
 export interface GoogleEmail {

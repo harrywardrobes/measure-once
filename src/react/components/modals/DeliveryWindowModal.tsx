@@ -123,16 +123,39 @@ export function DeliveryWindowModal(props: Props) {
     const w = window as unknown as { showToast?: (m: string, e: boolean) => void };
     try {
       if (isEdit && visit) {
-        await PATCH(`/api/visits/${visit.id}`, {
-          type: 'delivery',
-          title: title.trim(),
-          customerId: visit.customerId || null,
-          customerName: visit.customerName || null,
-          startAt: start.toDate().toISOString(),
-          endAt: end.toDate().toISOString(),
-          location: location.trim() || null,
-          notes: notes.trim() || null,
+        // Offline-aware edit. When offline / on a network error the visit update
+        // is queued and replayed on reconnect; the cached version/updated_at base
+        // lets the sync engine detect a stale overwrite for the conflict view.
+        const { sendOrQueue } = await import('../../lib/offlineQueue');
+        const res = await sendOrQueue({
+          area: 'visit',
+          label: `Edit delivery window — ${visit.customerName || visit.id}`,
+          method: 'PATCH',
+          url: `/api/visits/${visit.id}`,
+          body: {
+            type: 'delivery',
+            title: title.trim(),
+            customerId: visit.customerId || null,
+            customerName: visit.customerName || null,
+            startAt: start.toDate().toISOString(),
+            endAt: end.toDate().toISOString(),
+            location: location.trim() || null,
+            notes: notes.trim() || null,
+          },
+          conflictCheckUrl: `/api/visits/${visit.id}`,
+          recordKey: `visit:${visit.id}`,
+          baseVersion: visit.version ?? null,
+          baseUpdatedAt: visit.updatedAt ?? null,
         });
+        if (!res.queued && !res.ok) {
+          throw new Error((res.data as { error?: string })?.error || 'Could not save.');
+        }
+        if (res.queued) {
+          w.showToast?.('Delivery window update saved offline — it will sync when you reconnect', false);
+          handleClose();
+          props.onSaved?.();
+          return;
+        }
 
         if (updateGcal && visit.googleEventId) {
           try {

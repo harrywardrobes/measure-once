@@ -73,6 +73,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/workflow-stages',           level: 'auth' },
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
   { method: 'GET',    path: '/api/visits',                    level: 'auth' },
+  { method: 'GET',    path: '/api/visits/0',                  level: 'auth' },
   { method: 'GET',    path: '/api/contacts-lead-status-counts', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/contacts-substatus-counts?leadStatus=OPEN_DEAL', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/lead-statuses',              level: 'auth' },
