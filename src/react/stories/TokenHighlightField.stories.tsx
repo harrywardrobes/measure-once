@@ -12,8 +12,11 @@ const meta: Meta<typeof TokenHighlightField> = {
       description: {
         component:
           'Outlined text field that highlights `{{token}}` placeholders as you ' +
-          'type. Known variables are tinted green; unknown ones get a red, ' +
-          'spell-checker-style wavy underline so typos are obvious instantly.',
+          'type. Known variables are tinted green; well-formed but unknown ones ' +
+          'get a red, spell-checker-style wavy underline; and malformed ' +
+          'placeholders with the wrong number of curly braces (e.g. ' +
+          '`{firstName}` or `{{firstName}`) get an amber wavy underline so ' +
+          'brace typos are obvious instantly.',
       },
     },
   },
@@ -73,6 +76,24 @@ export const MultilineBody: Story = {
         '{{visitDate}}.\n\n' +
         'Please reply if {{phoneNumber}} is the best number to reach you.\n\n' +
         'Warm regards,\nThe {{companyName}} team'
+      }
+    />
+  ),
+};
+
+export const MalformedPlaceholders: Story = {
+  name: 'Malformed — missing or extra braces',
+  render: () => (
+    <Interactive
+      label="Body (plain text)"
+      multiline
+      minRows={6}
+      initial={
+        'Hi {firstName},\n\n' +
+        'Your visit with {{companyName} is booked for {{visitDate}}.\n\n' +
+        'A well-formed token like {{lastName}} stays green; the single-brace ' +
+        '{firstName} and the missing-brace {{companyName} get an amber wavy ' +
+        'underline instead.'
       }
     />
   ),

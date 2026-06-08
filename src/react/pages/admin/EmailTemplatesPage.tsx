@@ -269,8 +269,12 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [confirmUnknownOpen, setConfirmUnknownOpen] = useState(false);
 
   // ── Token analysis ────────────────────────────────────────────────────────
-  const { unknownTokens, unusedVariables } = useMemo(() => {
-    const TOKEN_RE = /\{\{(\w+)\}\}/g;
+  const { unknownTokens, unusedVariables, malformedTokens } = useMemo(() => {
+    // Matches both balanced `{{word}}` tokens and brace runs with a mismatched
+    // open/close count (`{word}`, `{{word}`, `{word}}`) — the latter are likely
+    // typos that render literally in the sent email. Kept in sync with
+    // buildSegments in TokenHighlightField.
+    const PLACEHOLDER_RE = /(\{{1,2})(\w+)(\}{1,2})/g;
     const combined = [
       fields.subject,
       fields.body_text,
@@ -278,14 +282,21 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       fields.footer_text,
     ].join('\n');
     const found = new Set<string>();
+    const malformed = new Set<string>();
     let m: RegExpExecArray | null;
-    while ((m = TOKEN_RE.exec(combined)) !== null) {
-      found.add(m[1]);
+    while ((m = PLACEHOLDER_RE.exec(combined)) !== null) {
+      const balanced = m[1].length === 2 && m[3].length === 2;
+      if (balanced) {
+        found.add(m[2]);
+      } else {
+        malformed.add(m[0]);
+      }
     }
     const knownSet = new Set(template.variables);
     return {
       unknownTokens: [...found].filter((t) => !knownSet.has(t)),
       unusedVariables: template.variables.filter((v) => !found.has(v)),
+      malformedTokens: [...malformed],
     };
   }, [fields, template.variables]);
 
@@ -341,12 +352,12 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       showToast('Subject is required.', true);
       return;
     }
-    if (unknownTokens.length > 0) {
+    if (unknownTokens.length > 0 || malformedTokens.length > 0) {
       setConfirmUnknownOpen(true);
       return;
     }
     handleConfirmedSave();
-  }, [fields.subject, unknownTokens, showToast, handleConfirmedSave]);
+  }, [fields.subject, unknownTokens, malformedTokens, showToast, handleConfirmedSave]);
 
   return (
     <Dialog open onClose={handleCancel} maxWidth="md" fullWidth>
@@ -385,6 +396,17 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
             {hadDraft && (
               <Alert severity="info">
                 Restored an unsaved draft from your last edit. Save to apply, or cancel to discard it.
+              </Alert>
+            )}
+
+            {malformedTokens.length > 0 && (
+              <Alert severity="warning">
+                <strong>
+                  Malformed placeholder{malformedTokens.length > 1 ? 's' : ''}:
+                </strong>{' '}
+                {malformedTokens.join(', ')}
+                {' '}— check the curly braces. Variables need exactly two on each
+                side, e.g. {'{{firstName}}'}. As written these render as literal text.
               </Alert>
             )}
 
@@ -476,18 +498,43 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
         </Button>
       </DialogActions>
 
-      {/* Confirmation dialog when unknown tokens are present */}
+      {/* Confirmation dialog when unknown or malformed tokens are present */}
       <Dialog open={confirmUnknownOpen} onClose={() => setConfirmUnknownOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Unknown variables in template</DialogTitle>
+        <DialogTitle>
+          {unknownTokens.length > 0 && malformedTokens.length > 0
+            ? 'Variable problems in template'
+            : malformedTokens.length > 0
+              ? 'Malformed placeholders in template'
+              : 'Unknown variables in template'}
+        </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1.5 }}>
-            This template contains variable{unknownTokens.length > 1 ? 's' : ''} that won't be replaced when the email is sent:
-          </Typography>
-          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-            {unknownTokens.map((t) => (
-              <Chip key={t} label={`{{${t}}}`} size="small" color="warning" />
-            ))}
-          </Stack>
+          {malformedTokens.length > 0 && (
+            <>
+              <Typography variant="body2" sx={{ mb: 1.5 }}>
+                {malformedTokens.length > 1
+                  ? 'These placeholders have the wrong number of curly braces'
+                  : 'This placeholder has the wrong number of curly braces'}
+                {' '}(variables need exactly two on each side, e.g. {'{{firstName}}'}):
+              </Typography>
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                {malformedTokens.map((t) => (
+                  <Chip key={t} label={t} size="small" color="warning" />
+                ))}
+              </Stack>
+            </>
+          )}
+          {unknownTokens.length > 0 && (
+            <>
+              <Typography variant="body2" sx={{ mb: 1.5 }}>
+                This template contains variable{unknownTokens.length > 1 ? 's' : ''} that won't be replaced when the email is sent:
+              </Typography>
+              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+                {unknownTokens.map((t) => (
+                  <Chip key={t} label={`{{${t}}}`} size="small" color="warning" />
+                ))}
+              </Stack>
+            </>
+          )}
           <Typography variant="body2" color="text.secondary">
             These will appear as literal text in the sent email. Check for typos or remove them before saving.
           </Typography>

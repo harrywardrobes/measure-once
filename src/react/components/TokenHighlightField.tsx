@@ -14,9 +14,13 @@ import { STATUS_COLORS } from '../theme';
 
 // ── Token analysis ────────────────────────────────────────────────────────────
 
-const TOKEN_RE = /\{\{(\w+)\}\}/g;
+// Matches any run of 1–2 opening braces, a word, then 1–2 closing braces.
+// A perfectly-balanced `{{word}}` is a real token; anything else with a
+// mismatched brace count (`{word}`, `{{word}`, `{word}}`) is a malformed
+// placeholder — a likely typo that would render literally in the sent email.
+const PLACEHOLDER_RE = /(\{{1,2})(\w+)(\}{1,2})/g;
 
-type SegmentKind = 'plain' | 'known' | 'unknown';
+type SegmentKind = 'plain' | 'known' | 'unknown' | 'malformed';
 
 interface Segment {
   text: string;
@@ -24,22 +28,26 @@ interface Segment {
 }
 
 /**
- * Split `text` into plain / known-token / unknown-token segments. A token is a
- * complete `{{word}}` sequence — partial typing like `{{fo` stays plain until
- * it is closed, mirroring the token analysis in EmailTemplatesPage.
+ * Split `text` into plain / known-token / unknown-token / malformed segments.
+ * A well-formed token is a balanced `{{word}}` sequence (classified known or
+ * unknown). A brace run with a mismatched open/close count — `{word}`,
+ * `{{word}`, `{word}}` — is flagged as `malformed` so an obvious typo stands
+ * out from a well-formed-but-unknown token. Partial typing with no closing
+ * brace (`{{fo`) stays plain until it is closed.
  */
 export function buildSegments(text: string, known: Set<string>): Segment[] {
   const segments: Segment[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
-  TOKEN_RE.lastIndex = 0;
-  while ((m = TOKEN_RE.exec(text)) !== null) {
+  PLACEHOLDER_RE.lastIndex = 0;
+  while ((m = PLACEHOLDER_RE.exec(text)) !== null) {
     if (m.index > last) {
       segments.push({ text: text.slice(last, m.index), kind: 'plain' });
     }
+    const balanced = m[1].length === 2 && m[3].length === 2;
     segments.push({
       text: m[0],
-      kind: known.has(m[1]) ? 'known' : 'unknown',
+      kind: balanced ? (known.has(m[2]) ? 'known' : 'unknown') : 'malformed',
     });
     last = m.index + m[0].length;
   }
@@ -211,7 +219,16 @@ export function TokenHighlightField({
               return <React.Fragment key={i}>{seg.text}</React.Fragment>;
             }
             const isUnknown = seg.kind === 'unknown';
-            const palette = isUnknown ? STATUS_COLORS.error : STATUS_COLORS.success;
+            const isMalformed = seg.kind === 'malformed';
+            const underlined = isUnknown || isMalformed;
+            const palette = isMalformed
+              ? STATUS_COLORS.warning
+              : isUnknown
+                ? STATUS_COLORS.error
+                : STATUS_COLORS.success;
+            const underlineColor = isMalformed
+              ? STATUS_COLORS.warningDeep.bg
+              : STATUS_COLORS.danger.text;
             return (
               <Box
                 key={i}
@@ -220,9 +237,9 @@ export function TokenHighlightField({
                   bgcolor: palette.bg,
                   color: palette.text,
                   borderRadius: '2px',
-                  textDecoration: isUnknown ? 'underline' : 'none',
-                  textDecorationStyle: isUnknown ? 'wavy' : undefined,
-                  textDecorationColor: isUnknown ? STATUS_COLORS.danger.text : undefined,
+                  textDecoration: underlined ? 'underline' : 'none',
+                  textDecorationStyle: underlined ? 'wavy' : undefined,
+                  textDecorationColor: underlined ? underlineColor : undefined,
                   WebkitBoxDecorationBreak: 'clone',
                   boxDecorationBreak: 'clone',
                 }}
