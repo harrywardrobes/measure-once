@@ -11,19 +11,23 @@ import Chip from '@mui/material/Chip';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 import Collapse from '@mui/material/Collapse';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import CircularProgress from '@mui/material/CircularProgress';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
-import type { ConflictEntry, OfflineArea } from '../lib/offlineQueue';
+import type { ConflictEntry, OfflineArea, ResolveConflictResult } from '../lib/offlineQueue';
 import { resolveConflictRoute } from '../lib/conflictRoute';
 
 // ── Offline sync-conflict review ─────────────────────────────────────────────────
 // When a queued offline edit replays onto a record that changed on the server,
 // the sync engine keeps your edit (last-write-wins) but persists a conflict so
 // you can see what was overwritten. This header pill appears only while there
-// are unreviewed conflicts; clicking it opens a list where each can be dismissed.
+// are unreviewed conflicts; clicking it opens a list where each can be resolved:
+// keep your edit, restore the server copy, or pick per field which value to keep.
 //
 // Lazy-loaded by GlobalHeader so its code (plus the conflicts hook and its
 // icons) stays out of the always-loaded main.js bundle.
@@ -151,9 +155,54 @@ export function buildFieldDiff(attemptedBody: unknown, serverData: unknown): Fie
   return rows;
 }
 
-function FieldDiffSection({ conflict }: { conflict: ConflictEntry }) {
-  const [open, setOpen] = useState(false);
-  const rows = buildFieldDiff(conflict.attemptedBody, conflict.serverData);
+/**
+ * Build the write body that re-applies the chosen server values.
+ *
+ * Starts from the original queued body (so fields the user is keeping — and any
+ * extra payload keys the diff never surfaced, e.g. a design visit's rooms or
+ * handlerConfig — are preserved verbatim) and overwrites only `restoreKeys`
+ * with the server snapshot value. Missing server values become `null` so the
+ * field is explicitly cleared rather than silently dropped from the body.
+ *
+ * Returns `null` when there is nothing to restore (no keys, or no usable
+ * attempted body), signalling the caller to keep the edit instead.
+ */
+export function buildRestoreBody(
+  attemptedBody: unknown,
+  serverData: unknown,
+  restoreKeys: string[],
+): Record<string, unknown> | null {
+  if (!restoreKeys || restoreKeys.length === 0) return null;
+  if (!attemptedBody || typeof attemptedBody !== 'object' || Array.isArray(attemptedBody)) {
+    return null;
+  }
+  const server = unwrapRecord(serverData);
+  const body: Record<string, unknown> = { ...(attemptedBody as Record<string, unknown>) };
+  for (const key of restoreKeys) {
+    const value = server[key];
+    body[key] = value === undefined ? null : value;
+  }
+  return body;
+}
+
+/** Per-field resolution choice. `mine` keeps the queued edit; `server` restores. */
+type FieldChoice = 'mine' | 'server';
+
+function FieldDiffSection({
+  rows,
+  open,
+  onToggleOpen,
+  choices,
+  onChoose,
+  disabled,
+}: {
+  rows: FieldDiffRow[];
+  open: boolean;
+  onToggleOpen: () => void;
+  choices: Record<string, FieldChoice>;
+  onChoose: (key: string, choice: FieldChoice) => void;
+  disabled: boolean;
+}) {
   if (rows.length === 0) return null;
 
   const changedCount = rows.filter((r) => r.changed).length;
@@ -164,7 +213,7 @@ function FieldDiffSection({ conflict }: { conflict: ConflictEntry }) {
         size="small"
         variant="text"
         color="inherit"
-        onClick={() => setOpen((v) => !v)}
+        onClick={onToggleOpen}
         startIcon={open ? <ExpandLessIcon /> : <ExpandMoreIcon />}
         data-testid="conflict-fields-toggle"
         sx={{ textTransform: 'none', px: 0.5 }}
@@ -190,46 +239,81 @@ function FieldDiffSection({ conflict }: { conflict: ConflictEntry }) {
               Your edit
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
-              Server copy (overwritten)
+              Server copy
             </Typography>
           </Box>
-          {rows.map((row) => (
-            <Box
-              key={row.key}
-              data-testid="conflict-field-row"
-              data-changed={row.changed ? 'true' : 'false'}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 1,
-                px: 1.25,
-                py: 0.75,
-                borderTop: '1px solid',
-                borderColor: 'divider',
-                bgcolor: row.changed ? 'rgba(249,115,22,0.1)' : 'transparent',
-              }}
-            >
-              <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
-                {row.label}
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{ wordBreak: 'break-word', fontWeight: row.changed ? 600 : 400 }}
-              >
-                {formatFieldValue(row.attempted)}
-              </Typography>
-              <Typography
-                variant="body2"
+          {rows.map((row) => {
+            const choice = choices[row.key] ?? 'mine';
+            return (
+              <Box
+                key={row.key}
+                data-testid="conflict-field-row"
+                data-changed={row.changed ? 'true' : 'false'}
                 sx={{
-                  wordBreak: 'break-word',
-                  color: row.changed ? 'text.primary' : 'text.secondary',
-                  textDecoration: row.changed ? 'line-through' : 'none',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 1,
+                  px: 1.25,
+                  py: 0.75,
+                  borderTop: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: row.changed ? 'rgba(249,115,22,0.1)' : 'transparent',
                 }}
               >
-                {formatFieldValue(row.server)}
-              </Typography>
-            </Box>
-          ))}
+                <Typography variant="caption" sx={{ gridColumn: '1 / -1', color: 'text.disabled' }}>
+                  {row.label}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    wordBreak: 'break-word',
+                    fontWeight: row.changed && choice === 'mine' ? 600 : 400,
+                    color: row.changed && choice === 'server' ? 'text.secondary' : 'text.primary',
+                    textDecoration: row.changed && choice === 'server' ? 'line-through' : 'none',
+                  }}
+                >
+                  {formatFieldValue(row.attempted)}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    wordBreak: 'break-word',
+                    fontWeight: row.changed && choice === 'server' ? 600 : 400,
+                    color: row.changed && choice === 'mine' ? 'text.secondary' : 'text.primary',
+                    textDecoration: row.changed && choice === 'mine' ? 'line-through' : 'none',
+                  }}
+                >
+                  {formatFieldValue(row.server)}
+                </Typography>
+                {row.changed && (
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={choice}
+                    disabled={disabled}
+                    onChange={(_e, next: FieldChoice | null) => { if (next) onChoose(row.key, next); }}
+                    data-testid="conflict-field-choice"
+                    sx={{
+                      gridColumn: '1 / -1',
+                      mt: 0.5,
+                      '& .MuiToggleButton-root': {
+                        textTransform: 'none',
+                        py: 0.25,
+                        fontSize: 11,
+                      },
+                    }}
+                  >
+                    <ToggleButton value="mine" data-testid="conflict-field-choice-mine">
+                      Keep mine
+                    </ToggleButton>
+                    <ToggleButton value="server" data-testid="conflict-field-choice-server">
+                      Use server
+                    </ToggleButton>
+                  </ToggleButtonGroup>
+                )}
+              </Box>
+            );
+          })}
         </Box>
       </Collapse>
     </Box>
@@ -265,10 +349,51 @@ function VersionRow({ label, base, server }: { label: string; base: React.ReactN
   );
 }
 
-function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDismiss: (id: number) => void }) {
+function ConflictCard({
+  conflict,
+  onResolve,
+}: {
+  conflict: ConflictEntry;
+  onResolve: (conflict: ConflictEntry, resolvedBody: Record<string, unknown> | null) => Promise<ResolveConflictResult>;
+}) {
   const hasVersions = conflict.baseVersion != null || conflict.serverVersion != null;
   const hasTimestamps = !!conflict.baseUpdatedAt || !!conflict.serverUpdatedAt;
   const recordHref = resolveConflictRoute(conflict);
+
+  const rows = buildFieldDiff(conflict.attemptedBody, conflict.serverData);
+  const changedKeys = rows.filter((r) => r.changed).map((r) => r.key);
+  const canRestore = changedKeys.length > 0;
+
+  const [open, setOpen] = useState(false);
+  const [choices, setChoices] = useState<Record<string, FieldChoice>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = (key: string, choice: FieldChoice) => {
+    setChoices((prev) => ({ ...prev, [key]: choice }));
+  };
+
+  // Keys the user has explicitly flipped to the server value.
+  const selectedServerKeys = changedKeys.filter((k) => choices[k] === 'server');
+  const hasSelection = selectedServerKeys.length > 0;
+
+  const run = async (restoreKeys: string[]) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = buildRestoreBody(conflict.attemptedBody, conflict.serverData, restoreKeys);
+      const res = await onResolve(conflict, body);
+      // A genuine server rejection (4xx) leaves the conflict in place; surface it.
+      if (body !== null && !res.ok && !res.queued) {
+        setError('Could not restore the server copy. Please try again.');
+      }
+      // On success/queued the parent clears the conflict and this card unmounts.
+    } catch {
+      setError('Could not restore the server copy. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Box
@@ -280,7 +405,7 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
         p: 2,
       }}
     >
-      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
         <Box sx={{ minWidth: 0 }}>
           <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <Chip label={areaLabel(conflict.area)} size="small" color="primary" variant="outlined" />
@@ -292,8 +417,8 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
             Detected {formatTimestamp(conflict.detectedAt)}
           </Typography>
         </Box>
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-          {recordHref && (
+        {recordHref && (
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <Button
               size="small"
               variant="outlined"
@@ -306,22 +431,13 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
             >
               Open record
             </Button>
-          )}
-          <Button
-            size="small"
-            variant="text"
-            color="inherit"
-            onClick={() => onDismiss(conflict.id)}
-            data-testid="conflict-dismiss"
-          >
-            Dismiss
-          </Button>
-        </Stack>
+          </Stack>
+        )}
       </Stack>
 
       <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
         Someone else changed this record while your edit was waiting to sync. Your change was
-        applied anyway (last edit wins), overwriting the server copy below.
+        applied anyway (last edit wins), overwriting the server copy. Choose which version to keep.
       </Typography>
 
       {(hasVersions || hasTimestamps) && (
@@ -344,7 +460,62 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
         </>
       )}
 
-      <FieldDiffSection conflict={conflict} />
+      <FieldDiffSection
+        rows={rows}
+        open={open}
+        onToggleOpen={() => setOpen((v) => !v)}
+        choices={choices}
+        onChoose={choose}
+        disabled={busy}
+      />
+
+      {error && (
+        <Typography variant="caption" sx={{ color: 'error.main', display: 'block', mt: 1 }} data-testid="conflict-error">
+          {error}
+        </Typography>
+      )}
+
+      <Stack
+        direction="row"
+        sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1, mt: 1.5 }}
+      >
+        <Button
+          size="small"
+          variant="text"
+          color="inherit"
+          disabled={busy}
+          onClick={() => void run([])}
+          data-testid="conflict-keep-mine"
+        >
+          Keep my edit
+        </Button>
+        {canRestore && (
+          <Button
+            size="small"
+            variant="outlined"
+            color="primary"
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
+            onClick={() => void run(changedKeys)}
+            data-testid="conflict-restore-server"
+          >
+            Restore server copy
+          </Button>
+        )}
+        {canRestore && open && hasSelection && (
+          <Button
+            size="small"
+            variant="contained"
+            color="primary"
+            disabled={busy}
+            startIcon={busy ? <CircularProgress size={14} color="inherit" /> : undefined}
+            onClick={() => void run(selectedServerKeys)}
+            data-testid="conflict-apply-selection"
+          >
+            Apply selection ({selectedServerKeys.length})
+          </Button>
+        )}
+      </Stack>
     </Box>
   );
 }
@@ -352,8 +523,9 @@ function ConflictCard({ conflict, onDismiss }: { conflict: ConflictEntry; onDism
 export interface ConflictsReviewProps {
   /** Test/Storybook seam: inject conflicts + handlers instead of the live hook. */
   conflicts?: ConflictEntry[];
-  onDismiss?: (id: number) => void | Promise<void>;
   onDismissAll?: () => void | Promise<void>;
+  /** Resolve a single conflict: `null` keeps the edit, a body restores server values. */
+  onResolve?: (conflict: ConflictEntry, resolvedBody: Record<string, unknown> | null) => Promise<ResolveConflictResult>;
   /** Force the dialog open (Storybook). */
   defaultOpen?: boolean;
 }
@@ -361,8 +533,8 @@ export interface ConflictsReviewProps {
 export default function ConflictsReview(props: ConflictsReviewProps) {
   const live = useOfflineConflicts();
   const conflicts = props.conflicts ?? live.conflicts;
-  const dismiss = props.onDismiss ?? live.dismiss;
   const dismissAll = props.onDismissAll ?? live.dismissAll;
+  const resolve = props.onResolve ?? live.resolve;
 
   const [open, setOpen] = useState(!!props.defaultOpen);
 
@@ -420,12 +592,12 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
         <DialogContent dividers>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
             These records changed on the server while your offline edits were waiting to sync.
-            Your edits were kept (last edit wins). Review what was overwritten, then dismiss each
-            once you've checked it.
+            Your edits were kept (last edit wins). For each conflict, keep your edit or restore the
+            server copy — expand the field comparison to choose value by value.
           </Typography>
           <Stack spacing={2}>
             {conflicts.map((c) => (
-              <ConflictCard key={c.id} conflict={c} onDismiss={(id) => void dismiss(id)} />
+              <ConflictCard key={c.id} conflict={c} onResolve={resolve} />
             ))}
           </Stack>
         </DialogContent>
@@ -435,7 +607,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
             onClick={() => void dismissAll()}
             data-testid="conflicts-dismiss-all"
           >
-            Dismiss all
+            Keep all my edits
           </Button>
           <Button variant="contained" onClick={() => setOpen(false)}>
             Close

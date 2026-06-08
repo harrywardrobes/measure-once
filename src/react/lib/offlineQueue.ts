@@ -325,6 +325,59 @@ export async function clearConflict(id: number): Promise<void> {
   _notify();
 }
 
+// ── Conflict resolution ──────────────────────────────────────────────────────────
+// A persisted conflict starts out resolved last-write-wins: the queued edit has
+// already overwritten the server copy. The review UI lets the user revisit that
+// choice per conflict (or per field):
+//  - "Keep my edit"      → just clear the conflict (`resolvedBody === null`).
+//  - "Restore server copy" / per-field selection → replay a write that re-applies
+//    the chosen server values, then clear the conflict.
+//
+// The restore write is offline-aware (`sendOrQueue`): when offline it is parked
+// in the outbox and replayed on reconnect, so the user's resolution is never
+// lost. The conflict is cleared once the restore is sent (2xx) or queued; a
+// genuine server rejection (4xx) leaves the conflict in place so the user can
+// retry.
+
+export interface ResolveConflictResult {
+  /** True when the restore write was accepted by the server (2xx). */
+  ok: boolean;
+  /** True when the restore write was parked offline for later replay. */
+  queued: boolean;
+  /** Status code (0 when queued offline / on a network error). */
+  status: number;
+}
+
+/**
+ * Resolve a persisted conflict.
+ *
+ * Pass `resolvedBody === null` to keep the queued edit (just clears the
+ * conflict). Pass a body object to restore server values: it is replayed with
+ * the conflict's original `method`/`url`, and the conflict is cleared once the
+ * write succeeds or is queued offline.
+ */
+export async function resolveConflict(
+  conflict: ConflictEntry,
+  resolvedBody: Record<string, unknown> | null,
+): Promise<ResolveConflictResult> {
+  if (resolvedBody === null) {
+    await clearConflict(conflict.id);
+    return { ok: true, queued: false, status: 0 };
+  }
+  const res = await sendOrQueue({
+    area: conflict.area,
+    label: conflict.label,
+    method: conflict.method,
+    url: conflict.url,
+    body: resolvedBody,
+    recordKey: conflict.recordKey,
+  });
+  if (res.ok || res.queued) {
+    await clearConflict(conflict.id);
+  }
+  return { ok: res.ok, queued: res.queued, status: res.status };
+}
+
 // ── Last successful sync bookkeeping ─────────────────────────────────────────────
 // A small `meta` timestamp the sync engine stamps after every confirmed (2xx)
 // replay, so the Phase 3 Offline Support admin view can show when the queue last

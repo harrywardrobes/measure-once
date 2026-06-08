@@ -71,7 +71,9 @@ const meta: Meta<typeof ConflictsReview> = {
           'A conflict is persisted when a queued offline edit replays onto a record that ' +
           'changed on the server: the edit is applied (last-write-wins) and the overwritten ' +
           'server copy is recorded for review. The pill appears only while unreviewed ' +
-          'conflicts exist; users dismiss each (or all) to clear them from the IndexedDB store.',
+          'conflicts exist. Each conflict can be resolved by keeping your edit, restoring the ' +
+          'server copy, or picking per field which value to keep — restoring replays a write ' +
+          'with the chosen server values, then clears the conflict.',
       },
     },
   },
@@ -80,7 +82,11 @@ export default meta;
 
 type Story = StoryObj<typeof ConflictsReview>;
 
-/** Interactive: dismiss removes from the local list so the flow is demonstrable. */
+/**
+ * Interactive: resolving (keep my edit / restore server copy / per-field) removes
+ * the conflict from the local list so the full flow is demonstrable. The real
+ * `onResolve` replays a write and clears the conflict; here we just drop it.
+ */
 function Interactive({ open }: { open?: boolean }) {
   const [conflicts, setConflicts] = useState<ConflictEntry[]>(SAMPLE);
   return (
@@ -88,7 +94,10 @@ function Interactive({ open }: { open?: boolean }) {
       <ConflictsReview
         conflicts={conflicts}
         defaultOpen={open}
-        onDismiss={(id) => setConflicts((cs) => cs.filter((c) => c.id !== id))}
+        onResolve={async (conflict) => {
+          setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+          return { ok: true, queued: false, status: 200 };
+        }}
         onDismissAll={() => setConflicts([])}
       />
     </Box>
@@ -115,7 +124,10 @@ export const SingleConflict: Story = {
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
-            onDismiss={(id) => setConflicts((cs) => cs.filter((c) => c.id !== id))}
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
             onDismissAll={() => setConflicts([])}
           />
         </Box>

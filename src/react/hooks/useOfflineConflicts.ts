@@ -14,13 +14,19 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConflictEntry } from '../lib/offlineQueue';
+import type { ConflictEntry, ResolveConflictResult } from '../lib/offlineQueue';
 
 export interface UseOfflineConflicts {
   conflicts: ConflictEntry[];
   count: number;
   dismiss: (id: number) => Promise<void>;
   dismissAll: () => Promise<void>;
+  /**
+   * Resolve a conflict. `resolvedBody === null` keeps the queued edit (clears
+   * the conflict); a body object restores the chosen server values by replaying
+   * an offline-aware write, then clears the conflict.
+   */
+  resolve: (conflict: ConflictEntry, resolvedBody: Record<string, unknown> | null) => Promise<ResolveConflictResult>;
 }
 
 export function useOfflineConflicts(): UseOfflineConflicts {
@@ -69,5 +75,14 @@ export function useOfflineConflicts(): UseOfflineConflicts {
     await Promise.all(list.map((c) => mod.clearConflict(c.id)));
   }, []);
 
-  return { conflicts, count: conflicts.length, dismiss, dismissAll };
+  const resolve = useCallback(
+    async (conflict: ConflictEntry, resolvedBody: Record<string, unknown> | null) => {
+      const mod = modRef.current;
+      if (!mod) return { ok: false, queued: false, status: 0 };
+      return mod.resolveConflict(conflict, resolvedBody);
+    },
+    [],
+  );
+
+  return { conflicts, count: conflicts.length, dismiss, dismissAll, resolve };
 }
