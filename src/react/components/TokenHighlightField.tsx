@@ -15,61 +15,168 @@ import { STATUS_COLORS } from '../theme';
 
 // ── Token analysis ────────────────────────────────────────────────────────────
 
-// Matches any run of 1–2 opening braces, any non-brace inner content, then a
-// run of 1–2 closing braces. A perfectly-balanced `{{word}}` whose name is a
-// clean `\w+` identifier is a real token. Anything else is a malformed
-// placeholder — a likely typo that would render literally in the sent email:
+// A perfectly-balanced `{{word}}` whose name is a clean `\w+` identifier is a
+// real token. Anything else is a malformed placeholder — a likely typo that
+// would render literally in the sent email:
 //   - a mismatched brace count (`{word}`, `{{word}`, `{word}}`), or
 //   - a balanced `{{…}}` whose name has stray characters that break
-//     substitution (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`).
+//     substitution (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`), or
+//   - a `{{` opener with no matching closing braces (`{{firstName`) — see the
+//     over-eager guard below for when an unclosed opener becomes a warning.
 // A lone-brace run around stray content (e.g. CSS `{color:red}`) is left as
 // plain text — only `\w+` lone-brace runs are treated as brace-count typos.
-const PLACEHOLDER_RE = /(\{{1,2})([^{}]*)(\}{1,2})/g;
 const CLEAN_NAME_RE = /^\w+$/;
+const NAME_PREFIX_RE = /^\w*/;
 
 type SegmentKind = 'plain' | 'known' | 'unknown' | 'malformed';
 
 interface Segment {
   text: string;
   kind: SegmentKind;
+  /** Clean variable name, present only for `known` / `unknown` token segments. */
+  name?: string;
 }
 
 /**
  * Split `text` into plain / known-token / unknown-token / malformed segments.
  * A well-formed token is a balanced `{{word}}` sequence (classified known or
- * unknown). A brace run with a mismatched open/close count — `{word}`,
- * `{{word}`, `{word}}` — is flagged as `malformed` so an obvious typo stands
- * out from a well-formed-but-unknown token. Partial typing with no closing
- * brace (`{{fo`) stays plain until it is closed.
+ * unknown). The following are flagged as `malformed` so an obvious typo stands
+ * out from a well-formed-but-unknown token:
+ *   - a mismatched open/close brace count (`{word}`, `{{word}`, `{word}}`);
+ *   - a balanced `{{…}}` whose name has stray characters (`{{first Name}}`);
+ *   - a `{{` opener with no matching closing braces (`{{firstName`).
+ *
+ * Over-eager guard for unclosed openers: a bare `{{word` (or `{{`) sitting at
+ * the very end of the input is treated as still-being-typed and left plain, so
+ * the field does not flash amber on every keystroke while a token is typed.
+ * It only becomes a warning once it is *followed by more text* — a space,
+ * punctuation, a newline, or another brace run — which signals the user has
+ * moved on and forgotten the closing `}}`.
  */
 export function buildSegments(text: string, known: Set<string>): Segment[] {
   const segments: Segment[] = [];
-  let last = 0;
-  let m: RegExpExecArray | null;
-  PLACEHOLDER_RE.lastIndex = 0;
-  while ((m = PLACEHOLDER_RE.exec(text)) !== null) {
-    const balanced = m[1].length === 2 && m[3].length === 2;
-    const cleanName = CLEAN_NAME_RE.test(m[2]);
-    // A lone-brace run around stray content (CSS, code) isn't a placeholder —
-    // leave it as plain text so we only flag genuine typos.
-    if (!balanced && !cleanName) continue;
-    if (m.index > last) {
-      segments.push({ text: text.slice(last, m.index), kind: 'plain' });
+  let plainStart = 0;
+  let i = 0;
+
+  const pushPlain = (end: number) => {
+    if (end > plainStart) {
+      segments.push({ text: text.slice(plainStart, end), kind: 'plain' });
     }
-    let kind: SegmentKind;
-    if (balanced && cleanName) {
-      kind = known.has(m[2]) ? 'known' : 'unknown';
-    } else {
-      // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
-      kind = 'malformed';
+  };
+
+  while (i < text.length) {
+    if (text[i] !== '{') {
+      i++;
+      continue;
     }
-    segments.push({ text: m[0], kind });
-    last = m.index + m[0].length;
+
+    const openStart = i;
+    const openLen = text[i + 1] === '{' ? 2 : 1;
+    let j = openStart + openLen;
+    const contentStart = j;
+    while (j < text.length && text[j] !== '{' && text[j] !== '}') j++;
+    const content = text.slice(contentStart, j);
+
+    if (j < text.length && text[j] === '}') {
+      // A closing brace run is present — this is a closed placeholder.
+      const closeStart = j;
+      const closeLen = text[j + 1] === '}' ? 2 : 1;
+      const balanced = openLen === 2 && closeLen === 2;
+      const cleanName = CLEAN_NAME_RE.test(content);
+      // A lone-brace run around stray content (CSS, code) isn't a placeholder —
+      // leave it as plain text so we only flag genuine typos.
+      if (!balanced && !cleanName) {
+        i = closeStart + closeLen;
+        continue;
+      }
+      pushPlain(openStart);
+      const full = text.slice(openStart, closeStart + closeLen);
+      if (balanced && cleanName) {
+        segments.push({
+          text: full,
+          kind: known.has(content) ? 'known' : 'unknown',
+          name: content,
+        });
+      } else {
+        // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
+        segments.push({ text: full, kind: 'malformed' });
+      }
+      i = closeStart + closeLen;
+      plainStart = i;
+      continue;
+    }
+
+    // No closing brace before end-of-string or before the next `{`. Only a
+    // two-brace opener is treated as an intended token; a lone `{name` with no
+    // close is far more likely to be literal text and stays plain.
+    if (openLen === 2) {
+      const atEnd = j === text.length;
+      const cleanPartial = content === '' || CLEAN_NAME_RE.test(content);
+      if (atEnd && cleanPartial) {
+        // Over-eager guard: a bare `{{word` at the very end of the input is
+        // still being typed — leave the remainder plain.
+        i = j;
+        continue;
+      }
+      // Unclosed opener followed by more text — flag `{{` plus its leading name.
+      const name = NAME_PREFIX_RE.exec(content)![0];
+      const tokenEnd = contentStart + name.length;
+      pushPlain(openStart);
+      segments.push({ text: text.slice(openStart, tokenEnd), kind: 'malformed' });
+      i = tokenEnd;
+      plainStart = i;
+      continue;
+    }
+
+    // Single-brace opener with no close — plain text; advance past it.
+    i = openStart + openLen;
   }
-  if (last < text.length) {
-    segments.push({ text: text.slice(last), kind: 'plain' });
-  }
+
+  pushPlain(text.length);
   return segments;
+}
+
+// ── Aggregate token analysis (for save-guard banners) ──────────────────────────
+
+export interface TemplateTokenAnalysis {
+  /** Clean token names used anywhere (both known and unknown). */
+  usedNames: string[];
+  /** Token names not present in the known-variable set. */
+  unknownNames: string[];
+  /** Literal text of malformed placeholders (wrong braces, stray chars, or
+   *  unclosed openers). */
+  malformedTokens: string[];
+}
+
+/**
+ * Analyse one or more template fields and aggregate the token findings, reusing
+ * the exact `buildSegments` classification so a field's inline highlight and the
+ * save-guard banner never disagree. Each field is analysed independently so the
+ * unclosed-opener over-eager guard applies per field (an opener typed at the end
+ * of one field is not treated as "followed by" the next field's text).
+ */
+export function analyzeTemplateTokens(
+  texts: string[],
+  known: Set<string>,
+): TemplateTokenAnalysis {
+  const used = new Set<string>();
+  const unknown = new Set<string>();
+  const malformed = new Set<string>();
+  for (const text of texts) {
+    for (const seg of buildSegments(text, known)) {
+      if (seg.kind === 'malformed') {
+        malformed.add(seg.text);
+      } else if (seg.name) {
+        used.add(seg.name);
+        if (seg.kind === 'unknown') unknown.add(seg.name);
+      }
+    }
+  }
+  return {
+    usedNames: [...used],
+    unknownNames: [...unknown],
+    malformedTokens: [...malformed],
+  };
 }
 
 // ── Shared metrics ─────────────────────────────────────────────────────────────

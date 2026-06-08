@@ -29,6 +29,7 @@ import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import {
+  analyzeTemplateTokens,
   TokenHighlightField,
   type TokenHighlightFieldHandle,
 } from '../../components/TokenHighlightField';
@@ -292,40 +293,23 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   }, []);
 
   // ── Token analysis ────────────────────────────────────────────────────────
+  // Reuse buildSegments (via analyzeTemplateTokens) so the inline field
+  // highlighting and this save-guard banner always agree on what counts as a
+  // malformed placeholder — including `{{` openers with no closing braces.
+  // Each field is analysed independently so an unclosed opener typed at the end
+  // of one field is treated as still-being-typed, not as "followed by" the next
+  // field's text.
   const { unknownTokens, unusedVariables, malformedTokens } = useMemo(() => {
-    // Matches balanced `{{word}}` tokens plus malformed placeholders: brace
-    // runs with a mismatched open/close count (`{word}`, `{{word}`, `{word}}`)
-    // and balanced `{{…}}` whose name has stray characters that break
-    // substitution (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`). A
-    // lone-brace run around stray content (e.g. CSS `{color:red}`) is ignored.
-    // Kept in sync with buildSegments in TokenHighlightField.
-    const PLACEHOLDER_RE = /(\{{1,2})([^{}]*)(\}{1,2})/g;
-    const CLEAN_NAME_RE = /^\w+$/;
-    const combined = [
-      fields.subject,
-      fields.body_text,
-      fields.body_html,
-      fields.footer_text,
-    ].join('\n');
-    const found = new Set<string>();
-    const malformed = new Set<string>();
-    let m: RegExpExecArray | null;
-    while ((m = PLACEHOLDER_RE.exec(combined)) !== null) {
-      const balanced = m[1].length === 2 && m[3].length === 2;
-      const cleanName = CLEAN_NAME_RE.test(m[2]);
-      if (balanced && cleanName) {
-        found.add(m[2]);
-      } else if (balanced || cleanName) {
-        // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
-        malformed.add(m[0]);
-      }
-      // else: a lone-brace run around stray content — not a placeholder.
-    }
     const knownSet = new Set(template.variables);
+    const { usedNames, unknownNames, malformedTokens } = analyzeTemplateTokens(
+      [fields.subject, fields.body_text, fields.body_html, fields.footer_text],
+      knownSet,
+    );
+    const usedSet = new Set(usedNames);
     return {
-      unknownTokens: [...found].filter((t) => !knownSet.has(t)),
-      unusedVariables: template.variables.filter((v) => !found.has(v)),
-      malformedTokens: [...malformed],
+      unknownTokens: unknownNames,
+      unusedVariables: template.variables.filter((v) => !usedSet.has(v)),
+      malformedTokens,
     };
   }, [fields, template.variables]);
 

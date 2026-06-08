@@ -21,9 +21,12 @@ const meta: Meta<typeof TokenHighlightField> = {
           'get a red, spell-checker-style wavy underline; and malformed ' +
           'placeholders get an amber wavy underline so typos are obvious ' +
           'instantly. A placeholder is malformed when it has the wrong number ' +
-          'of curly braces (e.g. `{firstName}` or `{{firstName}`) or when its ' +
+          'of curly braces (e.g. `{firstName}` or `{{firstName}`), when its ' +
           'name has stray characters that break substitution (e.g. ' +
-          '`{{first Name}}`, `{{first-name}}`, `{{first.name}}`).',
+          '`{{first Name}}`, `{{first-name}}`, `{{first.name}}`), or when a ' +
+          '`{{` opener is never closed (e.g. `{{firstName` followed by more ' +
+          'text). An unclosed opener at the very end of the input is treated ' +
+          'as still-being-typed and stays plain until more text follows it.',
       },
     },
   },
@@ -101,6 +104,25 @@ export const MalformedPlaceholders: Story = {
         'A well-formed token like {{lastName}} stays green; the single-brace ' +
         '{firstName} and the missing-brace {{companyName} get an amber wavy ' +
         'underline instead.'
+      }
+    />
+  ),
+};
+
+export const UnclosedOpener: Story = {
+  name: 'Malformed — opener with no closing braces',
+  render: () => (
+    <Interactive
+      label="Body (plain text)"
+      multiline
+      minRows={6}
+      initial={
+        'Hi {{firstName, welcome aboard!\n\n' +
+        'An opener like {{firstName that is never closed gets an amber wavy ' +
+        'underline once more text follows it. A well-formed {{lastName}} stays ' +
+        'green.\n\n' +
+        'While you are still typing a token at the very end, it stays plain: ' +
+        '{{visitDate'
       }
     />
   ),
