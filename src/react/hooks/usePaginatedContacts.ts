@@ -1,5 +1,8 @@
 import React from 'react';
-import { cacheRecords, readRecords } from '../lib/offlineDb';
+import { cacheRecords, readRecords, getMeta, setMeta } from '../lib/offlineDb';
+
+/** Meta key holding the epoch-ms time of the last successful contacts fetch. */
+export const CONTACTS_LAST_SYNC_META_KEY = 'customersLastSyncAt';
 
 export type PaginatedContact = {
   id: string;
@@ -47,6 +50,9 @@ export type UsePaginatedContactsResult = {
   /** True when the list is rendered from the offline IndexedDB cache because the
    *  network fetch failed (e.g. the device is offline). */
   fromCache: boolean;
+  /** Epoch-ms time of the last successful contacts fetch, or null if unknown.
+   *  Used to render a "Last synced at …" indicator when offline. */
+  lastSyncAt: number | null;
   page: number;
   setPage: (p: number) => void;
 };
@@ -208,6 +214,7 @@ export function usePaginatedContacts(
   const [error, setError] = React.useState<string | null>(null);
   const [contactsStale, setContactsStale] = React.useState<boolean>(false);
   const [fromCache, setFromCache] = React.useState<boolean>(false);
+  const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
 
   const pendingContactsStaleRef = React.useRef<boolean | null>(null);
 
@@ -275,8 +282,13 @@ export function usePaginatedContacts(
         }
         const list = data.results || [];
         setContacts(list);
-        // Write-through to the offline store (best-effort, never blocks the UI).
+        // Write-through to the offline store (best-effort, never blocks the UI)
+        // and stamp the freshness time so the offline view can show "Last
+        // synced at …".
+        const syncedAt = Date.now();
         void cacheRecords('customers', list);
+        void setMeta(CONTACTS_LAST_SYNC_META_KEY, syncedAt);
+        setLastSyncAt(syncedAt);
         setTotal(data.total != null ? data.total : list.length);
         setTotalPages(data.totalPages || 1);
         setLoading(false);
@@ -289,6 +301,9 @@ export function usePaginatedContacts(
         // or page, so we surface it as a single best-effort "saved data" view.
         const cached = await readRecords<PaginatedContact>('customers');
         if (cancelled) return;
+        const persistedSyncAt = await getMeta<number>(CONTACTS_LAST_SYNC_META_KEY);
+        if (cancelled) return;
+        if (typeof persistedSyncAt === 'number') setLastSyncAt(persistedSyncAt);
         if (cached.length > 0) {
           // Apply the active search box, lead-status / stage filters, sort
           // order, and pagination client-side so the offline experience feels
@@ -337,5 +352,5 @@ export function usePaginatedContacts(
     };
   }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, refreshNonce, staleAfterDays, pageSize]);
 
-  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, page: effectivePage, setPage };
+  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, page: effectivePage, setPage };
 }

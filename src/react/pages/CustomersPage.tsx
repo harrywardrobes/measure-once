@@ -201,6 +201,32 @@ function writeUrlState(s: {
   history.replaceState(null, '', str ? '?' + str : location.pathname);
 }
 
+/**
+ * Human-friendly "last synced" label for the offline banner. Shows a relative
+ * phrase ("just now", "5 mins ago", "2 hours ago") plus the absolute clock time
+ * so a field user can judge how stale the cached contacts list is.
+ */
+function formatLastSynced(ms: number): string {
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  const clock = new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  let relative: string;
+  if (mins < 1) {
+    relative = 'just now';
+  } else if (mins < 60) {
+    relative = `${mins} min${mins === 1 ? '' : 's'} ago`;
+  } else {
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) {
+      relative = `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+    } else {
+      const days = Math.floor(hrs / 24);
+      relative = `${days} day${days === 1 ? '' : 's'} ago`;
+    }
+  }
+  return `${relative} (${clock})`;
+}
+
 function contactName(c: Contact): string {
   const first = c.properties?.firstname || '';
   const last = c.properties?.lastname || '';
@@ -900,6 +926,7 @@ export function CustomersPage(): React.ReactElement {
     error,
     contactsStale,
     fromCache,
+    lastSyncAt,
     page,
     setPage,
   } = usePaginatedContacts(
@@ -1561,7 +1588,8 @@ export function CustomersPage(): React.ReactElement {
 
         {!loading && fromCache ? (
           <Alert severity="info" sx={{ py: 0 }} data-testid="contacts-offline-banner">
-            You&apos;re offline — showing saved customers from your last visit. This list may be out of date.
+            You&apos;re offline — showing saved customers from your last visit.
+            {lastSyncAt ? ` Last synced ${formatLastSynced(lastSyncAt)}.` : ' This list may be out of date.'}
           </Alert>
         ) : null}
 
