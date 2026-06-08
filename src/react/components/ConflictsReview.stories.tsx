@@ -181,6 +181,67 @@ export const SingleConflict: Story = {
 };
 
 /**
+ * A contact record with five changed non-rooms fields exercises the new bulk
+ * field shortcuts. Expand "Compare fields (5 changed)" to see the compact
+ * "Keep all mine / Use server for all fields" bar above the table.
+ * Clicking "Use server for all fields" flips every field to the server side and
+ * enables the "Apply selection (5)" button; individual per-field toggles still
+ * override the bulk choice afterwards.
+ */
+export const BulkFieldShortcuts: Story = {
+  name: 'Bulk field shortcuts (Use server for all fields / Keep all mine)',
+  render: () => {
+    const multiFieldConflict: ConflictEntry = {
+      id: 10,
+      area: 'customer',
+      label: 'Contact details — James Okafor',
+      url: '/api/contacts/1200',
+      method: 'PUT',
+      recordKey: 'contact:1200',
+      baseUpdatedAt: new Date(now - 1000 * 60 * 60 * 3).toISOString(),
+      serverUpdatedAt: new Date(now - 1000 * 60 * 15).toISOString(),
+      attemptedBody: {
+        firstName: 'James',
+        lastName: 'Okafor',
+        email: 'james.okafor@example.com',
+        phone: '07700900123',
+        address: '18 Maple Street',
+        city: 'Leeds',
+        postcode: 'LS1 1AB',
+      },
+      serverData: {
+        firstName: 'Jim',
+        lastName: 'Okafor-Smith',
+        email: 'jim.okafor@example.org',
+        phone: '07700900456',
+        address: '18 Maple Street',
+        city: 'Manchester',
+        postcode: 'M1 1AE',
+      },
+      resolution: 'last_write_wins',
+      detectedAt: now - 1000 * 60 * 8,
+    };
+    function Bulk() {
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([multiFieldConflict]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <Bulk />;
+  },
+};
+
+/**
  * Multi-room conflict with the bulk shortcuts visible: expand "Compare fields"
  * to see the "Use server for all" / "Keep all mine" header above the per-room
  * toggles. The fixture has three rooms — Kitchen (changed), Bedroom (unchanged),

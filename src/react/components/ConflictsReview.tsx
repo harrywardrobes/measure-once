@@ -618,6 +618,7 @@ function FieldDiffSection({
   onToggleOpen,
   choices,
   onChoose,
+  onChooseAllFields,
   roomChoices,
   onChooseRoom,
   onChooseAllRooms,
@@ -628,6 +629,7 @@ function FieldDiffSection({
   onToggleOpen: () => void;
   choices: Record<string, FieldChoice>;
   onChoose: (key: string, choice: FieldChoice) => void;
+  onChooseAllFields: (choice: FieldChoice) => void;
   roomChoices: Record<number, FieldChoice>;
   onChooseRoom: (index: number, choice: FieldChoice) => void;
   onChooseAllRooms: (choice: FieldChoice) => void;
@@ -636,6 +638,7 @@ function FieldDiffSection({
   if (rows.length === 0) return null;
 
   const changedCount = rows.filter((r) => r.changed).length;
+  const changedNonRoomsCount = rows.filter((r) => r.changed && r.key !== 'rooms').length;
 
   return (
     <Box sx={{ mt: 1.5 }}>
@@ -651,6 +654,41 @@ function FieldDiffSection({
         {open ? 'Hide field changes' : `Compare fields${changedCount ? ` (${changedCount} changed)` : ''}`}
       </Button>
       <Collapse in={open} unmountOnExit>
+        {changedNonRoomsCount >= 2 && (
+          <Stack
+            direction="row"
+            data-testid="conflict-fields-bulk-bar"
+            sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1, mb: 0.5 }}
+          >
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {changedNonRoomsCount} field{changedNonRoomsCount === 1 ? '' : 's'} changed
+            </Typography>
+            <Stack direction="row" sx={{ gap: 0.5 }}>
+              <Button
+                size="small"
+                variant="text"
+                color="inherit"
+                disabled={disabled}
+                onClick={() => onChooseAllFields('mine')}
+                data-testid="conflict-fields-keep-all"
+                sx={{ textTransform: 'none', fontSize: 11, py: 0.25, px: 0.75, minWidth: 0 }}
+              >
+                Keep all mine
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                color="primary"
+                disabled={disabled}
+                onClick={() => onChooseAllFields('server')}
+                data-testid="conflict-fields-use-server-all"
+                sx={{ textTransform: 'none', fontSize: 11, py: 0.25, px: 0.75, minWidth: 0 }}
+              >
+                Use server for all fields
+              </Button>
+            </Stack>
+          </Stack>
+        )}
         <Box
           data-testid="conflict-fields"
           sx={{ mt: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}
@@ -836,6 +874,19 @@ function ConflictCard({
     });
   };
 
+  // Non-rooms changed field keys available for bulk selection.
+  const changedNonRoomsKeys = changedKeys.filter((k) => k !== 'rooms');
+
+  const chooseAllFields = (choice: FieldChoice) => {
+    setChoices((prev) => {
+      const next = { ...prev };
+      for (const k of changedNonRoomsKeys) {
+        next[k] = choice;
+      }
+      return next;
+    });
+  };
+
   // Non-rooms fields the user has explicitly flipped to the server value.
   const selectedServerFieldKeys = changedKeys.filter(
     (k) => k !== 'rooms' && choices[k] === 'server',
@@ -950,6 +1001,7 @@ function ConflictCard({
         onToggleOpen={() => setOpen((v) => !v)}
         choices={choices}
         onChoose={choose}
+        onChooseAllFields={chooseAllFields}
         roomChoices={roomChoices}
         onChooseRoom={chooseRoom}
         onChooseAllRooms={chooseAllRooms}
