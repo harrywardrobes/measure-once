@@ -60,7 +60,13 @@
       max-width: 34ch;
       color: var(--ink-2, #3a3937);
     }
-    .offline-link {
+    .offline-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .offline-retry {
       display: inline-block;
       background: var(--orchid, #8B2BFF);
       color: #fff;
@@ -69,14 +75,25 @@
       font-size: 0.95rem;
       padding: 12px 24px;
       border-radius: var(--radius-md, 8px);
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
       transition: background 0.15s, opacity 0.15s;
     }
-    .offline-link:hover { opacity: 0.9; }
-    .offline-link:active { background: var(--orchid-press, #7a1fe0); }
-    .offline-hint {
-      margin: 20px auto 0;
+    .offline-retry:hover { opacity: 0.9; }
+    .offline-retry:active { background: var(--orchid-press, #7a1fe0); }
+    .offline-home {
+      font-size: 0.9rem;
+      color: var(--ink-2, #3a3937);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .offline-home:hover { color: var(--orchid, #8B2BFF); }
+    .offline-status {
+      margin: 16px auto 0;
       font-size: 0.8rem;
       color: var(--ink-4, #8b8a87);
+      min-height: 1.2em;
     }
   </style>
 </head>
@@ -89,9 +106,47 @@
         This page hasn&rsquo;t been loaded yet, so it isn&rsquo;t available offline.
         Reconnect to view it.
       </p>
-      <a class="offline-link" href="/">Back to home</a>
-      <p class="offline-hint">Pages you&rsquo;ve already opened still work without a connection.</p>
+      <div class="offline-actions">
+        <button class="offline-retry" id="retry-btn" onclick="retryNow()">Try again</button>
+        <a class="offline-home" href="/">Back to home</a>
+      </div>
+      <p class="offline-status" id="offline-status">Pages you&rsquo;ve already opened still work without a connection.</p>
     </div>
   </main>
+  <script>
+    (function () {
+      var statusEl = document.getElementById('offline-status');
+      var retryBtn = document.getElementById('retry-btn');
+
+      function reload() {
+        if (navigator.onLine) {
+          window.location.reload();
+        }
+      }
+
+      window.retryNow = function () {
+        if (!navigator.onLine) {
+          statusEl.textContent = 'Still offline \u2014 please check your connection.';
+          return;
+        }
+        window.location.reload();
+      };
+
+      window.addEventListener('online', function () {
+        statusEl.textContent = 'Connection restored \u2014 reloading\u2026';
+        retryBtn.disabled = true;
+        setTimeout(reload, 400);
+      });
+
+      window.addEventListener('offline', function () {
+        statusEl.textContent = 'Still offline \u2014 this page will reload automatically when you reconnect.';
+        retryBtn.disabled = false;
+      });
+
+      if (!navigator.onLine) {
+        statusEl.textContent = 'This page will reload automatically when you reconnect.';
+      }
+    })();
+  </script>
 </body>
 </html>
