@@ -539,15 +539,39 @@ function scalarEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
+ * Find an element in `arr` whose `id` field equals `id`, or `undefined` when
+ * no match is found or `id` is nullish. Used to match rooms by stable identity
+ * rather than by array index.
+ */
+function findByIdIn(arr: unknown[], id: unknown): unknown {
+  if (id == null) return undefined;
+  return arr.find(
+    (el) => el != null && typeof el === 'object' && (el as Record<string, unknown>).id === id,
+  );
+}
+
+/**
  * True when every leaf in the (write-shape) resolved value matches the
  * corresponding (read-shape) server value, ignoring server-only metadata fields.
  * Used to tell a "restore server copy" field apart from a "keep mine" field so
  * the former can adopt the server snapshot's exact read shape.
+ *
+ * For arrays whose elements carry an `id` field, each resolved element is
+ * matched to its server counterpart by `id` rather than by index, so a server-
+ * side room insertion or deletion does not cause a false positive equivalence.
+ * Elements without an `id` fall back to index-based comparison.
  */
 export function isServerEquivalent(resolved: unknown, server: unknown): boolean {
   if (Array.isArray(resolved)) {
     if (!Array.isArray(server) || server.length !== resolved.length) return false;
-    return resolved.every((el, i) => isServerEquivalent(el, server[i]));
+    const sArr = server as unknown[];
+    return resolved.every((el, i) => {
+      const id = el != null && typeof el === 'object'
+        ? (el as Record<string, unknown>).id
+        : undefined;
+      const serverEl = id != null ? findByIdIn(sArr, id) : undefined;
+      return isServerEquivalent(el, serverEl !== undefined ? serverEl : sArr[i]);
+    });
   }
   if (resolved && typeof resolved === 'object') {
     if (!server || typeof server !== 'object' || Array.isArray(server)) return false;
@@ -570,13 +594,23 @@ export function isServerEquivalent(resolved: unknown, server: unknown): boolean 
  * check element-by-element so each server-restored room adopts the full server
  * object (including server-only fields like `door_style_name`), while
  * user-kept rooms are still deep-snake-cased from the write shape.
+ *
+ * Room matching uses the element's `id` field when available so that a server-
+ * side room addition or deletion does not shift the index-to-room mapping and
+ * silently apply the wrong server values. Elements without an `id` fall back
+ * to index-based comparison.
  */
 export function reconcileForCache(resolved: unknown, server: unknown): unknown {
   if (Array.isArray(resolved)) {
-    const sArr = Array.isArray(server) ? server : [];
-    return resolved.map((el, i) =>
-      isServerEquivalent(el, sArr[i]) ? sArr[i] : deepSnakeize(el),
-    );
+    const sArr = Array.isArray(server) ? (server as unknown[]) : [];
+    return resolved.map((el, i) => {
+      const id = el != null && typeof el === 'object'
+        ? (el as Record<string, unknown>).id
+        : undefined;
+      const serverEl = id != null ? findByIdIn(sArr, id) : undefined;
+      const matched = serverEl !== undefined ? serverEl : sArr[i];
+      return isServerEquivalent(el, matched) ? matched : deepSnakeize(el);
+    });
   }
   return deepSnakeize(resolved);
 }

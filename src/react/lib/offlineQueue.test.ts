@@ -165,6 +165,63 @@ describe('reconcileForCache', () => {
     const result = reconcileForCache({ myKey: 'val' }, { my_key: 'different' });
     expect(result).toEqual({ my_key: 'val' });
   });
+
+  it('server added a room: resolved rooms are matched by id, not index', () => {
+    const serverRooms = [
+      { id: 99, door_style: 'Slab', door_style_name: 'Slab Door' },
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door' },
+      { id: 2, door_style: 'Flat', door_style_name: 'Flat Door' },
+    ];
+    const resolvedRooms = [
+      { id: 1, doorStyle: 'Shaker' },
+      { id: 2, doorStyle: 'Flat' },
+    ];
+    const result = reconcileForCache(resolvedRooms, serverRooms) as unknown[];
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(serverRooms[1]);
+    expect(result[1]).toBe(serverRooms[2]);
+  });
+
+  it('server removed a room: resolved room with no server match is deep-snake-cased', () => {
+    const serverRooms = [
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door' },
+    ];
+    const resolvedRooms = [
+      { id: 1, doorStyle: 'Shaker' },
+      { id: 2, doorStyle: 'Flat' },
+    ];
+    const result = reconcileForCache(resolvedRooms, serverRooms) as unknown[];
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(serverRooms[0]);
+    expect(result[1]).toEqual({ id: 2, door_style: 'Flat' });
+  });
+
+  it('server reordered rooms: id lookup maps each resolved room to the correct server room', () => {
+    const serverRooms = [
+      { id: 2, door_style: 'Flat', door_style_name: 'Flat Door' },
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door' },
+    ];
+    const resolvedRooms = [
+      { id: 1, doorStyle: 'Shaker' },
+      { id: 2, doorStyle: 'Flat' },
+    ];
+    const result = reconcileForCache(resolvedRooms, serverRooms) as unknown[];
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(serverRooms[1]);
+    expect(result[1]).toBe(serverRooms[0]);
+  });
+
+  it('server added a room: user-edited room matched by id — server-only fields preserved', () => {
+    const serverRooms = [
+      { id: 10, door_style: 'Slab', door_style_name: 'Slab Door' },
+      { id: 1, door_style: 'Shaker', door_style_name: 'Shaker Door', width: 36 },
+    ];
+    const resolvedRooms = [{ id: 1, doorStyle: 'Shaker', width: 42 }];
+    const result = reconcileForCache(resolvedRooms, serverRooms) as unknown[];
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ id: 1, door_style: 'Shaker', width: 42 });
+    expect((result[0] as Record<string, unknown>).door_style_name).toBeUndefined();
+  });
 });
 
 // ── buildRestoredCachePatch ───────────────────────────────────────────────────
