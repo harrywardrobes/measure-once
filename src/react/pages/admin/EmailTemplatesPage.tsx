@@ -293,11 +293,14 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
 
   // ── Token analysis ────────────────────────────────────────────────────────
   const { unknownTokens, unusedVariables, malformedTokens } = useMemo(() => {
-    // Matches both balanced `{{word}}` tokens and brace runs with a mismatched
-    // open/close count (`{word}`, `{{word}`, `{word}}`) — the latter are likely
-    // typos that render literally in the sent email. Kept in sync with
-    // buildSegments in TokenHighlightField.
-    const PLACEHOLDER_RE = /(\{{1,2})(\w+)(\}{1,2})/g;
+    // Matches balanced `{{word}}` tokens plus malformed placeholders: brace
+    // runs with a mismatched open/close count (`{word}`, `{{word}`, `{word}}`)
+    // and balanced `{{…}}` whose name has stray characters that break
+    // substitution (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`). A
+    // lone-brace run around stray content (e.g. CSS `{color:red}`) is ignored.
+    // Kept in sync with buildSegments in TokenHighlightField.
+    const PLACEHOLDER_RE = /(\{{1,2})([^{}]*)(\}{1,2})/g;
+    const CLEAN_NAME_RE = /^\w+$/;
     const combined = [
       fields.subject,
       fields.body_text,
@@ -309,11 +312,14 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     let m: RegExpExecArray | null;
     while ((m = PLACEHOLDER_RE.exec(combined)) !== null) {
       const balanced = m[1].length === 2 && m[3].length === 2;
-      if (balanced) {
+      const cleanName = CLEAN_NAME_RE.test(m[2]);
+      if (balanced && cleanName) {
         found.add(m[2]);
-      } else {
+      } else if (balanced || cleanName) {
+        // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
         malformed.add(m[0]);
       }
+      // else: a lone-brace run around stray content — not a placeholder.
     }
     const knownSet = new Set(template.variables);
     return {

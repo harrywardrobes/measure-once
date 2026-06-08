@@ -19,9 +19,11 @@ const meta: Meta<typeof TokenHighlightField> = {
           'Outlined text field that highlights `{{token}}` placeholders as you ' +
           'type. Known variables are tinted green; well-formed but unknown ones ' +
           'get a red, spell-checker-style wavy underline; and malformed ' +
-          'placeholders with the wrong number of curly braces (e.g. ' +
-          '`{firstName}` or `{{firstName}`) get an amber wavy underline so ' +
-          'brace typos are obvious instantly.',
+          'placeholders get an amber wavy underline so typos are obvious ' +
+          'instantly. A placeholder is malformed when it has the wrong number ' +
+          'of curly braces (e.g. `{firstName}` or `{{firstName}`) or when its ' +
+          'name has stray characters that break substitution (e.g. ' +
+          '`{{first Name}}`, `{{first-name}}`, `{{first.name}}`).',
       },
     },
   },
@@ -99,6 +101,24 @@ export const MalformedPlaceholders: Story = {
         'A well-formed token like {{lastName}} stays green; the single-brace ' +
         '{firstName} and the missing-brace {{companyName} get an amber wavy ' +
         'underline instead.'
+      }
+    />
+  ),
+};
+
+export const StrayCharactersInName: Story = {
+  name: 'Malformed — stray characters in the name',
+  render: () => (
+    <Interactive
+      label="Body (plain text)"
+      multiline
+      minRows={6}
+      initial={
+        'Hi {{first Name}},\n\n' +
+        'Your visit is booked. A name with a space ({{first Name}}), a hyphen ' +
+        '({{first-name}}) or a dot ({{first.name}}) breaks substitution and ' +
+        'gets an amber wavy underline.\n\n' +
+        'A clean token like {{firstName}} stays green.'
       }
     />
   ),

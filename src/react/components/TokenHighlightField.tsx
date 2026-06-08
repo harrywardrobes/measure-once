@@ -15,11 +15,17 @@ import { STATUS_COLORS } from '../theme';
 
 // ── Token analysis ────────────────────────────────────────────────────────────
 
-// Matches any run of 1–2 opening braces, a word, then 1–2 closing braces.
-// A perfectly-balanced `{{word}}` is a real token; anything else with a
-// mismatched brace count (`{word}`, `{{word}`, `{word}}`) is a malformed
-// placeholder — a likely typo that would render literally in the sent email.
-const PLACEHOLDER_RE = /(\{{1,2})(\w+)(\}{1,2})/g;
+// Matches any run of 1–2 opening braces, any non-brace inner content, then a
+// run of 1–2 closing braces. A perfectly-balanced `{{word}}` whose name is a
+// clean `\w+` identifier is a real token. Anything else is a malformed
+// placeholder — a likely typo that would render literally in the sent email:
+//   - a mismatched brace count (`{word}`, `{{word}`, `{word}}`), or
+//   - a balanced `{{…}}` whose name has stray characters that break
+//     substitution (`{{first Name}}`, `{{first-name}}`, `{{first.name}}`).
+// A lone-brace run around stray content (e.g. CSS `{color:red}`) is left as
+// plain text — only `\w+` lone-brace runs are treated as brace-count typos.
+const PLACEHOLDER_RE = /(\{{1,2})([^{}]*)(\}{1,2})/g;
+const CLEAN_NAME_RE = /^\w+$/;
 
 type SegmentKind = 'plain' | 'known' | 'unknown' | 'malformed';
 
@@ -42,14 +48,22 @@ export function buildSegments(text: string, known: Set<string>): Segment[] {
   let m: RegExpExecArray | null;
   PLACEHOLDER_RE.lastIndex = 0;
   while ((m = PLACEHOLDER_RE.exec(text)) !== null) {
+    const balanced = m[1].length === 2 && m[3].length === 2;
+    const cleanName = CLEAN_NAME_RE.test(m[2]);
+    // A lone-brace run around stray content (CSS, code) isn't a placeholder —
+    // leave it as plain text so we only flag genuine typos.
+    if (!balanced && !cleanName) continue;
     if (m.index > last) {
       segments.push({ text: text.slice(last, m.index), kind: 'plain' });
     }
-    const balanced = m[1].length === 2 && m[3].length === 2;
-    segments.push({
-      text: m[0],
-      kind: balanced ? (known.has(m[2]) ? 'known' : 'unknown') : 'malformed',
-    });
+    let kind: SegmentKind;
+    if (balanced && cleanName) {
+      kind = known.has(m[2]) ? 'known' : 'unknown';
+    } else {
+      // Wrong brace count, or a balanced `{{…}}` whose name has stray chars.
+      kind = 'malformed';
+    }
+    segments.push({ text: m[0], kind });
     last = m.index + m[0].length;
   }
   if (last < text.length) {
