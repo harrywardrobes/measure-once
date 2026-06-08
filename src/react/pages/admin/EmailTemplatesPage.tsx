@@ -266,6 +266,7 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   });
   const [hadDraft] = useState<boolean>(() => loadDraft(template.key) !== null);
   const [saving, setSaving] = useState(false);
+  const [confirmUnknownOpen, setConfirmUnknownOpen] = useState(false);
 
   // ── Token analysis ────────────────────────────────────────────────────────
   const { unknownTokens, unusedVariables } = useMemo(() => {
@@ -307,11 +308,13 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     onClose();
   }, [template.key, onClose]);
 
-  const handleSave = useCallback(async () => {
+  const handleConfirmedSave = useCallback(async () => {
     if (!fields.subject.trim()) {
       showToast('Subject is required.', true);
+      setConfirmUnknownOpen(false);
       return;
     }
+    setConfirmUnknownOpen(false);
     setSaving(true);
     try {
       const updated = await PATCH<EmailTemplate>(
@@ -332,6 +335,18 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       setSaving(false);
     }
   }, [fields, template.key, showToast, onSaved]);
+
+  const handleSave = useCallback(() => {
+    if (!fields.subject.trim()) {
+      showToast('Subject is required.', true);
+      return;
+    }
+    if (unknownTokens.length > 0) {
+      setConfirmUnknownOpen(true);
+      return;
+    }
+    handleConfirmedSave();
+  }, [fields.subject, unknownTokens, showToast, handleConfirmedSave]);
 
   return (
     <Dialog open onClose={handleCancel} maxWidth="md" fullWidth>
@@ -456,6 +471,30 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
+
+      {/* Confirmation dialog when unknown tokens are present */}
+      <Dialog open={confirmUnknownOpen} onClose={() => setConfirmUnknownOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Unknown variables in template</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            This template contains variable{unknownTokens.length > 1 ? 's' : ''} that won't be replaced when the email is sent:
+          </Typography>
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
+            {unknownTokens.map((t) => (
+              <Chip key={t} label={`{{${t}}}`} size="small" color="warning" />
+            ))}
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            These will appear as literal text in the sent email. Check for typos or remove them before saving.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmUnknownOpen(false)} disabled={saving}>Go back</Button>
+          <Button onClick={handleConfirmedSave} variant="contained" color="warning" disabled={saving}>
+            Save anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }
