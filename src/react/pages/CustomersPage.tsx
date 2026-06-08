@@ -10,6 +10,7 @@ import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../compon
 import { createPortal } from 'react-dom';
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Card,
@@ -29,6 +30,7 @@ import {
   Snackbar,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { PageFilterBar } from '../components/PageFilterBar';
@@ -1612,7 +1614,27 @@ export function CustomersPage(): React.ReactElement {
           </Stack>
 
           <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-            <Typography variant="body2">Incl. excluded</Typography>
+            {(() => {
+              const counts = store.counts || {};
+              const hiddenCount = !showExcluded
+                ? store.statuses.filter((s) => s.excluded_from_sales && (counts[s.key] || 0) > 0).length
+                : 0;
+              const label = hiddenCount > 0
+                ? `${hiddenCount} status${hiddenCount === 1 ? '' : 'es'} hidden`
+                : undefined;
+              return (
+                <Tooltip title={label} arrow disableHoverListener={!label}>
+                  <Badge
+                    badgeContent={hiddenCount || null}
+                    color="warning"
+                    overlap="rectangular"
+                    sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', minWidth: 16, height: 16, padding: '0 4px' } }}
+                  >
+                    <Typography variant="body2">Incl. excluded</Typography>
+                  </Badge>
+                </Tooltip>
+              );
+            })()}
             <Toggle
               checked={showExcluded}
               title="Show lead statuses excluded from sales"
