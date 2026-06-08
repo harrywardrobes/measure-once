@@ -104,13 +104,13 @@ if (mountIds.size === 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Scan public/*.html and record which files contain each mount id
+// 2. Scan views/*.ejs and record which files contain each mount id
 // ---------------------------------------------------------------------------
 
-const publicDir = join(ROOT, 'public');
-const htmlFiles = readdirSync(publicDir)
-  .filter(f => f.endsWith('.html'))
-  .map(f => join(publicDir, f));
+const viewsDir = join(ROOT, 'views');
+const htmlFiles = readdirSync(viewsDir)
+  .filter(f => f.endsWith('.ejs'))
+  .map(f => join(viewsDir, f));
 
 // For each mount id → array of html files that contain it
 /** @type {Map<string, string[]>} */
@@ -325,21 +325,21 @@ if (!pass3ParseError) {
 if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
   console.log(
     '[check-mount-id-conflicts] Pass 3 OK — every BOOTSTRAP_ONLY_IDS entry ' +
-    'has a matching container element in public/*.html.',
+    'has a matching container element in views/*.ejs.',
   );
 } else if (!pass3ParseError) {
   process.stderr.write('\n[check-mount-id-conflicts] Pass 3 MISSING ERROR-PAGE CONTAINERS:\n\n');
   for (const id of bootstrapIdsMissingFromHtml) {
     process.stderr.write(
       `  id="${id}" is in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) ` +
-      `but no element with that id was found in any public/*.html file\n`,
+      `but no element with that id was found in any views/*.ejs file\n`,
     );
   }
   process.stderr.write(
     '\nEvery id in BOOTSTRAP_ONLY_IDS must have a matching <… id="…"> element\n' +
-    'in its corresponding HTML page under public/.  Without this, the React\n' +
+    'in its corresponding EJS view under views/.  Without this, the React\n' +
     'component silently never mounts.\n\n' +
-    'Fix: ensure the HTML file for the error/restricted page declares the\n' +
+    'Fix: ensure the EJS view for the error/restricted page declares the\n' +
     'correct container element, e.g.:\n' +
     '  <div id="not-found-root"></div>\n' +
     'and verify that the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
@@ -353,28 +353,28 @@ if (!pass3ParseError && bootstrapIdsMissingFromHtml.length === 0) {
 // ---------------------------------------------------------------------------
 //
 // Pass 4a — Annotation required:
-//   Every entry in BOOTSTRAP_ONLY_IDS must carry a `// public/<file>.html`
+//   Every entry in BOOTSTRAP_ONLY_IDS must carry a `// views/<file>.ejs`
 //   comment annotation.  Entries without an annotation are a CI failure —
 //   the per-file guarantee of Pass 4b would be silently skipped for them.
 //
 // Pass 4b — Per-file presence check:
-//   Pass 3 only checks that a BOOTSTRAP_ONLY_IDS id exists in *some* HTML file.
+//   Pass 3 only checks that a BOOTSTRAP_ONLY_IDS id exists in *some* EJS file.
 //   That can silently pass when, e.g., an error-page container is renamed to a
 //   typo ("not-found-roots") in the correct file while the original id still
-//   survives in a different HTML file.  Pass 4b closes that gap by verifying
+//   survives in a different EJS file.  Pass 4b closes that gap by verifying
 //   each annotated id against its specific declared file.
 //
-// The canonical file is declared as the first `public/…html` token in the
+// The canonical file is declared as the first `views/….ejs` token in the
 // inline comment on the same line as the id string in BOOTSTRAP_ONLY_IDS:
 //
-//   'not-found-root',  // public/404.html — 404 page, rendered after auth
+//   'not-found-root',  // views/404.ejs — 404 page, rendered after auth
 //
 // Convention: every BOOTSTRAP_ONLY_IDS entry MUST have this annotation.
 // Omitting it is now a CI failure (Pass 4a).  Pass 3 still applies regardless.
 
 /**
  * Extracts a Map<id, canonicalRelPath> by scanning the BOOTSTRAP_ONLY_IDS
- * block in publicIslands.ts for inline `// public/xxx.html` comments.
+ * block in publicIslands.ts for inline `// views/xxx.ejs` comments.
  *
  * Returns an empty Map if the block cannot be located or no annotations are
  * found — the pass is then a no-op (Pass 3 still applies).
@@ -405,9 +405,9 @@ function extractBootstrapCanonicalFiles(src) {
   const block = src.slice(bracketOpen + 1, i - 1);
 
   // Each line may look like:
-  //   'some-id',         // public/foo.html — description
-  // We capture: the id string and the first public/…html token in the comment.
-  const linePattern = /['"]([^'"]+)['"]\s*,?\s*\/\/\s*(public\/\S+\.html)/g;
+  //   'some-id',         // views/foo.ejs — description
+  // We capture: the id string and the first views/….ejs token in the comment.
+  const linePattern = /['"]([^'"]+)['"]\s*,?\s*\/\/\s*(views\/\S+\.ejs)/g;
   let lm;
   while ((lm = linePattern.exec(block)) !== null) {
     result.set(lm[1], lm[2]);
@@ -478,16 +478,16 @@ if (
     for (const id of pass4MissingAnnotations) {
       process.stderr.write(
         `  id="${id}" in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) ` +
-        `lacks a required \`// public/<file>.html\` annotation\n`,
+        `lacks a required \`// views/<file>.ejs\` annotation\n`,
       );
     }
     process.stderr.write(
-      '\nEvery BOOTSTRAP_ONLY_IDS entry must declare its canonical HTML file via\n' +
+      '\nEvery BOOTSTRAP_ONLY_IDS entry must declare its canonical EJS view via\n' +
       'an inline comment.  Without this annotation, the per-file presence check\n' +
       '(Pass 4b) is silently skipped for that entry.\n\n' +
-      'Fix: add a `// public/<filename>.html — <description>` comment to the\n' +
+      'Fix: add a `// views/<filename>.ejs — <description>` comment to the\n' +
       'right of the id string in src/react/lib/publicIslands.ts, e.g.:\n' +
-      '  \'not-found-root\',  // public/404.html — 404 page, rendered after auth\n',
+      '  \'not-found-root\',  // views/404.ejs — 404 page, rendered after auth\n',
     );
   }
 
@@ -499,13 +499,13 @@ if (
       );
     }
     process.stderr.write(
-      '\nThe `// public/…html` annotation on each BOOTSTRAP_ONLY_IDS entry must\n' +
-      'name a file that actually exists under public/.  The filename above does\n' +
+      '\nThe `// views/….ejs` annotation on each BOOTSTRAP_ONLY_IDS entry must\n' +
+      'name a file that actually exists under views/.  The filename above does\n' +
       'not exist on disk — it is likely a typo in the annotation comment.\n\n' +
-      'Fix: correct the `// public/<filename>.html` comment on the relevant\n' +
+      'Fix: correct the `// views/<filename>.ejs` comment on the relevant\n' +
       'BOOTSTRAP_ONLY_IDS line in src/react/lib/publicIslands.ts to match the\n' +
       'real filename, e.g.:\n' +
-      '  \'not-found-root\',  // public/404.html — 404 page, rendered after auth\n',
+      '  \'not-found-root\',  // views/404.ejs — 404 page, rendered after auth\n',
     );
   }
 
@@ -519,14 +519,14 @@ if (
       );
     }
     process.stderr.write(
-      '\nEach BOOTSTRAP_ONLY_IDS entry with a `// public/…html` annotation must\n' +
-      'have a matching <… id="…"> element in the declared HTML file.  Without\n' +
+      '\nEach BOOTSTRAP_ONLY_IDS entry with a `// views/….ejs` annotation must\n' +
+      'have a matching <… id="…"> element in the declared EJS view.  Without\n' +
       'this, the React component silently never mounts on that page.\n\n' +
-      'Fix: ensure the correct id appears in the HTML file, e.g.:\n' +
-      '  <div id="not-found-root"></div>   in public/404.html\n' +
+      'Fix: ensure the correct id appears in the EJS view, e.g.:\n' +
+      '  <div id="not-found-root"></div>   in views/404.ejs\n' +
       'and verify the id exactly matches the BOOTSTRAP_ONLY_IDS entry in\n' +
       'src/react/lib/publicIslands.ts.\n\n' +
-      'If the canonical file annotation is wrong, update the `// public/…html`\n' +
+      'If the canonical file annotation is wrong, update the `// views/….ejs`\n' +
       'comment on the relevant BOOTSTRAP_ONLY_IDS line.\n',
     );
   }

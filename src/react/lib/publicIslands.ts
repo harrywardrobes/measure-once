@@ -27,7 +27,7 @@ export const PUBLIC_ISLAND_IDS = new Set([
  * CONN_TOAST_EXCLUDED) and are checked by scripts/check-public-island-bootstrap.mjs.
  *
  * When adding a new error/restricted page:
- *  1. Add its id here WITH a `// public/<file>.html — <description>` annotation
+ *  1. Add its id here WITH a `// views/<file>.ejs — <description>` annotation
  *     on the same line (required — omitting it is a CI failure in test:mount-ids).
  *  2. Ensure a matching MOUNTS entry exists in src/react/main.tsx.
  *
@@ -35,6 +35,6 @@ export const PUBLIC_ISLAND_IDS = new Set([
  * PUBLIC_ISLAND_IDS ∪ BOOTSTRAP_ONLY_IDS — no manual sync needed there either.
  */
 export const BOOTSTRAP_ONLY_IDS = new Set([
-  'not-found-root',         // public/404.html — 404 page, rendered after auth; never public
-  'access-restricted-root', // public/access-restricted.html — access-denied page, rendered after auth; never public
+  'not-found-root',         // views/404.ejs — 404 page, rendered after auth; never public
+  'access-restricted-root', // views/access-restricted.ejs — access-denied page, rendered after auth; never public
 ]);

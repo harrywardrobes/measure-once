@@ -38,7 +38,7 @@
  *      Catches: a typo in BOOTSTRAP_ONLY_IDS, or a stale entry left behind
  *      after an error page is removed from MOUNTS.
  *
- *   E: every BOOTSTRAP_ONLY_IDS entry carries a `// public/<file>.html` annotation
+ *   E: every BOOTSTRAP_ONLY_IDS entry carries a `// views/<file>.ejs` annotation
  *      Catches: a new error/restricted page added without the required file
  *      annotation (mirrors the Pass 4a rule in check-mount-id-conflicts.mjs).
  *
@@ -163,7 +163,7 @@ function extractAllMountIds(src) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: check BOOTSTRAP_ONLY_IDS entries for `// public/<file>.html` annotations
+// Helper: check BOOTSTRAP_ONLY_IDS entries for `// views/<file>.ejs` annotations
 // ---------------------------------------------------------------------------
 
 /**
@@ -171,11 +171,11 @@ function extractAllMountIds(src) {
  * an array of `{ id, hasAnnotation, annotatedFile }` objects — one per line
  * that contains a string literal.
  *
- * The required annotation format is `// public/<file>.html` anywhere on the
+ * The required annotation format is `// views/<file>.ejs` anywhere on the
  * same line as the id string.  This mirrors Pass 4a in
  * check-mount-id-conflicts.mjs.
  *
- * `annotatedFile` is the extracted relative path (e.g. `"public/404.html"`)
+ * `annotatedFile` is the extracted relative path (e.g. `"views/404.ejs"`)
  * when the annotation is present, or `null` otherwise.
  *
  * Returns null if the BOOTSTRAP_ONLY_IDS declaration cannot be located (parse
@@ -200,7 +200,7 @@ function extractBootstrapAnnotations(src) {
   if (depth !== 0) return null; // unterminated
 
   const body = src.slice(bodyStart, i - 1);
-  const annotationPattern = /\/\/\s*(public\/\S+\.html)/;
+  const annotationPattern = /\/\/\s*(views\/\S+\.ejs)/;
   const strPattern = /['"]([^'"]+)['"]/g;
   const results = [];
 
@@ -436,7 +436,7 @@ if (bootOnlyNotInMounts.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Check E: every BOOTSTRAP_ONLY_IDS entry has a `// public/<file>.html` annotation
+// 7. Check E: every BOOTSTRAP_ONLY_IDS entry has a `// views/<file>.ejs` annotation
 //    Catches: a new error/restricted page added to BOOTSTRAP_ONLY_IDS without
 //    the required file annotation (mirrors Pass 4a in check-mount-id-conflicts).
 // ---------------------------------------------------------------------------
@@ -449,25 +449,25 @@ const missingAnnotation = bootstrapAnnotations
 if (missingAnnotation.length > 0) {
   process.stderr.write('\n[check-public-island-bootstrap] CHECK E FAILED — BOOTSTRAP_ONLY_IDS ENTRIES WITHOUT ANNOTATION:\n\n');
   for (const id of missingAnnotation) {
-    process.stderr.write(`  "${id}" is in BOOTSTRAP_ONLY_IDS but its line lacks a // public/<file>.html annotation\n`);
+    process.stderr.write(`  "${id}" is in BOOTSTRAP_ONLY_IDS but its line lacks a // views/<file>.ejs annotation\n`);
   }
   process.stderr.write(
     '\nEvery entry in BOOTSTRAP_ONLY_IDS (src/react/lib/publicIslands.ts) must carry\n' +
-    'a trailing `// public/<file>.html — <description>` annotation on the same line.\n\n' +
+    'a trailing `// views/<file>.ejs — <description>` annotation on the same line.\n\n' +
     'Example:\n' +
-    "  'not-found-root', // public/404.html — 404 page, rendered after auth; never public\n\n" +
+    "  'not-found-root', // views/404.ejs — 404 page, rendered after auth; never public\n\n" +
     'Fix: add the missing annotation to each id listed above.\n',
   );
   failed = true;
 } else {
   console.log(
     '[check-public-island-bootstrap] Check E OK — every BOOTSTRAP_ONLY_IDS entry ' +
-    'has a // public/<file>.html annotation.',
+    'has a // views/<file>.ejs annotation.',
   );
 }
 
 // ---------------------------------------------------------------------------
-// 8. Check E (file existence): every annotated public/<file>.html actually
+// 8. Check E (file existence): every annotated views/<file>.ejs actually
 //    exists on disk.
 //    Catches: a typo in the filename that satisfies the annotation syntax
 //    check (E) but names a file that doesn't exist — mirrors Pass 4b in
@@ -488,11 +488,11 @@ if (missingFiles.length > 0) {
     );
   }
   process.stderr.write(
-    '\nEach `// public/<file>.html` annotation in BOOTSTRAP_ONLY_IDS\n' +
+    '\nEach `// views/<file>.ejs` annotation in BOOTSTRAP_ONLY_IDS\n' +
     '(src/react/lib/publicIslands.ts) must name a file that actually exists.\n\n' +
     'This may mean:\n' +
     '  - A typo was introduced in the annotation filename.\n' +
-    '  - The HTML file was moved or renamed without updating the annotation.\n\n' +
+    '  - The EJS view was moved or renamed without updating the annotation.\n\n' +
     'Fix: correct the annotation filename so it matches the actual file path\n' +
     'relative to the project root.\n',
   );
@@ -500,7 +500,7 @@ if (missingFiles.length > 0) {
 } else {
   console.log(
     '[check-public-island-bootstrap] Check E (file existence) OK — every annotated ' +
-    'public/<file>.html path exists on disk.',
+    'views/<file>.ejs path exists on disk.',
   );
 }
 

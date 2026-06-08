@@ -1,5 +1,23 @@
 # Test Suites
 
+## Running `npm run test:ci` locally
+
+`npm run test:ci` (via `scripts/run-ci.mjs`) requires `DATABASE_URL` to point
+at an admin PostgreSQL connection before it is run.  The temp-database wrapper
+(`scripts/with-test-db.js`) uses this connection to create and drop per-suite
+`mo_testdb_*` databases.  Example:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres npm run test:ci
+```
+
+The Replit environment exposes this automatically via the built-in PostgreSQL
+integration.  When running locally or in another CI environment, set
+`DATABASE_URL` to any Postgres connection whose role has `CREATEDB` privilege
+before invoking the suite.
+
+---
+
 All suites accept either `DATABASE_URL_TEST=<disposable>` or, as a fallback,
 `PRIVTEST_ALLOW_SHARED_DB=1` (synthetic rows are namespaced behind a
 `privtest-` prefix and cleaned up on exit — a mid-run crash can leave stale
