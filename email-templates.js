@@ -318,10 +318,48 @@ function renderEmail(template, { textVars = {}, htmlVars = {} } = {}) {
   return { subject, text, html };
 }
 
+// ── Sample variable values (used for admin preview) ───────────────────────────
+// One realistic placeholder value per advertised variable, per template.
+// These are only used by the preview endpoint — never sent to real customers.
+const SAMPLE_VARS = {
+  customer_invite: {
+    maskedEmail: 'j***@example.com',
+    formLink: 'https://example.com/form/abc123',
+  },
+  admin_notification: {
+    customerName: 'Jane Smith',
+    customerEmail: 'jane@example.com',
+    address: '123 High Street, London',
+    rooms: 'Living room, Kitchen, Bedroom',
+    notes: 'Would like light flooring throughout. Allergic to strong adhesives.',
+    photoSummary: '3 photos uploaded.',
+  },
+  customer_thank_you: {
+    firstName: 'Jane',
+  },
+  set_password_welcome: {
+    link: 'https://example.com/set-password?token=preview-token',
+  },
+  set_password_resend: {
+    link: 'https://example.com/set-password?token=preview-token',
+  },
+  set_password_reset: {
+    link: 'https://example.com/set-password?token=preview-token',
+  },
+  photo_review_not_suitable: {
+    firstName: 'Jane',
+  },
+  photo_review_rough_estimate: {
+    firstName: 'Jane',
+    priceRange: '£5,000 – £8,000',
+  },
+};
+
 module.exports = {
   pool,
   TEMPLATE_DEFS,
   TEMPLATE_KEYS,
+  SAMPLE_VARS,
   ensureEmailTemplatesTable,
   getEmailTemplate,
   invalidateEmailTemplate,

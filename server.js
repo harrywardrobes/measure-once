@@ -21,7 +21,7 @@ const { router: visitsRouter, ensureVisitsTable } = require('./visits');
 const { router: designVisitsRouter, ensureDesignVisitTables } = require('./design-visits');
 const { router: customerInfoRouter, ensureCustomerInfoSubmissionsTable, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
-const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS } = require('./email-templates');
+const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -4799,6 +4799,45 @@ app.patch('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, asyn
     console.error('PATCH /api/admin/email-templates/:key error:', e.message);
     res.status(500).json({ error: 'Could not update email template.' });
   }
+});
+
+// POST /api/admin/email-templates/:key/preview — render draft fields with sample
+// variable values and return { subject, text, html } without saving anything.
+// Mirrors the exact send-path semantics: when body_html is empty the html field
+// is auto-generated from the rendered plain text (same line-wrapping logic used
+// by sendReviewEmail in photo-reviews.js) so the preview matches real emails.
+app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmin, (req, res) => {
+  const { key } = req.params;
+  if (!TEMPLATE_KEYS.includes(key)) {
+    return res.status(404).json({ error: 'Unknown email template key.' });
+  }
+  const { subject, body_text, body_html, footer_text } = req.body || {};
+  const sampleVars = SAMPLE_VARS[key] || {};
+  const template = {
+    subject:     typeof subject     === 'string' ? subject     : '',
+    body_text:   typeof body_text   === 'string' ? body_text   : '',
+    body_html:   typeof body_html   === 'string' ? body_html   : '',
+    footer_text: typeof footer_text === 'string' ? footer_text : '',
+  };
+  // For the HTML vars we HTML-escape the sample values since they are plain
+  // text placeholders (not pre-rendered HTML). The footer is always escaped
+  // inside renderEmail itself.
+  const htmlVars = Object.fromEntries(
+    Object.entries(sampleVars).map(([k, v]) => [k, escapeHtml(String(v))])
+  );
+  const rendered = renderEmail(template, { textVars: sampleVars, htmlVars });
+
+  // When body_html is empty, the production send path (sendReviewEmail) derives
+  // HTML from the rendered plain text by wrapping each non-blank line in <p>.
+  // Replicate that here so the preview matches what the recipient actually sees.
+  if (!template.body_html.trim()) {
+    rendered.html = rendered.text
+      .split('\n')
+      .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
+      .join('');
+  }
+
+  res.json(rendered);
 });
 
 // ── Substatus clear failure tracking ─────────────────────────────────────────

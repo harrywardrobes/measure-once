@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -11,17 +11,22 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
 
-import { GET, PATCH } from '../../utils/api';
+import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
@@ -45,6 +50,12 @@ interface DraftFields {
   body_text: string;
   body_html: string;
   footer_text: string;
+}
+
+interface PreviewResult {
+  subject: string;
+  text: string;
+  html: string;
 }
 
 const DRAFT_PREFIX = 'emailTemplateDraft:';
@@ -74,6 +85,165 @@ function formatUpdated(t: EmailTemplate): string {
   return t.updated_by ? `${when} by ${t.updated_by}` : when;
 }
 
+// ── Preview panel ─────────────────────────────────────────────────────────────
+
+interface PreviewPanelProps {
+  templateKey: string;
+  fields: DraftFields;
+}
+
+function PreviewPanel({ templateKey, fields }: PreviewPanelProps) {
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'html' | 'text'>('html');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchPreview = useCallback(async (f: DraftFields, key: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await POST<PreviewResult>(
+        `/api/admin/email-templates/${encodeURIComponent(key)}/preview`,
+        {
+          subject: f.subject,
+          body_text: f.body_text,
+          body_html: f.body_html,
+          footer_text: f.footer_text,
+        },
+      );
+      setPreview(result);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchPreview(fields, templateKey);
+    }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [fields, templateKey, fetchPreview]);
+
+  const hasHtml = Boolean(preview?.html?.trim());
+
+  return (
+    <Stack spacing={2}>
+      <Alert severity="info" sx={{ py: 0.5 }}>
+        Variables are filled with sample values so you can see how the email
+        will look. Unsaved edits are reflected here in real time.
+      </Alert>
+
+      {loading && !preview && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={24} />
+        </Box>
+      )}
+
+      {error && (
+        <Alert severity="error">Could not render preview: {error}</Alert>
+      )}
+
+      {preview && (
+        <Stack spacing={1.5}>
+          {/* Subject */}
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+              Subject
+            </Typography>
+            <Box sx={{
+              px: 1.5, py: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: 'background.paper',
+            }}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {preview.subject || <em style={{ opacity: 0.5 }}>empty subject</em>}
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Body view-mode toggle */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="caption" color="text.secondary">Body</Typography>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={hasHtml ? viewMode : 'text'}
+              onChange={(_, v) => { if (v) setViewMode(v); }}
+            >
+              <Tooltip title={hasHtml ? 'HTML email body' : 'No HTML body — showing plain text'}>
+                <span>
+                  <ToggleButton value="html" disabled={!hasHtml} sx={{ px: 1.5, py: 0.25, fontSize: '0.7rem' }}>
+                    HTML
+                  </ToggleButton>
+                </span>
+              </Tooltip>
+              <ToggleButton value="text" sx={{ px: 1.5, py: 0.25, fontSize: '0.7rem' }}>
+                Plain text
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
+          {/* Body content */}
+          {(hasHtml && viewMode === 'html') ? (
+            <Box sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              overflow: 'hidden',
+              bgcolor: '#fff',
+            }}>
+              <iframe
+                title="Email HTML preview"
+                sandbox="allow-same-origin"
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:#111;padding:16px;margin:0;}</style></head><body>${preview.html}</body></html>`}
+                style={{ width: '100%', minHeight: 240, border: 'none', display: 'block' }}
+                onLoad={(e) => {
+                  const iframe = e.currentTarget;
+                  try {
+                    const h = iframe.contentDocument?.body?.scrollHeight;
+                    if (h && h > 0) iframe.style.height = `${h + 32}px`;
+                  } catch (_) { /* cross-origin guard */ }
+                }}
+              />
+            </Box>
+          ) : (
+            <Box sx={{
+              px: 1.5, py: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: 'background.paper',
+              fontFamily: 'monospace',
+              fontSize: '0.8rem',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 320,
+              overflowY: 'auto',
+            }}>
+              {preview.text || <em style={{ opacity: 0.5 }}>empty body</em>}
+            </Box>
+          )}
+
+          {loading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+              <CircularProgress size={12} />
+              <Typography variant="caption">Updating preview…</Typography>
+            </Box>
+          )}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
 // ── Edit dialog ───────────────────────────────────────────────────────────────
 
 interface EditDialogProps {
@@ -84,6 +254,7 @@ interface EditDialogProps {
 
 function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const showToast = useToast();
+  const [activeTab, setActiveTab] = useState(0);
   const [fields, setFields] = useState<DraftFields>(() => {
     const draft = loadDraft(template.key);
     return draft || {
@@ -96,7 +267,6 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [hadDraft] = useState<boolean>(() => loadDraft(template.key) !== null);
   const [saving, setSaving] = useState(false);
 
-  // Persist the in-progress edit so a refresh / navigation does not lose work.
   useEffect(() => {
     try {
       localStorage.setItem(draftKey(template.key), JSON.stringify(fields));
@@ -145,69 +315,86 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   return (
     <Dialog open onClose={handleCancel} maxWidth="md" fullWidth>
       <DialogTitle>Edit: {template.label}</DialogTitle>
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
+          <Tab label="Edit" />
+          <Tab label="Preview" />
+        </Tabs>
+      </Box>
+
       <DialogContent dividers>
-        <Stack spacing={2.5} sx={{ mt: 0.5 }}>
-          {template.description && (
-            <Typography variant="body2" color="text.secondary">
-              {template.description}
-            </Typography>
-          )}
-
-          {template.variables.length > 0 && (
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                Available variables (insert with double curly braces, e.g. {'{{firstName}}'}):
+        {/* Edit panel — always mounted so draft state is preserved; hidden when on Preview tab */}
+        <Box sx={{ display: activeTab === 0 ? 'block' : 'none' }}>
+          <Stack spacing={2.5} sx={{ mt: 0.5 }}>
+            {template.description && (
+              <Typography variant="body2" color="text.secondary">
+                {template.description}
               </Typography>
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                {template.variables.map((v) => (
-                  <Chip key={v} label={`{{${v}}}`} size="small" variant="outlined" />
-                ))}
-              </Stack>
-            </Box>
-          )}
+            )}
 
-          {hadDraft && (
-            <Alert severity="info">
-              Restored an unsaved draft from your last edit. Save to apply, or cancel to discard it.
-            </Alert>
-          )}
+            {template.variables.length > 0 && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                  Available variables (insert with double curly braces, e.g. {'{{firstName}}'}):
+                </Typography>
+                <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
+                  {template.variables.map((v) => (
+                    <Chip key={v} label={`{{${v}}}`} size="small" variant="outlined" />
+                  ))}
+                </Stack>
+              </Box>
+            )}
 
-          <TextField
-            label="Subject"
-            value={fields.subject}
-            onChange={set('subject')}
-            fullWidth
-            required
-          />
-          <TextField
-            label="Body (plain text)"
-            value={fields.body_text}
-            onChange={set('body_text')}
-            fullWidth
-            multiline
-            minRows={6}
-            helperText="Sent as the plain-text part of the email."
-          />
-          <TextField
-            label="Body (HTML)"
-            value={fields.body_html}
-            onChange={set('body_html')}
-            fullWidth
-            multiline
-            minRows={6}
-            helperText="Optional. Leave blank to auto-generate HTML from the plain-text body."
-          />
-          <TextField
-            label="Footer"
-            value={fields.footer_text}
-            onChange={set('footer_text')}
-            fullWidth
-            multiline
-            minRows={2}
-            helperText="Appended to the end of every send of this template."
-          />
-        </Stack>
+            {hadDraft && (
+              <Alert severity="info">
+                Restored an unsaved draft from your last edit. Save to apply, or cancel to discard it.
+              </Alert>
+            )}
+
+            <TextField
+              label="Subject"
+              value={fields.subject}
+              onChange={set('subject')}
+              fullWidth
+              required
+            />
+            <TextField
+              label="Body (plain text)"
+              value={fields.body_text}
+              onChange={set('body_text')}
+              fullWidth
+              multiline
+              minRows={6}
+              helperText="Sent as the plain-text part of the email."
+            />
+            <TextField
+              label="Body (HTML)"
+              value={fields.body_html}
+              onChange={set('body_html')}
+              fullWidth
+              multiline
+              minRows={6}
+              helperText="Optional. Leave blank to auto-generate HTML from the plain-text body."
+            />
+            <TextField
+              label="Footer"
+              value={fields.footer_text}
+              onChange={set('footer_text')}
+              fullWidth
+              multiline
+              minRows={2}
+              helperText="Appended to the end of every send of this template."
+            />
+          </Stack>
+        </Box>
+
+        {/* Preview panel — always mounted so it fetches updates while admin types on Edit tab */}
+        <Box sx={{ display: activeTab === 1 ? 'block' : 'none', mt: 0.5 }}>
+          <PreviewPanel templateKey={template.key} fields={fields} />
+        </Box>
       </DialogContent>
+
       <DialogActions>
         <Button onClick={handleCancel} disabled={saving}>Cancel</Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
