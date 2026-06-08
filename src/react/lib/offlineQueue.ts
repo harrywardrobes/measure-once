@@ -319,6 +319,49 @@ export async function sendOrQueue(input: EnqueueInput): Promise<SendOrQueueResul
   return { queued: true, ok: false, status: 0 };
 }
 
+// ── Calendar follow-up for offline visit edits ──────────────────────────────────
+// When a visit edit is queued offline, its linked Google Calendar event can't be
+// updated then (Calendar needs a live Google session). Queue the calendar PATCH
+// as its own entry so the sync engine replays it on reconnect — keeping the
+// calendar in step with the visit instead of silently drifting. If the Google
+// session is gone at replay time the endpoint returns 401, which the sync engine
+// surfaces as a failed change the user can see and retry.
+
+export interface CalendarUpdateInput {
+  /** Google Calendar event id to patch. */
+  googleEventId: string;
+  summary: string;
+  description: string;
+  location: string;
+  /** Event start as an ISO 8601 string. */
+  startISO: string;
+  /** Event end as an ISO 8601 string. */
+  endISO: string;
+  /** Short human-readable summary for the pending-sync UI. */
+  label: string;
+}
+
+/**
+ * Queue a Google Calendar event update to replay after an offline visit edit.
+ * Replayed in insertion order, so it runs after the visit edit it follows. No
+ * conflict base is attached — last-write-wins mirrors the visit edit it tracks.
+ */
+export async function queueCalendarUpdate(input: CalendarUpdateInput): Promise<void> {
+  await enqueue({
+    area: 'visit',
+    label: input.label,
+    method: 'PATCH',
+    url: `/api/events/${input.googleEventId}`,
+    body: {
+      summary: input.summary,
+      description: input.description,
+      location: input.location,
+      start: { dateTime: input.startISO },
+      end: { dateTime: input.endISO },
+    },
+  });
+}
+
 /** Clear a single conflict (used by the future Phase 3 review UI). */
 export async function clearConflict(id: number): Promise<void> {
   await conflictDelete(id);

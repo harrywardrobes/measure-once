@@ -132,7 +132,7 @@ export function InstallationSlotModal(props: Props) {
         // Offline-aware edit. When offline / on a network error the visit update
         // is queued and replayed on reconnect; the cached version/updated_at base
         // lets the sync engine detect a stale overwrite for the conflict view.
-        const { sendOrQueue } = await import('../../lib/offlineQueue');
+        const { sendOrQueue, queueCalendarUpdate } = await import('../../lib/offlineQueue');
         const res = await sendOrQueue({
           area: 'visit',
           label: `Edit installation slot — ${visit.customerName || visit.id}`,
@@ -158,7 +158,20 @@ export function InstallationSlotModal(props: Props) {
           throw new Error((res.data as { error?: string })?.error || 'Could not save.');
         }
         if (res.queued) {
-          showToast('Installation slot update saved offline — it will sync when you reconnect', false);
+          if (updateGcal && visit.googleEventId) {
+            await queueCalendarUpdate({
+              googleEventId: visit.googleEventId,
+              summary: title.trim(),
+              description: notes.trim() || '',
+              location: location.trim() || '',
+              startISO: start.toISOString(),
+              endISO: end.toISOString(),
+              label: `Update Google Calendar — ${visit.customerName || visit.id}`,
+            });
+            showToast('Installation slot update saved offline — the visit and its Google Calendar event will sync when you reconnect', false);
+          } else {
+            showToast('Installation slot update saved offline — it will sync when you reconnect', false);
+          }
           handleClose();
           props.onSaved?.();
           return;
