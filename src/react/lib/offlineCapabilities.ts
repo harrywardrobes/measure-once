@@ -21,6 +21,22 @@
  * Adding or removing an offline-capable surface therefore forces this matrix
  * (and the docs) to be updated in lockstep, or CI fails.
  *
+ * ── How view-only drift is prevented ────────────────────────────────────────
+ * Being *viewable* offline depends on the service worker actually caching the
+ * area's GET reads. Every row that is viewable offline (`full` **and** `view`)
+ * that introduces a runtime cache declares `cachedBy`: the service-worker
+ * runtime cache name(s) that hold its offline-viewable responses. The cached
+ * read routes are defined once in `scripts/offline-read-caches.mjs`
+ * (`OFFLINE_READ_CACHES`), which `scripts/build-sw.mjs` consumes to build the
+ * Workbox runtimeCaching rules. The lint asserts a three-way equality between:
+ *   1. that manifest (cache names + route patterns),
+ *   2. the union of `cachedBy` names across `full`/`view` rows here, and
+ *   3. the `<!-- offline-view-cache: <cache> routes: … -->` annotations on the
+ *      cache table in `docs/OFFLINE.md` (matched at route granularity).
+ * So a `view` row can never claim offline caching the SW doesn't provide, and
+ * adding/removing a cached read route forces the matrix (and docs) to update.
+ * `online` rows must NOT declare `cachedBy`; `view` rows MUST declare it.
+ *
  * NOTE: `OfflineArea` is imported **type-only** so this module pulls no runtime
  * dependency on `offlineQueue`/`idb` — it stays cheap to import anywhere.
  *
@@ -43,6 +59,14 @@ export interface FeatureArea {
    * writes make this area work offline. Must be omitted for `view`/`online`.
    */
   backedBy?: OfflineArea[];
+  /**
+   * For offline-viewable areas (`full` and `view`): the service-worker runtime
+   * cache name(s) (declared in `scripts/offline-read-caches.mjs`) that hold this
+   * area's cached GET reads. REQUIRED on every `view` row; on
+   * `full` rows declare it on whichever row introduces the cache. MUST be
+   * omitted on `online` rows (they are not cached for offline viewing).
+   */
+  cachedBy?: string[];
   /** One-line explanation shown in the matrix. */
   detail: string;
 }
@@ -52,6 +76,7 @@ export const FEATURE_AREAS: FeatureArea[] = [
     name: 'Customer cards & details',
     capability: 'full',
     backedBy: ['customer'],
+    cachedBy: ['mo-customers'],
     detail:
       'Browse cached customer cards and detail pages. Lead-status changes, sub-status quick-sets, and rooms/notes edits are queued and synced on reconnect.',
   },
@@ -59,6 +84,7 @@ export const FEATURE_AREAS: FeatureArea[] = [
     name: 'Visits & schedule',
     capability: 'full',
     backedBy: ['visit'],
+    cachedBy: ['mo-visits'],
     detail:
       'View cached visits and design visits. Design-visit wizard submissions (new and edits) are queued offline and replayed in order; edits are checked for conflicts on sync.',
   },
@@ -66,6 +92,7 @@ export const FEATURE_AREAS: FeatureArea[] = [
     name: 'Photo capture',
     capability: 'full',
     backedBy: ['visit'],
+    cachedBy: ['mo-photos'],
     detail:
       'Room photos captured in the design-visit wizard are saved on the device and uploaded with the queued submission when you reconnect.',
   },
@@ -96,6 +123,7 @@ export const FEATURE_AREAS: FeatureArea[] = [
   {
     name: 'Calendar & scheduling',
     capability: 'view',
+    cachedBy: ['mo-visits'],
     detail:
       'Previously loaded calendar events are viewable offline, but creating or booking new events writes to Google Calendar and needs internet.',
   },

@@ -25,6 +25,7 @@ import { createHash } from 'crypto';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { OFFLINE_READ_CACHES } from './offline-read-caches.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -96,44 +97,25 @@ const { count, size, warnings } = await generateSW({
         cacheableResponse: { statuses: [0, 200] },
       },
     },
-    // Customer cards (lists, counts, status lookups, workflow) + customer
-    // detail / localdata / tasks.
-    {
-      urlPattern: ({ url, sameOrigin }) => sameOrigin && (
-        /^\/api\/(contacts-all|contacts-lead-status-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$/.test(url.pathname) ||
-        /^\/api\/contacts\/[^/]+(\/(localdata|tasks))?$/.test(url.pathname)
-      ),
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'mo-customers',
-        expiration: { maxEntries: 200, maxAgeSeconds: TWELVE_HOURS },
-        cacheableResponse: { statuses: [200] },
-      },
-    },
-    // Visits & schedule.
-    {
-      urlPattern: ({ url, sameOrigin }) =>
-        sameOrigin && /^\/api\/(visits|design-visits|events)(\/[^/]+)?$/.test(url.pathname),
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'mo-visits',
-        expiration: { maxEntries: 100, maxAgeSeconds: TWELVE_HOURS },
-        cacheableResponse: { statuses: [200] },
-      },
-    },
-    // Photo capture / review + customer-info reads.
-    {
-      urlPattern: ({ url, sameOrigin }) => sameOrigin && (
-        /^\/api\/card-actions\/review-customer-photos\/[^/]+$/.test(url.pathname) ||
-        /^\/api\/customer-info\//.test(url.pathname)
-      ),
-      handler: 'StaleWhileRevalidate',
-      options: {
-        cacheName: 'mo-photos',
-        expiration: { maxEntries: 100, maxAgeSeconds: TWELVE_HOURS },
-        cacheableResponse: { statuses: [200] },
-      },
-    },
+    // Offline READ caches (customer cards, visits & schedule, photo capture/
+    // review). Route patterns are the single source of truth in
+    // scripts/offline-read-caches.mjs — consumed here AND validated against the
+    // capability matrix + docs by scripts/check-offline-capability-sync.mjs.
+    // Do NOT hand-add same-origin read-route caches below; add them to that
+    // manifest so the matrix/docs drift guard stays effective.
+    ...OFFLINE_READ_CACHES.map(({ cacheName, maxEntries, routes }) => {
+      const patterns = routes.map((source) => new RegExp(source));
+      return {
+        urlPattern: ({ url, sameOrigin }) =>
+          sameOrigin && patterns.some((re) => re.test(url.pathname)),
+        handler: 'StaleWhileRevalidate',
+        options: {
+          cacheName,
+          expiration: { maxEntries, maxAgeSeconds: TWELVE_HOURS },
+          cacheableResponse: { statuses: [200] },
+        },
+      };
+    }),
     // App-shell navigations (server-rendered EJS). NetworkFirst so online users
     // always get fresh HTML, offline users get the last cached shell.
     {

@@ -61,6 +61,25 @@ fresh copy is fetched in the background for next time. Only `200` responses are
 cached (fonts also allow opaque `0`). Entries past their TTL or beyond the max
 count are evicted automatically by Workbox's expiration plugin.
 
+> The three runtime *read* caches above (`mo-customers`, `mo-visits`,
+> `mo-photos`) are defined once in `scripts/offline-read-caches.mjs`
+> (`OFFLINE_READ_CACHES`), which `scripts/build-sw.mjs` consumes to build the
+> Workbox `runtimeCaching` rules — so that manifest *is* the real SW behaviour.
+> The machine-readable `offline-view-cache` HTML-comment annotations below
+> (one per cache, `<cache> routes: …`) mirror each cache's exact route
+> patterns. The
+> `test:offline-capability-sync` lint asserts a three-way match — manifest ↔
+> `cachedBy` names on the `full`/`view` rows of the capability matrix
+> (`src/react/lib/offlineCapabilities.ts`) ↔ these docs annotations — at **both**
+> cache-name and route granularity. This stops a "view-only when cached" matrix
+> row from claiming offline caching the SW doesn't provide, and forces this table
+> to update whenever a cached read route is added or removed. Keep the route
+> patterns below byte-for-byte identical to the manifest.
+
+<!-- offline-view-cache: mo-customers routes: ^/api/(contacts-all|contacts-lead-status-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$ ; ^/api/contacts/[^/]+(/(localdata|tasks))?$ -->
+<!-- offline-view-cache: mo-visits routes: ^/api/(visits|design-visits|events)(/[^/]+)?$ -->
+<!-- offline-view-cache: mo-photos routes: ^/api/card-actions/review-customer-photos/[^/]+$ ; ^/api/customer-info/ -->
+
 ### IndexedDB store (`measure-once-offline`)
 
 Object stores: `customers`, `visits`, `photos` (cached read data), `meta`
@@ -232,7 +251,15 @@ changing it:
   between those `backedBy` codes, the `area:` codes actually used by
   `sendOrQueue()` callers, and the `<!-- offline-areas: … -->` annotations on the
   "Covered write surfaces" rows above — so the matrix cannot silently drift from
-  real offline behaviour.
+  real offline behaviour. The `view` ("view-only when cached") and cache-backed
+  `full` rows additionally declare `cachedBy` — the service-worker runtime cache
+  name(s) that hold their offline-viewable reads — which the same lint reconciles
+  against the offline read-cache manifest in `scripts/offline-read-caches.mjs`
+  (the single source `scripts/build-sw.mjs` builds its runtime caches from) and
+  the `offline-view-cache` cache-table annotations (`<cache> routes: …`),
+  matched at both cache-name and route granularity, so a `view` row can't claim
+  caching the SW doesn't provide and a new cached read route can't be added
+  without updating the matrix and docs.
 - **Live sync status** — pending / syncing / failed queue counts (via
   `useOfflineQueue`) plus the **last successful sync time**. The sync engine
   stamps `markSynced()` (a `lastSuccessfulSyncAt` value in the `meta` store) after
