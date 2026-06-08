@@ -560,6 +560,28 @@ function isServerEquivalent(resolved: unknown, server: unknown): boolean {
 }
 
 /**
+ * Build the read-cache value for a single resolved field.
+ *
+ * For scalar fields and plain objects, `isServerEquivalent` at the top level
+ * already selects the right branch in `buildRestoredCachePatch`. For *arrays*
+ * (e.g. the design-visit `rooms` field) a mixed per-room resolve makes the
+ * whole array non-equivalent even though individual server-restored rooms *are*
+ * equivalent to their server counterparts. This helper applies the equivalence
+ * check element-by-element so each server-restored room adopts the full server
+ * object (including server-only fields like `door_style_name`), while
+ * user-kept rooms are still deep-snake-cased from the write shape.
+ */
+function reconcileForCache(resolved: unknown, server: unknown): unknown {
+  if (Array.isArray(resolved)) {
+    const sArr = Array.isArray(server) ? server : [];
+    return resolved.map((el, i) =>
+      isServerEquivalent(el, sArr[i]) ? sArr[i] : deepSnakeize(el),
+    );
+  }
+  return deepSnakeize(resolved);
+}
+
+/**
  * Build the read-cache patch that re-applies a resolved conflict's restored
  * values, so an offline read (which can't re-fetch) still shows the restored
  * state. The resolved body is in the *write* shape (camelCase for design
@@ -569,8 +591,11 @@ function isServerEquivalent(resolved: unknown, server: unknown): boolean {
  * shape and skips write-only payload keys (e.g. a design visit's `handlerConfig`)
  * that don't map onto the cached record. For a field whose resolved value equals
  * the server snapshot (a true "restore"), the exact read-shape server value is
- * used; a "keep mine" value is rewritten to snake_case. Returns `null` when
- * nothing maps.
+ * used; a "keep mine" value is rewritten to snake_case. For array fields (e.g.
+ * `rooms`), the comparison is done element-by-element so server-restored
+ * elements adopt the full server object (preserving server-only fields such as
+ * `door_style_name`) even when the overall array is not identical to the
+ * server's. Returns `null` when nothing maps.
  */
 function buildRestoredCachePatch(
   conflict: ConflictEntry,
@@ -585,7 +610,7 @@ function buildRestoredCachePatch(
     const serverValue = server[readKey];
     patch[readKey] = isServerEquivalent(resolvedValue, serverValue)
       ? serverValue
-      : deepSnakeize(resolvedValue);
+      : reconcileForCache(resolvedValue, serverValue);
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
