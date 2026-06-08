@@ -131,6 +131,7 @@ const DB_SUITES = [
   'test:design-visit-hubspot-retry:ci',
   'test:visits-past-time:ci',
   'test:hubspot-credential-audit:ci',
+  'test:lead-status-guard:ci',
   'test:phone-directory:ci',
   'test:phone-directory-customers:ci',
   'test:contacts-all-stale-fallback:ci',

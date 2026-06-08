@@ -136,6 +136,8 @@
     "test:visits-past-time:ci": "node scripts/with-test-db.js test/visits-past-time/run.js",
     "test:hubspot-credential-audit": "node test/hubspot-credential-audit/run.js",
     "test:hubspot-credential-audit:ci": "node scripts/with-test-db.js test/hubspot-credential-audit/run.js",
+    "test:lead-status-guard": "node test/lead-status-guard/run.js",
+    "test:lead-status-guard:ci": "node scripts/with-test-db.js test/lead-status-guard/run.js",
     "test:phone-directory": "node test/phone-directory/run.js",
     "test:phone-directory:ci": "node scripts/with-test-db.js test/phone-directory/run.js",
     "test:phone-directory-customers": "node test/phone-directory/run-customers.js",
