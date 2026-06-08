@@ -35,6 +35,7 @@ import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { FilterChipRow } from '../components/FilterChipRow';
 import { SortSelect } from '../components/SortSelect';
+import Toggle from '../components/Toggle';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
@@ -843,6 +844,7 @@ export function CustomersPage(): React.ReactElement {
   const [search, setSearch] = React.useState<string>(initial.q);
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
+  const [showExcluded, setShowExcluded] = React.useState(false);
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
@@ -1466,7 +1468,7 @@ export function CustomersPage(): React.ReactElement {
                     <option value="__no_status__" disabled={nullCount === 0}>
                       {store.nullLabel}
                     </option>
-                    {store.statuses.filter((s) => !s.excluded_from_sales).map((s) => {
+                    {store.statuses.filter((s) => showExcluded || !s.excluded_from_sales).map((s) => {
                       const n = counts[s.key] || 0;
                       return (
                         <option key={s.key} value={s.key} disabled={n === 0}>
@@ -1496,7 +1498,7 @@ export function CustomersPage(): React.ReactElement {
                 ? [{ key: '__no_status__', label: store.nullLabel }]
                 : []),
               ...store.statuses
-                .filter((s) => !s.excluded_from_sales)
+                .filter((s) => showExcluded || !s.excluded_from_sales)
                 .filter((s) => (store.counts[s.key] || 0) > 0)
                 .map((s) => ({ key: s.key, label: s.label })),
             ]}
@@ -1592,26 +1594,41 @@ export function CustomersPage(): React.ReactElement {
             label="Sort by"
           />
 
-          <Button
-            id="archived-toggle"
-            size="small"
-            variant="text"
-            color={showArchived ? 'secondary' : 'primary'}
-            aria-pressed={showArchived}
-            onClick={() => {
-              const next = !showArchived;
-              setShowArchived(next);
-              setPage(1);
-              setStageFilter('');
-              if (!next) {
-                setLeadStatus('');
-                setSubstatus('');
-              }
-            }}
-            sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignSelf: { xs: 'flex-end', sm: 'auto' } }}
-          >
-            {showArchived ? 'Hide archived' : 'Show all'}
-          </Button>
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <Typography variant="body2">Show archived</Typography>
+            <Toggle
+              checked={showArchived}
+              title="Show archived contacts"
+              onChange={(next) => {
+                setShowArchived(next);
+                setPage(1);
+                setStageFilter('');
+                if (!next) {
+                  setLeadStatus('');
+                  setSubstatus('');
+                }
+              }}
+            />
+          </Stack>
+
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <Typography variant="body2">Incl. excluded</Typography>
+            <Toggle
+              checked={showExcluded}
+              title="Show lead statuses excluded from sales"
+              onChange={(next) => {
+                setShowExcluded(next);
+                if (!next) {
+                  const excluded = store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key);
+                  if (leadStatus && excluded.includes(leadStatus)) {
+                    setLeadStatus('');
+                    setSubstatus('');
+                    setPage(1);
+                  }
+                }
+              }}
+            />
+          </Stack>
         </Stack>
 
         {error ? <Alert severity="error">{error}</Alert> : null}
