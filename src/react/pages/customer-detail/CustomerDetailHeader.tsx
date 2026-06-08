@@ -53,6 +53,11 @@ export function CustomerDetailHeader({
   const name       = contactName(contact);
   const email      = props.email || '';
   const bestPhone  = props.phone || props.mobilephone || props.hs_whatsapp_phone_number || '';
+  const phoneSource: 'phone' | 'mobile' | 'whatsapp' | null =
+    props.phone            ? 'phone'
+    : props.mobilephone    ? 'mobile'
+    : props.hs_whatsapp_phone_number ? 'whatsapp'
+    : null;
   const address    = props.address || '';
   const city       = props.city   || '';
   const zip        = props.zip    || '';
@@ -137,6 +142,32 @@ export function CustomerDetailHeader({
                 {bestPhone && (
                   <div className="text-sm flex items-center gap-1.5" style={{ color: 'var(--ink-4)' }}>
                     <a href={`tel:${bestPhone}`} className="hover:underline" style={{ color: 'inherit' }}>{bestPhone}</a>
+                    {phoneSource === 'mobile' && (
+                      <span
+                        title="Mobile number"
+                        style={{
+                          fontSize: '0.65rem', fontWeight: 600, lineHeight: 1,
+                          padding: '2px 5px', borderRadius: 4,
+                          background: 'var(--stone)', color: 'var(--ink-3)',
+                          letterSpacing: '0.02em', flexShrink: 0,
+                        }}
+                      >
+                        Mobile
+                      </span>
+                    )}
+                    {phoneSource === 'whatsapp' && (
+                      <span
+                        title="WhatsApp number"
+                        style={{
+                          fontSize: '0.65rem', fontWeight: 600, lineHeight: 1,
+                          padding: '2px 5px', borderRadius: 4,
+                          background: '#e8f5e9', color: '#2e7d32',
+                          letterSpacing: '0.02em', flexShrink: 0,
+                        }}
+                      >
+                        WhatsApp
+                      </span>
+                    )}
                     {whatsappEnabled && !isViewer && onOpenWhatsApp && (
                       <button
                         onClick={onOpenWhatsApp}
