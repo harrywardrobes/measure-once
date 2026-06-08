@@ -45,22 +45,6 @@ const STANDALONE_SUITES = new Set([
   // Infinite-scroll E2E for the Audit Log tab; not enrolled in CI — run
   // standalone when iterating on audit-log pagination behaviour.
   'test:audit-log-scrolling',
-  // CalendarSection empty-state Puppeteer suite; removed from the CI pipeline,
-  // retained as a standalone smoke test.
-  'test:calendar-empty-state',
-  // Full calendar-page E2E; removed from the CI pipeline, retained standalone.
-  'test:calendar-page',
-  // SalesBoard end-to-end suite; removed from the CI pipeline, retained standalone.
-  'test:sales-board',
-  // SalesBoard bootstrap path suite; removed from the CI pipeline, retained standalone.
-  'test:sales-board-bootstrap',
-  // SalesBoard stage-labels regression guard; removed from the CI pipeline, retained standalone.
-  'test:sales-board-stage-labels',
-  // SalesBoard error-state regression guard; removed from the CI pipeline, retained standalone.
-  'test:sales-board-error-state',
-  // SurveyBoard Puppeteer suite; removed from the CI pipeline, retained
-  // standalone.
-  'test:survey-board',
 ]);
 
 /**
