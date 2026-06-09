@@ -60,6 +60,7 @@ interface HubStatus {
 interface LeadStatusHealthEntry {
   key: string;
   source: string;
+  featureLabel?: string;
 }
 
 interface LeadStatusHealth {
@@ -68,14 +69,6 @@ interface LeadStatusHealth {
   required: LeadStatusHealthEntry[];
 }
 
-const LEAD_STATUS_FEATURE_LABEL: Record<string, string> = {
-  OPEN_DEAL:           'Creating new contacts',
-  SURVEY_SCHEDULED:    'Booking survey visits',
-  DESIGN_SCHEDULED:    'Booking design visits',
-  NOT_SUITABLE:        'Marking visits as not suitable & photo review outcomes',
-  AWAITING_PHOTOS:     'Customer photo submission',
-  ROUGH_ESTIMATE_SENT: 'Photo review outcomes',
-};
 
 const W = window as unknown as Record<string, unknown>;
 
@@ -134,13 +127,14 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
   );
 }
 
-function StatusRow({ status, index, total, onMove, onDelete, isRequired }: {
+function StatusRow({ status, index, total, onMove, onDelete, isRequired, featureLabel }: {
   status: LeadStatus;
   index: number;
   total: number;
   onMove: (key: string, dir: 'up' | 'down') => void;
   onDelete: (key: string) => void;
   isRequired: boolean;
+  featureLabel?: string;
 }) {
   return (
     <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
@@ -178,8 +172,8 @@ function StatusRow({ status, index, total, onMove, onDelete, isRequired }: {
       <td style={{ ...TD, textAlign: 'center' }}>
         {isRequired ? (
           <Tooltip title={
-            LEAD_STATUS_FEATURE_LABEL[status.key]
-              ? `Required by: ${LEAD_STATUS_FEATURE_LABEL[status.key]} — cannot be deleted.`
+            featureLabel
+              ? `Required by: ${featureLabel} — cannot be deleted.`
               : 'This status is required by the application and cannot be deleted.'
           }>
             <span style={{ display: 'inline-block', cursor: 'not-allowed' }}>
@@ -815,12 +809,12 @@ export function SettingsPage() {
                 Staff actions that rely on them will fail with an error until the keys are restored.
               </Typography>
               <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                {healthData.missing.map(({ key }) => (
+                {healthData.missing.map(({ key, featureLabel }) => (
                   <Box component="li" key={key} sx={{ mb: 0.25 }}>
                     <Box component="code" sx={{ fontSize: '0.8em', fontWeight: 600 }}>{key}</Box>
-                    {LEAD_STATUS_FEATURE_LABEL[key] && (
+                    {featureLabel && (
                       <Box component="span" sx={{ color: 'text.secondary', ml: 0.75, fontSize: '0.85em' }}>
-                        — {LEAD_STATUS_FEATURE_LABEL[key]}
+                        — {featureLabel}
                       </Box>
                     )}
                   </Box>
@@ -854,7 +848,7 @@ export function SettingsPage() {
                   <tbody>
                     {nullRow && <NullStatusRow key={`${nullRow.key}-${reloadKey}`} status={nullRow} />}
                     {real.map((s, i) => (
-                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)} />
+                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)} featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel} />
                     ))}
                   </tbody>
                 </table>
