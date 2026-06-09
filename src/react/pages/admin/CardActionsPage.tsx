@@ -9,17 +9,15 @@ import { STATUS_COLORS } from '../../theme';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-const CARD_ACTION_STAGES: Array<{ key: string; label: string; lsStage: string }> = [
-  { key: 'sales',       label: 'Sales',        lsStage: 'SALES'        },
-  { key: 'designvisit', label: 'Design Visit', lsStage: 'DESIGN_VISIT' },
-  { key: 'survey',      label: 'Survey',       lsStage: 'SURVEY'       },
-];
-const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
-  CARD_ACTION_STAGES.map(s => [s.lsStage, s.key]),
-);
+// Maps lead_status_config.stage (e.g. 'DESIGN_VISIT') → workflow key (e.g. 'designvisit').
+// Mirrors the server-side _normToCardStageKey rule: lowercase + strip underscores.
+function lsStageToKey(stage: string): string {
+  return stage.toLowerCase().replace(/_/g, '');
+}
 
 // Ordered list of handler types available in the "Default handler type" selector.
 // Shown when an admin wants to pre-configure which handler a new substatus binding
@@ -63,6 +61,7 @@ const W = window as unknown as Record<string, unknown>;
 
 function buildModel(
   labels: CALabel[], statuses: LeadStatus[], substatuses: Substatus[],
+  stages: Array<{ key: string; label: string }>,
 ): StageModel[] {
   const labelByKey: Record<string, string> = {};
   for (const r of labels) labelByKey[`${r.stage_key}|${r.status_key}`] = r.label;
@@ -74,7 +73,7 @@ function buildModel(
   }
 
   const stageMap = new Map<string, StageModel>();
-  for (const cs of CARD_ACTION_STAGES) {
+  for (const cs of stages) {
     stageMap.set(cs.key, { key: cs.key, label: cs.label, statuses: [] });
   }
 
@@ -82,8 +81,8 @@ function buildModel(
   const real    = statuses.filter(s => !s.is_null_row);
 
   for (const s of real) {
-    const sk = STAGE_FOR_LS[s.stage || ''];
-    if (!sk) continue;
+    const sk = lsStageToKey(s.stage || '');
+    if (!sk || !stageMap.has(sk)) continue;
     const stage  = stageMap.get(sk)!;
     const lsKey  = String(s.key || '');
     const defKey = lsKey.toLowerCase();
@@ -97,7 +96,7 @@ function buildModel(
   }
 
   // Null-status / stage-default row goes first in every stage
-  for (const cs of CARD_ACTION_STAGES) {
+  for (const cs of stages) {
     const stage = stageMap.get(cs.key);
     if (!stage) continue;
     const rowLabel = cs.key === 'sales'
@@ -200,13 +199,13 @@ function HandlerBadges({
 export function CardActionsPage() {
   usePageTitle('Card Actions · Measure Once');
   const showToast = useToast();
-  const [labels,      setLabels]      = useState<CALabel[]>([]);
-  const [statuses,    setStatuses]    = useState<LeadStatus[]>([]);
-  const [substatuses, setSubstatuses] = useState<Substatus[]>([]);
-  const [handlers,    setHandlers]    = useState<Handler[]>([]);
-  const [collapsed,   setCollapsed]   = useState<Set<string>>(
-    new Set(CARD_ACTION_STAGES.map(s => s.key)),
-  );
+  const [labels,         setLabels]         = useState<CALabel[]>([]);
+  const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
+  const [substatuses,    setSubstatuses]    = useState<Substatus[]>([]);
+  const [handlers,       setHandlers]       = useState<Handler[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
+  const [collapsed,      setCollapsed]      = useState<Set<string>>(new Set());
+  const didInitCollapse = useRef(false);
 
   const [newSubRows,    setNewSubRows]    = useState<NewSubRow[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -245,13 +244,24 @@ export function CardActionsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [lbl, sta, sub, hdl] = await Promise.all([
+      const [wfl, lbl, sta, sub, hdl] = await Promise.all([
+        GET('/api/workflow'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/lead-substatuses'),
         GET('/api/admin/card-action-handlers'),
-      ]) as [CALabel[], LeadStatus[], Substatus[], Handler[]];
+      ]) as [WorkflowDef | null, CALabel[], LeadStatus[], Substatus[], Handler[]];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
+      const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
+      const stages = Object.entries(rawStages).map(([key, data]) => ({
+        key,
+        label: (data as WorkflowStage).label ?? key,
+      }));
+      setWorkflowStages(stages);
+      if (!didInitCollapse.current) {
+        didInitCollapse.current = true;
+        setCollapsed(new Set(stages.map(s => s.key)));
+      }
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
       setSubstatuses(safeArr(sub));
@@ -453,7 +463,7 @@ export function CardActionsPage() {
     const sh = ls?.shorthand ? String(ls.shorthand).toUpperCase() : '';
     const prefix = sh ? `${sh}_` : '';
     setNewSubRows(prev => [...prev, { id: Date.now(), lsKey, prefix }]);
-    const stageKey = STAGE_FOR_LS[ls?.stage || ''];
+    const stageKey = lsStageToKey(ls?.stage || '');
     if (stageKey) setCollapsed(prev => { const n = new Set(prev); n.delete(stageKey); return n; });
   }, []);
 
@@ -531,7 +541,7 @@ export function CardActionsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const stages = buildModel(labels, statuses, substatuses);
+  const stages = buildModel(labels, statuses, substatuses, workflowStages);
 
   const toggleStage = (key: string) => setCollapsed(prev => {
     const n = new Set(prev);

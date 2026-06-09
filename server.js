@@ -5343,15 +5343,16 @@ app.delete('/api/admin/substatus-clear-failures/:id', isAuthenticated, requireAd
 // (stage_key, status_key) so admins can customize per-substage call-to-action.
 // status_key is lowercase to match the substageId values rendered on cards;
 // '' (empty) is a valid key for "no substage / null status".
-const STAGE_ACTION_STAGE_KEYS = new Set(['sales', 'designvisit', 'survey']);
-
-
-// Maps the uppercase lead_status_config.stage to the lowercase card stage key.
-const STAGE_ACTION_STAGE_MAP = {
-  SALES:        'sales',
-  DESIGN_VISIT: 'designvisit',
-  SURVEY:       'survey',
-};
+// Maps uppercase lead_status_config.stage → lowercase card stage key.
+// Rule: lowercase + strip underscores (e.g. DESIGN_VISIT → designvisit, ORDER → order).
+// Derived from LEAD_STATUS_STAGE_KEYS so adding a new stage there is the only change needed.
+function _normToCardStageKey(stage) {
+  return stage.toLowerCase().replace(/_/g, '');
+}
+const STAGE_ACTION_STAGE_MAP = Object.fromEntries(
+  LEAD_STATUS_STAGE_KEYS.map(k => [k, _normToCardStageKey(k)])
+);
+const STAGE_ACTION_STAGE_KEYS = new Set(Object.values(STAGE_ACTION_STAGE_MAP));
 
 // Seed one row per (card stage × lead status) combination so every card has an
 // editable per-LS row in the admin Card-actions tab. Idempotent: only inserts
@@ -5424,7 +5425,7 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
     req.body?.stage_key, req.body?.status_key, req.body?.label
   );
   if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
-    return res.status(400).json({ error: 'stage_key must be one of: sales, designvisit, survey.' });
+    return res.status(400).json({ error: 'stage_key must be a valid pipeline stage key.' });
   }
   // An empty `label` is allowed and means "admin explicitly cleared this
   // per-LS row" — the row is still inserted so the client can distinguish
@@ -5459,7 +5460,7 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
   // we translate back to ''.
   const rawStatus  = String(req.params.status_key || '');
   const status_key = rawStatus === '_EMPTY_' ? '' : rawStatus.toLowerCase();
-  if (!STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
+  if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
     return res.status(400).json({ error: 'Invalid stage_key.' });
   }
   try {
@@ -6096,7 +6097,7 @@ function _validateHandlerBinding(b) {
   }
   if (!stage) return { error: 'Each binding requires a stage_key or substatus_id.' };
   if (!STAGE_ACTION_STAGE_KEYS.has(stage)) {
-    return { error: 'stage_key must be one of: sales, designvisit, survey.' };
+    return { error: 'stage_key must be a valid pipeline stage key.' };
   }
   if (status.length > 64 || !/^[a-z0-9_]*$/.test(status)) {
     return { error: 'status_key may only contain lowercase letters, digits, and underscores.' };
