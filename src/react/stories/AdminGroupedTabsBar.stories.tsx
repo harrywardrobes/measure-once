@@ -21,6 +21,7 @@ const ALL_TABS: LegacyTab[] = [
   { id: 'permissions',    label: 'Permissions & roles', hidden: false },
   { id: 'requests',       label: 'Pending Requests',    hidden: false },
   { id: 'auditlog',       label: 'Audit Log',           hidden: false },
+  { id: 'hubspot',        label: 'HubSpot',             hidden: false },
   { id: 'cardactions',    label: 'Card Actions',        hidden: false },
   { id: 'actionhandlers', label: 'Action Handlers',     hidden: false },
   { id: 'designvisit',    label: 'Design Visit',        hidden: false },

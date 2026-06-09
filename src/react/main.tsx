@@ -56,6 +56,7 @@ const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m
 const SettingsPage       = React.lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const CardActionsPage    = React.lazy(() => import('./pages/admin/CardActionsPage').then(m => ({ default: m.CardActionsPage })));
 const ActionHandlersPage = React.lazy(() => import('./pages/admin/ActionHandlersPage').then(m => ({ default: m.ActionHandlersPage })));
+const HubSpotPage        = React.lazy(() => import('./pages/admin/HubSpotPage').then(m => ({ default: m.HubSpotPage })));
 const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPage').then(m => ({ default: m.DesignVisitPage })));
 const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
 const OfflineSupportPage = React.lazy(() => import('./pages/admin/OfflineSupportPage').then(m => ({ default: m.OfflineSupportPage })));
@@ -180,6 +181,7 @@ const MOUNTS: Array<{
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage />,   fallback: <AdminRequestsPageSkeleton /> },
   { id: 'tab-auditlog',         render: () => <AdminAuditLogPage />,   fallback: <AdminAuditLogPageSkeleton /> },
+  { id: 'tab-hubspot',           render: () => <HubSpotPage /> },
   { id: 'tab-settings',         render: () => <SettingsPage />,        fallback: <AdminSettingsPageSkeleton /> },
   { id: 'tab-cardactions',      render: () => <CardActionsPage />,     fallback: <CardActionsPageSkeleton /> },
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
