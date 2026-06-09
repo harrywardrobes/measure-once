@@ -4553,6 +4553,11 @@ app.post('/api/admin/lead-statuses', isAuthenticated, requireAdmin, async (req, 
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
     syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
+    // If the new status was created with a stage, seed its label row immediately
+    // so the Card Actions tab shows it without a server restart.
+    if (stage) {
+      seedStageActionLabelsDefaults().catch(e => logger.warn({ err: e.message }, 'stage-action-labels seed after lead-status create failed:'));
+    }
   } catch (e) {
     if (e.code === '23505') {
       // Could be key collision or shorthand collision — distinguish by constraint name.
@@ -4642,6 +4647,12 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
     syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
+    // If a stage was assigned or changed, ensure every lead status in that stage
+    // has a stage_action_labels row so the Card Actions tab shows it immediately
+    // without requiring a server restart.
+    if (stageProvided && newStage) {
+      seedStageActionLabelsDefaults().catch(e => logger.warn({ err: e.message }, 'stage-action-labels seed after stage assignment failed:'));
+    }
   } catch (e) {
     if (e.code === '23505') {
       if (String(e.constraint || '').includes('shorthand')) {
