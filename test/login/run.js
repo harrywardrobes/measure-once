@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[UI.1] /login → React LoginPage rendered; #login-email and #login-password visible',
+  '[UI-1] /login → React LoginPage rendered; #login-email and #login-password visible',
   '[UI-autofill] native value setter + input event on email and password → no console errors',
 ];
 
@@ -18,7 +18,7 @@ const PROBE_LABELS = [
 // simulating autofill must not produce any console errors.
 //
 // Probes (UI):
-//   [UI.1]        /login → React LoginPage rendered; #login-email and
+//   [UI-1]        /login → React LoginPage rendered; #login-email and
 //                 #login-password inputs visible
 //   [UI-autofill] native HTMLInputElement.prototype value setter + bubbling
 //                 'input' event on both #login-email and #login-password →
