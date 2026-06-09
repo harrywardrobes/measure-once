@@ -243,6 +243,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/substatus-clear-failures/retry',       level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
+  { method: 'GET',    path: '/api/admin/lead-statuses/__noop__/usage',          level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-status-health',                   level: 'admin' },
   { method: 'GET',    path: '/api/admin/hubspot-lead-statuses',                level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot-lead-statuses/import',        level: 'admin', body: {} },

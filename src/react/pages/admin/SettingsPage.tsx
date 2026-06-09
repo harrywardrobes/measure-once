@@ -271,6 +271,16 @@ export function SettingsPage() {
   const [importRows, setImportRows] = useState<PreviewRow[]>([]);
   const [importOptions, setImportOptions] = useState<HsOption[]>([]);
 
+  interface DeleteDialogState {
+    open: boolean;
+    key: string;
+    usageCount: number | null;
+    usageError: string | null;
+    loading: boolean;
+    deleting: boolean;
+  }
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
+
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -624,17 +634,40 @@ export function SettingsPage() {
   }, [newKey, newLabel, newStage, fetchHealthData]);
 
   const deleteStatus = useCallback(async (key: string) => {
-    if (!window.confirm(`Delete lead status "${key}"? This cannot be undone.`)) return;
+    setDeleteDialog({ open: true, key, usageCount: null, usageError: null, loading: true, deleting: false });
+    try {
+      const data = await GET<{ count: number | null; hubspotAvailable: boolean }>(
+        `/api/admin/lead-statuses/${encodeURIComponent(key)}/usage`
+      );
+      if (!data.hubspotAvailable) {
+        setDeleteDialog(d => d?.key === key ? { ...d, loading: false, usageCount: null, usageError: 'HubSpot is not connected — could not verify usage' } : d);
+      } else {
+        setDeleteDialog(d => d?.key === key ? { ...d, loading: false, usageCount: data.count, usageError: null } : d);
+      }
+    } catch (e) {
+      const msg = (e as Error).message || 'Could not check usage.';
+      setDeleteDialog(d => d?.key === key ? { ...d, loading: false, usageCount: null, usageError: msg } : d);
+    }
+  }, []);
+
+  const confirmDeleteStatus = useCallback(async () => {
+    if (!deleteDialog) return;
+    const { key } = deleteDialog;
+    setDeleteDialog(d => d ? { ...d, deleting: true } : d);
     try {
       await DELETE(`/api/admin/lead-statuses/${encodeURIComponent(key)}`);
       const next = statusesRef.current.filter(s => s.key !== key);
       setStatuses(next); statusesRef.current = next;
       setReloadKey(rk => rk + 1);
+      setDeleteDialog(null);
       showToast(`Status "${key}" deleted.`);
       notifyLsChanged();
       fetchHealthData();
-    } catch (e) { showToast((e as Error).message || 'Failed to delete status.', true); }
-  }, [fetchHealthData]);
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to delete status.', true);
+      setDeleteDialog(d => d ? { ...d, deleting: false } : d);
+    }
+  }, [deleteDialog, fetchHealthData]);
 
   useEffect(() => {
     W.saveAllLeadStatuses      = saveAll;
@@ -1193,6 +1226,61 @@ export function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!deleteDialog?.open}
+        onClose={() => { if (!deleteDialog?.deleting) setDeleteDialog(null); }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete lead status</DialogTitle>
+        <DialogContent dividers>
+          {deleteDialog?.loading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" color="text.secondary">Checking HubSpot contacts…</Typography>
+            </Box>
+          ) : deleteDialog?.usageError ? (
+            <Stack spacing={1.5}>
+              <Typography variant="body2">
+                Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+              </Typography>
+              <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
+                Could not check HubSpot usage ({deleteDialog.usageError}). Proceed with caution.
+              </Alert>
+            </Stack>
+          ) : (deleteDialog?.usageCount ?? 0) > 0 ? (
+            <Stack spacing={1.5}>
+              <Typography variant="body2">
+                Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+              </Typography>
+              <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
+                <strong>{deleteDialog!.usageCount} contact{deleteDialog!.usageCount === 1 ? '' : 's'}</strong> currently
+                {deleteDialog!.usageCount === 1 ? ' has' : ' have'} this status in HubSpot — deleting it will break their pipeline card until their HubSpot record is updated.
+              </Alert>
+            </Stack>
+          ) : (
+            <Typography variant="body2">
+              Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+              {deleteDialog?.usageCount === 0 && (
+                <> No HubSpot contacts are currently using this status.</>
+              )}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialog(null)} disabled={deleteDialog?.deleting}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteStatus}
+            disabled={deleteDialog?.loading || deleteDialog?.deleting}
+            startIcon={deleteDialog?.deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+          >
+            {deleteDialog?.deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={importOpen} onClose={() => { if (!importConfirming) setImportOpen(false); }} maxWidth="sm" fullWidth>
         <DialogTitle>Import lead statuses from HubSpot</DialogTitle>

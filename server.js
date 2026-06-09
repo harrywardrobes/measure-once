@@ -5162,6 +5162,39 @@ async function backfillMisspelledAwphSubstatus() {
   }
 }
 
+app.get('/api/admin/lead-statuses/:key/usage', isAuthenticated, requireAdmin, async (req, res) => {
+  const key = req.params.key;
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT key FROM lead_status_config WHERE key = $1 AND is_null_row IS NOT TRUE',
+      [key]
+    );
+    if (!existing.length) return res.status(404).json({ error: 'Status not found.' });
+
+    const token = process.env.HUBSPOT_TOKEN || process.env.HUBSPOT_ACCESS_TOKEN || '';
+    if (!token) {
+      return res.json({ count: null, hubspotAvailable: false });
+    }
+
+    const r = await hubspotSearchWithRetry({
+      filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }] }],
+      limit: 1,
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json({ count: r.data.total ?? 0, hubspotAvailable: true });
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) {
+      return res.json({ count: null, hubspotAvailable: false });
+    }
+    if (status === 429) {
+      return res.status(429).json({ error: 'HubSpot rate limit reached — try again in a moment.' });
+    }
+    logger.error({ err: e.message }, 'GET /api/admin/lead-statuses/:key/usage error:');
+    res.status(500).json({ error: 'Could not check usage.' });
+  }
+});
+
 app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
