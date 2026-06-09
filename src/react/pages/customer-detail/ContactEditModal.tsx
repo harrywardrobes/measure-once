@@ -155,6 +155,22 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
         properties: { ...contact.properties, ...values },
       };
       updateRecentCustomer(updated);
+      // Notify other tabs so they can patch the contact name without a full reload.
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const ch = new BroadcastChannel('contact_properties_changed');
+          ch.postMessage({
+            contactId: contact.id,
+            props: {
+              firstname: values.firstname,
+              lastname:  values.lastname,
+              email:     values.email,
+              zip:       values.zip,
+            },
+          });
+          ch.close();
+        }
+      } catch { /* BroadcastChannel not available */ }
       onSaved(updated);
       onClose();
     } catch (e) {

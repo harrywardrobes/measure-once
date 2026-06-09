@@ -232,6 +232,27 @@ export function useProjectsData(): ProjectsData {
     return () => draftChannel.close();
   }, []);
 
+  // ── Patch contact properties when renamed in another tab ───────────────────
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel('contact_properties_changed');
+      ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<ProjectContact['properties']> }>) => {
+        const { contactId, props } = e.data ?? {};
+        if (!contactId || !props) return;
+        setContacts((prev) =>
+          prev.map((c) =>
+            c.id === contactId
+              ? { ...c, properties: { ...c.properties, ...props } }
+              : c,
+          ),
+        );
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { ch?.close(); };
+  }, []);
+
   // ── Re-fetch when a customer submits their info (photos received badge) ─────
   // Opens a direct EventSource to /api/hubspot/webhook-events and listens for
   // `customer_info_submitted` events pushed by the server after a successful
