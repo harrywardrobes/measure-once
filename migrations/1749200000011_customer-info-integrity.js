@@ -50,8 +50,16 @@ exports.up = (pgm) => {
   `);
 
   pgm.sql(`
-    ALTER TABLE photo_review_outcomes
-      ADD CONSTRAINT pro_submission_id_unique UNIQUE (submission_id);
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'pro_submission_id_unique'
+          AND table_name = 'photo_review_outcomes'
+      ) THEN
+        ALTER TABLE photo_review_outcomes
+          ADD CONSTRAINT pro_submission_id_unique UNIQUE (submission_id);
+      END IF;
+    END $$;
   `);
 };
 
