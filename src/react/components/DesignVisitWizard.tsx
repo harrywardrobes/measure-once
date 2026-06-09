@@ -13,6 +13,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { useToastContext } from '../contexts/ToastContext';
+import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
@@ -504,7 +505,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       if (!res.queued && !res.ok) {
         const d = res.data as { error?: string; code?: string } | undefined;
         if (d?.code === 'LEAD_STATUS_REMOVED') {
-          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+          throw new Error(LEAD_STATUS_REMOVED_MESSAGE);
         }
         throw new Error(d?.error || (editMode ? 'Save failed' : 'Submission failed'));
       }

@@ -18,7 +18,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST, ApiError, isGoogleAuthError } from '../../utils/api';
+import { POST, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -209,7 +209,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       if (!res.queued && !res.ok) {
         const d = res.data as { error?: string; code?: string } | undefined;
         if (d?.code === 'LEAD_STATUS_REMOVED') {
-          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+          throw new Error(LEAD_STATUS_REMOVED_MESSAGE);
         }
         throw new Error(d?.error || 'Could not update status.');
       }
@@ -253,7 +253,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       if (!res.queued && !res.ok) {
         const d = res.data as { error?: string; code?: string } | undefined;
         if (d?.code === 'LEAD_STATUS_REMOVED') {
-          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+          throw new Error(LEAD_STATUS_REMOVED_MESSAGE);
         }
         throw new Error(d?.error || 'Could not update status.');
       }
@@ -323,7 +323,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       if (isGoogleAuthError(e)) {
         setActionError('GOOGLE_AUTH');
       } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
-        setActionError(`${(e as Error).message} Visit Settings → Lead statuses to restore it.`);
+        setActionError(LEAD_STATUS_REMOVED_MESSAGE);
       } else {
         setActionError((e as Error).message || 'Could not send email.');
       }

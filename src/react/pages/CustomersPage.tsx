@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { formatCurrency } from '../utils/formatters';
+import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -1760,7 +1761,7 @@ function NewCustomerDialog({
       } else if (er.code === 'HUBSPOT_RATE_LIMIT') {
         setErr('HubSpot rate limit reached — please wait a moment and try again.');
       } else if (er.code === 'LEAD_STATUS_REMOVED') {
-        setErr(`${er.message} Visit Settings → Lead statuses to restore it.`);
+        setErr(LEAD_STATUS_REMOVED_MESSAGE);
       } else {
         setErr(er.message || 'Failed to create customer.');
       }

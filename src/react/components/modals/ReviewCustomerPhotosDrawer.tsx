@@ -13,6 +13,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
+import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -254,7 +255,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
       if (!res.queued && !res.ok) {
         const d = res.data as { error?: string; message?: string; code?: string } | undefined;
         if (d?.code === 'LEAD_STATUS_REMOVED') {
-          throw new Error(`${d.error || 'A required lead status has been removed.'} Visit Settings → Lead statuses to restore it.`);
+          throw new Error(LEAD_STATUS_REMOVED_MESSAGE);
         }
         throw new Error(d?.error || d?.message || 'Failed');
       }
