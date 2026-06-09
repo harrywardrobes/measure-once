@@ -826,6 +826,16 @@ async function runUiSmoke({ users, runId, clients }) {
       let overflowDetail = 'pagination bar not found';
 
       if (paginationElMobile) {
+        // Wait for the pagination info to confirm page-1 data is fully rendered
+        // before measuring overflow.  Use /Showing 1[–-]/ (not includes('26')) —
+        // "Showing 1–25 of 26" is the correct page-1 state; the selector alone
+        // only confirms the DOM node exists, not that the 26-contact dataset
+        // has been painted into it.
+        await page.waitForFunction(() => {
+          const info = document.querySelector('[data-testid="contacts-pagination-info"]');
+          return info && /Showing 1[–\-]/.test(info.textContent);
+        }, { timeout: 5000 }).catch(() => {});
+
         const dims = await page.$eval('[data-testid="contacts-pagination"]', el => ({
           scrollWidth: el.scrollWidth,
           clientWidth: el.clientWidth,
