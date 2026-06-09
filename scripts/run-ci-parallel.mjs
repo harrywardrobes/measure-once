@@ -123,6 +123,7 @@ const DB_SUITES = [
   'test:window-ui-smoke:ci',
   'test:sign-off-stale-link:ci',
   'test:react-admin-tabs:ci',
+  'test:workflow-tab:ci',
   'test:new-customer-flow:ci',
   'test:new-customer-counts-retry:ci',
   'test:duplicate-phone-warnings:ci',

@@ -5,6 +5,7 @@ import {
   AccordionSummary,
   Alert,
   Box,
+  Button,
   Chip,
   CircularProgress,
   Divider,
@@ -564,6 +565,24 @@ export function WorkflowPage() {
                 emailTemplates={emailTemplates}
               />
             ))}
+          </Stack>
+          <Stack direction="row" spacing={1.5} sx={{ mt: 2.5 }}>
+            <Button
+              size="small"
+              variant="text"
+              data-testid="wf-go-action-handlers"
+              onClick={() => navigateToTab('actionhandlers')}
+            >
+              Go to Action handlers →
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              data-testid="wf-go-stages"
+              onClick={() => navigateToTab('stages')}
+            >
+              Go to Stages →
+            </Button>
           </Stack>
         </Box>
       )}

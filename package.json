@@ -113,6 +113,8 @@
     "test:sign-off-stale-link:ci": "node scripts/with-test-db.js test/sign-off-stale-link/run.js",
     "test:react-admin-tabs": "node test/react-admin-tabs/run.js",
     "test:react-admin-tabs:ci": "node scripts/with-test-db.js test/react-admin-tabs/run.js",
+    "test:workflow-tab": "node test/workflow-tab/run.js",
+    "test:workflow-tab:ci": "node scripts/with-test-db.js test/workflow-tab/run.js",
     "test:new-customer-flow": "node test/new-customer-flow/run.js",
     "test:new-customer-flow:ci": "node scripts/with-test-db.js test/new-customer-flow/run.js",
     "test:new-customer-counts-retry": "node test/new-customer-counts-retry/run.js",
