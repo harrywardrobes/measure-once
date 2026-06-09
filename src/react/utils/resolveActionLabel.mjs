@@ -53,8 +53,9 @@ export function resolveActionLabel(
       // Row exists: return label (non-empty) or '' (admin explicitly cleared it).
       return map[perLsKey] ?? '';
     }
-    // No row for this LS → fall back to per-stage default (stage_key, '').
-    return map[`${sKey}|`] ?? '';
+    // No row for this LS → fall back to per-stage default (stage_key, ''),
+    // then the global "No lead status" row (__global__, '').
+    return map[`${sKey}|`] ?? map['__global__|'] ?? '';
   }
 
   // 3. Per-substageId legacy fallback (lowercase to match map key format)
@@ -63,6 +64,6 @@ export function resolveActionLabel(
     if (fromSub) return fromSub;
   }
 
-  // 4. Per-stage "no lead status" row
-  return map[`${sKey}|`] ?? '';
+  // 4. Per-stage "no lead status" row, then global fallback.
+  return map[`${sKey}|`] ?? map['__global__|'] ?? '';
 }

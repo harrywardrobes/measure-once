@@ -209,6 +209,61 @@ const NO_SUBSTATUS_MAP = {};
   );
 }
 
+// ── 11. Global __global__| fallback when per-stage default is also absent ─────
+//
+// When the admin sets a global "No lead status" label (stored as
+// stage_key='__global__', status_key=''), the resolver should use it
+// as a final fallback when neither a per-LS row nor a per-stage default
+// row exists for the contact's stage.
+{
+  const map = {
+    'sales|hot':   'Book appointment',
+    '__global__|': 'Schedule a call',
+    // No 'sales|' per-stage default
+  };
+  assertEqual(
+    '11a. No per-stage default, no lead status → uses __global__ fallback',
+    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    'Schedule a call',
+  );
+  assertEqual(
+    '11b. No per-stage default, unknown LS key → uses __global__ fallback',
+    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'warm', undefined, undefined),
+    'Schedule a call',
+  );
+}
+
+// ── 12. Per-stage default takes priority over __global__ fallback ──────────────
+{
+  const map = {
+    'sales|':      'Stage default',
+    '__global__|': 'Global default',
+  };
+  assertEqual(
+    '12. Per-stage default wins over __global__ when both present',
+    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    'Stage default',
+  );
+  assertEqual(
+    '12b. Per-stage default wins when falling back from missing per-LS row',
+    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'new_lead', undefined, undefined),
+    'Stage default',
+  );
+}
+
+// ── 13. __global__ fallback absent too → returns '' ───────────────────────────
+{
+  const map = {
+    'sales|hot': 'Book appointment',
+    // No 'sales|', no '__global__|'
+  };
+  assertEqual(
+    '13. No per-stage default and no __global__ row → returns empty string',
+    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    '',
+  );
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} checks: ${passed} passed, ${failed} failed\n`);

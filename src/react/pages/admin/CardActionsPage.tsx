@@ -96,8 +96,9 @@ function buildModel(
   }
 
   // Single global "No lead status" row.
-  // Write sentinel: stage_key='__global__', status_key='' (follow-up #2457 will wire runtime resolution).
+  // Write sentinel: stage_key='__global__', status_key=''.
   // Read: prefer '__global__' (new saves), fall back to 'sales' (legacy null-row data).
+  // Runtime resolver now falls back to '__global__|' when no per-stage default row is found.
   const globalNullLabel = labelByKey['__global__|'] || labelByKey['sales|'] || '';
   const globalNull: StatusModel = {
     key: '__NULL__', label: 'No lead status', shorthand: '',

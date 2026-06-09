@@ -5469,8 +5469,13 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
   const { stage_key, status_key, label } = _normaliseStageActionInput(
     req.body?.stage_key, req.body?.status_key, req.body?.label
   );
-  if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
+  const isGlobal = stage_key === '__global__';
+  if (!stage_key || (!isGlobal && !STAGE_ACTION_STAGE_KEYS.has(stage_key))) {
     return res.status(400).json({ error: 'stage_key must be a valid pipeline stage key.' });
+  }
+  // The __global__ sentinel only supports status_key='' (the "No lead status" row).
+  if (isGlobal && status_key !== '') {
+    return res.status(400).json({ error: 'The __global__ stage only supports an empty status_key.' });
   }
   // An empty `label` is allowed and means "admin explicitly cleared this
   // per-LS row" — the row is still inserted so the client can distinguish
@@ -5505,7 +5510,7 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
   // we translate back to ''.
   const rawStatus  = String(req.params.status_key || '');
   const status_key = rawStatus === '_EMPTY_' ? '' : rawStatus.toLowerCase();
-  if (!stage_key || !STAGE_ACTION_STAGE_KEYS.has(stage_key)) {
+  if (!stage_key || (stage_key !== '__global__' && !STAGE_ACTION_STAGE_KEYS.has(stage_key))) {
     return res.status(400).json({ error: 'Invalid stage_key.' });
   }
   try {
