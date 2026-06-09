@@ -22,12 +22,12 @@ export const TAB_GROUPS: TabGroup[] = [
   {
     id: 'configuration',
     label: 'Configuration',
-    tabIds: ['cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'emailtemplates', 'offline'],
+    tabIds: ['cardactions', 'actionhandlers', 'designvisit', 'workshop', 'emailtemplates'],
   },
   {
     id: 'developer',
     label: 'Developer',
-    tabIds: ['settings', 'devenv'],
+    tabIds: ['settings', 'devenv', 'search', 'offline'],
   },
 ];
 

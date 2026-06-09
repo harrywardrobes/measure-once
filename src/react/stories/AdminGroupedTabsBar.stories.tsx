@@ -24,14 +24,15 @@ const ALL_TABS: LegacyTab[] = [
   { id: 'cardactions',    label: 'Card Actions',        hidden: false },
   { id: 'actionhandlers', label: 'Action Handlers',     hidden: false },
   { id: 'designvisit',    label: 'Design Visit',        hidden: false },
-  { id: 'search',         label: 'Search',              hidden: false },
   { id: 'workshop',       label: 'Workshop',            hidden: false },
   { id: 'settings',       label: 'Settings',            hidden: false },
   { id: 'devenv',         label: 'Dev Environment',     hidden: false },
+  { id: 'search',         label: 'Search',              hidden: false },
+  { id: 'offline',        label: 'Offline support',     hidden: false },
 ];
 
 const TABS_DEV_HIDDEN: LegacyTab[] = ALL_TABS.map((t) =>
-  t.id === 'devenv' || t.id === 'settings' ? { ...t, hidden: true } : t,
+  ['devenv', 'settings', 'search', 'offline'].includes(t.id) ? { ...t, hidden: true } : t,
 );
 
 const TABS_WITH_BADGES: LegacyTab[] = ALL_TABS.map((t) => {
