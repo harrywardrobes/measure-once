@@ -417,8 +417,12 @@ export function SettingsPage() {
   const confirmImport = useCallback(async () => {
     setImportConfirming(true);
     try {
-      const data = await POST<{ upserted: number; skipped: number }>('/api/admin/hubspot-lead-statuses/import', { options: importOptions });
-      showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot and pushed options back`);
+      const data = await POST<{ upserted: number; skipped: number; syncError: boolean }>('/api/admin/hubspot-lead-statuses/import', { options: importOptions });
+      if (data.syncError) {
+        showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot — HubSpot push failed, try re-syncing manually`, true);
+      } else {
+        showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot and pushed options back`);
+      }
       setImportOpen(false);
       await fetchStatuses();
       fetchHealthData();

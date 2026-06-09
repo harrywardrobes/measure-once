@@ -4677,7 +4677,7 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
   const raw = req.body?.options;
   if (!Array.isArray(raw)) return res.status(400).json({ error: 'options array is required.' });
   const options = raw.filter(o => !o.hidden);
-  if (!options.length) return res.json({ upserted: 0, skipped: 0 });
+  if (!options.length) return res.json({ upserted: 0, skipped: 0, syncError: false });
   let upserted = 0, skipped = 0;
   try {
     for (const opt of options) {
@@ -4697,8 +4697,17 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     _invalidateProjectContactsCache();
-    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed after import:'));
-    res.json({ upserted, skipped });
+    let syncError = false;
+    try {
+      await Promise.race([
+        syncLeadStatusesToHubSpot(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('sync timeout')), 10000)),
+      ]);
+    } catch (e) {
+      syncError = true;
+      logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed after import:');
+    }
+    res.json({ upserted, skipped, syncError });
   } catch (e) {
     logger.error({ err: e.message }, 'POST /api/admin/hubspot-lead-statuses/import error:');
     res.status(500).json({ error: 'Could not import lead statuses.' });
