@@ -418,7 +418,7 @@ export function SettingsPage() {
     setImportConfirming(true);
     try {
       const data = await POST<{ upserted: number; skipped: number }>('/api/admin/hubspot-lead-statuses/import', { options: importOptions });
-      showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot`);
+      showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot and pushed options back`);
       setImportOpen(false);
       await fetchStatuses();
       fetchHealthData();

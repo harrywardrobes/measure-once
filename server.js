@@ -4697,6 +4697,7 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
     _invalidateProjectContactsCache();
+    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed after import:'));
     res.json({ upserted, skipped });
   } catch (e) {
     logger.error({ err: e.message }, 'POST /api/admin/hubspot-lead-statuses/import error:');
