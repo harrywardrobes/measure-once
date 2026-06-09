@@ -30,6 +30,14 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import TuneIcon from '@mui/icons-material/Tune';
 import CodeIcon from '@mui/icons-material/Code';
 import HubIcon from '@mui/icons-material/Hub';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import LockIcon from '@mui/icons-material/Lock';
+import HistoryIcon from '@mui/icons-material/History';
+import BuildIcon from '@mui/icons-material/Build';
+import DesignServicesIcon from '@mui/icons-material/DesignServices';
+import EmailIcon from '@mui/icons-material/Email';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import WifiOffIcon from '@mui/icons-material/WifiOff';
 
 declare global {
   interface Window {
@@ -68,8 +76,25 @@ const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-group-people',        label: 'Admin · People',        hint: 'Jump to the People group (Alt+1)',        category: 'Admin', icon: <GroupIcon fontSize="small" /> },
   { id: 'go-admin-group-configuration', label: 'Admin · Configuration', hint: 'Jump to the Configuration group (Alt+2)', category: 'Admin', icon: <TuneIcon fontSize="small" /> },
   { id: 'go-admin-group-developer',     label: 'Admin · Developer',     hint: 'Jump to the Developer group (Alt+3)',     category: 'Admin', icon: <CodeIcon fontSize="small" /> },
-  { id: 'go-admin-tab-hubspot',         label: 'Admin · HubSpot',       hint: 'Jump to Configuration → HubSpot',         category: 'Admin', icon: <HubIcon fontSize="small" /> },
+  // People tabs
+  { id: 'go-admin-tab-team',            label: 'Admin · Team',               hint: 'Manage team members and invitations',          category: 'Admin', icon: <GroupIcon fontSize="small" /> },
+  { id: 'go-admin-tab-permissions',     label: 'Admin · Permissions & roles', hint: 'Configure user permissions and roles',         category: 'Admin', icon: <LockIcon fontSize="small" /> },
+  { id: 'go-admin-tab-requests',        label: 'Admin · Pending Requests',    hint: 'Review and approve access requests',           category: 'Admin', icon: <PersonAddIcon fontSize="small" /> },
+  { id: 'go-admin-tab-auditlog',        label: 'Admin · Audit Log',           hint: 'View a log of admin actions',                  category: 'Admin', icon: <HistoryIcon fontSize="small" /> },
+  // Configuration tabs
+  { id: 'go-admin-tab-hubspot',         label: 'Admin · HubSpot',             hint: 'Jump to Configuration → HubSpot',              category: 'Admin', icon: <HubIcon fontSize="small" /> },
+  { id: 'go-admin-tab-stages',          label: 'Admin · Stages',              hint: 'Manage lead and project stages',               category: 'Admin', icon: <AccountTreeIcon fontSize="small" /> },
+  { id: 'go-admin-tab-cardactions',     label: 'Admin · Card Actions',        hint: 'Configure customer card action buttons',       category: 'Admin', icon: <ViewKanbanIcon fontSize="small" /> },
+  { id: 'go-admin-tab-actionhandlers',  label: 'Admin · Action Handlers',     hint: 'Manage action handler types and settings',     category: 'Admin', icon: <BuildIcon fontSize="small" /> },
+  { id: 'go-admin-tab-designvisit',     label: 'Admin · Design Visit',        hint: 'Configure design visit settings',              category: 'Admin', icon: <DesignServicesIcon fontSize="small" /> },
+  { id: 'go-admin-tab-emailtemplates',  label: 'Admin · Email Templates',     hint: 'Edit email templates sent to customers',       category: 'Admin', icon: <EmailIcon fontSize="small" /> },
+  // Developer tabs (filtered out when devMode is off)
+  { id: 'go-admin-tab-settings',        label: 'Admin · Settings',            hint: 'Application settings and configuration',       category: 'Admin', icon: <SettingsIcon fontSize="small" /> },
+  { id: 'go-admin-tab-devenv',          label: 'Admin · Dev Environment',     hint: 'View dev-only features and environment info',  category: 'Admin', icon: <BugReportIcon fontSize="small" /> },
+  { id: 'go-admin-tab-search',          label: 'Admin · Search',              hint: 'Configure search and command palette settings', category: 'Admin', icon: <SearchIcon fontSize="small" /> },
+  { id: 'go-admin-tab-offline',         label: 'Admin · Offline Support',     hint: 'Manage offline mode and cached data',          category: 'Admin', icon: <WifiOffIcon fontSize="small" /> },
 ];
+
 
 function contactName(c: { properties?: { firstname?: string; lastname?: string } }): string {
   const first = c.properties?.firstname || '';
@@ -151,10 +176,20 @@ function ResultItem({ icon, avatar, label, sub, category, onClick, itemRef }: Re
   );
 }
 
+// Tab action IDs that belong to the Developer group in the admin panel.
+const DEVELOPER_TAB_ACTION_IDS = new Set([
+  'go-admin-tab-settings',
+  'go-admin-tab-devenv',
+  'go-admin-tab-search',
+  'go-admin-tab-offline',
+]);
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [settings, setSettings] = useState<SearchSettings | null>(null);
+  // null = not yet fetched; true = dev environment; false = production
+  const [isDevelopment, setIsDevelopment] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { invoices: qbInvoices, loading: invoicesLoading } = useQBInvoices();
@@ -168,6 +203,18 @@ export function CommandPalette() {
       setSettings(data);
     });
   }, [settings]);
+
+  useEffect(() => {
+    if (!isAdmin || isDevelopment !== null) return;
+    fetch('/api/admin/server-env', { headers: { Accept: 'application/json' } })
+      .then(r => (r.ok ? r.json() : null))
+      .then((data: { isDevelopment?: boolean } | null) => {
+        if (data && typeof data.isDevelopment === 'boolean') {
+          setIsDevelopment(data.isDevelopment);
+        }
+      })
+      .catch(() => {});
+  }, [isAdmin, isDevelopment]);
 
   const doOpen = useCallback(() => {
     triggerQBLoad();
@@ -197,6 +244,19 @@ export function CommandPalette() {
       }
     };
 
+    const adminTabNav = (tabId: string, groupId: string) => {
+      doClose();
+      if (typeof window.adminSwitchToTab === 'function') {
+        window.adminSwitchToTab(tabId);
+      } else {
+        try {
+          localStorage.setItem('adminActiveGroup', groupId);
+          localStorage.setItem('adminActiveTab', tabId);
+        } catch (_) {}
+        location.href = '/admin';
+      }
+    };
+
     window._cpRun = {
       'new-customer': () => {
         doClose();
@@ -211,18 +271,23 @@ export function CommandPalette() {
       'go-admin-group-people':        () => adminGroupNav('people'),
       'go-admin-group-configuration': () => adminGroupNav('configuration'),
       'go-admin-group-developer':     () => adminGroupNav('developer'),
-      'go-admin-tab-hubspot': () => {
-        doClose();
-        if (typeof window.adminSwitchToTab === 'function') {
-          window.adminSwitchToTab('hubspot');
-        } else {
-          try {
-            localStorage.setItem('adminActiveGroup', 'configuration');
-            localStorage.setItem('adminActiveTab', 'hubspot');
-          } catch (_) {}
-          location.href = '/admin';
-        }
-      },
+      // People tabs
+      'go-admin-tab-team':            () => adminTabNav('team',           'people'),
+      'go-admin-tab-permissions':     () => adminTabNav('permissions',    'people'),
+      'go-admin-tab-requests':        () => adminTabNav('requests',       'people'),
+      'go-admin-tab-auditlog':        () => adminTabNav('auditlog',       'people'),
+      // Configuration tabs
+      'go-admin-tab-hubspot':         () => adminTabNav('hubspot',        'configuration'),
+      'go-admin-tab-stages':          () => adminTabNav('stages',         'configuration'),
+      'go-admin-tab-cardactions':     () => adminTabNav('cardactions',    'configuration'),
+      'go-admin-tab-actionhandlers':  () => adminTabNav('actionhandlers', 'configuration'),
+      'go-admin-tab-designvisit':     () => adminTabNav('designvisit',    'configuration'),
+      'go-admin-tab-emailtemplates':  () => adminTabNav('emailtemplates', 'configuration'),
+      // Developer tabs
+      'go-admin-tab-settings':        () => adminTabNav('settings',       'developer'),
+      'go-admin-tab-devenv':          () => adminTabNav('devenv',         'developer'),
+      'go-admin-tab-search':          () => adminTabNav('search',         'developer'),
+      'go-admin-tab-offline':         () => adminTabNav('offline',        'developer'),
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -302,9 +367,33 @@ export function CommandPalette() {
       }).slice(0, 5)
     : [];
 
+  // Determine whether an admin-tab action should appear in the palette.
+  //
+  // Two-stage check:
+  //   1. If the legacy .tabs DOM is present (we're on /admin), use the actual
+  //      hidden state of the tab button — the same source AdminGroupedTabsBar
+  //      reads, so command palette and tab bar are always in sync.
+  //   2. When the admin DOM is absent (other pages), apply the environment
+  //      policy: developer-group tabs are only shown in non-production
+  //      environments (isDevelopment=true). Non-developer admin tabs are
+  //      always allowed — navigating to /admin will apply real visibility.
+  const isAdminTabVisible = (actionId: string): boolean => {
+    if (!actionId.startsWith('go-admin-tab-')) return true;
+    const tabId = actionId.replace('go-admin-tab-', '');
+    const btn = document.querySelector<HTMLElement>(`.tabs .tab-btn[data-tab="${tabId}"]`);
+    if (btn) return !btn.hidden; // On admin page — use real DOM state
+    // Off admin page: apply environment policy for developer-group tabs.
+    if (DEVELOPER_TAB_ACTION_IDS.has(actionId)) {
+      return isDevelopment !== false; // hide when explicitly production (false)
+    }
+    return true;
+  };
+
   const filteredActions = q
-    ? activeActions.filter(a => a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q))
-    : activeActions;
+    ? activeActions.filter(a =>
+        isAdminTabVisible(a.id) &&
+        (a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q)))
+    : activeActions.filter(a => isAdminTabVisible(a.id));
 
   let recentCustomers: Array<{ id: string; name: string; company?: string }> = [];
   if (!q) {
