@@ -93,6 +93,14 @@ export function RoomsTabs({
     try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
   }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved, onRoomSaveError]);
 
+  const changeInstallDate = useCallback(async (field: 'installStart' | 'installFinish', value: string) => {
+    if (!room) return;
+    const updated = { ...room, [field]: value || null };
+    const next = rooms.map((r, i) => i === selectedRoomIdx ? updated : r);
+    onRoomsChange(next);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
+  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved, onRoomSaveError]);
+
   const addComment = useCallback(async () => {
     const text = draftComment.trim();
     if (!text) return;
@@ -316,11 +324,32 @@ export function RoomsTabs({
                   {stageLabel}
                 </Typography>
               )}
-              {installLine && (
+              {!isViewer ? (
+                <>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'var(--ink-3)', fontWeight: 500 }}>Install:</Typography>
+                  <input
+                    type="date"
+                    title="Install start date"
+                    aria-label="Install start date"
+                    value={installStart || ''}
+                    onChange={e => changeInstallDate('installStart', e.target.value)}
+                    className="border rounded px-2 py-1 text-xs"
+                  />
+                  <Typography sx={{ fontSize: '0.75rem', color: 'var(--ink-4)' }}>→</Typography>
+                  <input
+                    type="date"
+                    title="Install finish date"
+                    aria-label="Install finish date"
+                    value={installFinish || ''}
+                    onChange={e => changeInstallDate('installFinish', e.target.value)}
+                    className="border rounded px-2 py-1 text-xs"
+                  />
+                </>
+              ) : installLine ? (
                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--ink-4)', ml: 0.5 }}>
                   Install: {installLine}
                 </Typography>
-              )}
+              ) : null}
             </Box>
 
             <div id="comments-section" className="mb-4">
