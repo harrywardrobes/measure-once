@@ -21,6 +21,7 @@ interface Props {
   onSave: (rooms: Room[], notes: string) => void | Promise<void>;
   onNotesSaved?: () => void;
   onRoomSaved?: () => void;
+  onInstallDateSaved?: () => void;
   onCommentSaved?: () => void;
   onRoomSaveError?: () => void;
   onCommentSaveError?: () => void;
@@ -39,6 +40,7 @@ export function RoomsTabs({
   onSave,
   onNotesSaved,
   onRoomSaved,
+  onInstallDateSaved,
   onCommentSaved,
   onRoomSaveError,
   onCommentSaveError,
@@ -98,8 +100,8 @@ export function RoomsTabs({
     const updated = { ...room, [field]: value || null };
     const next = rooms.map((r, i) => i === selectedRoomIdx ? updated : r);
     onRoomsChange(next);
-    try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
-  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved, onRoomSaveError]);
+    try { await onSave(next, notes); onInstallDateSaved?.(); } catch { onRoomSaveError?.(); }
+  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onInstallDateSaved, onRoomSaveError]);
 
   const addComment = useCallback(async () => {
     const text = draftComment.trim();

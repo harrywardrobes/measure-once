@@ -793,6 +793,7 @@ export function CustomerDetailPage() {
               onSave={saveRoomsAndNotes}
               onNotesSaved={() => setToast({ msg: 'Notes saved' })}
               onRoomSaved={() => setToast({ msg: 'Saved' })}
+              onInstallDateSaved={() => setToast({ msg: 'Install date updated' })}
               onCommentSaved={() => setToast({ msg: 'Comment saved' })}
               onRoomSaveError={() => setToast({ msg: 'Failed to save — please try again', error: true })}
               onCommentSaveError={() => setToast({ msg: 'Failed to save comment — please try again', error: true })}
