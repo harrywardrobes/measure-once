@@ -282,7 +282,9 @@ export function CardActionsPage() {
 
   useEffect(() => {
     const onWinLsChanged = () => fetchAll();
+    const onWinAhChanged = () => fetchAll();
     window.addEventListener('lead_statuses_changed', onWinLsChanged);
+    window.addEventListener('card_action_handlers_changed', onWinAhChanged);
 
     let bc1: BroadcastChannel | undefined;
     let bc2: BroadcastChannel | undefined;
@@ -296,6 +298,7 @@ export function CardActionsPage() {
     }
     return () => {
       window.removeEventListener('lead_statuses_changed', onWinLsChanged);
+      window.removeEventListener('card_action_handlers_changed', onWinAhChanged);
       try { bc1?.close(); bc2?.close(); } catch { /* ignore */ }
     };
   }, [fetchAll]);

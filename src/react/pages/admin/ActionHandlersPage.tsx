@@ -300,6 +300,7 @@ async function _reloadAndBroadcast() {
   try {
     new BroadcastChannel('card_action_handlers_changed').postMessage({ ts: Date.now(), src: _nonce });
   } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent('card_action_handlers_changed'));
 }
 
 function _flashResolvedBadge(slot: Partial<ActionSlot>): void {
