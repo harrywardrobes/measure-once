@@ -157,7 +157,6 @@
         <button class="tab-btn"        data-tab="actionhandlers" onclick="switchTab('actionhandlers')">Action handlers</button>
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit')">Design visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
-        <button class="tab-btn"        data-tab="workshop"    onclick="switchTab('workshop')">Workshop</button>
         <button class="tab-btn"        data-tab="emailtemplates" onclick="switchTab('emailtemplates')">Email templates</button>
         <button class="tab-btn"        data-tab="devenv"      onclick="switchTab('devenv')" id="tab-btn-devenv" hidden>Dev environment</button>
         <button class="tab-btn"        data-tab="offline"     onclick="switchTab('offline')">Offline support</button>
@@ -195,8 +194,6 @@
       <!-- SEARCH SETTINGS — React island (src/react/pages/SearchSettingsPage.tsx). -->
       <div class="tab-panel" id="tab-search"></div>
 
-      <!-- WORKSHOP — React island (src/react/pages/WorkshopSettingsPage.tsx). -->
-      <div class="tab-panel" id="tab-workshop"></div>
 
       <!-- EMAIL TEMPLATES — React island (src/react/pages/admin/EmailTemplatesPage.tsx). -->
       <div class="tab-panel" id="tab-emailtemplates"></div>
@@ -238,7 +235,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'emailtemplates', 'devenv', 'offline'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'emailtemplates', 'devenv', 'offline'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);

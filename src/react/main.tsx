@@ -50,7 +50,6 @@ const SetPasswordPage    = React.lazy(() => import('./pages/auth/SetPasswordPage
 const OnboardingPage     = React.lazy(() => import('./pages/auth/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m => ({ default: m.TradesPage })));
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
-const WorkshopSettingsPage = React.lazy(() => import('./pages/WorkshopSettingsPage').then(m => ({ default: m.WorkshopSettingsPage })));
 const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
 const HomePage           = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
@@ -176,7 +175,6 @@ const MOUNTS: Array<{
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
   { id: 'admin-grouped-tabs-mount', render: () => <AdminGroupedTabsBar /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
-  { id: 'tab-workshop',         render: () => <WorkshopSettingsPage /> },
   { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
   { id: 'tab-team',             render: () => <AdminTeamPage />, fallback: <AdminTeamPageSkeleton /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
@@ -245,7 +243,7 @@ function mount() {
   if (mountedAny) return;
 
   // No mount points exist yet — admin.html renders #tab-search /
-  // #tab-workshop into #page asynchronously after its data fetches resolve,
+  // other tab panels into #page asynchronously after its data fetches resolve,
   // then calls window.__reactIslandMount() synchronously right after setting
   // #page.innerHTML so the React panels render in the same tick.
   // Nothing else to do here.
