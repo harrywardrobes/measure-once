@@ -3,15 +3,17 @@
  * scripts/check-lead-status-keys.mjs
  *
  * Static lint: verifies that `HARDCODED_LEAD_STATUS_KEYS` in server.js stays
- * in sync with every literal `assertLeadStatusKey('KEY')` call-site in
- * production source files.
+ * in sync with every literal `assertLeadStatusKey('KEY')` call-site AND every
+ * inline `hs_lead_status: 'KEY'` object-literal value in production source
+ * files.
  *
  * Two checks are performed:
  *
- *   FORWARD — Every literal string passed to `assertLeadStatusKey()` in
- *   production code must have a matching entry in HARDCODED_LEAD_STATUS_KEYS.
- *   Catches the case where a developer adds a new assertLeadStatusKey call
- *   without updating the list.
+ *   FORWARD — Every literal string passed to `assertLeadStatusKey()` OR used
+ *   as an inline `hs_lead_status: 'KEY'` value in production code must have a
+ *   matching entry in HARDCODED_LEAD_STATUS_KEYS.  Catches the case where a
+ *   developer adds a new assertLeadStatusKey call or a new hs_lead_status
+ *   object literal without updating the list.
  *
  *   REVERSE — Every key in HARDCODED_LEAD_STATUS_KEYS must appear as a string
  *   literal somewhere in production source code outside of the list definition
@@ -142,6 +144,28 @@ function findLiteralCallKeys(files) {
   return found;
 }
 
+// ─── Find inline hs_lead_status: 'KEY' object-literal values ─────────────────
+// Catches hardcoded keys set directly in HubSpot mutation objects, e.g.:
+//   { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: '...' }
+// These are valid hardcoded uses that HARDCODED_LEAD_STATUS_KEYS must track,
+// but they are invisible to the assertLeadStatusKey-only forward check.
+
+function findInlineObjectKeys(files) {
+  const found = new Map(); // key → [file, ...]
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    // Match `hs_lead_status: 'KEY'` or `hs_lead_status: "KEY"` where KEY is
+    // an uppercase hs_lead_status value.  Lowercase or mixed-case values
+    // (property names, filter strings) won't match [A-Z0-9_]+.
+    for (const m of src.matchAll(/hs_lead_status:\s*['"]([A-Z0-9_]+)['"]/g)) {
+      const key = m[1];
+      if (!found.has(key)) found.set(key, []);
+      found.get(key).push(relative(ROOT, file));
+    }
+  }
+  return found;
+}
+
 // ─── Find any string-literal occurrence of a key in production files ─────────
 // Used for the REVERSE check: does the key appear in code outside the list?
 
@@ -165,23 +189,38 @@ const { keys: listKeys } = extractListKeys(serverJsPath);
 const allFiles = collectSourceFiles(ROOT);
 
 const callSiteKeys = findLiteralCallKeys(allFiles);
+const inlineObjectKeys = findInlineObjectKeys(allFiles);
+
+// Merge both sources into a single map for the forward check.
+// Values are deduplicated file lists per key.
+const allForwardKeys = new Map(callSiteKeys);
+for (const [key, files] of inlineObjectKeys) {
+  if (!allForwardKeys.has(key)) {
+    allForwardKeys.set(key, files);
+  } else {
+    // Merge file lists, deduplicating entries.
+    const merged = [...new Set([...allForwardKeys.get(key), ...files])];
+    allForwardKeys.set(key, merged);
+  }
+}
 
 let failed = false;
 
 // ── FORWARD CHECK ─────────────────────────────────────────────────────────────
-// Every literal assertLeadStatusKey('KEY') → must be in HARDCODED_LEAD_STATUS_KEYS
+// Every literal assertLeadStatusKey('KEY') call AND every inline
+// `hs_lead_status: 'KEY'` object value → must be in HARDCODED_LEAD_STATUS_KEYS
 
-const forwardMissing = [...callSiteKeys.keys()].filter((k) => !listKeys.has(k)).sort();
+const forwardMissing = [...allForwardKeys.keys()].filter((k) => !listKeys.has(k)).sort();
 
 if (forwardMissing.length > 0) {
   failed = true;
   console.error(
     `❌  lead-status-keys: ${forwardMissing.length} ` +
-    `${forwardMissing.length === 1 ? 'key' : 'keys'} passed to assertLeadStatusKey() ` +
-    `as a literal but missing from HARDCODED_LEAD_STATUS_KEYS in server.js:\n`,
+    `${forwardMissing.length === 1 ? 'key' : 'keys'} used as a hardcoded hs_lead_status ` +
+    `value but missing from HARDCODED_LEAD_STATUS_KEYS in server.js:\n`,
   );
   for (const key of forwardMissing) {
-    const files = callSiteKeys.get(key).join(', ');
+    const files = allForwardKeys.get(key).join(', ');
     console.error(`   - '${key}'  (in ${files})`);
   }
   console.error(
@@ -230,11 +269,14 @@ if (reverseMissing.length > 0) {
 if (!failed) {
   const listCount = listKeys.size;
   const callCount = callSiteKeys.size;
+  const inlineCount = inlineObjectKeys.size;
   console.log(
     `✅  lead-status-keys: ${listCount} ${listCount === 1 ? 'key' : 'keys'} in ` +
     `HARDCODED_LEAD_STATUS_KEYS; ` +
     `${callCount} literal assertLeadStatusKey() ` +
-    `${callCount === 1 ? 'call-site key' : 'call-site keys'} all present in list; ` +
+    `${callCount === 1 ? 'call-site key' : 'call-site keys'} + ` +
+    `${inlineCount} inline hs_lead_status object ` +
+    `${inlineCount === 1 ? 'key' : 'keys'} all present in list; ` +
     `all list keys referenced in production code`,
   );
   process.exit(0);
