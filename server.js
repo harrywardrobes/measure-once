@@ -67,6 +67,7 @@ app.use('/__mockup', (req, res) => {
 // signature verification. A separate express.raw() middleware is applied
 // inline to this single route only.
 const _hsWebhookSseClients = new Set();
+const _clearInProgress = new Set(); // guard against concurrent orphaned-substatus clear jobs for the same deleted key
 // Per-user connection tracking for SSE abuse prevention.
 // Maps userId -> Set of active response objects.
 const _hsWebhookSseByUser = new Map();
@@ -5005,7 +5006,12 @@ async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId
 // it as hs_lead_status AND have a hw_lead_substatus set, and clear the stale
 // substatus value.  Runs fire-and-forget so it never blocks the DELETE response.
 async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
+  if (_clearInProgress.has(deletedKey)) {
+    logger.info(`[clear-orphaned-substatuses key=${deletedKey}] already in progress — skipping duplicate invocation`);
+    return;
+  }
   if (!getCredential('access_token')) return;
+  _clearInProgress.add(deletedKey);
   const label = `[clear-orphaned-substatuses key=${deletedKey}]`;
   try {
     let cleared = 0;
@@ -5060,6 +5066,8 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
       contactId: null,
       errorMessage: errMsg,
     });
+  } finally {
+    _clearInProgress.delete(deletedKey);
   }
 }
 
