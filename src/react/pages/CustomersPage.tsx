@@ -883,7 +883,7 @@ export function CustomersPage(): React.ReactElement {
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
-  const [customersPageSize, setCustomersPageSize] = React.useState<number | undefined>(undefined);
+  const [customersPageSize, setCustomersPageSize] = React.useState<number>(PAGINATED_CONTACTS_PAGE_LIMIT);
 
   React.useEffect(() => {
     fetch('/api/page-filter-config', { headers: { Accept: 'application/json' } })
@@ -1080,7 +1080,15 @@ export function CustomersPage(): React.ReactElement {
   }, [page]);
 
   // Debounce the search input.
+  // Skip the first run (initial mount) so the debounce does not call
+  // setPage(1) unconditionally 250 ms after load — that would reset the page
+  // to 1 if the user (or a test) navigated to page 2 in the first 250 ms.
+  const searchDebounceInitialRef = React.useRef(true);
   React.useEffect(() => {
+    if (searchDebounceInitialRef.current) {
+      searchDebounceInitialRef.current = false;
+      return;
+    }
     const h = setTimeout(() => {
       setSearch(searchInput.trim());
       setPage(1);

@@ -32,6 +32,10 @@ export interface StageTabGroupProps {
  *
  * This is the canonical tab implementation shared by CustomersPage and
  * ProjectsPage. Pass the STAGE_COLORS map (or a subset) as `stageColors`.
+ *
+ * Selection is handled via `onClick` on each button (not via the group's
+ * `onChange`) so that clicking the already-active tab still fires the handler
+ * — important for filter-change side-effects such as resetting the page to 1.
  */
 export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGroupProps) {
   return (
@@ -39,9 +43,6 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
       size="small"
       exclusive
       value={value}
-      onChange={(_, v: string | null) => {
-        if (v !== null) onChange(v);
-      }}
       aria-label="Stage filter"
       sx={{ flexWrap: 'wrap' }}
     >
@@ -54,7 +55,9 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
           <ToggleButton
             key={t.key}
             data-testid={`stage-filter-tab-${t.key}`}
+            data-tab-key={t.key}
             value={t.key}
+            onClick={() => onChange(t.key)}
             sx={
               selected
                 ? {
