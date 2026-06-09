@@ -187,6 +187,67 @@ function findInlineObjectKeys(files) {
   return found;
 }
 
+// ─── Build an index of TypeScript enum / const-object string values ──────────
+// Scans all source files for:
+//   enum LeadStatus { SURVEY_SCHEDULED = 'SURVEY_SCHEDULED', … }
+//   const LEAD_STATUS = { SURVEY_SCHEDULED: 'SURVEY_SCHEDULED', … }
+// Returns a Map from "EnumOrConstName.MEMBER" → 'STRING_VALUE'.
+
+function buildEnumConstIndex(files) {
+  const index = new Map();
+
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+
+    // TypeScript string enum: enum Name { MEMBER = 'VALUE', … }
+    // The [\s\S]*? is non-greedy; this relies on the closing } being the first
+    // unescaped } after the opening {.  That works for all enum bodies seen in
+    // this codebase; deeply nested generic types in const bodies may need the
+    // extended const-object pattern below instead.
+    for (const em of src.matchAll(/\benum\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\{([\s\S]*?)\}/g)) {
+      const name = em[1];
+      const body = em[2];
+      for (const mm of body.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*[`'"]([A-Z0-9_]+)[`'"]/g)) {
+        index.set(`${name}.${mm[1]}`, mm[2]);
+      }
+    }
+
+    // const object (possibly typed): const Name[: Type] = { MEMBER: 'VALUE', … }
+    for (const cm of src.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:[^=]+)?\s*=\s*\{([\s\S]*?)\}/g)) {
+      const name = cm[1];
+      const body = cm[2];
+      for (const mm of body.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]*)\s*:\s*[`'"]([A-Z0-9_]+)[`'"]/g)) {
+        index.set(`${name}.${mm[1]}`, mm[2]);
+      }
+    }
+  }
+
+  return index;
+}
+
+// ─── Find dotted enum/const hs_lead_status references ────────────────────────
+// Catches patterns like:
+//   { hs_lead_status: LeadStatus.SURVEY_SCHEDULED }
+//   { hs_lead_status: LEAD_STATUS.SURVEY_SCHEDULED }
+// String literals (already handled by findInlineObjectKeys) start with a quote
+// character and therefore cannot match the Identifier.Identifier pattern below.
+// Plain type-annotation forms (e.g. `hs_lead_status?: LeadStatus`) also do not
+// match because they use `?:` rather than `:`.
+
+function findDottedEnumUsages(files) {
+  // Matches: hs_lead_status: SomeName.MEMBER_NAME
+  // Requires a dot so bare identifiers (dynamic variables) are left alone.
+  const re = /hs_lead_status:\s*([A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*)/g;
+  const usages = []; // { ref, file }
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    for (const m of src.matchAll(re)) {
+      usages.push({ ref: m[1], file: relative(ROOT, file) });
+    }
+  }
+  return usages;
+}
+
 // ─── Find any string-literal occurrence of a key in production files ─────────
 // Used for the REVERSE check: does the key appear in code outside the list?
 
@@ -212,24 +273,74 @@ const allFiles = collectSourceFiles(ROOT);
 const callSiteKeys = findLiteralCallKeys(allFiles);
 const inlineObjectKeys = findInlineObjectKeys(allFiles);
 
-// Merge both sources into a single map for the forward check.
-// Values are deduplicated file lists per key.
-const allForwardKeys = new Map(callSiteKeys);
-for (const [key, files] of inlineObjectKeys) {
-  if (!allForwardKeys.has(key)) {
-    allForwardKeys.set(key, files);
+// ── Enum / const resolution ───────────────────────────────────────────────────
+// Build a lookup table of all TypeScript enum-member and const-object string
+// values found across the source tree, then resolve every dotted
+// `hs_lead_status: EnumName.MEMBER` reference to its underlying string value.
+
+const enumConstIndex = buildEnumConstIndex(allFiles);
+const dottedUsages = findDottedEnumUsages(allFiles);
+
+const resolvedEnumKeys = new Map(); // resolved string value → [file, …]
+const unresolvedEnumRefs = [];      // { ref, file } — could not resolve statically
+
+for (const { ref, file } of dottedUsages) {
+  const value = enumConstIndex.get(ref);
+  if (value !== undefined) {
+    if (!resolvedEnumKeys.has(value)) resolvedEnumKeys.set(value, []);
+    if (!resolvedEnumKeys.get(value).includes(file)) {
+      resolvedEnumKeys.get(value).push(file);
+    }
   } else {
-    // Merge file lists, deduplicating entries.
-    const merged = [...new Set([...allForwardKeys.get(key), ...files])];
-    allForwardKeys.set(key, merged);
+    unresolvedEnumRefs.push({ ref, file });
   }
 }
 
+// Merge all forward sources into a single map.
+// Values are deduplicated file lists per key.
+function mergeInto(target, source) {
+  for (const [key, files] of source) {
+    if (!target.has(key)) {
+      target.set(key, [...files]);
+    } else {
+      target.set(key, [...new Set([...target.get(key), ...files])]);
+    }
+  }
+}
+
+const allForwardKeys = new Map(callSiteKeys);
+mergeInto(allForwardKeys, inlineObjectKeys);
+mergeInto(allForwardKeys, resolvedEnumKeys);
+
 let failed = false;
 
+// ── UNRESOLVED ENUM/CONST WARNINGS ───────────────────────────────────────────
+// Emit a warning (not a hard failure) for every dotted hs_lead_status reference
+// whose value could not be determined from the source index.  A human must
+// verify that the referenced constant is either already in
+// HARDCODED_LEAD_STATUS_KEYS or does not represent a hardcoded key.
+
+if (unresolvedEnumRefs.length > 0) {
+  console.warn(
+    `⚠️   lead-status-keys: ${unresolvedEnumRefs.length} ` +
+    `hs_lead_status reference${unresolvedEnumRefs.length === 1 ? '' : 's'} ` +
+    `used a non-literal value that could not be resolved statically — ` +
+    `verify manually that the underlying string is in HARDCODED_LEAD_STATUS_KEYS:\n`,
+  );
+  for (const { ref, file } of unresolvedEnumRefs) {
+    console.warn(`   - ${ref}  (in ${file})`);
+  }
+  console.warn(
+    '\nIf the value is already covered, no action is needed.  ' +
+    'If it is a new key, add a matching { key, source } entry to ' +
+    'HARDCODED_LEAD_STATUS_KEYS in server.js.\n',
+  );
+}
+
 // ── FORWARD CHECK ─────────────────────────────────────────────────────────────
-// Every literal assertLeadStatusKey('KEY') call AND every inline
-// `hs_lead_status: 'KEY'` object value → must be in HARDCODED_LEAD_STATUS_KEYS
+// Every literal assertLeadStatusKey('KEY') call, every inline
+// `hs_lead_status: 'KEY'` object value, AND every resolved enum/const
+// reference → must be in HARDCODED_LEAD_STATUS_KEYS.
 
 const forwardMissing = [...allForwardKeys.keys()].filter((k) => !listKeys.has(k)).sort();
 
@@ -291,14 +402,23 @@ if (!failed) {
   const listCount = listKeys.size;
   const callCount = callSiteKeys.size;
   const inlineCount = inlineObjectKeys.size;
+  const enumCount = resolvedEnumKeys.size;
+  const unresolvedCount = unresolvedEnumRefs.length;
+  const enumSuffix = enumCount > 0
+    ? ` + ${enumCount} resolved enum/const ${enumCount === 1 ? 'key' : 'keys'}`
+    : '';
+  const unresolvedSuffix = unresolvedCount > 0
+    ? `; ${unresolvedCount} unresolved reference${unresolvedCount === 1 ? '' : 's'} warned above`
+    : '';
   console.log(
     `✅  lead-status-keys: ${listCount} ${listCount === 1 ? 'key' : 'keys'} in ` +
     `HARDCODED_LEAD_STATUS_KEYS; ` +
     `${callCount} literal assertLeadStatusKey() ` +
     `${callCount === 1 ? 'call-site key' : 'call-site keys'} + ` +
     `${inlineCount} inline hs_lead_status object ` +
-    `${inlineCount === 1 ? 'key' : 'keys'} all present in list; ` +
-    `all list keys referenced in production code`,
+    `${inlineCount === 1 ? 'key' : 'keys'}` +
+    `${enumSuffix} all present in list; ` +
+    `all list keys referenced in production code${unresolvedSuffix}`,
   );
   process.exit(0);
 }
