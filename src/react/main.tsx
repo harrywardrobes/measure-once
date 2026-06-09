@@ -62,6 +62,7 @@ const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPag
 const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
 const OfflineSupportPage = React.lazy(() => import('./pages/admin/OfflineSupportPage').then(m => ({ default: m.OfflineSupportPage })));
 const EmailTemplatesPage = React.lazy(() => import('./pages/admin/EmailTemplatesPage'));
+const WorkflowPage       = React.lazy(() => import('./pages/admin/WorkflowPage').then(m => ({ default: m.WorkflowPage })));
 const StagesPage         = React.lazy(() => import('./pages/admin/StagesPage').then(m => ({ default: m.StagesPage })));
 const AdminTeamPage      = React.lazy(() => import('./pages/admin/AdminTeamPage').then(m => ({ default: m.AdminTeamPage })));
 const AdminPermissionsPage = React.lazy(() => import('./pages/admin/AdminPermissionsPage').then(m => ({ default: m.AdminPermissionsPage })));
@@ -192,6 +193,7 @@ const MOUNTS: Array<{
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
   { id: 'tab-offline',          render: () => <OfflineSupportPage /> },
   { id: 'tab-emailtemplates',   render: () => <EmailTemplatesPage /> },
+  { id: 'tab-workflow',         render: () => <WorkflowPage /> },
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },

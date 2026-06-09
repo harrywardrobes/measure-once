@@ -22,7 +22,7 @@ export const TAB_GROUPS: TabGroup[] = [
   {
     id: 'configuration',
     label: 'Configuration',
-    tabIds: ['hubspot', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'emailtemplates'],
+    tabIds: ['hubspot', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'emailtemplates', 'workflow'],
   },
   {
     id: 'developer',

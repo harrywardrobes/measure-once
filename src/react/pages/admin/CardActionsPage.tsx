@@ -1,24 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState, lazy, Suspense } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, Box, Button, Card, CardContent, CircularProgress, Collapse, Stack, Typography,
+  Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
   MenuItem, Select, Tooltip,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import MapIcon from '@mui/icons-material/Map';
 import { useToast } from '../../contexts/ToastContext';
 import { STATUS_COLORS } from '../../theme';
 import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
-import type { WorkflowMapNodeData, WMAllStage } from '../../components/WorkflowMapChart';
-import { WorkflowMapDetailPanel } from '../../components/WorkflowMapDetailPanel';
 import { usePageTitle } from '../../hooks/usePageTitle';
-
-const WorkflowMapChart = lazy(() =>
-  import('../../components/WorkflowMapChart').then(m => ({ default: m.WorkflowMapChart })),
-);
-
-const MAP_COLLAPSED_KEY = 'mo:card-actions:map-collapsed';
+import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -30,11 +20,6 @@ const CARD_ACTION_STAGES: Array<{ key: string; label: string; lsStage: string }>
 const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
   CARD_ACTION_STAGES.map(s => [s.lsStage, s.key]),
 );
-
-const HANDLER_TYPE_LABELS: Record<string, string> = {
-  add_design_visit_to_calendar: 'Add design visit to calendar',
-  start_design_visit:           'Start design visit wizard',
-};
 
 // Ordered list of handler types available in the "Default handler type" selector.
 // Shown when an admin wants to pre-configure which handler a new substatus binding
@@ -160,33 +145,51 @@ function HandlerBadges({
     else fn(stageKey, statusKey, null);
   };
 
+  const summaries = matched
+    .map(h => HANDLER_MODAL_SUMMARY[h.type])
+    .filter(Boolean) as Array<{ steps: string; hubspot: string }>;
+
   return (
-    <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}>
-      {matched.map(h => (
-        <span key={h.id} className="ca-handler-badge adm-handler-badge"
-          title={`${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 7px', background: STATUS_COLORS.violet.bg, color: STATUS_COLORS.violet.text,
-            borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
-          }}>
-          <span aria-hidden="true">⚡</span>
-          <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.type)}</span>
+    <span style={{ marginLeft: 6, display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, verticalAlign: 'middle' }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {matched.map(h => {
+          const summary = HANDLER_MODAL_SUMMARY[h.type];
+          const tooltipTitle = summary
+            ? `${HANDLER_TYPE_LABELS[h.type] || h.type}\n${summary.steps}\n${summary.hubspot}`
+            : `${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`;
+          return (
+            <Tooltip key={h.id} title={<span style={{ whiteSpace: 'pre-line' }}>{tooltipTitle}</span>} arrow placement="top">
+              <span className="ca-handler-badge adm-handler-badge"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '1px 7px', background: STATUS_COLORS.violet.bg, color: STATUS_COLORS.violet.text,
+                  borderRadius: 999, fontSize: '.7rem', fontWeight: 600, cursor: 'default',
+                }}>
+                <span aria-hidden="true">⚡</span>
+                <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.type)}</span>
+              </span>
+            </Tooltip>
+          );
+        })}
+        {matched.length > 1 && (
+          <button type="button" className="ca-fix-conflict-btn"
+            title="Multiple handlers bound to this slot — click to resolve"
+            onClick={openFix}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              padding: '1px 8px', marginLeft: 4, background: STATUS_COLORS.warning.bg,
+              color: STATUS_COLORS.warning.text, border: `1px solid ${STATUS_COLORS.warning.border}`,
+              borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
+              lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
+            }}>
+            ⚠ Fix
+          </button>
+        )}
+      </span>
+      {summaries.length > 0 && (
+        <span style={{ fontSize: '.68rem', color: 'var(--neutral-500, #737373)', fontStyle: 'italic', lineHeight: 1.4 }}>
+          {summaries.map(s => s.steps).join(' · ')}
         </span>
-      ))}
-      {matched.length > 1 && (
-        <button type="button" className="ca-fix-conflict-btn"
-          title="Multiple handlers bound to this slot — click to resolve"
-          onClick={openFix}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            padding: '1px 8px', marginLeft: 4, background: STATUS_COLORS.warning.bg,
-            color: STATUS_COLORS.warning.text, border: `1px solid ${STATUS_COLORS.warning.border}`,
-            borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
-            lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
-          }}>
-          ⚠ Fix
-        </button>
       )}
     </span>
   );
@@ -205,19 +208,6 @@ export function CardActionsPage() {
     new Set(CARD_ACTION_STAGES.map(s => s.key)),
   );
 
-  const [mapCollapsed, setMapCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem(MAP_COLLAPSED_KEY) === 'true'; } catch { return false; }
-  });
-  const [detailNode, setDetailNode] = useState<WorkflowMapNodeData | null>(null);
-  const [allStages, setAllStages] = useState<WMAllStage[]>([]);
-
-  const toggleMap = useCallback(() => {
-    setMapCollapsed(prev => {
-      const next = !prev;
-      try { localStorage.setItem(MAP_COLLAPSED_KEY, String(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
   const [newSubRows,    setNewSubRows]    = useState<NewSubRow[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [reloadKey,     setReloadKey]     = useState(0);
@@ -255,13 +245,12 @@ export function CardActionsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [lbl, sta, sub, hdl, wf] = await Promise.all([
+      const [lbl, sta, sub, hdl] = await Promise.all([
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/lead-substatuses'),
         GET('/api/admin/card-action-handlers'),
-        GET('/api/workflow'),
-      ]) as [CALabel[], LeadStatus[], Substatus[], Handler[], { stages?: Record<string, { label: string; statuses?: Array<{ id: string; label: string; hint?: string }> }> } | null];
+      ]) as [CALabel[], LeadStatus[], Substatus[], Handler[]];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
@@ -272,35 +261,6 @@ export function CardActionsPage() {
       setNewSubRows([]);
       setHandlerTypeEdits(new Map());
       setReloadKey(k => k + 1);
-
-      // Build the unified ordered stage list from workflow.json key order.
-      //
-      // Ordering contract: Object.keys(wf.stages) reflects the insertion order
-      // in workflow.json, which is the canonical pipeline sequence. We map each
-      // key to a WMAllStage descriptor — card-action stages (sales / designvisit
-      // / survey) get kind:'card-action' so buildFlowGraph renders their full
-      // lead-status + handler tree; every other stage gets kind:'read-only' and
-      // shows its statuses from the JSON file as informational nodes.
-      // This means a future reorder of stages in workflow.json is automatically
-      // reflected in the Workflow Map without any code change.
-      const cardActionByKey = new Map(CARD_ACTION_STAGES.map(s => [s.key, s]));
-      const wfStages = wf?.stages ?? {};
-      const unified: WMAllStage[] = Object.keys(wfStages).map(key => {
-        const ca = cardActionByKey.get(key);
-        if (ca) {
-          return { kind: 'card-action', key: ca.key, label: ca.label, lsStage: ca.lsStage };
-        }
-        const val = wfStages[key];
-        return {
-          kind: 'read-only',
-          key,
-          label: val.label || key,
-          statuses: Array.isArray(val.statuses)
-            ? val.statuses.map(s => ({ id: s.id, label: s.label, hint: s.hint }))
-            : [],
-        };
-      });
-      setAllStages(unified);
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -581,69 +541,6 @@ export function CardActionsPage() {
 
   return (
     <Stack spacing={2}>
-      {/* ── Workflow Map ────────────────────────────────────────────────── */}
-      <Card variant="outlined">
-        <Box
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 1,
-            px: 2, py: 1.25,
-            borderBottom: mapCollapsed ? 'none' : '1px solid',
-            borderColor: 'divider',
-            cursor: 'pointer',
-            userSelect: 'none',
-            '&:hover': { bgcolor: 'action.hover' },
-          }}
-          onClick={toggleMap}
-          role="button"
-          aria-expanded={!mapCollapsed}
-          aria-controls="workflow-map-body"
-        >
-          <MapIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Workflow Map</Typography>
-            <Typography variant="caption" color="text.secondary">
-              Visual overview of stages, lead statuses, and sub-statuses with their handlers
-            </Typography>
-          </Box>
-          {mapCollapsed ? <ExpandMoreIcon sx={{ color: 'text.secondary' }} /> : <ExpandLessIcon sx={{ color: 'text.secondary' }} />}
-        </Box>
-        <Collapse in={!mapCollapsed} id="workflow-map-body">
-          <Box
-            sx={{
-              height: 680,
-              overflowX: 'auto',
-              overflowY: 'hidden',
-              borderRadius: '0 0 8px 8px',
-            }}
-          >
-            {loading ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 3 }}>
-                <CircularProgress size={16} />
-                <Typography variant="body2" color="text.secondary">Loading workflow map…</Typography>
-              </Box>
-            ) : (
-              <Suspense fallback={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 3 }}>
-                  <CircularProgress size={16} />
-                  <Typography variant="body2" color="text.secondary">Loading chart…</Typography>
-                </Box>
-              }>
-                <WorkflowMapChart
-                  labels={labels}
-                  statuses={statuses}
-                  substatuses={substatuses}
-                  handlers={handlers}
-                  onNodeClick={setDetailNode}
-                  allStages={allStages}
-                />
-              </Suspense>
-            )}
-          </Box>
-        </Collapse>
-      </Card>
-
-      <WorkflowMapDetailPanel node={detailNode} onClose={() => setDetailNode(null)} />
-
       {syncWarning && (
         <Alert
           severity="warning"

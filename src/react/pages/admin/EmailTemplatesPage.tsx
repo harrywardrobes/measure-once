@@ -28,6 +28,7 @@ import {
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import {
   analyzeTemplateTokens,
   MALFORMED_REASON_ORDER,
@@ -635,12 +636,11 @@ export default function EmailTemplatesPage() {
 
   return (
     <Box sx={{ py: 1 }}>
-      <Typography variant="h6" sx={{ mb: 0.5 }}>Email templates</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Edit the subject, body and footer of the emails this app sends. Changes
-        take effect immediately. Templates left unedited use the built-in
-        defaults.
-      </Typography>
+      <Typography variant="h6" sx={{ mb: 1 }}>Email templates</Typography>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Edit the subject, body and footer of the emails this app sends. Changes take effect immediately.
+        Templates left unedited use the built-in defaults. The <strong>Used by</strong> column shows which action handlers send each template.
+      </Alert>
 
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -668,21 +668,44 @@ export default function EmailTemplatesPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {templates.map((t) => (
-                <TableRow key={t.key} hover>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.label}</Typography>
-                    <Typography variant="caption" color="text.secondary">{t.key}</Typography>
-                  </TableCell>
-                  <TableCell>{t.subject}</TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="text.secondary">{formatUpdated(t)}</Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button size="small" onClick={() => setEditing(t)}>Edit</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {templates.map((t) => {
+                const usedByHandlers = Object.entries(HANDLER_EMAIL_TEMPLATES)
+                  .filter(([, keys]) => keys.includes(t.key))
+                  .map(([type]) => ({ type, label: HANDLER_TYPE_LABELS[type] || type }));
+                return (
+                  <TableRow key={t.key} hover>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">{t.key}</Typography>
+                      {usedByHandlers.length > 0 && (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                          {usedByHandlers.map(h => (
+                            <Chip
+                              key={h.type}
+                              label={h.label}
+                              size="small"
+                              sx={{
+                                fontSize: '0.7rem',
+                                height: 20,
+                                bgcolor: 'rgba(124,58,237,0.08)',
+                                color: 'rgb(109,40,217)',
+                                '.MuiChip-label': { px: 0.75 },
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell>{t.subject}</TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">{formatUpdated(t)}</Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button size="small" onClick={() => setEditing(t)}>Edit</Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {templates.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={4}>

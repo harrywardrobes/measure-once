@@ -21,6 +21,7 @@ import {
   Typography,
 } from '@mui/material';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
+import { HANDLER_MODAL_SUMMARY } from '../../utils/handlerMeta';
 
 import {
   DeliveryWindowConfig,
@@ -881,6 +882,72 @@ async function _deleteHandler(id: number): Promise<void> {
 
 // ── Sub-component: handler summary ────────────────────────────────────────────
 
+function HandlerBoundTo({ h }: { h: Handler }) {
+  const summary = HANDLER_MODAL_SUMMARY[h.type];
+  if (!h.bindings || h.bindings.length === 0) {
+    return (
+      <div className="adm-handler-bound-to">
+        <div className="adm-handler-bound-to-head">Bound to:</div>
+        <div className="adm-muted-inline" style={{ fontStyle: 'italic', marginTop: 2 }}>Not bound to any action</div>
+        {summary && (
+          <div className="adm-handler-summary-steps" style={{ marginTop: 4 }}>
+            <span className="adm-muted-inline">Steps:</span> {summary.steps}
+          </div>
+        )}
+        {summary && (
+          <div className="adm-handler-summary-hubspot" style={{ marginTop: 2 }}>
+            <span className="adm-muted-inline">HubSpot:</span> {summary.hubspot}
+          </div>
+        )}
+      </div>
+    );
+  }
+  const chipSx = {
+    height: 20, fontSize: '0.7rem', fontWeight: 600,
+    bgcolor: 'rgba(124,58,237,0.08)', color: 'rgb(109,40,217)',
+    '.MuiChip-label': { px: 0.75 },
+  } as const;
+
+  return (
+    <div className="adm-handler-bound-to">
+      <div className="adm-handler-bound-to-head">Bound to:</div>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+        {h.bindings.map((b, i) => {
+          let chipLabel: string;
+          if (b.substatus_id != null) {
+            const sub = _substatusesRef.current.find(s => Number(s.id) === Number(b.substatus_id));
+            const parentLs = sub ? _statusesRef.current.find(s => String(s.key || '').toLowerCase() === String(sub.status_key || '').toLowerCase()) : null;
+            const stage = String(b.stage_key || '');
+            const lsLabel = parentLs ? (parentLs.label || parentLs.key) : (b.status_key || '?');
+            const subLabel = sub ? (sub.label || sub.substatus_key) : `#${b.substatus_id}`;
+            chipLabel = stage ? `${stage} / ${lsLabel} / ${subLabel}` : `${lsLabel} / ${subLabel}`;
+          } else {
+            const ck = String(b.status_key || '').toLowerCase();
+            const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
+            const stage = String(b.stage_key || '');
+            const lsLabel = ls ? (ls.label || ls.key) : (b.status_key || '—');
+            chipLabel = stage ? `${stage} / ${lsLabel}` : lsLabel;
+          }
+          return <Chip key={i} label={chipLabel} size="small" sx={chipSx} />;
+        })}
+      </Box>
+      {summary && (
+        <div className="adm-handler-summary-steps">
+          <span className="adm-muted-inline">Steps:</span> {summary.steps}
+        </div>
+      )}
+      {summary && (
+        <div className="adm-handler-summary-hubspot">
+          <span className="adm-muted-inline">HubSpot:</span>{' '}
+          {h.type === 'start_design_visit' && h.config?.submittedLeadStatus
+            ? `Sets lead status to in-progress on open; to ${h.config.submittedLeadStatus} on submit`
+            : summary.hubspot}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HandlerSummary({ h }: { h: Handler }) {
   const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
   const actionName = h.config?.action_name ? (
@@ -955,6 +1022,7 @@ function HandlerSummary({ h }: { h: Handler }) {
         {HANDLER_TYPE_DESCRIPTIONS[h.type] || 'No description available for this handler type.'}
       </div>
       {extraRows.length > 0 && <div className="adm-handler-extra">{extraRows}</div>}
+      <HandlerBoundTo h={h} />
     </div>
   );
 }

@@ -88,6 +88,7 @@ const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-tab-actionhandlers',  label: 'Admin · Action Handlers',     hint: 'Manage action handler types and settings',     category: 'Admin', icon: <BuildIcon fontSize="small" /> },
   { id: 'go-admin-tab-designvisit',     label: 'Admin · Design Visit',        hint: 'Configure design visit settings',              category: 'Admin', icon: <DesignServicesIcon fontSize="small" /> },
   { id: 'go-admin-tab-emailtemplates',  label: 'Admin · Email Templates',     hint: 'Edit email templates sent to customers',       category: 'Admin', icon: <EmailIcon fontSize="small" /> },
+  { id: 'go-admin-tab-workflow',        label: 'Admin · Workflow',             hint: 'View workflow — stages, handlers, and email chains', category: 'Admin', icon: <AccountTreeIcon fontSize="small" /> },
   // Developer tabs (filtered out when devMode is off)
   { id: 'go-admin-tab-settings',        label: 'Admin · Settings',            hint: 'Application settings and configuration',       category: 'Admin', icon: <SettingsIcon fontSize="small" /> },
   { id: 'go-admin-tab-devenv',          label: 'Admin · Dev Environment',     hint: 'View dev-only features and environment info',  category: 'Admin', icon: <BugReportIcon fontSize="small" /> },
@@ -283,6 +284,7 @@ export function CommandPalette() {
       'go-admin-tab-actionhandlers':  () => adminTabNav('actionhandlers', 'configuration'),
       'go-admin-tab-designvisit':     () => adminTabNav('designvisit',    'configuration'),
       'go-admin-tab-emailtemplates':  () => adminTabNav('emailtemplates', 'configuration'),
+      'go-admin-tab-workflow':        () => adminTabNav('workflow',        'configuration'),
       // Developer tabs
       'go-admin-tab-settings':        () => adminTabNav('settings',       'developer'),
       'go-admin-tab-devenv':          () => adminTabNav('devenv',         'developer'),
