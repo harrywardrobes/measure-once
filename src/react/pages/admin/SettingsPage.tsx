@@ -249,6 +249,7 @@ export function SettingsPage() {
     usageError: string | null;
     loading: boolean;
     deleting: boolean;
+    deleteError: string | null;
   }
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
 
@@ -526,7 +527,7 @@ export function SettingsPage() {
   }, [newKey, newLabel, newStage, fetchHealthData]);
 
   const deleteStatus = useCallback(async (key: string) => {
-    setDeleteDialog({ open: true, key, usageCount: null, usageError: null, loading: true, deleting: false });
+    setDeleteDialog({ open: true, key, usageCount: null, usageError: null, loading: true, deleting: false, deleteError: null });
     try {
       const data = await GET<{ count: number | null; hubspotAvailable: boolean }>(
         `/api/admin/lead-statuses/${encodeURIComponent(key)}/usage`
@@ -556,8 +557,8 @@ export function SettingsPage() {
       notifyLsChanged();
       fetchHealthData();
     } catch (e) {
-      showToast((e as Error).message || 'Failed to delete status.', true);
-      setDeleteDialog(d => d ? { ...d, deleting: false } : d);
+      const msg = (e as Error).message || 'Failed to delete status.';
+      setDeleteDialog(d => d ? { ...d, deleting: false, deleteError: msg } : d);
     }
   }, [deleteDialog, fetchHealthData]);
 
@@ -928,38 +929,45 @@ export function SettingsPage() {
       >
         <DialogTitle>Delete lead status</DialogTitle>
         <DialogContent dividers>
-          {deleteDialog?.loading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
-              <CircularProgress size={18} />
-              <Typography variant="body2" color="text.secondary">Checking HubSpot contacts…</Typography>
-            </Box>
-          ) : deleteDialog?.usageError ? (
-            <Stack spacing={1.5}>
+          <Stack spacing={1.5}>
+            {deleteDialog?.loading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1 }}>
+                <CircularProgress size={18} />
+                <Typography variant="body2" color="text.secondary">Checking HubSpot contacts…</Typography>
+              </Box>
+            ) : deleteDialog?.usageError ? (
+              <>
+                <Typography variant="body2">
+                  Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+                </Typography>
+                <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
+                  Could not check HubSpot usage ({deleteDialog.usageError}). Proceed with caution.
+                </Alert>
+              </>
+            ) : (deleteDialog?.usageCount ?? 0) > 0 ? (
+              <>
+                <Typography variant="body2">
+                  Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+                </Typography>
+                <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
+                  <strong>{deleteDialog!.usageCount} contact{deleteDialog!.usageCount === 1 ? '' : 's'}</strong> currently
+                  {deleteDialog!.usageCount === 1 ? ' has' : ' have'} this status in HubSpot — deleting it will break their pipeline card until their HubSpot record is updated.
+                </Alert>
+              </>
+            ) : (
               <Typography variant="body2">
                 Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
+                {deleteDialog?.usageCount === 0 && (
+                  <> No HubSpot contacts are currently using this status.</>
+                )}
               </Typography>
-              <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
-                Could not check HubSpot usage ({deleteDialog.usageError}). Proceed with caution.
+            )}
+            {deleteDialog?.deleteError && (
+              <Alert severity="error" sx={{ fontSize: '0.8125rem' }}>
+                {deleteDialog.deleteError}
               </Alert>
-            </Stack>
-          ) : (deleteDialog?.usageCount ?? 0) > 0 ? (
-            <Stack spacing={1.5}>
-              <Typography variant="body2">
-                Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
-              </Typography>
-              <Alert severity="warning" sx={{ fontSize: '0.8125rem' }}>
-                <strong>{deleteDialog!.usageCount} contact{deleteDialog!.usageCount === 1 ? '' : 's'}</strong> currently
-                {deleteDialog!.usageCount === 1 ? ' has' : ' have'} this status in HubSpot — deleting it will break their pipeline card until their HubSpot record is updated.
-              </Alert>
-            </Stack>
-          ) : (
-            <Typography variant="body2">
-              Delete lead status <strong style={{ fontFamily: 'var(--font-mono)' }}>{deleteDialog?.key}</strong>? This cannot be undone.
-              {deleteDialog?.usageCount === 0 && (
-                <> No HubSpot contacts are currently using this status.</>
-              )}
-            </Typography>
-          )}
+            )}
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialog(null)} disabled={deleteDialog?.deleting}>Cancel</Button>
