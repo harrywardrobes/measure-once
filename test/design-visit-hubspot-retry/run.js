@@ -61,6 +61,18 @@ const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'design-vis
 const CONTACT_ID  = 'privtest-dv-hs-retry-contact';
 const findings    = [];
 
+const PROBE_LABELS = [
+  '[DV1] design-visit note creation retry',
+  '[DV2] design-visit lead-status PATCH retry',
+  '[DV3] design-visit note permanent failure',
+  '[DV4] design-visit lead-status permanent failure',
+  '[LD] localdata PATCH retry',
+  '[LD2] localdata PATCH permanent failure',
+  '[RA1] room-assignments fitter PATCH retry',
+  '[RA2] fitter PATCH permanent failure (syncFailed: true body; sub-check RA2.4 verifies the flag)',
+  '[RA3] fitter PATCH happy path',
+];
+
 function record(id, ok, detail) {
   findings.push({ id, ok, detail });
   console.log(`  [${ok ? 'PASS' : 'FAIL'}] ${id} — ${detail}`);
