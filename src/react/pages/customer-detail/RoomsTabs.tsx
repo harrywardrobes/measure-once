@@ -18,8 +18,10 @@ interface Props {
   onRoomsChange: (rooms: Room[]) => void;
   onNotesChange: (notes: string) => void;
   onRoomSelect: (idx: number) => void;
-  onSave: (rooms: Room[], notes: string) => void;
+  onSave: (rooms: Room[], notes: string) => void | Promise<void>;
   onNotesSaved?: () => void;
+  onRoomSaved?: () => void;
+  onCommentSaved?: () => void;
 }
 
 export function RoomsTabs({
@@ -33,6 +35,8 @@ export function RoomsTabs({
   onRoomSelect,
   onSave,
   onNotesSaved,
+  onRoomSaved,
+  onCommentSaved,
 }: Props) {
   const { isViewer, isManager } = usePrivilege();
   const canEdit = isManager;
@@ -47,7 +51,7 @@ export function RoomsTabs({
 
   const todayISO = () => new Date().toISOString().split('T')[0];
 
-  const addRoom = useCallback(() => {
+  const addRoom = useCallback(async () => {
     const name = newRoomName.trim() || `Room ${rooms.length + 1}`;
     const newRoom: Room = {
       room: name,
@@ -61,27 +65,27 @@ export function RoomsTabs({
     onRoomSelect(next.length - 1);
     setNewRoomName('');
     setAddingRoom(false);
-    onSave(next, notes);
-  }, [newRoomName, rooms, notes, onRoomsChange, onRoomSelect, onSave]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
+  }, [newRoomName, rooms, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved]);
 
-  const deleteRoom = useCallback((idx: number) => {
+  const deleteRoom = useCallback(async (idx: number) => {
     if (rooms.length <= 1) return;
     const next = [...rooms];
     next.splice(idx, 1);
     const newIdx = Math.min(selectedRoomIdx, next.length - 1);
     onRoomsChange(next);
     onRoomSelect(newIdx);
-    onSave(next, notes);
-  }, [rooms, selectedRoomIdx, notes, onRoomsChange, onRoomSelect, onSave]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
+  }, [rooms, selectedRoomIdx, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved]);
 
-  const changeStage = useCallback((stageKey: string) => {
+  const changeStage = useCallback(async (stageKey: string) => {
     if (!room) return;
     const updated = { ...room, stageKey };
     if (!updated.stageDates[stageKey]) updated.stageDates = { ...updated.stageDates, [stageKey]: todayISO() };
     const next = rooms.map((r, i) => i === selectedRoomIdx ? updated : r);
     onRoomsChange(next);
-    onSave(next, notes);
-  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
+  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved]);
 
   const addComment = useCallback(async () => {
     const text = draftComment.trim();
@@ -97,9 +101,12 @@ export function RoomsTabs({
     const next = rooms.map((r, i) => i === selectedRoomIdx ? updated : r);
     onRoomsChange(next);
     setDraftComment('');
-    try { await onSave(next, notes); } catch { /* noop */ }
+    try {
+      await onSave(next, notes);
+      onCommentSaved?.();
+    } catch { /* noop */ }
     setSavingComment(false);
-  }, [draftComment, room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave]);
+  }, [draftComment, room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onCommentSaved]);
 
   const saveNotes = useCallback(async () => {
     try {
