@@ -31,7 +31,7 @@ const ALL_TABS: LegacyTab[] = [
 ];
 
 const TABS_DEV_HIDDEN: LegacyTab[] = ALL_TABS.map((t) =>
-  t.id === 'devenv' ? { ...t, hidden: true } : t,
+  t.id === 'devenv' || t.id === 'settings' ? { ...t, hidden: true } : t,
 );
 
 const TABS_WITH_BADGES: LegacyTab[] = ALL_TABS.map((t) => {
@@ -118,12 +118,12 @@ export const DeveloperGroupHidden: Story = {
   ),
 };
 
-export const IntegrationsGroupActive: Story = {
-  name: 'Integrations group active',
+export const DeveloperGroupActive: Story = {
+  name: 'Developer group active',
   render: () => (
     <Interactive
       tabs={ALL_TABS}
-      initialGroup="integrations"
+      initialGroup="developer"
       initialTab="settings"
     />
   ),

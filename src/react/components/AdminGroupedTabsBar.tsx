@@ -4,7 +4,7 @@ import type { TabBarTab } from './TabBar';
 
 // ── Group / tab mapping ────────────────────────────────────────────────────────
 
-export type GroupId = 'people' | 'configuration' | 'integrations' | 'developer';
+export type GroupId = 'people' | 'configuration' | 'developer';
 
 export interface TabGroup {
   id: GroupId;
@@ -25,14 +25,9 @@ export const TAB_GROUPS: TabGroup[] = [
     tabIds: ['cardactions', 'actionhandlers', 'designvisit', 'search', 'workshop', 'emailtemplates', 'offline'],
   },
   {
-    id: 'integrations',
-    label: 'Integrations',
-    tabIds: ['settings'],
-  },
-  {
     id: 'developer',
     label: 'Developer',
-    tabIds: ['devenv'],
+    tabIds: ['settings', 'devenv'],
   },
 ];
 

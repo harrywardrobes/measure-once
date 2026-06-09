@@ -28,7 +28,6 @@ import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TuneIcon from '@mui/icons-material/Tune';
-import ExtensionIcon from '@mui/icons-material/Extension';
 import CodeIcon from '@mui/icons-material/Code';
 
 declare global {
@@ -66,8 +65,7 @@ const ALL_ACTIONS: Action[] = [
 const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-group-people',        label: 'Admin · People',        hint: 'Jump to the People group (Alt+1)',        category: 'Admin', icon: <GroupIcon fontSize="small" /> },
   { id: 'go-admin-group-configuration', label: 'Admin · Configuration', hint: 'Jump to the Configuration group (Alt+2)', category: 'Admin', icon: <TuneIcon fontSize="small" /> },
-  { id: 'go-admin-group-integrations',  label: 'Admin · Integrations',  hint: 'Jump to the Integrations group (Alt+3)',  category: 'Admin', icon: <ExtensionIcon fontSize="small" /> },
-  { id: 'go-admin-group-developer',     label: 'Admin · Developer',     hint: 'Jump to the Developer group (Alt+4)',     category: 'Admin', icon: <CodeIcon fontSize="small" /> },
+  { id: 'go-admin-group-developer',     label: 'Admin · Developer',     hint: 'Jump to the Developer group (Alt+3)',     category: 'Admin', icon: <CodeIcon fontSize="small" /> },
 ];
 
 function contactName(c: { properties?: { firstname?: string; lastname?: string } }): string {
@@ -209,7 +207,6 @@ export function CommandPalette() {
       },
       'go-admin-group-people':        () => adminGroupNav('people'),
       'go-admin-group-configuration': () => adminGroupNav('configuration'),
-      'go-admin-group-integrations':  () => adminGroupNav('integrations'),
       'go-admin-group-developer':     () => adminGroupNav('developer'),
     };
 
