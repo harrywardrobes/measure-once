@@ -356,9 +356,13 @@ export const ServerAddedRoom: Story = {
  * admin guidance — "restore it in Visit Settings → Lead statuses" — is
  * immediately visible. The field diff and "Restore server copy" buttons are
  * hidden because the write was never applied; only "Dismiss" is shown.
+ *
+ * This story exercises the **design-visit** path (`/api/design-visits/:id`,
+ * `dv:` record key). For the arrange-visit path see
+ * {@link ArrangeVisitLeadStatusRemoved}.
  */
 export const LeadStatusRemoved: Story = {
-  name: 'Pipeline config error: lead status removed',
+  name: 'Pipeline config error: lead status removed (design visit)',
   render: () => {
     function LeadStatusRemovedConflict() {
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([
@@ -390,6 +394,56 @@ export const LeadStatusRemoved: Story = {
       );
     }
     return <LeadStatusRemovedConflict />;
+  },
+};
+
+/**
+ * A queued **arrange-visit** lead-status write was rejected because the status
+ * was removed by an admin before the device came back online. This story
+ * exercises the arrange-visit path (`/api/visits/:id`, `visit:<id>` record key)
+ * to verify that `resolveConflictRoute` derives the correct "Open record" link
+ * — `/customers/:contactId#upcoming-visits-section` — rather than the
+ * design-visit fragment used by the sibling {@link LeadStatusRemoved} story.
+ *
+ * The `attemptedBody` carries `contactId` so the contact can be resolved even
+ * though there is no `serverData` (the write was never applied). The field diff
+ * and "Restore server copy" buttons are hidden; only "Dismiss" is shown.
+ */
+export const ArrangeVisitLeadStatusRemoved: Story = {
+  name: 'Pipeline config error: lead status removed (arrange visit)',
+  render: () => {
+    function ArrangeVisitConflict() {
+      const [conflicts, setConflicts] = useState<ConflictEntry[]>([
+        {
+          id: 21,
+          area: 'visit',
+          label: 'Survey visit — 22 Birch Road',
+          url: '/api/visits/78',
+          method: 'PATCH',
+          recordKey: 'visit:78',
+          errorCode: 'LEAD_STATUS_REMOVED',
+          resolution: 'flagged',
+          detectedAt: now - 1000 * 60 * 8,
+          // contactId in the attempted body lets resolveConflictRoute derive
+          // /customers/991#upcoming-visits-section without needing serverData.
+          attemptedBody: { contactId: '991', leadStatus: 'survey_booked' },
+        },
+      ]);
+      return (
+        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+          <ConflictsReview
+            conflicts={conflicts}
+            defaultOpen
+            onResolve={async (conflict) => {
+              setConflicts((cs) => cs.filter((c) => c.id !== conflict.id));
+              return { ok: true, queued: false, status: 200 };
+            }}
+            onDismissAll={() => setConflicts([])}
+          />
+        </Box>
+      );
+    }
+    return <ArrangeVisitConflict />;
   },
 };
 

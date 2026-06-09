@@ -70,14 +70,15 @@ function contactIdFor(conflict: RouteSource): string | null {
 }
 
 /**
- * Best-effort lookup of the design-visit id a *visit* conflict touched, checked
- * across the record key (`dv:<id>` / `design-visit:<id>`), the attempted write
- * body, the server snapshot, and finally the request URL
- * (`/api/design-visits/<id>`). Returns `null` when none can be derived.
+ * Best-effort lookup of the visit id a *visit* conflict touched, checked across
+ * the record key (`dv:<id>` / `design-visit:<id>` for design visits,
+ * `visit:<id>` for arrange visits), the attempted write body, the server
+ * snapshot, and finally the request URL (`/api/design-visits/<id>` or
+ * `/api/visits/<id>`). Returns `null` when none can be derived.
  */
 function visitIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
-  if (parts && (parts.type === 'dv' || parts.type === 'design-visit')) {
+  if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'visit')) {
     const id = asId(parts.id);
     if (id) return id;
   }
@@ -90,11 +91,25 @@ function visitIdFor(conflict: RouteSource): string | null {
   const fromServer = asId(server?.id ?? server?.visitId ?? server?.visit_id);
   if (fromServer) return fromServer;
 
-  const m = conflict.url.match(/\/api\/design-visits\/([^/?#]+)/);
+  const m = conflict.url.match(/\/api\/(?:design-visits|visits)\/([^/?#]+)/);
   if (m) {
     try { return decodeURIComponent(m[1]); } catch { return m[1]; }
   }
   return null;
+}
+
+/**
+ * Returns `true` when the source looks like an arrange-visit entry (uses
+ * `/api/visits/:id` rather than `/api/design-visits/:id`). Used to choose the
+ * correct customer-page fragment for the "Open record" link.
+ */
+function isArrangeVisit(source: RouteSource): boolean {
+  if (source.recordKey) {
+    const parts = recordKeyParts(source.recordKey);
+    if (parts?.type === 'visit') return true;
+    if (parts && (parts.type === 'dv' || parts.type === 'design-visit')) return false;
+  }
+  return /\/api\/visits\//.test(source.url);
 }
 
 /**
@@ -135,12 +150,15 @@ function submissionIdFor(conflict: RouteSource): string | null {
  *   submission id is known, a `#customer-info-<submissionId>` fragment is
  *   appended so the customer page can auto-expand and scroll to that exact
  *   submission.
- * - **visit** edits → the owning customer page, where design visits are reviewed
- *   (there is no standalone per-visit route). The contact id is read from the
- *   attempted body / server snapshot, since a `dv:<visitId>` key alone is not a
- *   contact id. When the specific visit id is known, a
- *   `#design-visit-<visitId>` fragment is appended so the customer page can
- *   auto-expand and scroll to that exact visit.
+ * - **visit** edits (design visit) → the owning customer page. When the specific
+ *   design-visit id is known, a `#design-visit-<visitId>` fragment is appended
+ *   so the customer page can auto-expand and scroll to that exact visit. The
+ *   contact id is read from the attempted body / server snapshot, since a
+ *   `dv:<visitId>` key alone is not a contact id.
+ * - **visit** edits (arrange visit) → the owning customer page with a
+ *   `#upcoming-visits-section` fragment so the browser scrolls to the visits
+ *   section. Arrange visits use `/api/visits/:id` and `visit:<id>` record keys
+ *   (distinct from the `dv:` / `design-visit:` keys used by design visits).
  */
 function resolveRoute(source: RouteSource): string | null {
   const contactId = contactIdFor(source);
@@ -156,6 +174,9 @@ function resolveRoute(source: RouteSource): string | null {
       return submissionId ? `${base}#customer-info-${encodeURIComponent(submissionId)}` : base;
     }
     case 'visit': {
+      if (isArrangeVisit(source)) {
+        return `${base}#upcoming-visits-section`;
+      }
       const visitId = visitIdFor(source);
       return visitId ? `${base}#design-visit-${encodeURIComponent(visitId)}` : base;
     }
