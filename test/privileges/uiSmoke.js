@@ -665,6 +665,12 @@ async function runUiSmoke({ users, runId, clients }) {
       // Advance back to page 2, then change the lead-status dropdown.
       // setLeadStatusFilter resets currentPage to 1; verify the info text shows
       // "Showing 1–" (not an empty page 2).
+      //
+      // The page-aware request interceptor set up above already handles this
+      // second trip to page 2: a request for /api/contacts-all?page=2 returns
+      // { results: [syntheticContacts[25]], total: 26, page: 2, totalPages: 2 }
+      // so "Showing 26–26 of 26" is correctly rendered before the lead-status
+      // dropdown change fires and resets currentPage back to 1.
       let leadFilterOnPage2Text = '';
       let afterLeadFilterText = '';
       let leadFilterApplied = false;
@@ -679,11 +685,14 @@ async function runUiSmoke({ users, runId, clients }) {
             if (prev) prev.click();
           }).catch(() => {});
 
-          // Advance to page 2
+          // Advance to page 2.
+          // Use /Showing 26/ (not includes('26')) — page 1 shows "Showing 1–25 of 26"
+          // which also contains '26', so the looser check resolves before the click
+          // takes effect.  /Showing 26/ only matches "Showing 26–26 of 26" (page 2).
           await page.click('button[aria-label="Go to next page"]').catch(() => {});
           await page.waitForFunction(() => {
             const info = document.querySelector('[data-testid="contacts-pagination-info"]');
-            return info && info.textContent.includes('26');
+            return info && /Showing 26/.test(info.textContent);
           }, { timeout: 5000 }).catch(() => {});
           leadFilterOnPage2Text = await page.$eval('[data-testid="contacts-pagination-info"]', el => el.textContent).catch(() => '');
 
