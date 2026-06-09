@@ -5206,8 +5206,8 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     if (existing[0].is_null_row) {
       return res.status(400).json({ error: 'The null-status sentinel row cannot be deleted.' });
     }
-    if (HARDCODED_LEAD_STATUS_KEYS.some(h => h.key === key)) {
-      return res.status(400).json({ error: `"${key}" is a pipeline-critical status and cannot be deleted.` });
+    if (HARDCODED_LEAD_STATUS_KEYS.some(({ key: k }) => k === key)) {
+      return res.status(409).json({ error: 'This status is required by the pipeline and cannot be deleted.' });
     }
     await pool.query(
       `DELETE FROM card_action_handler_bindings

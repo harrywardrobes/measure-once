@@ -481,6 +481,32 @@ async function main() {
       retryPatchArrived,
       `arrived=${retryPatchArrived}`);
 
+    // ── (E) Hardcoded key — 409 Conflict ─────────────────────────────────────
+    // Attempting to DELETE a pipeline-critical key must be rejected with 409.
+    // The row must still exist in lead_status_config after the attempt.
+    console.log('\n  [E] Hardcoded key: DELETE returns 409, row untouched');
+
+    const LS_KEY_HARDCODED = 'OPEN_DEAL';
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, 'Open Deal (test fixture)', 9901, false)
+         ON CONFLICT (key) DO NOTHING`,
+      [LS_KEY_HARDCODED],
+    );
+
+    const delE = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_HARDCODED)}`);
+    record('E1 DELETE hardcoded key returns 409',
+      delE.status === 409,
+      `status=${delE.status} body=${(delE.text || '').slice(0, 200)}`);
+
+    const afterE = await pool.query(
+      'SELECT key FROM lead_status_config WHERE key = $1',
+      [LS_KEY_HARDCODED],
+    );
+    record('E2 Row still exists after rejected delete',
+      afterE.rows.length === 1,
+      `rows=${afterE.rows.length}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
