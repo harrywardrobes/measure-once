@@ -269,7 +269,8 @@
     "test:suite-probe-counts": "node scripts/check-suite-probe-counts.mjs",
     "test:browser-launch-pattern": "node scripts/check-browser-launch-pattern.mjs",
     "test:story-count-sync": "node scripts/check-story-count-sync.mjs",
-    "test:offline-capability-sync": "node scripts/check-offline-capability-sync.mjs"
+    "test:offline-capability-sync": "node scripts/check-offline-capability-sync.mjs",
+    "test:lead-status-keys": "node scripts/check-lead-status-keys.mjs"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",
