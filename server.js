@@ -5076,6 +5076,12 @@ async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
 async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) {
   if (!deletedSubstatusKey) return;
   if (!getCredential('access_token')) return;
+  const guardKey = `substatus:${deletedSubstatusKey}`;
+  if (_clearInProgress.has(guardKey)) {
+    logger.info(`[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}] already in progress, skipping duplicate run`);
+    return;
+  }
+  _clearInProgress.add(guardKey);
   const label = `[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}]`;
   try {
     let cleared = 0;
@@ -5115,6 +5121,8 @@ async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) 
     }
   } catch (e) {
     logger.warn({ err: e.response?.data?.message || e.message }, `${label} search failed:`);
+  } finally {
+    _clearInProgress.delete(guardKey);
   }
 }
 
