@@ -22,6 +22,8 @@ interface Props {
   onNotesSaved?: () => void;
   onRoomSaved?: () => void;
   onCommentSaved?: () => void;
+  onRoomSaveError?: () => void;
+  onCommentSaveError?: () => void;
 }
 
 export function RoomsTabs({
@@ -37,6 +39,8 @@ export function RoomsTabs({
   onNotesSaved,
   onRoomSaved,
   onCommentSaved,
+  onRoomSaveError,
+  onCommentSaveError,
 }: Props) {
   const { isViewer, isManager } = usePrivilege();
   const canEdit = isManager;
@@ -65,8 +69,8 @@ export function RoomsTabs({
     onRoomSelect(next.length - 1);
     setNewRoomName('');
     setAddingRoom(false);
-    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
-  }, [newRoomName, rooms, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
+  }, [newRoomName, rooms, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved, onRoomSaveError]);
 
   const deleteRoom = useCallback(async (idx: number) => {
     if (rooms.length <= 1) return;
@@ -75,8 +79,8 @@ export function RoomsTabs({
     const newIdx = Math.min(selectedRoomIdx, next.length - 1);
     onRoomsChange(next);
     onRoomSelect(newIdx);
-    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
-  }, [rooms, selectedRoomIdx, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
+  }, [rooms, selectedRoomIdx, notes, onRoomsChange, onRoomSelect, onSave, onRoomSaved, onRoomSaveError]);
 
   const changeStage = useCallback(async (stageKey: string) => {
     if (!room) return;
@@ -84,8 +88,8 @@ export function RoomsTabs({
     if (!updated.stageDates[stageKey]) updated.stageDates = { ...updated.stageDates, [stageKey]: todayISO() };
     const next = rooms.map((r, i) => i === selectedRoomIdx ? updated : r);
     onRoomsChange(next);
-    try { await onSave(next, notes); onRoomSaved?.(); } catch { /* noop */ }
-  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved]);
+    try { await onSave(next, notes); onRoomSaved?.(); } catch { onRoomSaveError?.(); }
+  }, [room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onRoomSaved, onRoomSaveError]);
 
   const addComment = useCallback(async () => {
     const text = draftComment.trim();
@@ -104,9 +108,9 @@ export function RoomsTabs({
     try {
       await onSave(next, notes);
       onCommentSaved?.();
-    } catch { /* noop */ }
+    } catch { onCommentSaveError?.(); }
     setSavingComment(false);
-  }, [draftComment, room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onCommentSaved]);
+  }, [draftComment, room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave, onCommentSaved, onCommentSaveError]);
 
   const saveNotes = useCallback(async () => {
     try {
