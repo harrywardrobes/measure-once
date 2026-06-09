@@ -339,11 +339,22 @@ async function runUiSmoke({ users, runId, clients }) {
         { privilege_level: 'viewer' });
 
       // From the *same* already-loaded page, fire the same API call again.
-      const after = await page.evaluate(async (base) => {
-        const r = await fetch(`${base}/api/trades`, { credentials: 'include' });
-        return r.status;
-      }, BASE);
-      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-downgrade-ui.png`));
+      // NOTE: We use a direct Node.js fetch here (not page.evaluate) because
+      // the privilege downgrade immediately invalidates the manager's session
+      // server-side (auth.js deletes the session row). The next in-page
+      // request gets a 401, which triggers client-side code (WorkflowDataContext,
+      // useProjectsData, etc.) to navigate to /login. That navigation destroys
+      // the Puppeteer execution context while page.evaluate is still awaiting,
+      // throwing "Execution context was destroyed, most likely because of a
+      // navigation." A Node-level fetch with the same cookie tests the same
+      // security property (does the server reject the stale cookie?) without
+      // depending on the browser page remaining stable.
+      const cookieHeader = kv ? `${kv.name}=${kv.value}` : '';
+      const afterFetchRes = await fetch(`${BASE}/api/trades`, {
+        headers: { Cookie: cookieHeader, Accept: 'application/json' },
+      }).catch(() => ({ status: 0 }));
+      const after = afterFetchRes.status;
+      await safeShot(page, path.join(SCREENSHOT_DIR, `${runId}-downgrade-ui.png`)).catch(() => {});
 
       record('demoted manager loses access from an already-open page (UI staleness)',
         'before=200 (manager) → after in {401,403} (viewer)',
@@ -411,6 +422,10 @@ async function runUiSmoke({ users, runId, clients }) {
           req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
         } else if (u.includes('/api/open-leads')) {
           req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses')) {
+          req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+        } else if (u.includes('/api/contacts-lead-status-counts')) {
+          req.respond({ status: 200, contentType: 'application/json', body: '{}' });
         } else {
           req.continue();
         }
@@ -436,11 +451,25 @@ async function runUiSmoke({ users, runId, clients }) {
           `text="${infoText}"`,
           'medium', infoText.includes('of 26'));
 
+        // Wait for the lead-status store to finish loading before clicking Next.
+        // When store.loaded transitions false→true a new Set reference is created
+        // for excludedStatusKeys; usePaginatedContacts detects this as a filter
+        // change and resets page to 1.  Waiting here ensures the reset has already
+        // fired (and the Set reference is now stable) before we click Next.
+        await page.waitForFunction(() => {
+          const fc = document.querySelector('[data-testid="lead-status-form-control"]');
+          if (!fc) return false;
+          return window.getComputedStyle(fc).visibility === 'visible';
+        }, { timeout: 5000 }).catch(() => {});
+
         // (b) click Next → page 2 (the 26th contact)
         await page.click('button[aria-label="Go to next page"]');
+        // Wait for page 2 to actually render: check for "Showing 26" specifically
+        // (page 1 shows "Showing 1–26 of 26" which contains "26" but not "Showing 26",
+        // so `includes('26')` resolves immediately on page 1 — we need the stricter test).
         await page.waitForFunction(() => {
           const info = document.querySelector('[data-testid="contacts-pagination-info"]');
-          return info && info.textContent.includes('26');
+          return info && /Showing 26/.test(info.textContent);
         }, { timeout: 5000 }).catch(() => {});
 
         page2InfoText = await page.$eval('[data-testid="contacts-pagination-info"]', el => el.textContent).catch(() => '');
@@ -470,7 +499,7 @@ async function runUiSmoke({ users, runId, clients }) {
           await page.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded' });
           await page.waitForFunction(() => {
             const info = document.querySelector('[data-testid="contacts-pagination-info"]');
-            return info && info.textContent.includes('26');
+            return info && /Showing 26/.test(info.textContent);
           }, { timeout: 8000 }).catch(() => {});
 
           restoredInfoText = await page.$eval('[data-testid="contacts-pagination-info"]', el => el.textContent).catch(() => '');
@@ -543,6 +572,10 @@ async function runUiSmoke({ users, runId, clients }) {
           req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
         } else if (u.includes('/api/open-leads')) {
           req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
+        } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses')) {
+          req.respond({ status: 200, contentType: 'application/json', body: '[]' });
+        } else if (u.includes('/api/contacts-lead-status-counts')) {
+          req.respond({ status: 200, contentType: 'application/json', body: '{}' });
         } else {
           req.continue();
         }
@@ -557,23 +590,38 @@ async function runUiSmoke({ users, runId, clients }) {
       let filterApplied = false;
 
       if (paginationEl2) {
+        // Wait for the lead-status store to finish loading before clicking Next.
+        // store.loaded false→true creates a new excludedStatusKeys Set reference;
+        // usePaginatedContacts treats this as a filter change and resets page to 1.
+        // Waiting here ensures the reset has fired before we click Next.
+        await page.waitForFunction(() => {
+          const fc = document.querySelector('[data-testid="lead-status-form-control"]');
+          if (!fc) return false;
+          return window.getComputedStyle(fc).visibility === 'visible';
+        }, { timeout: 5000 }).catch(() => {});
+
         // Step 2: advance to page 2
         await page.click('button[aria-label="Go to next page"]');
+        // Wait specifically for "Showing 26" — page 1 shows "Showing 1–25 of 26"
+        // which contains '26' but NOT "Showing 26", so the old `includes('26')`
+        // condition resolved immediately on page 1 before the click took effect.
         await page.waitForFunction(() => {
           const info = document.querySelector('[data-testid="contacts-pagination-info"]');
-          return info && info.textContent.includes('26');
+          return info && /Showing 26/.test(info.textContent);
         }, { timeout: 5000 }).catch(() => {});
         onPage2Text = await page.$eval('[data-testid="contacts-pagination-info"]', el => el.textContent).catch(() => '');
 
         // Step 3: apply a filter that keeps contacts-all as the data source so
         // the list remains non-empty after the reset and we can assert page 1.
         // - "[data-tab-key='__all__']" always calls loadContactsPage (mocked →
-        //   26 contacts) and sets currentPage=1.
+        //   25 contacts) and sets currentPage=1.
         // - "#archived-toggle" (showArchived false→true) also calls
         //   loadContactsPage and sets currentPage=1 — used as a fallback.
         // Avoid "[data-tab-key='__active__']" / any tab that triggers
         // open-leads (mocked empty), which removes pagination entirely.
-        const allTab = await page.$('[data-tab-key="__all__"]');
+        // Use waitForSelector (not page.$) to give the StageTabGroup time to
+        // render — pagination may appear before the tab group fully mounts.
+        const allTab = await page.waitForSelector('[data-tab-key="__all__"]', { timeout: 3000 }).catch(() => null);
         if (allTab) {
           await allTab.click();
           filterApplied = true;
