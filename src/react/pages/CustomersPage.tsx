@@ -794,15 +794,17 @@ function CustomerCard({
         </Box>
       </CardActionArea>
 
-      {/* Action strip — only rendered when a configured handler matches this
-          card's stage/lead-status/substatus. Clicking fires the handler
-          without also triggering the CardActionArea navigation link. */}
-      {!!handler && (
+      {/* Action strip — rendered when either a handler is configured for this
+          card's stage/lead-status/substatus, OR a label-only row is set for
+          the stage in Card Actions. When a handler is present, clicking fires
+          it without also triggering the CardActionArea navigation link. A
+          label-only strip (no handler) is non-interactive and shows no chevron. */}
+      {(!!handler || !!actionLabel) && (
         <Box
-          role="button"
-          tabIndex={-1}
-          title={actionLabel || 'Run action'}
-          onClick={handleActionClick}
+          role={handler ? 'button' : undefined}
+          tabIndex={handler ? -1 : undefined}
+          title={handler ? (actionLabel || 'Run action') : undefined}
+          onClick={handler ? handleActionClick : undefined}
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -812,20 +814,20 @@ function CustomerCard({
             bgcolor: actionTint,
             borderTop: '1px solid',
             borderColor: 'divider',
-            cursor: dispatchingAction ? 'wait' : 'pointer',
+            cursor: handler ? (dispatchingAction ? 'wait' : 'pointer') : 'default',
             opacity: dispatchingAction ? 0.7 : 1,
             transition: 'opacity 0.15s, filter 0.12s',
-            '&:hover': dispatchingAction ? undefined : { filter: 'brightness(0.96)' },
+            '&:hover': (handler && !dispatchingAction) ? { filter: 'brightness(0.96)' } : undefined,
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
             {dispatchingAction ? 'Opening…' : actionLabel}
           </Typography>
-          {dispatchingAction ? (
+          {handler && (dispatchingAction ? (
             <CircularProgress size={12} sx={{ color: actionTextColor }} />
           ) : (
             <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
-          )}
+          ))}
         </Box>
       )}
 

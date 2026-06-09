@@ -39,6 +39,8 @@ interface DemoCardProps {
   showContinueDesigning?: boolean;
   continuingDesign?: boolean;
   photosReceived?: boolean;
+  /** When true, the strip is label-only (no handler) — non-interactive, no chevron. */
+  labelOnly?: boolean;
 }
 
 function DemoProjectCard({
@@ -51,10 +53,12 @@ function DemoProjectCard({
   showContinueDesigning = false,
   continuingDesign = false,
   photosReceived = false,
+  labelOnly = false,
 }: DemoCardProps) {
   const stageColors = STAGE_COLORS[actionStageKey || rooms[0]?.stageKey || ''];
   const actionTint = stageColors?.light || STATUS_COLORS.neutral.bg;
   const actionTextColor = stageColors?.text || STATUS_COLORS.neutral.text;
+  const isInteractive = !labelOnly;
 
   return (
     <Box
@@ -202,12 +206,13 @@ function DemoProjectCard({
         })}
       </Box>
 
-      {/* Action strip */}
+      {/* Action strip — interactive when a handler is configured (isInteractive=true);
+          label-only (non-interactive, no chevron) when labelOnly=true. */}
       {actionLabel && (
         <Box
-          role="button"
-          tabIndex={-1}
-          title="Run action"
+          role={isInteractive ? 'button' : undefined}
+          tabIndex={isInteractive ? -1 : undefined}
+          title={isInteractive ? 'Run action' : undefined}
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -216,15 +221,17 @@ function DemoProjectCard({
             py: '9px',
             bgcolor: actionTint,
             borderTop: `1px solid ${BRAND_COLORS.stone}`,
-            cursor: 'pointer',
+            cursor: isInteractive ? 'pointer' : 'default',
             transition: 'filter 0.12s',
-            '&:hover': { filter: 'brightness(0.96)' },
+            '&:hover': isInteractive ? { filter: 'brightness(0.96)' } : undefined,
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
             {actionLabel}
           </Typography>
-          <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          {isInteractive && (
+            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          )}
         </Box>
       )}
 
@@ -358,6 +365,28 @@ export const SalesStageAction: Story = {
       rooms={[{ roomLabel: 'Main Kitchen', stageKey: 'sales' }]}
       actionLabel="Follow Up Call"
       actionStageKey="sales"
+    />
+  ),
+};
+
+export const LabelOnlyStripOrder: Story = {
+  name: 'Label-only strip — ORDER stage (no handler)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When an admin configures a text label for a non-sales stage in Card Actions (but no handler), the strip shows with the stage colour tint but is **non-interactive** — no chevron, default cursor. This works for ORDER, WORKSHOP, PACKING, DELIVERY, INSTALLATION, and AFTERCARE stages.',
+      },
+    },
+  },
+  render: () => (
+    <DemoProjectCard
+      name="Oliver Wright"
+      contactId="66666"
+      rooms={[{ roomLabel: 'Kitchen', stageKey: 'order' }]}
+      actionLabel="Order confirmed — awaiting workshop"
+      actionStageKey="order"
+      labelOnly
     />
   ),
 };

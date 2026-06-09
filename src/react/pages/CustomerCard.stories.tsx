@@ -52,6 +52,8 @@ interface DemoCardProps {
   showContinueDesigning?: boolean;
   continuingDesign?: boolean;
   showInvoiceBadge?: boolean;
+  /** When true, the strip is label-only (no handler) — non-interactive, no chevron. */
+  labelOnly?: boolean;
 }
 
 function StagePill({ stageKey, label }: { stageKey: string; label: string }) {
@@ -90,6 +92,7 @@ function DemoCustomerCard({
   showContinueDesigning = false,
   continuingDesign = false,
   showInvoiceBadge = false,
+  labelOnly = false,
 }: DemoCardProps) {
   const primaryStageKey = actionStageKey || rooms[0]?.stageKey || 'sales';
   const stageColors = STAGE_COLORS[primaryStageKey];
@@ -103,6 +106,7 @@ function DemoCustomerCard({
       ? 'Opening…'
       : 'Continue designing'
     : actionLabel;
+  const isInteractive = !labelOnly;
 
   return (
     <Card variant="outlined" sx={{ width: '100%', maxWidth: 360, overflow: 'hidden' }}>
@@ -159,13 +163,10 @@ function DemoCustomerCard({
 
       {hasStrip && (
         <Box
-          role="button"
-          tabIndex={-1}
-          title={stripLabel || 'Run action'}
-          onClick={(e: React.MouseEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
+          role={isInteractive ? 'button' : undefined}
+          tabIndex={isInteractive ? -1 : undefined}
+          title={isInteractive ? (stripLabel || 'Run action') : undefined}
+          onClick={isInteractive ? (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); } : undefined}
           sx={{
             display: 'flex',
             alignItems: 'center',
@@ -175,20 +176,20 @@ function DemoCustomerCard({
             bgcolor: actionTint,
             borderTop: '1px solid',
             borderColor: 'divider',
-            cursor: continuingDesign ? 'wait' : 'pointer',
+            cursor: isInteractive ? (continuingDesign ? 'wait' : 'pointer') : 'default',
             opacity: continuingDesign ? 0.7 : 1,
             transition: 'opacity 0.15s, filter 0.12s',
-            '&:hover': continuingDesign ? undefined : { filter: 'brightness(0.96)' },
+            '&:hover': (isInteractive && !continuingDesign) ? { filter: 'brightness(0.96)' } : undefined,
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
             {stripLabel}
           </Typography>
-          {continuingDesign ? (
+          {isInteractive && (continuingDesign ? (
             <CircularProgress size={12} sx={{ color: actionTextColor }} />
           ) : (
             <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
-          )}
+          ))}
         </Box>
       )}
     </Card>
@@ -369,6 +370,28 @@ export const WithInvoiceBadge: Story = {
       actionLabel="Confirm Delivery"
       actionStageKey="delivery"
       showInvoiceBadge
+    />
+  ),
+};
+
+export const LabelOnlyStripOrder: Story = {
+  name: 'Label-only strip — ORDER stage (no handler)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When an admin configures a text label for a non-sales stage in Card Actions (but no handler), the strip shows with the stage colour tint but is **non-interactive** — no chevron, default cursor. This now works for ORDER, WORKSHOP, PACKING, DELIVERY, INSTALLATION, and AFTERCARE stages.',
+      },
+    },
+  },
+  render: () => (
+    <DemoCustomerCard
+      name="Oliver Wright"
+      email="oliver@example.com"
+      rooms={[{ room: 'Main', stageKey: 'order' }]}
+      actionLabel="Order confirmed — awaiting workshop"
+      actionStageKey="order"
+      labelOnly
     />
   ),
 };
