@@ -117,6 +117,7 @@ function showToast(msg: string, err?: boolean) {
 
 function notifyLsChanged() {
   try { new BroadcastChannel('lead_statuses_changed').postMessage('changed'); } catch {}
+  try { window.dispatchEvent(new CustomEvent('lead_statuses_changed')); } catch {}
   if (typeof W.loadCardActionsAdmin === 'function') (W.loadCardActionsAdmin as () => void)();
 }
 

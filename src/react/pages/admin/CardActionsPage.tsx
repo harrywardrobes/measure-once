@@ -278,19 +278,26 @@ export function CardActionsPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── BroadcastChannel sync ──────────────────────────────────────────────────
+  // ── BroadcastChannel sync (cross-tab) + window event sync (same-tab) ────────
 
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
+    const onWinLsChanged = () => fetchAll();
+    window.addEventListener('lead_statuses_changed', onWinLsChanged);
+
     let bc1: BroadcastChannel | undefined;
     let bc2: BroadcastChannel | undefined;
-    try {
-      bc1 = new BroadcastChannel('lead_statuses_changed');
-      bc1.onmessage = () => fetchAll();
-      bc2 = new BroadcastChannel('card_action_handlers_changed');
-      bc2.onmessage = () => fetchAll();
-    } catch { /* ignore */ }
-    return () => { try { bc1?.close(); bc2?.close(); } catch { /* ignore */ } };
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc1 = new BroadcastChannel('lead_statuses_changed');
+        bc1.onmessage = () => fetchAll();
+        bc2 = new BroadcastChannel('card_action_handlers_changed');
+        bc2.onmessage = () => fetchAll();
+      } catch { /* ignore */ }
+    }
+    return () => {
+      window.removeEventListener('lead_statuses_changed', onWinLsChanged);
+      try { bc1?.close(); bc2?.close(); } catch { /* ignore */ }
+    };
   }, [fetchAll]);
 
   // ── Window exposures ───────────────────────────────────────────────────────
