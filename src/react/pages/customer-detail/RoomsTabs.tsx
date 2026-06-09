@@ -19,6 +19,7 @@ interface Props {
   onNotesChange: (notes: string) => void;
   onRoomSelect: (idx: number) => void;
   onSave: (rooms: Room[], notes: string) => void;
+  onNotesSaved?: () => void;
 }
 
 export function RoomsTabs({
@@ -31,6 +32,7 @@ export function RoomsTabs({
   onNotesChange,
   onRoomSelect,
   onSave,
+  onNotesSaved,
 }: Props) {
   const { isViewer, isManager } = usePrivilege();
   const canEdit = isManager;
@@ -100,8 +102,11 @@ export function RoomsTabs({
   }, [draftComment, room, rooms, selectedRoomIdx, notes, onRoomsChange, onSave]);
 
   const saveNotes = useCallback(async () => {
-    try { await onSave(rooms, notes); } catch { /* noop */ }
-  }, [rooms, notes, onSave]);
+    try {
+      await onSave(rooms, notes);
+      onNotesSaved?.();
+    } catch { /* noop */ }
+  }, [rooms, notes, onSave, onNotesSaved]);
 
   if (!rooms.length) {
     return (

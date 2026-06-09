@@ -791,6 +791,7 @@ export function CustomerDetailPage() {
               onNotesChange={setNotes}
               onRoomSelect={handleRoomSelect}
               onSave={saveRoomsAndNotes}
+              onNotesSaved={() => setToast({ msg: 'Notes saved' })}
             />
 
             {qb.statusKnown && qb.connected && (
