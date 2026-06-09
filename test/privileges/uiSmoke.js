@@ -572,7 +572,12 @@ async function runUiSmoke({ users, runId, clients }) {
       page.on('request', req => {
         const u = req.url();
         if (u.includes('/api/contacts-all')) {
-          req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
+          const _pu = new URL(u);
+          const _pg = parseInt(_pu.searchParams.get('page') || '1', 10);
+          const body = _pg === 2
+            ? JSON.stringify({ results: [syntheticContacts[25]], total: 26, page: 2, totalPages: 2 })
+            : mockPayload;
+          req.respond({ status: 200, contentType: 'application/json', body });
         } else if (u.includes('/api/open-leads')) {
           req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
         } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses')) {
