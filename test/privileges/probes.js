@@ -296,6 +296,10 @@ async function runProbes({ clients, users, pool, runId }) {
     const restored = await bcrypt.hash(PASSWORD, 10);
     await pool.query(`UPDATE users SET password_hash = $1 WHERE email = $2`,
       [restored, users.viewer.email]);
+    // Reset rate-limit buckets — the probes above include a deliberate 401
+    // which counts against the login limiter; without this reset the two
+    // login() calls below would hit the 429 limit and abort the run.
+    await resetRateLimitStore(pool);
     clients.viewer = await login(users.viewer.email, PASSWORD);
 
     // Another user's session cookie cannot be used to change someone *else's*
