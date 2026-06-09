@@ -270,7 +270,31 @@ function _buildActionSlotGroups(): ActionStage[] {
     return groups;
   };
 
-  // Null-status row (sales stage)
+  // Global null slot (stage_key='__global__', status_key='').
+  // Mirrors CardActionsPage: prefer '__global__' label, fall back to legacy 'sales' label for display.
+  // Shown when the '__global__' label is set OR a handler is already bound to this slot.
+  const globalLabel = labelsByKey.get('__global__|') || '';
+  const globalLabelDisplay = globalLabel || labelsByKey.get('sales|') || (nullRow?.label ?? 'No lead status');
+  const hasGlobalHandler = _handlersRef.current.some(h =>
+    (h.bindings || []).some(b =>
+      b.substatus_id == null &&
+      (b.stage_key || '').toLowerCase() === '__global__' &&
+      (b.status_key || '') === '',
+    ),
+  );
+  const globalStage: ActionStage | null = (globalLabel || hasGlobalHandler) ? {
+    stage: { key: '__global__', label: 'No lead status (global)' },
+    groups: [{
+      ls: { key: '__GLOBAL_NULL__', label: '', isNullRow: false },
+      slots: [{
+        kind: 'ls', stage_key: '__global__', status_key: '',
+        label: globalLabelDisplay, rowLabel: 'Default action',
+        hasLabel: !!globalLabel,
+      }],
+    }],
+  } : null;
+
+  // Null-status row (sales stage) — kept for legacy bindings where stage_key='sales', status_key=''.
   if (nullRow) {
     const dflt = labelsByKey.get('sales|') || '';
     if (dflt) {
@@ -290,7 +314,8 @@ function _buildActionSlotGroups(): ActionStage[] {
     stage.groups.push(...groups);
   }
 
-  return Array.from(stageMap.values()).filter(s => s.groups.length > 0);
+  const pipelineStages = Array.from(stageMap.values()).filter(s => s.groups.length > 0);
+  return globalStage ? [globalStage, ...pipelineStages] : pipelineStages;
 }
 
 // ── DOM-appending modal functions ─────────────────────────────────────────────
@@ -923,11 +948,15 @@ function HandlerBoundTo({ h }: { h: Handler }) {
             const subLabel = sub ? (sub.label || sub.substatus_key) : `#${b.substatus_id}`;
             chipLabel = stage ? `${stage} / ${lsLabel} / ${subLabel}` : `${lsLabel} / ${subLabel}`;
           } else {
-            const ck = String(b.status_key || '').toLowerCase();
-            const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
             const stage = String(b.stage_key || '');
-            const lsLabel = ls ? (ls.label || ls.key) : (b.status_key || '—');
-            chipLabel = stage ? `${stage} / ${lsLabel}` : lsLabel;
+            if (stage.toLowerCase() === '__global__' && (b.status_key || '') === '') {
+              chipLabel = 'No lead status (global)';
+            } else {
+              const ck = String(b.status_key || '').toLowerCase();
+              const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
+              const lsLabel = ls ? (ls.label || ls.key) : (b.status_key || '—');
+              chipLabel = stage ? `${stage} / ${lsLabel}` : lsLabel;
+            }
           }
           return <Chip key={i} label={chipLabel} size="small" sx={chipSx} />;
         })}
@@ -1240,7 +1269,7 @@ export function ActionHandlersPage() {
                     ? `${g.ls.label} (no lead status)` : g.ls.label;
                   return (
                     <div key={g.ls.key} className="adm-handlers-group">
-                      <div className="adm-handlers-group-head">{lsLabel}</div>
+                      {lsLabel && <div className="adm-handlers-group-head">{lsLabel}</div>}
                       <table className="adm-handlers-table">
                         <tbody>
                           {g.slots.map(slot => {
