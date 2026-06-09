@@ -411,15 +411,18 @@ async function runUiSmoke({ users, runId, clients }) {
         updatedAt: new Date().toISOString(),
         archived: false,
       }));
-      const mockPayload  = JSON.stringify({ results: syntheticContacts, total: 26, page: 1, totalPages: 2 });
-      const emptyPayload = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
+      const mockPage1Payload = JSON.stringify({ results: syntheticContacts.slice(0, 25), total: 26, page: 1, totalPages: 2 });
+      const mockPage2Payload = JSON.stringify({ results: [syntheticContacts[25]],      total: 26, page: 2, totalPages: 2 });
+      const emptyPayload     = JSON.stringify({ results: [], total: 0, page: 1, totalPages: 1 });
 
       await page.setBypassServiceWorker(true);
       await page.setRequestInterception(true);
       page.on('request', req => {
         const u = req.url();
         if (u.includes('/api/contacts-all')) {
-          req.respond({ status: 200, contentType: 'application/json', body: mockPayload });
+          const reqPage = new URL(u).searchParams.get('page');
+          const body = reqPage === '2' ? mockPage2Payload : mockPage1Payload;
+          req.respond({ status: 200, contentType: 'application/json', body });
         } else if (u.includes('/api/open-leads')) {
           req.respond({ status: 200, contentType: 'application/json', body: emptyPayload });
         } else if (u.includes('/api/lead-statuses') || u.includes('/api/lead-substatuses')) {
@@ -465,8 +468,8 @@ async function runUiSmoke({ users, runId, clients }) {
         // (b) click Next → page 2 (the 26th contact)
         await page.click('button[aria-label="Go to next page"]');
         // Wait for page 2 to actually render: check for "Showing 26" specifically
-        // (page 1 shows "Showing 1–26 of 26" which contains "26" but not "Showing 26",
-        // so `includes('26')` resolves immediately on page 1 — we need the stricter test).
+        // (page 1 shows "Showing 1–25 of 26" which does not match /Showing 26/,
+        // so the waitForFunction correctly waits until the page-2 response arrives).
         await page.waitForFunction(() => {
           const info = document.querySelector('[data-testid="contacts-pagination-info"]');
           return info && /Showing 26/.test(info.textContent);
