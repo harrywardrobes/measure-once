@@ -4445,12 +4445,12 @@ async function backfillLeadStatusShorthands() {
 // The `source` field should identify the file and call-site so the warning message
 // points maintainers directly to the affected code.
 const HARDCODED_LEAD_STATUS_KEYS = [
-  { key: 'OPEN_DEAL',           source: 'server.js — contact create' },
-  { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP' },
-  { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP' },
-  { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js' },
-  { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission' },
-  { key: 'ROUGH_ESTIMATE_SENT', source: 'photo-reviews.js — review outcome' },
+  { key: 'OPEN_DEAL',           source: 'server.js — contact create',                              featureLabel: 'Creating new contacts' },
+  { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                   featureLabel: 'Booking survey visits' },
+  { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                   featureLabel: 'Booking design visits' },
+  { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js', featureLabel: 'Marking visits as not suitable & photo review outcomes' },
+  { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission',                     featureLabel: 'Customer photo submission' },
+  { key: 'ROUGH_ESTIMATE_SENT', source: 'photo-reviews.js — review outcome',                       featureLabel: 'Photo review outcomes' },
 ];
 
 async function checkHardcodedLeadStatusKeys() {
@@ -5206,8 +5206,10 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     if (existing[0].is_null_row) {
       return res.status(400).json({ error: 'The null-status sentinel row cannot be deleted.' });
     }
-    if (HARDCODED_LEAD_STATUS_KEYS.some(({ key: k }) => k === key)) {
-      return res.status(409).json({ error: 'This status is required by the pipeline and cannot be deleted.' });
+    const hardcoded = HARDCODED_LEAD_STATUS_KEYS.find(({ key: k }) => k === key);
+    if (hardcoded) {
+      const featurePart = hardcoded.featureLabel ? ` Required by: ${hardcoded.featureLabel}.` : '';
+      return res.status(409).json({ error: `"${key}" is a pipeline-critical status and cannot be deleted.${featurePart}` });
     }
     await pool.query(
       `DELETE FROM card_action_handler_bindings

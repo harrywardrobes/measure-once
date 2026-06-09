@@ -177,7 +177,11 @@ function StatusRow({ status, index, total, onMove, onDelete, isRequired }: {
       </td>
       <td style={{ ...TD, textAlign: 'center' }}>
         {isRequired ? (
-          <Tooltip title="This status is required by the application and cannot be deleted">
+          <Tooltip title={
+            LEAD_STATUS_FEATURE_LABEL[status.key]
+              ? `Required by: ${LEAD_STATUS_FEATURE_LABEL[status.key]} — cannot be deleted.`
+              : 'This status is required by the application and cannot be deleted.'
+          }>
             <span style={{ display: 'inline-block', cursor: 'not-allowed' }}>
               <button
                 className="btn btn-ghost"
