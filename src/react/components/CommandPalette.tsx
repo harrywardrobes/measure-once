@@ -29,6 +29,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TuneIcon from '@mui/icons-material/Tune';
 import CodeIcon from '@mui/icons-material/Code';
+import HubIcon from '@mui/icons-material/Hub';
 
 declare global {
   interface Window {
@@ -36,6 +37,7 @@ declare global {
     closeCommandPalette?: () => void;
     _cpRun?: Record<string, () => void>;
     adminSwitchGroup?: (groupId: string) => void;
+    adminSwitchToTab?: (tabId: string) => void;
   }
 }
 
@@ -66,6 +68,7 @@ const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-group-people',        label: 'Admin · People',        hint: 'Jump to the People group (Alt+1)',        category: 'Admin', icon: <GroupIcon fontSize="small" /> },
   { id: 'go-admin-group-configuration', label: 'Admin · Configuration', hint: 'Jump to the Configuration group (Alt+2)', category: 'Admin', icon: <TuneIcon fontSize="small" /> },
   { id: 'go-admin-group-developer',     label: 'Admin · Developer',     hint: 'Jump to the Developer group (Alt+3)',     category: 'Admin', icon: <CodeIcon fontSize="small" /> },
+  { id: 'go-admin-tab-hubspot',         label: 'Admin · HubSpot',       hint: 'Jump to Configuration → HubSpot',         category: 'Admin', icon: <HubIcon fontSize="small" /> },
 ];
 
 function contactName(c: { properties?: { firstname?: string; lastname?: string } }): string {
@@ -208,6 +211,18 @@ export function CommandPalette() {
       'go-admin-group-people':        () => adminGroupNav('people'),
       'go-admin-group-configuration': () => adminGroupNav('configuration'),
       'go-admin-group-developer':     () => adminGroupNav('developer'),
+      'go-admin-tab-hubspot': () => {
+        doClose();
+        if (typeof window.adminSwitchToTab === 'function') {
+          window.adminSwitchToTab('hubspot');
+        } else {
+          try {
+            localStorage.setItem('adminActiveGroup', 'configuration');
+            localStorage.setItem('adminActiveTab', 'hubspot');
+          } catch (_) {}
+          location.href = '/admin';
+        }
+      },
     };
 
     const onKeyDown = (e: KeyboardEvent) => {

@@ -241,17 +241,23 @@ export function AdminGroupedTabsBar() {
     }
   }, []);
 
-  // Expose a global so external callers (Command Palette, etc.) can
-  // programmatically switch to a group without touching React internals.
-  // The wrapper validates the string is a known GroupId before delegating.
+  // Expose globals so external callers (Command Palette, etc.) can
+  // programmatically switch to a group or a specific tab without touching
+  // React internals.
   useEffect(() => {
     window.adminSwitchGroup = (groupId: string) => {
       if (TAB_GROUPS.some((g) => g.id === groupId)) {
         handleGroupSelect(groupId as GroupId);
       }
     };
-    return () => { delete window.adminSwitchGroup; };
-  }, [handleGroupSelect]);
+    window.adminSwitchToTab = (tabId: string) => {
+      handleTabSelect(tabId);
+    };
+    return () => {
+      delete window.adminSwitchGroup;
+      delete window.adminSwitchToTab;
+    };
+  }, [handleGroupSelect, handleTabSelect]);
 
   // Alt+1…4 keyboard shortcuts — jump to the Nth visible group.
   // Ignored when focus is inside an interactive input element.
