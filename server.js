@@ -2967,11 +2967,45 @@ function validateWorkflow(body) {
   return null;
 }
 
-app.post('/api/workflow', isAuthenticated, requireManagerOrAdmin, (req, res) => {
+app.post('/api/workflow', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
   const err = validateWorkflow(req.body);
   if (err) return res.status(400).json({ error: err });
+
+  // Capture existing stage keys before overwriting so we can detect additions.
+  let prevStageKeys = new Set();
+  try {
+    if (fs.existsSync(WORKFLOW_FILE)) {
+      const prev = JSON.parse(fs.readFileSync(WORKFLOW_FILE, 'utf8'));
+      if (prev?.stages && typeof prev.stages === 'object') {
+        prevStageKeys = new Set(Object.keys(prev.stages));
+      }
+    }
+  } catch { /* treat as empty — safe to re-seed */ }
+
   fs.writeFileSync(WORKFLOW_FILE, JSON.stringify(req.body, null, 2));
   res.json({ success: true });
+
+  // For each stage key that is new in this save and is a known pipeline stage,
+  // seed a null-status row (stage_key, '', '') so the Card Actions tab shows the
+  // "No lead status / stage default" row immediately without waiting for a restart.
+  // ON CONFLICT DO NOTHING preserves any admin-set value.
+  const newStageKeys = Object.keys(req.body.stages || {}).filter(k => !prevStageKeys.has(k));
+  if (newStageKeys.length) {
+    const knownNew = newStageKeys.filter(k => STAGE_ACTION_STAGE_KEYS.has(k));
+    for (const sk of knownNew) {
+      pool.query(
+        `INSERT INTO stage_action_labels (stage_key, status_key, label)
+         VALUES ($1, '', '')
+         ON CONFLICT (stage_key, status_key) DO NOTHING`,
+        [sk],
+      ).catch(e => logger.warn({ err: e.message }, `stage-action-labels null-row seed for stage "${sk}" failed:`));
+    }
+    // Seed per-status rows for every lead status already assigned to any of the
+    // newly added stages (idempotent — skips rows that already exist).
+    seedStageActionLabelsDefaults().catch(e =>
+      logger.warn({ err: e.message }, 'stage-action-labels seed after workflow stage add failed:'),
+    );
+  }
 });
 
 // ── Personal Tasks (local JSON) ───────────────────────────────────────────────
