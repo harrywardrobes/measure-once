@@ -507,6 +507,49 @@ async function main() {
       afterE.rows.length === 1,
       `rows=${afterE.rows.length}`);
 
+    // ── (F) Status with sub-statuses — 409 Conflict ──────────────────────────
+    // Attempting to DELETE a status that still has lead_substatuses rows must
+    // return 409 with a human-readable message.  The status row must survive.
+    console.log('\n  [F] Status with sub-statuses: DELETE returns 409, row untouched');
+
+    const LS_KEY_F = 'PRIVTEST_LSDSC_F';
+    await pool.query(
+      `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, 'Test Status F', 9902, false)
+         ON CONFLICT (key) DO NOTHING`,
+      [LS_KEY_F],
+    );
+    await pool.query(
+      `INSERT INTO lead_substatuses (status_key, substatus_key, label, sort_order)
+         VALUES ($1, 'F_SUB_1', 'Sub One', 1), ($1, 'F_SUB_2', 'Sub Two', 2)`,
+      [LS_KEY_F],
+    );
+
+    const delF = await admin.delete(`/api/admin/lead-statuses/${encodeURIComponent(LS_KEY_F)}`);
+    const delFBody = delF.json || {};
+    record('F1 DELETE with sub-statuses returns 409',
+      delF.status === 409,
+      `status=${delF.status} body=${(delF.text || '').slice(0, 200)}`);
+    record('F2 Error message mentions sub-status count',
+      typeof delFBody.error === 'string' && /2/.test(delFBody.error),
+      `error=${delFBody.error}`);
+
+    const afterF = await pool.query(
+      'SELECT key FROM lead_status_config WHERE key = $1',
+      [LS_KEY_F],
+    );
+    record('F3 Status row still exists after rejected delete',
+      afterF.rows.length === 1,
+      `rows=${afterF.rows.length}`);
+
+    const subF = await pool.query(
+      'SELECT id FROM lead_substatuses WHERE status_key = $1',
+      [LS_KEY_F],
+    );
+    record('F4 Sub-statuses still exist after rejected delete',
+      subF.rows.length === 2,
+      `rows=${subF.rows.length}`);
+
     const failed = findings.filter(f => !f.ok).length;
     exitCode = failed === 0 ? 0 : 1;
     console.log(`\n  Results: ${findings.length - failed} passed, ${failed} failed`);
@@ -557,6 +600,11 @@ async function writeReport(runId) {
     '  `failure_type=patch` row is persisted per contact. Then fixes the mock and',
     '  calls `POST /api/admin/substatus-clear-failures/retry` — asserts the prior',
     '  failures are marked resolved and the job re-runs successfully.',
+    '- **(E) Hardcoded key**: `DELETE` of a pipeline-critical key returns 409.',
+    '  The row must remain untouched in `lead_status_config`.',
+    '- **(F) Status with sub-statuses**: `DELETE` of a status that still has',
+    '  `lead_substatuses` rows returns 409 with a message that includes the count.',
+    '  The status row and all sub-status rows must survive the rejected delete.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);

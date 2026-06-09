@@ -5219,6 +5219,15 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       const featurePart = hardcoded.featureLabel ? ` Required by: ${hardcoded.featureLabel}.` : '';
       return res.status(409).json({ error: `"${key}" is a pipeline-critical status and cannot be deleted.${featurePart}` });
     }
+    const { rows: substatuses } = await pool.query(
+      'SELECT id FROM lead_substatuses WHERE status_key = $1',
+      [key]
+    );
+    if (substatuses.length > 0) {
+      return res.status(409).json({
+        error: `Remove all sub-statuses before deleting this status (${substatuses.length} sub-status${substatuses.length === 1 ? '' : 'es'} remain)`,
+      });
+    }
     await pool.query(
       `DELETE FROM card_action_handler_bindings
         WHERE status_key = LOWER($1) AND status_key <> '' AND substatus_id IS NULL`,
