@@ -8,7 +8,7 @@ server serves it as static assets.
 ## How everything fits together
 
 - `main.tsx` — the single entry point. It finds known mount points
-  (`#tab-search`, `#tab-workshop`, …) and renders each that exists,
+  (`#tab-search`, …) and renders each that exists,
   wrapping every mount in `AppThemeProvider` so the shared MUI theme +
   `ScopedCssBaseline` apply automatically.
 - `theme.ts` — the MUI theme. Close to MUI defaults today; intentionally
@@ -25,8 +25,8 @@ server serves it as static assets.
   across pages. Add a wrapper only when we genuinely need shared
   defaults — don't pre-build the world.
 - `components/` (root) — legacy non-MUI React components used by the
-  Search and Workshop tabs. They keep working through the new theme
-  provider; new components should be MUI-first.
+  Search tab. They keep working through the new theme provider; new
+  components should be MUI-first.
 
 ## Adding a new MUI-based component
 
