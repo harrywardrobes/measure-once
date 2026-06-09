@@ -127,15 +127,17 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
         />
       </td>
       <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
+      <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
     </tr>
   );
 }
 
-function StatusRow({ status, index, total, onMove }: {
+function StatusRow({ status, index, total, onMove, onDelete }: {
   status: LeadStatus;
   index: number;
   total: number;
   onMove: (key: string, dir: 'up' | 'down') => void;
+  onDelete: (key: string) => void;
 }) {
   return (
     <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
@@ -169,6 +171,14 @@ function StatusRow({ status, index, total, onMove }: {
       </td>
       <td style={{ ...TD, textAlign: 'center' }}>
         <input type="checkbox" defaultChecked={!!status.excluded_from_sales} data-key={status.key} />
+      </td>
+      <td style={{ ...TD, textAlign: 'center' }}>
+        <button
+          className="btn btn-ghost"
+          title={`Delete ${status.key}`}
+          onClick={() => onDelete(status.key)}
+          style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--error-600, #dc2626)' }}
+        >✕</button>
       </td>
     </tr>
   );
@@ -598,21 +608,37 @@ export function SettingsPage() {
     } catch (e) { setAddErr((e as Error).message || 'Failed to add status.'); }
   }, [newKey, newLabel, newStage, fetchHealthData]);
 
+  const deleteStatus = useCallback(async (key: string) => {
+    if (!window.confirm(`Delete lead status "${key}"? This cannot be undone.`)) return;
+    try {
+      await DELETE(`/api/admin/lead-statuses/${encodeURIComponent(key)}`);
+      const next = statusesRef.current.filter(s => s.key !== key);
+      setStatuses(next); statusesRef.current = next;
+      setReloadKey(rk => rk + 1);
+      showToast(`Status "${key}" deleted.`);
+      notifyLsChanged();
+      fetchHealthData();
+    } catch (e) { showToast((e as Error).message || 'Failed to delete status.', true); }
+  }, [fetchHealthData]);
 
   useEffect(() => {
-    W.saveAllLeadStatuses   = saveAll;
-    W.moveLeadStatus        = (key: string, dir: 'up' | 'down') => moveStatus(key, dir);
-    W.addLeadStatus         = addStatus;
-    W.loadLeadStatusesAdmin = fetchStatuses;
-    W.loadHubspotStatus     = fetchHubStatus;
+    W.saveAllLeadStatuses      = saveAll;
+    W.moveLeadStatus           = (key: string, dir: 'up' | 'down') => moveStatus(key, dir);
+    W.addLeadStatus            = addStatus;
+    W.deleteLeadStatus         = deleteStatus;
+    W.loadLeadStatusesAdmin    = fetchStatuses;
+    W.loadHubspotStatus        = fetchHubStatus;
+    W.reloadLeadStatusHealth   = fetchHealthData;
     return () => {
       delete W.saveAllLeadStatuses;
       delete W.moveLeadStatus;
       delete W.addLeadStatus;
+      delete W.deleteLeadStatus;
       delete W.loadLeadStatusesAdmin;
       delete W.loadHubspotStatus;
+      delete W.reloadLeadStatusHealth;
     };
-  }, [saveAll, moveStatus, addStatus, fetchStatuses, fetchHubStatus]);
+  }, [saveAll, moveStatus, addStatus, deleteStatus, fetchStatuses, fetchHubStatus, fetchHealthData]);
 
   const badge = (() => {
     if (!hubStatus) return { text: 'Checking…', bg: 'var(--neutral-100)', color: 'var(--neutral-500)' };
@@ -770,12 +796,13 @@ export function SettingsPage() {
                       <th style={TH} title="4-character shorthand used to prefix sub-status keys">Shorthand</th>
                       <th style={TH}>Display Label</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Excl. from Sales</th>
+                      <th style={{ ...TH, textAlign: 'center' }}>Delete</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nullRow && <NullStatusRow key={`${nullRow.key}-${reloadKey}`} status={nullRow} />}
                     {real.map((s, i) => (
-                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} />
+                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} />
                     ))}
                   </tbody>
                 </table>
