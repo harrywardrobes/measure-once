@@ -767,7 +767,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     await assertLeadStatusKey('AWAITING_PHOTOS');
   } catch (e) {
     if (e.code === 'LEAD_STATUS_REMOVED') {
-      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
     }
     throw e;
   }

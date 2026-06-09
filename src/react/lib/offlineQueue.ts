@@ -151,6 +151,12 @@ export interface ConflictEntry {
    * restore the pipeline status before the change can be re-entered).
    */
   errorCode?: string;
+  /**
+   * Structured metadata attached by the server alongside a known error code.
+   * For `LEAD_STATUS_REMOVED`, includes `removedKey` — the exact status key
+   * that was missing — so the UI can name it in the user-facing message.
+   */
+  errorMeta?: { removedKey?: string };
   detectedAt: number;
 }
 

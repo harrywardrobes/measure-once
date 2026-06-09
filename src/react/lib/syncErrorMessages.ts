@@ -177,6 +177,12 @@ export interface ConflictExplanationInput {
    * rather than a data-version race. Takes precedence over `resolution`.
    */
   errorCode?: string | null;
+  /**
+   * Structured metadata from the server alongside a known error code.
+   * For `LEAD_STATUS_REMOVED`, `removedKey` names the exact status that
+   * was missing so the message can be specific.
+   */
+  errorMeta?: { removedKey?: string } | null;
 }
 
 export interface ConflictExplanation {
@@ -198,7 +204,7 @@ export interface ConflictExplanation {
  * nothing was overwritten yet but a decision is needed.
  */
 export function explainConflict(input: ConflictExplanationInput): ConflictExplanation {
-  const { resolution, serverVersion, baseVersion, errorCode } = input;
+  const { resolution, serverVersion, baseVersion, errorCode, errorMeta } = input;
 
   // ── Configuration errors (not data-version races) ──
   // These take precedence over the resolution-based explanations below because
@@ -206,10 +212,12 @@ export function explainConflict(input: ConflictExplanationInput): ConflictExplan
   // user needs targeted admin guidance rather than a "keep mine / restore
   // server" framing.
   if (errorCode === 'LEAD_STATUS_REMOVED') {
+    const statusName = errorMeta?.removedKey
+      ? `The status '${errorMeta.removedKey}' has been removed`
+      : 'The pipeline status this change referenced has been removed';
     return {
       summary:
-        'This change was rejected because the pipeline status it referenced has been removed. ' +
-        'Ask an admin to restore it in Visit Settings → Lead statuses, then re-enter the change.',
+        `${statusName} — ask an admin to restore it in Visit Settings → Lead statuses, then re-enter the change.`,
     };
   }
 

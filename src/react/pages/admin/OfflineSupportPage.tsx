@@ -493,6 +493,8 @@ export function OfflineSupportPage() {
                           resolution: c.resolution,
                           serverVersion: c.serverVersion,
                           baseVersion: c.baseVersion,
+                          errorCode: c.errorCode,
+                          errorMeta: c.errorMeta,
                         });
                         const technical = `${c.recordKey ? `${c.recordKey} · ` : ''}applied (last-write-wins)${
                           c.serverVersion != null && c.baseVersion != null

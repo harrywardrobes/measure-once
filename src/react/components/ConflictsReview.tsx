@@ -914,6 +914,7 @@ function ConflictCard({
     serverVersion: conflict.serverVersion,
     baseVersion: conflict.baseVersion,
     errorCode: conflict.errorCode,
+    errorMeta: conflict.errorMeta,
   });
 
   // When the conflict was caused by a pipeline-configuration error the queued

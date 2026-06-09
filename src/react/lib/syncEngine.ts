@@ -271,6 +271,7 @@ async function processEntry(entry: QueueEntry): Promise<void> {
   // ConflictsReview drawer can surface the targeted admin guidance, then remove
   // the entry from the queue so it doesn't sit as a permanently-failed change.
   if (data?.code === 'LEAD_STATUS_REMOVED') {
+    const removedKey = (data as { removedKey?: string }).removedKey;
     await recordConflict({
       area: entry.area,
       label: entry.label,
@@ -286,6 +287,7 @@ async function processEntry(entry: QueueEntry): Promise<void> {
       serverData: null,
       resolution: 'flagged',
       errorCode: 'LEAD_STATUS_REMOVED',
+      errorMeta: removedKey ? { removedKey } : undefined,
     });
     await removeEntry(entry.id);
     surfaceConflict(entry);

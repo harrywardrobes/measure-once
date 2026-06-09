@@ -370,6 +370,7 @@ export const LeadStatusRemoved: Story = {
           method: 'PUT',
           recordKey: 'dv:503',
           errorCode: 'LEAD_STATUS_REMOVED',
+          errorMeta: { removedKey: 'QUOTED' },
           resolution: 'flagged',
           detectedAt: now - 1000 * 60 * 5,
         },

@@ -2007,7 +2007,7 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     return res.status(201).json(contact);
   } catch (e) {
     if (e.code === 'LEAD_STATUS_REMOVED') {
-      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+      return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
     }
     const status = e.response?.status;
     if (status === 409) {
@@ -6448,7 +6448,7 @@ app.post('/api/card-actions/arrange-visit/outcome',
       res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
-        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
       }
       const status = e.response?.status;
       if (status === 401 || status === 403) {

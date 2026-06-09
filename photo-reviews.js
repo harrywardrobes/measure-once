@@ -287,7 +287,7 @@ router.post('/api/card-actions/review-customer-photos',
       await assertLeadStatusKey(hsStatusForCheck);
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
-        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED' });
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
       }
       throw e;
     }

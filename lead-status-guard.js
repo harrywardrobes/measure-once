@@ -47,6 +47,7 @@ async function assertLeadStatusKey(key) {
     const err = new Error(`Lead status '${key}' has been removed — contact an admin.`);
     err.code = 'LEAD_STATUS_REMOVED';
     err.statusCode = 422;
+    err.removedKey = key;
     throw err;
   }
 }
