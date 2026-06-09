@@ -4653,6 +4653,57 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
   }
 });
 
+// Admin: fetch hs_lead_status property options directly from HubSpot
+app.get('/api/admin/hubspot-lead-statuses', isAuthenticated, requireAdmin, requireHubspotToken, async (req, res) => {
+  try {
+    const url = `${HS}/crm/v3/properties/contacts/hs_lead_status`;
+    const r = await hubspotRequestWithRetry('get', url, null);
+    const options = (r.data?.options || []).map(o => ({
+      value:        o.value,
+      label:        o.label,
+      displayOrder: o.displayOrder ?? 0,
+      hidden:       o.hidden ?? false,
+    }));
+    res.json({ options });
+  } catch (e) {
+    const status = e.response?.status || 502;
+    logger.error({ err: e.response?.data?.message || e.message }, 'GET /api/admin/hubspot-lead-statuses error:');
+    res.status(status).json({ error: e.response?.data?.message || 'Could not fetch HubSpot lead statuses.' });
+  }
+});
+
+// Admin: import (upsert) hs_lead_status options into lead_status_config
+app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmin, async (req, res) => {
+  const raw = req.body?.options;
+  if (!Array.isArray(raw)) return res.status(400).json({ error: 'options array is required.' });
+  const options = raw.filter(o => !o.hidden);
+  if (!options.length) return res.json({ upserted: 0, skipped: 0 });
+  let upserted = 0, skipped = 0;
+  try {
+    for (const opt of options) {
+      const key        = String(opt.value || '').trim().toUpperCase();
+      const label      = String(opt.label || '').trim();
+      const sort_order = typeof opt.displayOrder === 'number' ? opt.displayOrder : 0;
+      if (!key || !label) { skipped++; continue; }
+      const result = await pool.query(
+        `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+         VALUES ($1, $2, $3, FALSE)
+         ON CONFLICT (key) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
+        [key, label, sort_order]
+      );
+      if (result.rowCount > 0) upserted++;
+    }
+    invalidateLeadStatusCache();
+    _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
+    _invalidateProjectContactsCache();
+    res.json({ upserted, skipped });
+  } catch (e) {
+    logger.error({ err: e.message }, 'POST /api/admin/hubspot-lead-statuses/import error:');
+    res.status(500).json({ error: 'Could not import lead statuses.' });
+  }
+});
+
 // ── Page filter config ────────────────────────────────────────────────────────
 // Generic key/value config table for per-page defaults that admins can tune
 // without a code deploy. Defaults are seeded on boot.

@@ -244,6 +244,8 @@ const ROUTES = [
   { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-status-health',                   level: 'admin' },
+  { method: 'GET',    path: '/api/admin/hubspot-lead-statuses',                level: 'admin' },
+  { method: 'POST',   path: '/api/admin/hubspot-lead-statuses/import',        level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/stage-action-labels',                  level: 'admin' },
   { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot/dev-mode',                     level: 'admin', body: { devMode: false } },

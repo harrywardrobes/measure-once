@@ -5,7 +5,12 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Stack,
   TextField,
@@ -232,6 +237,15 @@ export function SettingsPage() {
 
   const [healthData, setHealthData] = useState<LeadStatusHealth | null>(null);
 
+  interface HsOption { value: string; label: string; displayOrder: number; hidden: boolean; }
+  type ImportTag = 'NEW' | 'REORDERED' | 'OK';
+  interface PreviewRow { option: HsOption; tag: ImportTag; }
+  const [importOpen, setImportOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importConfirming, setImportConfirming] = useState(false);
+  const [importRows, setImportRows] = useState<PreviewRow[]>([]);
+  const [importOptions, setImportOptions] = useState<HsOption[]>([]);
+
 
   const statusesRef = useRef<LeadStatus[]>([]);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -372,6 +386,49 @@ export function SettingsPage() {
       setSyncingHubspot(false);
     }
   }, []);
+
+  const openImportModal = useCallback(async () => {
+    setImportLoading(true);
+    setImportOpen(true);
+    setImportRows([]);
+    try {
+      const data = await GET<{ options: HsOption[] }>('/api/admin/hubspot-lead-statuses');
+      const visible = (data.options || []).filter(o => !o.hidden);
+      const localMap = new Map(statusesRef.current.map(s => [s.key, s]));
+      const rows: PreviewRow[] = visible.map(opt => {
+        const key = opt.value.toUpperCase();
+        const local = localMap.get(key);
+        let tag: ImportTag;
+        if (!local) tag = 'NEW';
+        else if (local.sort_order !== opt.displayOrder) tag = 'REORDERED';
+        else tag = 'OK';
+        return { option: { ...opt, value: key }, tag };
+      });
+      setImportRows(rows);
+      setImportOptions(visible.map(o => ({ ...o, value: o.value.toUpperCase() })));
+    } catch (e) {
+      showToast((e as Error).message || 'Could not fetch HubSpot statuses.', true);
+      setImportOpen(false);
+    } finally {
+      setImportLoading(false);
+    }
+  }, []);
+
+  const confirmImport = useCallback(async () => {
+    setImportConfirming(true);
+    try {
+      const data = await POST<{ upserted: number; skipped: number }>('/api/admin/hubspot-lead-statuses/import', { options: importOptions });
+      showToast(`Synced ${data.upserted} status${data.upserted !== 1 ? 'es' : ''} from HubSpot`);
+      setImportOpen(false);
+      await fetchStatuses();
+      fetchHealthData();
+      notifyLsChanged();
+    } catch (e) {
+      showToast((e as Error).message || 'Import failed.', true);
+    } finally {
+      setImportConfirming(false);
+    }
+  }, [importOptions, fetchStatuses, fetchHealthData]);
 
   const saveDigestThresholds = useCallback(async () => {
     const staleDaysVal   = parseInt(digestStaleDays, 10);
@@ -651,7 +708,18 @@ export function SettingsPage() {
                 "Excl. from Sales" are hidden from the Sales board.
               </Typography>
             </Box>
-            <Button variant="contained" onClick={saveAll} sx={{ flexShrink: 0 }}>Save</Button>
+            <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<SyncIcon />}
+                onClick={openImportModal}
+                disabled={importLoading}
+              >
+                Import from HubSpot
+              </Button>
+              <Button variant="contained" onClick={saveAll}>Save</Button>
+            </Box>
           </Box>
 
           {healthData && !healthData.ok && healthData.missing.length > 0 && (
@@ -1079,6 +1147,66 @@ export function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={importOpen} onClose={() => { if (!importConfirming) setImportOpen(false); }} maxWidth="sm" fullWidth>
+        <DialogTitle>Import lead statuses from HubSpot</DialogTitle>
+        <DialogContent dividers>
+          {importLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 2 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" color="text.secondary">Fetching HubSpot statuses…</Typography>
+            </Box>
+          ) : importRows.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No visible statuses found in HubSpot.</Typography>
+          ) : (
+            <Stack spacing={0}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                {importRows.filter(r => r.tag !== 'OK').length === 0
+                  ? 'All statuses are already in sync — confirming will refresh sort order values.'
+                  : `${importRows.filter(r => r.tag === 'NEW').length} new, ${importRows.filter(r => r.tag === 'REORDERED').length} reordered, ${importRows.filter(r => r.tag === 'OK').length} already in sync.`}
+              </Typography>
+              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...TH }}>Key</th>
+                      <th style={{ ...TH }}>HubSpot label</th>
+                      <th style={{ ...TH, textAlign: 'center' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.map((row, i) => (
+                      <tr key={row.option.value} style={{ background: i % 2 ? 'var(--neutral-50)' : 'white' }}>
+                        <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{row.option.value}</td>
+                        <td style={TD}>{row.option.label}</td>
+                        <td style={{ ...TD, textAlign: 'center' }}>
+                          {row.tag === 'NEW' && <Chip label="NEW" size="small" color="success" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />}
+                          {row.tag === 'REORDERED' && <Chip label="REORDERED" size="small" color="info" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />}
+                          {row.tag === 'OK' && <Chip label="OK" size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 20, color: 'text.secondary', borderColor: 'divider' }} />}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                New rows will be inserted with the HubSpot label. Existing rows will only have their sort order updated — labels, stage, shorthand, and exclusion flags are not overwritten. Local-only statuses are not deleted.
+              </Typography>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportOpen(false)} disabled={importConfirming}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={confirmImport}
+            disabled={importLoading || importConfirming || importRows.length === 0}
+            startIcon={importConfirming ? <CircularProgress size={14} color="inherit" /> : undefined}
+          >
+            {importConfirming ? 'Importing…' : 'Confirm import'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Stack>
   );
