@@ -417,10 +417,12 @@ export function AdminAuditLogPageSkeleton({ forceVisible }: { forceVisible?: boo
 /**
  * Shape-matched skeleton for AdminSettingsPage.
  *
- * Mirrors the real page structure:
- *   • Integrations card — heading + subtitle + HubSpot status row + divider
- *     + Lead Statuses heading/Save row + table placeholder rows
- *     + "Add new status" inset with key / stage / label fields + button
+ * Mirrors the real page structure (Lead Statuses moved to StagesPage):
+ *   • Conflict digest card — heading + subtitle + two numeric fields + Save
+ *     + divider + last-sent row + Send now button
+ *   • Page defaults card — heading + Save button + Sales board / Surveys /
+ *     Customers list subsections
+ *   • Design System card — heading + subtitle + Open Storybook button
  */
 export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
   const visible = useVisible(forceVisible);
@@ -428,31 +430,119 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
 
   return (
     <Stack data-testid="loading-skeleton" spacing={2}>
+      {/* Conflict digest card */}
       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
-        {/* Integrations heading */}
-        <MuiSkeleton variant="text" width={120} height={28} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width={140} height={28} sx={{ mb: 0.5 }} />
         <MuiSkeleton variant="text" width="70%" height={16} sx={{ mb: 2 }} />
 
-        {/* HubSpot status row */}
-        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center',
-          border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <MuiSkeleton variant="rounded" width={18} height={18} />
-            <MuiSkeleton variant="text" width={100} height={18} />
-          </Stack>
-          <MuiSkeleton variant="rounded" width={80} height={22} />
+        {/* Threshold fields + Save */}
+        <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: 'flex-end' }}>
+          <MuiSkeleton variant="rounded" width={170} height={40} />
+          <MuiSkeleton variant="rounded" width={210} height={40} />
+          <MuiSkeleton variant="rounded" width={72} height={36} />
         </Stack>
 
         {/* Divider */}
-        <Box sx={{ my: 3, borderTop: '1px solid', borderColor: 'divider' }} />
+        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
 
-        {/* Lead Statuses heading + Save button */}
+        {/* Last sent + Send now */}
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <MuiSkeleton variant="text" width={180} height={18} />
+          <MuiSkeleton variant="rounded" width={100} height={36} />
+        </Stack>
+      </Box>
+
+      {/* Page defaults card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        {/* Heading + Save button */}
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
-            <MuiSkeleton variant="text" width={130} height={22} sx={{ mb: 0.5 }} />
-            <MuiSkeleton variant="text" width="75%" height={16} />
+            <MuiSkeleton variant="text" width={130} height={28} sx={{ mb: 0.5 }} />
+            <MuiSkeleton variant="text" width="70%" height={16} />
           </Box>
           <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
+        </Stack>
+
+        {/* Sales board */}
+        <MuiSkeleton variant="text" width={100} height={18} sx={{ mb: 1.5 }} />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
+          <MuiSkeleton variant="rounded" width={220} height={56} />
+          <MuiSkeleton variant="rounded" width={200} height={56} />
+        </Stack>
+
+        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
+
+        {/* Surveys board */}
+        <MuiSkeleton variant="text" width={110} height={18} sx={{ mb: 1.5 }} />
+        <MuiSkeleton variant="rounded" width={200} height={56} sx={{ mb: 2 }} />
+
+        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
+
+        {/* Customers list section */}
+        <MuiSkeleton variant="text" width={120} height={18} sx={{ mb: 1.5 }} />
+        <MuiSkeleton variant="rounded" width={200} height={56} />
+      </Box>
+
+      {/* Design System card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={120} height={28} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width="60%" height={16} sx={{ mb: 2 }} />
+        <MuiSkeleton variant="rounded" width={160} height={36} />
+      </Box>
+    </Stack>
+  );
+}
+
+/**
+ * Shape-matched skeleton for AdminStagesPage.
+ *
+ * Mirrors the real page structure:
+ *   • Pipeline stages card — heading + compact 3-column table (key / label / count)
+ *   • Lead statuses card — heading + Save button + table rows + Add new status inset
+ */
+export function AdminStagesPageSkeleton({ forceVisible }: { forceVisible?: boolean } = {}) {
+  const visible = useVisible(forceVisible);
+  if (!visible) return null;
+
+  return (
+    <Stack data-testid="loading-skeleton" spacing={2}>
+      {/* Pipeline stages card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        <MuiSkeleton variant="text" width={140} height={22} sx={{ mb: 0.5 }} />
+        <MuiSkeleton variant="text" width="70%" height={16} sx={{ mb: 2 }} />
+
+        {/* Table header */}
+        <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
+          {[100, 120, 80].map((w, i) => (
+            <MuiSkeleton key={i} variant="text" width={w} height={14} />
+          ))}
+        </Stack>
+
+        {/* 9 stage rows */}
+        <Stack spacing={0.75}>
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <Stack key={i} direction="row" spacing={2} sx={{ alignItems: 'center',
+              py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <MuiSkeleton variant="text" width={90} height={16} sx={{ flexShrink: 0 }} />
+              <MuiSkeleton variant="text" width={110} height={16} sx={{ flex: 1 }} />
+              <MuiSkeleton variant="text" width={24} height={16} sx={{ flexShrink: 0 }} />
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+
+      {/* Lead statuses card */}
+      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+        {/* Heading + buttons */}
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box>
+            <MuiSkeleton variant="text" width={120} height={22} sx={{ mb: 0.5 }} />
+            <MuiSkeleton variant="text" width="65%" height={16} />
+          </Box>
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+            <MuiSkeleton variant="rounded" width={140} height={32} />
+            <MuiSkeleton variant="rounded" width={60} height={36} />
+          </Stack>
         </Stack>
 
         {/* Table header */}
@@ -490,37 +580,6 @@ export function AdminSettingsPageSkeleton({ forceVisible }: { forceVisible?: boo
             <MuiSkeleton variant="rounded" width={100} height={40} />
           </Stack>
         </Box>
-      </Box>
-
-      {/* Page defaults card */}
-      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
-        {/* Heading + Save button */}
-        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box>
-            <MuiSkeleton variant="text" width={130} height={28} sx={{ mb: 0.5 }} />
-            <MuiSkeleton variant="text" width="70%" height={16} />
-          </Box>
-          <MuiSkeleton variant="rounded" width={72} height={36} sx={{ flexShrink: 0 }} />
-        </Stack>
-
-        {/* Sales board */}
-        <MuiSkeleton variant="text" width={100} height={18} sx={{ mb: 1.5 }} />
-        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
-          <MuiSkeleton variant="rounded" width={220} height={56} />
-          <MuiSkeleton variant="rounded" width={200} height={56} />
-        </Stack>
-
-        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
-
-        {/* Surveys board */}
-        <MuiSkeleton variant="text" width={110} height={18} sx={{ mb: 1.5 }} />
-        <MuiSkeleton variant="rounded" width={200} height={56} sx={{ mb: 2 }} />
-
-        <Box sx={{ my: 2, borderTop: '1px solid', borderColor: 'divider' }} />
-
-        {/* Customers list section */}
-        <MuiSkeleton variant="text" width={120} height={18} sx={{ mb: 1.5 }} />
-        <MuiSkeleton variant="rounded" width={200} height={56} />
       </Box>
     </Stack>
   );

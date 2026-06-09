@@ -154,6 +154,7 @@
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="hubspot"     onclick="switchTab('hubspot')">HubSpot</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings')">Settings</button>
+        <button class="tab-btn"        data-tab="stages"      onclick="switchTab('stages')">Stages</button>
         <button class="tab-btn"        data-tab="cardactions"   onclick="switchTab('cardactions')">Card actions</button>
         <button class="tab-btn"        data-tab="actionhandlers" onclick="switchTab('actionhandlers')">Action handlers</button>
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit')">Design visit</button>
@@ -196,6 +197,7 @@
            work unchanged.
       -->
       <div class="tab-panel" id="tab-settings"></div>
+      <div class="tab-panel" id="tab-stages"></div>
       <div class="tab-panel" id="tab-cardactions"></div>
       <div class="tab-panel" id="tab-actionhandlers"></div>
       <div class="tab-panel" id="tab-designvisit"></div>
@@ -244,7 +246,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'settings', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'emailtemplates', 'devenv', 'offline'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'emailtemplates', 'devenv', 'offline'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);
