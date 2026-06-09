@@ -53,6 +53,7 @@ interface StatusModel {
   substatuses: Substatus[];
 }
 interface StageModel { key: string; label: string; statuses: StatusModel[]; }
+interface BuildResult { globalNull: StatusModel; stages: StageModel[]; }
 interface NewSubRow  { id: number; lsKey: string; prefix: string; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -62,7 +63,7 @@ const W = window as unknown as Record<string, unknown>;
 function buildModel(
   labels: CALabel[], statuses: LeadStatus[], substatuses: Substatus[],
   stages: Array<{ key: string; label: string }>,
-): StageModel[] {
+): BuildResult {
   const labelByKey: Record<string, string> = {};
   for (const r of labels) labelByKey[`${r.stage_key}|${r.status_key}`] = r.label;
 
@@ -77,8 +78,7 @@ function buildModel(
     stageMap.set(cs.key, { key: cs.key, label: cs.label, statuses: [] });
   }
 
-  const nullRow = statuses.find(s => s.is_null_row);
-  const real    = statuses.filter(s => !s.is_null_row);
+  const real = statuses.filter(s => !s.is_null_row);
 
   for (const s of real) {
     const sk = lsStageToKey(s.stage || '');
@@ -95,22 +95,18 @@ function buildModel(
     });
   }
 
-  // Null-status / stage-default row goes first in every stage
-  for (const cs of stages) {
-    const stage = stageMap.get(cs.key);
-    if (!stage) continue;
-    const rowLabel = cs.key === 'sales'
-      ? (nullRow?.label ?? 'No lead status')
-      : 'No lead status / stage default';
-    stage.statuses.unshift({
-      key: '__NULL__', label: rowLabel, shorthand: '',
-      defaultLabel: labelByKey[`${cs.key}|`] || '',
-      defaultStatusKey: '', isNullRow: true,
-      substatuses: [],
-    });
-  }
+  // Single global "No lead status" row.
+  // Write sentinel: stage_key='__global__', status_key='' (follow-up #2457 will wire runtime resolution).
+  // Read: prefer '__global__' (new saves), fall back to 'sales' (legacy null-row data).
+  const globalNullLabel = labelByKey['__global__|'] || labelByKey['sales|'] || '';
+  const globalNull: StatusModel = {
+    key: '__NULL__', label: 'No lead status', shorthand: '',
+    defaultLabel: globalNullLabel,
+    defaultStatusKey: '', isNullRow: true,
+    substatuses: [],
+  };
 
-  return Array.from(stageMap.values());
+  return { globalNull, stages: Array.from(stageMap.values()) };
 }
 
 function handlersForSlot(
@@ -551,7 +547,7 @@ export function CardActionsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const stages = buildModel(labels, statuses, substatuses, workflowStages);
+  const { globalNull, stages } = buildModel(labels, statuses, substatuses, workflowStages);
 
   const toggleStage = (key: string) => setCollapsed(prev => {
     const n = new Set(prev);
@@ -576,8 +572,9 @@ export function CardActionsPage() {
             <Box>
               <Typography variant="h6">Card action labels</Typography>
               <Typography variant="body2" color="text.secondary">
-                The bottom strip on Sales &amp; Survey cards. One row per (stage × lead status);
-                rows mirror the Lead Statuses table order and refresh automatically when renamed.
+                The bottom strip on Sales &amp; Survey cards. A single global row covers contacts
+                with no lead status, followed by per-stage rows for each configured lead status.
+                Rows mirror the Lead Statuses table order and refresh automatically when renamed.
               </Typography>
             </Box>
             <Button variant="contained" onClick={saveAllCardActionLabels} sx={{ flexShrink: 0 }}>Save</Button>
@@ -589,9 +586,45 @@ export function CardActionsPage() {
                 <CircularProgress size={16} />
                 <Typography variant="body2" color="text.secondary">Loading…</Typography>
               </Box>
-            ) : !stages.length ? (
-              <p className="admin-msg admin-msg--muted">No card action stages configured.</p>
-            ) : stages.map(stage => {
+            ) : (
+              <>
+                {/* ── Global "No lead status" block ──────────────────────── */}
+                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} key={`__global__-${reloadKey}`}>
+                  <div className="adm-ca-block-head">
+                    <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
+                    <span className="adm-text-muted-xs">
+                      contact has no <code>hs_lead_status</code>
+                    </span>
+                  </div>
+                  <div className="adm-ca-default-row" data-testid="ca-default-row-global">
+                    <div className="adm-ca-default-label">Action label</div>
+                    <input type="text" className="field ca-default-input adm-ca-default-input"
+                      maxLength={128}
+                      data-kind="ls-default"
+                      data-stage="__global__"
+                      data-status=""
+                      data-original={globalNull.defaultLabel}
+                      defaultValue={globalNull.defaultLabel}
+                      placeholder="(Action label)"
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                    <HandlerBadges stageKey="__global__" statusKey="" handlers={handlers} />
+                    {resolvedSlots.has('ls:__global__:') && (
+                      <span className="ca-resolved-pill" style={{
+                        display: 'inline-flex', alignItems: 'center',
+                        padding: '1px 8px', marginLeft: 6,
+                        background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
+                        borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                        lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                      }}>✓ Resolved</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Per-stage accordion sections ────────────────────────── */}
+                {!stages.length ? (
+                  <p className="admin-msg admin-msg--muted">No card action stages configured.</p>
+                ) : stages.map(stage => {
               const isCollapsed = collapsed.has(stage.key);
               const bodyId = `ca-stage-body-${stage.key}`;
               return (
@@ -613,14 +646,8 @@ export function CardActionsPage() {
                       return (
                         <div key={`${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key}>
                           <div className="adm-ca-block-head">
-                            <strong className={`adm-ca-block-title${ls.isNullRow ? ' is-null' : ''}`}>{ls.label}</strong>
-                            {ls.isNullRow
-                              ? <span className="adm-text-muted-xs">
-                                  {stage.key === 'sales'
-                                    ? <>contact has no <code>hs_lead_status</code> — also used as the <strong>stage default</strong> for any lead status without a per-LS row below</>
-                                    : <>used as the <strong>stage default</strong> for any lead status without a per-LS row below</>}
-                                </span>
-                              : <span className="adm-text-faint-mono">{ls.key}</span>}
+                            <strong className="adm-ca-block-title">{ls.label}</strong>
+                            <span className="adm-text-faint-mono">{ls.key}</span>
                           </div>
 
                           <div className="adm-ca-default-row" data-testid="ca-default-row">
@@ -765,6 +792,8 @@ export function CardActionsPage() {
                 </section>
               );
             })}
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
