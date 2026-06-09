@@ -428,6 +428,24 @@ export function CustomerDetailPage() {
     };
   }, [fetchLeadStatuses]);
 
+  // ── Patch contact properties when renamed in another tab ───────────────────
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel('contact_properties_changed');
+      ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<Contact['properties']> }>) => {
+        const { contactId: changedId, props } = e.data ?? {};
+        if (!changedId || !props || changedId !== contactId) return;
+        setContact((prev) =>
+          prev ? { ...prev, properties: { ...prev.properties, ...props } } : prev,
+        );
+      };
+    } catch { /* BroadcastChannel unavailable */ }
+    return () => { try { ch?.close(); } catch { /* noop */ } };
+  }, [contactId]);
+
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
 
   const contactEmailRef = useRef<string | undefined>(undefined);
