@@ -6725,63 +6725,6 @@ app.get('/api/whatsapp/history/:contactId', isAuthenticated, requireAdmin, async
   }
 });
 
-// ── Workshop Settings ─────────────────────────────────────────────────────────
-const WORKSHOP_SETTINGS_DEFAULTS = [
-  { key: 'integral_lead_time_days',       label: 'Integral Lead Times',            value: '14' },
-  { key: 'interfit_drawer_box_lead_time_days', label: 'Interfit Drawer Box Lead Times', value: '14' },
-];
-
-async function ensureWorkshopSettingsTable() {
-  // Schema created by migrations; this boot step seeds default rows.
-  for (const row of WORKSHOP_SETTINGS_DEFAULTS) {
-    await pool.query(
-      `INSERT INTO workshop_settings (key, label, value)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (key) DO NOTHING`,
-      [row.key, row.label, row.value]
-    );
-  }
-}
-
-app.get('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      'SELECT key, label, value, updated_at, updated_by FROM workshop_settings ORDER BY key ASC'
-    );
-    res.json(rows);
-  } catch (e) {
-    logger.error({ err: e.message }, 'GET /api/admin/workshop-settings error:');
-    res.status(500).json({ error: 'Could not load workshop settings.' });
-  }
-});
-
-app.patch('/api/admin/workshop-settings', isAuthenticated, requireAdmin, async (req, res) => {
-  const { key, value } = req.body || {};
-  if (!key || typeof key !== 'string') return res.status(400).json({ error: 'key is required.' });
-  const trimmedValue = typeof value === 'string' ? value.trim() : String(value ?? '');
-  const adminEmail = req.user?.claims?.email || req.user?.email || 'unknown';
-  try {
-    const existing = await pool.query('SELECT value, label FROM workshop_settings WHERE key = $1', [key]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'Setting not found.' });
-    const oldValue = existing.rows[0].value;
-    const label    = existing.rows[0].label;
-    await pool.query(
-      `UPDATE workshop_settings SET value = $1, updated_at = NOW(), updated_by = $2 WHERE key = $3`,
-      [trimmedValue, adminEmail, key]
-    );
-    await logAdminAction(
-      adminEmail,
-      'edit_workshop_setting',
-      null,
-      `${label} (${key}): ${oldValue} → ${trimmedValue}`
-    );
-    res.json({ ok: true });
-  } catch (e) {
-    logger.error({ err: e.message }, 'PATCH /api/admin/workshop-settings error:');
-    res.status(500).json({ error: 'Could not save workshop setting.' });
-  }
-});
-
 
 app.get('/api/search-settings', isAuthenticated, async (req, res) => {
   try {
@@ -6943,8 +6886,6 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.warn({ err: e }, '  hw_lead_substatus sync skipped'); }
     try { await checkDuplicateHandlerBindings(); }
     catch (e) { logger.error({ err: e }, '  Card action handler duplicate-binding check failed'); }
-    try { await ensureWorkshopSettingsTable(); }
-    catch (e) { logger.error({ err: e }, '  Workshop settings seed failed'); }
     try { await ensureResendLogTable(); }
     catch (e) { logger.error({ err: e }, '  Customer info resend log cleanup failed'); }
     backfillMaskedEmails().catch(e => logger.warn({ err: e }, '  masked_email backfill error'));

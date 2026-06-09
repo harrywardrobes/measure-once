@@ -252,8 +252,6 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/hubspot/dev-mode',                     level: 'admin', body: { devMode: false } },
   { method: 'GET',    path: '/api/admin/server-env',                           level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-substatuses',                     level: 'admin' },
-  { method: 'GET',    path: '/api/admin/workshop-settings',                    level: 'admin' },
-  { method: 'PATCH',  path: '/api/admin/workshop-settings',                    level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/search-settings',                      level: 'admin' },
   { method: 'PUT',    path: '/api/admin/search-settings',                      level: 'admin', body: {} },
 
