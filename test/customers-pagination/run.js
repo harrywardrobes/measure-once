@@ -2,13 +2,13 @@
 const { makeSkip3 } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  '[A.1] All view — pagination control appears with 30 contacts',
-  '[A.2] All view — page-2 click sends ?page=2 to /api/contacts-all',
-  '[A.3] All view — page-2 results differ from page-1 results',
-  '[C.1] All view — "Showing X–Y of Z" count visible on page 1',
-  '[D.1] Filter change (sort) resets from page 2 to page 1',
-  '[D.2] Filter change (search) resets from page 2 to page 1',
-  '[D.3] Filter change (lead-status select) resets from page 2 to page 1',
+  '(A) All view — pagination control appears with 30 contacts',
+  '(A) All view — page-2 click sends ?page=2 to /api/contacts-all',
+  '(A) All view — page-2 results differ from page-1 results',
+  '(C) All view — "Showing X–Y of Z" count visible on page 1',
+  '(D) Filter change (sort) resets from page 2 to page 1',
+  '(D) Filter change (search) resets from page 2 to page 1',
+  '(D) Filter change (lead-status select) resets from page 2 to page 1',
 ];
 
 // test/customers-pagination/run.js
