@@ -147,17 +147,38 @@ function findLiteralCallKeys(files) {
 // ─── Find inline hs_lead_status: 'KEY' object-literal values ─────────────────
 // Catches hardcoded keys set directly in HubSpot mutation objects, e.g.:
 //   { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: '...' }
+//   { hs_lead_status: "SURVEY_SCHEDULED" }
+//   { hs_lead_status: `SURVEY_SCHEDULED` }        ← template literal, no interpolation
+//   { hs_lead_status: 'KEY' as const }             ← TypeScript `as const` assertion
+//   { hs_lead_status: 'KEY' satisfies LeadStatus } ← TypeScript `satisfies` operator
 // These are valid hardcoded uses that HARDCODED_LEAD_STATUS_KEYS must track,
 // but they are invisible to the assertLeadStatusKey-only forward check.
+//
+// Dynamic values — String(variable), a plain identifier, or a template literal
+// with interpolation (e.g. `${someVar}`) — contain characters outside
+// [A-Z0-9_]+ and therefore do not match, which is the correct behaviour.
+//
+// TypeScript-specific patterns already covered without extra regex work:
+//   • `hs_lead_status?: string` type annotations — the `?` before `:` means the
+//     value side is a type keyword, not a string literal; no [A-Z0-9_]+ match.
+//   • `const body: Record<string,string> = { hs_lead_status: String(x) }` —
+//     `String(x)` contains `(` which is outside [A-Z0-9_]+; no match.
+//   • Spread: `...(flag ? { hs_lead_status: variable } : {})` — the value is
+//     an identifier, not a quoted string; no match.
+// The only additional pattern that required explicit support was the unquoted
+// template literal (backtick string without interpolation), handled by
+// including `` ` `` in the opening/closing delimiter character class below.
 
 function findInlineObjectKeys(files) {
   const found = new Map(); // key → [file, ...]
   for (const file of files) {
     const src = readFileSync(file, 'utf8');
-    // Match `hs_lead_status: 'KEY'` or `hs_lead_status: "KEY"` where KEY is
-    // an uppercase hs_lead_status value.  Lowercase or mixed-case values
-    // (property names, filter strings) won't match [A-Z0-9_]+.
-    for (const m of src.matchAll(/hs_lead_status:\s*['"]([A-Z0-9_]+)['"]/g)) {
+    // Match `hs_lead_status: 'KEY'`, `hs_lead_status: "KEY"`, or
+    // `hs_lead_status: \`KEY\`` where KEY is an uppercase hs_lead_status value.
+    // Lowercase or mixed-case values (property names, filter strings) won't
+    // match [A-Z0-9_]+.  Template literals with interpolation (${...}) also
+    // won't match because `$` and `{` are outside [A-Z0-9_]+.
+    for (const m of src.matchAll(/hs_lead_status:\s*[`'"]([A-Z0-9_]+)[`'"]/g)) {
       const key = m[1];
       if (!found.has(key)) found.set(key, []);
       found.get(key).push(relative(ROOT, file));
