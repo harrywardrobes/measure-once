@@ -117,7 +117,7 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
   );
 }
 
-function StatusRow({ status, index, total, onMove, onDelete, isRequired, featureLabel }: {
+function StatusRow({ status, index, total, onMove, onDelete, isRequired, featureLabel, source }: {
   status: LeadStatus;
   index: number;
   total: number;
@@ -125,6 +125,7 @@ function StatusRow({ status, index, total, onMove, onDelete, isRequired, feature
   onDelete: (key: string) => void;
   isRequired: boolean;
   featureLabel?: string;
+  source?: string;
 }) {
   return (
     <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
@@ -162,9 +163,15 @@ function StatusRow({ status, index, total, onMove, onDelete, isRequired, feature
       <td style={{ ...TD, textAlign: 'center' }}>
         {isRequired ? (
           <Tooltip title={
-            featureLabel
-              ? `Required by: ${featureLabel} — cannot be deleted.`
-              : 'This status is required by the application and cannot be deleted.'
+            <Box>
+              <Box>{featureLabel
+                ? `Required by: ${featureLabel} — cannot be deleted.`
+                : 'This status is required by the application and cannot be deleted.'
+              }</Box>
+              {source && (
+                <Box sx={{ mt: 0.5, fontSize: '0.8em', opacity: 0.8 }}>Used in: {source}</Box>
+              )}
+            </Box>
           }>
             <span style={{ display: 'inline-block', cursor: 'not-allowed' }}>
               <button
@@ -611,12 +618,17 @@ export function SettingsPage() {
                 Staff actions that rely on them will fail with an error until the keys are restored.
               </Typography>
               <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-                {healthData.missing.map(({ key, featureLabel }) => (
-                  <Box component="li" key={key} sx={{ mb: 0.25 }}>
+                {healthData.missing.map(({ key, featureLabel, source }) => (
+                  <Box component="li" key={key} sx={{ mb: 0.5 }}>
                     <Box component="code" sx={{ fontSize: '0.8em', fontWeight: 600 }}>{key}</Box>
                     {featureLabel && (
                       <Box component="span" sx={{ color: 'text.secondary', ml: 0.75, fontSize: '0.85em' }}>
                         — {featureLabel}
+                      </Box>
+                    )}
+                    {source && (
+                      <Box sx={{ fontSize: '0.78em', color: 'text.disabled', mt: 0.1, fontFamily: 'var(--font-mono)' }}>
+                        Used in: {source}
                       </Box>
                     )}
                   </Box>
@@ -650,7 +662,7 @@ export function SettingsPage() {
                   <tbody>
                     {nullRow && <NullStatusRow key={`${nullRow.key}-${reloadKey}`} status={nullRow} />}
                     {real.map((s, i) => (
-                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)} featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel} />
+                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)} featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel} source={healthData?.required?.find(r => r.key === s.key)?.source} />
                     ))}
                   </tbody>
                 </table>
