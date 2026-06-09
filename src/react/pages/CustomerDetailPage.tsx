@@ -796,6 +796,7 @@ export function CustomerDetailPage() {
               onCommentSaved={() => setToast({ msg: 'Comment saved' })}
               onRoomSaveError={() => setToast({ msg: 'Failed to save — please try again', error: true })}
               onCommentSaveError={() => setToast({ msg: 'Failed to save comment — please try again', error: true })}
+              onNotesSaveError={() => setToast({ msg: 'Failed to save notes — please try again', error: true })}
             />
 
             {qb.statusKnown && qb.connected && (

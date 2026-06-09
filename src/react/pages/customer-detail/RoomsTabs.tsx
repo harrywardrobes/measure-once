@@ -24,6 +24,7 @@ interface Props {
   onCommentSaved?: () => void;
   onRoomSaveError?: () => void;
   onCommentSaveError?: () => void;
+  onNotesSaveError?: () => void;
 }
 
 export function RoomsTabs({
@@ -41,6 +42,7 @@ export function RoomsTabs({
   onCommentSaved,
   onRoomSaveError,
   onCommentSaveError,
+  onNotesSaveError,
 }: Props) {
   const { isViewer, isManager } = usePrivilege();
   const canEdit = isManager;
@@ -116,8 +118,8 @@ export function RoomsTabs({
     try {
       await onSave(rooms, notes);
       onNotesSaved?.();
-    } catch { /* noop */ }
-  }, [rooms, notes, onSave, onNotesSaved]);
+    } catch { onNotesSaveError?.(); }
+  }, [rooms, notes, onSave, onNotesSaved, onNotesSaveError]);
 
   if (!rooms.length) {
     return (
