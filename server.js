@@ -4504,7 +4504,7 @@ app.get('/api/admin/lead-status-health', isAuthenticated, requireAdmin, async (r
     const existing = new Set(rows.map(r => r.key));
     const missing = HARDCODED_LEAD_STATUS_KEYS.filter(({ key }) => !existing.has(key));
     res.set('Cache-Control', 'no-store');
-    res.json({ ok: missing.length === 0, missing });
+    res.json({ ok: missing.length === 0, missing, required: HARDCODED_LEAD_STATUS_KEYS });
   } catch (e) {
     logger.error({ err: e.message }, 'GET /api/admin/lead-status-health error:');
     res.status(500).json({ error: 'Could not check lead status health.' });

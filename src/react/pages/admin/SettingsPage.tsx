@@ -14,6 +14,7 @@ import {
   Divider,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
@@ -64,6 +65,7 @@ interface LeadStatusHealthEntry {
 interface LeadStatusHealth {
   ok: boolean;
   missing: LeadStatusHealthEntry[];
+  required: LeadStatusHealthEntry[];
 }
 
 const LEAD_STATUS_FEATURE_LABEL: Record<string, string> = {
@@ -132,12 +134,13 @@ function NullStatusRow({ status }: { status: LeadStatus }) {
   );
 }
 
-function StatusRow({ status, index, total, onMove, onDelete }: {
+function StatusRow({ status, index, total, onMove, onDelete, isRequired }: {
   status: LeadStatus;
   index: number;
   total: number;
   onMove: (key: string, dir: 'up' | 'down') => void;
   onDelete: (key: string) => void;
+  isRequired: boolean;
 }) {
   return (
     <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
@@ -173,12 +176,24 @@ function StatusRow({ status, index, total, onMove, onDelete }: {
         <input type="checkbox" defaultChecked={!!status.excluded_from_sales} data-key={status.key} />
       </td>
       <td style={{ ...TD, textAlign: 'center' }}>
-        <button
-          className="btn btn-ghost"
-          title={`Delete ${status.key}`}
-          onClick={() => onDelete(status.key)}
-          style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--error-600, #dc2626)' }}
-        >✕</button>
+        {isRequired ? (
+          <Tooltip title="This status is required by the application and cannot be deleted">
+            <span style={{ display: 'inline-block', cursor: 'not-allowed' }}>
+              <button
+                className="btn btn-ghost"
+                disabled
+                style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--neutral-300, #d1d5db)', pointerEvents: 'none' }}
+              >✕</button>
+            </span>
+          </Tooltip>
+        ) : (
+          <button
+            className="btn btn-ghost"
+            title={`Delete ${status.key}`}
+            onClick={() => onDelete(status.key)}
+            style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--error-600, #dc2626)' }}
+          >✕</button>
+        )}
       </td>
     </tr>
   );
@@ -802,7 +817,7 @@ export function SettingsPage() {
                   <tbody>
                     {nullRow && <NullStatusRow key={`${nullRow.key}-${reloadKey}`} status={nullRow} />}
                     {real.map((s, i) => (
-                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} />
+                      <StatusRow key={`${s.key}-${reloadKey}`} status={s} index={i} total={real.length} onMove={moveStatus} onDelete={deleteStatus} isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)} />
                     ))}
                   </tbody>
                 </table>
