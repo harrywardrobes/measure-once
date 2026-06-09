@@ -9,8 +9,10 @@
 // PROBE_LABELS_DOC_EXTRAS contains an ID that is not present in the docs row,
 // fails (exit 1) when PROBE_LABELS_DOC_EXTRAS contains an ID that is also
 // already covered by a dedicated PROBE_LABELS entry (redundant suppression),
-// AND suppresses the missing-array warning when the suite is listed in
-// NO_PROBE_LABELS_ALLOWLIST.
+// suppresses the missing-array warning when the suite is listed in
+// NO_PROBE_LABELS_ALLOWLIST, emits a no-probe-suite advisory when a suite has
+// no probe callouts in docs and is NOT listed in NO_PROBE_SUITES_ALLOWLIST,
+// AND stays silent when the suite IS listed in NO_PROBE_SUITES_ALLOWLIST.
 //
 // Strategy: for each scenario, build a minimal synthetic fixture in a temp
 // directory that has its own docs/TEST_SUITES.md, package.json, and a test
@@ -53,6 +55,17 @@ const DOCS_WITHOUT_ALIAS = `\
 | Suite | Description |
 | --- | --- |
 | \`test:synth\` | Synthetic suite with probes **(A)** **(B)**. |
+`;
+
+// TEST_SUITES.md row with NO probe callouts at all.  The suite has no named
+// probes, so it should be enrolled in NO_PROBE_SUITES_ALLOWLIST or it will
+// trigger a non-failing advisory.
+const DOCS_NO_CALLOUTS = `\
+# Test Suites
+
+| Suite | Description |
+| --- | --- |
+| \`test:synth\` | Synthetic suite — static lint, no named probes. |
 `;
 
 // package.json that maps the synth suite to a test file inside the fixture dir.
@@ -121,7 +134,7 @@ const PROBE_LABELS_DOC_EXTRAS = ['A'];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function buildFixture(docsSrc, synthSrc, { allowlistSuites = [] } = {}) {
+function buildFixture(docsSrc, synthSrc, { allowlistSuites = [], noProbeSuiteAllowlistSuites = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'suite-probe-counts-'));
 
   fs.mkdirSync(path.join(dir, 'docs'));
@@ -136,17 +149,29 @@ function buildFixture(docsSrc, synthSrc, { allowlistSuites = [] } = {}) {
   const scriptDest = path.join(dir, 'scripts', 'check-suite-probe-counts.mjs');
   fs.copyFileSync(SCRIPT_SRC, scriptDest);
 
+  let scriptSrc = fs.readFileSync(scriptDest, 'utf8');
+
   if (allowlistSuites.length > 0) {
     const entries = allowlistSuites
       .map((s) => `  ['${s}', 'synthetic fixture for meta-test — no PROBE_LABELS by design'],`)
       .join('\n');
-    let scriptSrc = fs.readFileSync(scriptDest, 'utf8');
     scriptSrc = scriptSrc.replace(
       /const NO_PROBE_LABELS_ALLOWLIST = new Map\(\[[\s\S]*?\]\);/,
       `const NO_PROBE_LABELS_ALLOWLIST = new Map([\n${entries}\n]);`,
     );
-    fs.writeFileSync(scriptDest, scriptSrc, 'utf8');
   }
+
+  if (noProbeSuiteAllowlistSuites.length > 0) {
+    const entries = noProbeSuiteAllowlistSuites
+      .map((s) => `  ['${s}', 'synthetic fixture for meta-test — no probe callouts by design'],`)
+      .join('\n');
+    scriptSrc = scriptSrc.replace(
+      /const NO_PROBE_SUITES_ALLOWLIST = new Map\(\[[\s\S]*?\]\);/,
+      `const NO_PROBE_SUITES_ALLOWLIST = new Map([\n${entries}\n]);`,
+    );
+  }
+
+  fs.writeFileSync(scriptDest, scriptSrc, 'utf8');
 
   return dir;
 }
@@ -167,72 +192,111 @@ function cleanFixture(dir) {
 
 const scenarios = [
   {
-    name:                      'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
-    docsSrc:                   DOCS_WITH_ALIAS,
-    synthSrc:                  SYNTH_WITH_EXTRAS,
-    expectAdvisory:            true,
-    expectMissingWarn:         false,
-    expectExit0:               true,
-    expectIds:                 ['A2'],
-    expectStaleExtrasFail:     false,
-    expectRedundantExtrasFail: false,
+    name:                          'advisory fires when PROBE_LABELS_DOC_EXTRAS is present',
+    docsSrc:                       DOCS_WITH_ALIAS,
+    synthSrc:                      SYNTH_WITH_EXTRAS,
+    expectAdvisory:                true,
+    expectMissingWarn:             false,
+    expectExit0:                   true,
+    expectIds:                     ['A2'],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
   },
   {
-    name:                      'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
-    docsSrc:                   DOCS_WITHOUT_ALIAS,
-    synthSrc:                  SYNTH_WITHOUT_EXTRAS,
-    expectAdvisory:            false,
-    expectMissingWarn:         false,
-    expectExit0:               true,
-    expectIds:                 [],
-    expectStaleExtrasFail:     false,
-    expectRedundantExtrasFail: false,
+    name:                          'no advisory when PROBE_LABELS_DOC_EXTRAS is absent and probes match docs',
+    docsSrc:                       DOCS_WITHOUT_ALIAS,
+    synthSrc:                      SYNTH_WITHOUT_EXTRAS,
+    expectAdvisory:                false,
+    expectMissingWarn:             false,
+    expectExit0:                   true,
+    expectIds:                     [],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
   },
   {
-    name:                      'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
-    docsSrc:                   DOCS_WITHOUT_ALIAS,
-    synthSrc:                  SYNTH_NO_PROBE_LABELS,
-    expectAdvisory:            false,
-    expectMissingWarn:         true,
-    expectExit0:               true,
-    expectIds:                 [],
-    expectStaleExtrasFail:     false,
-    expectRedundantExtrasFail: false,
+    name:                          'missing-PROBE_LABELS warning fires when test file omits PROBE_LABELS entirely',
+    docsSrc:                       DOCS_WITHOUT_ALIAS,
+    synthSrc:                      SYNTH_NO_PROBE_LABELS,
+    expectAdvisory:                false,
+    expectMissingWarn:             true,
+    expectExit0:                   true,
+    expectIds:                     [],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
   },
   {
-    name:                      'stale PROBE_LABELS_DOC_EXTRAS entry causes failure when ID absent from docs',
-    docsSrc:                   DOCS_WITHOUT_ALIAS,
-    synthSrc:                  SYNTH_WITH_STALE_EXTRAS,
-    expectAdvisory:            true,
-    expectMissingWarn:         false,
-    expectExit0:               false,
-    expectIds:                 ['STALE'],
-    expectStaleExtrasFail:     true,
-    expectRedundantExtrasFail: false,
+    name:                          'stale PROBE_LABELS_DOC_EXTRAS entry causes failure when ID absent from docs',
+    docsSrc:                       DOCS_WITHOUT_ALIAS,
+    synthSrc:                      SYNTH_WITH_STALE_EXTRAS,
+    expectAdvisory:                true,
+    expectMissingWarn:             false,
+    expectExit0:                   false,
+    expectIds:                     ['STALE'],
+    expectStaleExtrasFail:         true,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
   },
   {
-    name:                      'redundant PROBE_LABELS_DOC_EXTRAS entry causes failure when ID is already in PROBE_LABELS',
-    docsSrc:                   DOCS_WITHOUT_ALIAS,
-    synthSrc:                  SYNTH_WITH_REDUNDANT_EXTRAS,
-    expectAdvisory:            true,
-    expectMissingWarn:         false,
-    expectExit0:               false,
-    expectIds:                 ['A'],
-    expectStaleExtrasFail:     false,
-    expectRedundantExtrasFail: true,
+    name:                          'redundant PROBE_LABELS_DOC_EXTRAS entry causes failure when ID is already in PROBE_LABELS',
+    docsSrc:                       DOCS_WITHOUT_ALIAS,
+    synthSrc:                      SYNTH_WITH_REDUNDANT_EXTRAS,
+    expectAdvisory:                true,
+    expectMissingWarn:             false,
+    expectExit0:                   false,
+    expectIds:                     ['A'],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     true,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
   },
   {
-    name:                      'missing-PROBE_LABELS warning suppressed when suite is in NO_PROBE_LABELS_ALLOWLIST',
-    docsSrc:                   DOCS_WITHOUT_ALIAS,
-    synthSrc:                  SYNTH_NO_PROBE_LABELS,
-    allowlistSuites:           ['test:synth'],
-    expectAdvisory:            false,
-    expectMissingWarn:         false,
-    expectExit0:               true,
-    expectIds:                 [],
-    expectStaleExtrasFail:     false,
-    expectRedundantExtrasFail: false,
-    expectAllowlistedPhrase:   true,
+    name:                          'missing-PROBE_LABELS warning suppressed when suite is in NO_PROBE_LABELS_ALLOWLIST',
+    docsSrc:                       DOCS_WITHOUT_ALIAS,
+    synthSrc:                      SYNTH_NO_PROBE_LABELS,
+    allowlistSuites:               ['test:synth'],
+    expectAdvisory:                false,
+    expectMissingWarn:             false,
+    expectExit0:                   true,
+    expectIds:                     [],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectAllowlistedPhrase:       true,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: false,
+  },
+  {
+    name:                          'no-probe-suite advisory fires when suite has no callouts and is not in NO_PROBE_SUITES_ALLOWLIST',
+    docsSrc:                       DOCS_NO_CALLOUTS,
+    synthSrc:                      SYNTH_WITHOUT_EXTRAS,
+    expectAdvisory:                false,
+    expectMissingWarn:             false,
+    expectExit0:                   true,
+    expectIds:                     [],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        true,
+    expectNoProbeSuiteAllowlisted: false,
+  },
+  {
+    name:                          'no-probe-suite advisory silent when suite is in NO_PROBE_SUITES_ALLOWLIST',
+    docsSrc:                       DOCS_NO_CALLOUTS,
+    synthSrc:                      SYNTH_WITHOUT_EXTRAS,
+    noProbeSuiteAllowlistSuites:   ['test:synth'],
+    expectAdvisory:                false,
+    expectMissingWarn:             false,
+    expectExit0:                   true,
+    expectIds:                     [],
+    expectStaleExtrasFail:         false,
+    expectRedundantExtrasFail:     false,
+    expectNoProbeSuiteWarn:        false,
+    expectNoProbeSuiteAllowlisted: true,
   },
 ];
 
@@ -256,10 +320,21 @@ const REDUNDANT_EXTRAS_PHRASE = 'Redundant suppressions';
 // broader substring check would miss.
 const ALLOWLISTED_PHRASE = '1 allowlisted';
 
+// Phrase emitted when a suite has no probe callouts in docs and is NOT listed
+// in NO_PROBE_SUITES_ALLOWLIST — triggers the new no-probe-suite advisory.
+const NO_PROBE_SUITE_WARN_PHRASE = 'no probe callouts in';
+
+// Phrase emitted in the summary line when a suite with no probe callouts IS
+// listed in NO_PROBE_SUITES_ALLOWLIST — confirms it is silently counted.
+const NO_PROBE_SUITE_ALLOWLISTED_PHRASE = 'confirmed no-probe';
+
 const results = [];
 
 for (const sc of scenarios) {
-  const dir = buildFixture(sc.docsSrc, sc.synthSrc, { allowlistSuites: sc.allowlistSuites || [] });
+  const dir = buildFixture(sc.docsSrc, sc.synthSrc, {
+    allowlistSuites:             sc.allowlistSuites             || [],
+    noProbeSuiteAllowlistSuites: sc.noProbeSuiteAllowlistSuites || [],
+  });
   let result;
   try {
     result = runScript(dir);
@@ -267,26 +342,37 @@ for (const sc of scenarios) {
     cleanFixture(dir);
   }
 
-  const combined               = (result.stdout || '') + (result.stderr || '');
-  const hasAdvisory            = combined.includes('PROBE_LABELS_DOC_EXTRAS');
-  const hasMissingWarn         = combined.includes(MISSING_WARN_PHRASE);
-  const hasStaleExtrasFail     = combined.includes(STALE_EXTRAS_PHRASE);
-  const hasRedundantExtrasFail = combined.includes(REDUNDANT_EXTRAS_PHRASE);
-  const hasAllowlistedPhrase   = combined.includes(ALLOWLISTED_PHRASE);
-  const exit0                  = result.status === 0;
+  const combined                    = (result.stdout || '') + (result.stderr || '');
+  const hasAdvisory                 = combined.includes('PROBE_LABELS_DOC_EXTRAS');
+  const hasMissingWarn              = combined.includes(MISSING_WARN_PHRASE);
+  const hasStaleExtrasFail          = combined.includes(STALE_EXTRAS_PHRASE);
+  const hasRedundantExtrasFail      = combined.includes(REDUNDANT_EXTRAS_PHRASE);
+  const hasAllowlistedPhrase        = combined.includes(ALLOWLISTED_PHRASE);
+  const hasNoProbeSuiteWarn         = combined.includes(NO_PROBE_SUITE_WARN_PHRASE);
+  const hasNoProbeSuiteAllowlisted  = combined.includes(NO_PROBE_SUITE_ALLOWLISTED_PHRASE);
+  const exit0                       = result.status === 0;
 
-  const pass_advisory           = sc.expectAdvisory            ? hasAdvisory            : !hasAdvisory;
-  const pass_missing_warn       = sc.expectMissingWarn         ? hasMissingWarn         : !hasMissingWarn;
-  const pass_stale_extras       = sc.expectStaleExtrasFail     ? hasStaleExtrasFail     : !hasStaleExtrasFail;
-  const pass_redundant_extras   = sc.expectRedundantExtrasFail ? hasRedundantExtrasFail : !hasRedundantExtrasFail;
-  const pass_allowlisted_phrase = sc.expectAllowlistedPhrase   ? hasAllowlistedPhrase   : !hasAllowlistedPhrase;
-  const pass_exit               = sc.expectExit0               ? exit0                  : !exit0;
-  const pass_ids                = sc.expectIds.every((id) => combined.includes(id));
+  const pass_advisory                = sc.expectAdvisory                ? hasAdvisory                : !hasAdvisory;
+  const pass_missing_warn            = sc.expectMissingWarn             ? hasMissingWarn             : !hasMissingWarn;
+  const pass_stale_extras            = sc.expectStaleExtrasFail         ? hasStaleExtrasFail         : !hasStaleExtrasFail;
+  const pass_redundant_extras        = sc.expectRedundantExtrasFail     ? hasRedundantExtrasFail     : !hasRedundantExtrasFail;
+  const pass_allowlisted_phrase      = sc.expectAllowlistedPhrase       ? hasAllowlistedPhrase       : !hasAllowlistedPhrase;
+  const pass_no_probe_suite_warn     = sc.expectNoProbeSuiteWarn        ? hasNoProbeSuiteWarn        : !hasNoProbeSuiteWarn;
+  const pass_no_probe_suite_allowed  = sc.expectNoProbeSuiteAllowlisted ? hasNoProbeSuiteAllowlisted : !hasNoProbeSuiteAllowlisted;
+  const pass_exit                    = sc.expectExit0                   ? exit0                      : !exit0;
+  const pass_ids                     = sc.expectIds.every((id) => combined.includes(id));
 
-  const pass = pass_advisory && pass_missing_warn && pass_stale_extras && pass_redundant_extras && pass_allowlisted_phrase && pass_exit && pass_ids;
+  const pass = (
+    pass_advisory && pass_missing_warn && pass_stale_extras && pass_redundant_extras &&
+    pass_allowlisted_phrase && pass_no_probe_suite_warn && pass_no_probe_suite_allowed &&
+    pass_exit && pass_ids
+  );
   results.push({
     sc,
-    pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids,
+    pass,
+    pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras,
+    pass_allowlisted_phrase, pass_no_probe_suite_warn, pass_no_probe_suite_allowed,
+    pass_exit, pass_ids,
     combined,
     status: result.status,
   });
@@ -306,17 +392,29 @@ const lines = [
   'test file omits PROBE_LABELS entirely, fails when PROBE_LABELS_DOC_EXTRAS',
   'contains an ID absent from the docs row, fails when PROBE_LABELS_DOC_EXTRAS',
   'contains an ID already covered by a dedicated PROBE_LABELS entry (redundant),',
-  'and suppresses the missing-array warning when the suite is in NO_PROBE_LABELS_ALLOWLIST.',
+  'suppresses the missing-array warning when the suite is in NO_PROBE_LABELS_ALLOWLIST,',
+  'emits the no-probe-suite advisory when a suite has no callouts and is not in',
+  'NO_PROBE_SUITES_ALLOWLIST, and stays silent when the suite IS in that allowlist.',
   '',
   `Ran ${results.length} scenario${results.length === 1 ? '' : 's'}.`,
   '',
-  '| Scenario | advisory correct | missing-array warning correct | stale-extras failure correct | redundant-extras failure correct | allowlisted phrase correct | exit correct | IDs found | result |',
-  '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  '| Scenario | advisory | missing-array warn | stale-extras fail | redundant-extras fail | allowlisted phrase | no-probe-suite warn | no-probe-suite allowed | exit | IDs | result |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
 ];
 
-for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids } of results) {
+for (const { sc, pass, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_no_probe_suite_warn, pass_no_probe_suite_allowed, pass_exit, pass_ids } of results) {
   lines.push(
-    `| ${sc.name} | ${pass_advisory ? '✓' : '✗'} | ${pass_missing_warn ? '✓' : '✗'} | ${pass_stale_extras ? '✓' : '✗'} | ${pass_redundant_extras ? '✓' : '✗'} | ${pass_allowlisted_phrase ? '✓' : '✗'} | ${pass_exit ? '✓' : '✗'} | ${pass_ids ? '✓' : '✗'} | ${pass ? 'PASS' : '**FAIL**'} |`,
+    `| ${sc.name}` +
+    ` | ${pass_advisory ? '✓' : '✗'}` +
+    ` | ${pass_missing_warn ? '✓' : '✗'}` +
+    ` | ${pass_stale_extras ? '✓' : '✗'}` +
+    ` | ${pass_redundant_extras ? '✓' : '✗'}` +
+    ` | ${pass_allowlisted_phrase ? '✓' : '✗'}` +
+    ` | ${pass_no_probe_suite_warn ? '✓' : '✗'}` +
+    ` | ${pass_no_probe_suite_allowed ? '✓' : '✗'}` +
+    ` | ${pass_exit ? '✓' : '✗'}` +
+    ` | ${pass_ids ? '✓' : '✗'}` +
+    ` | ${pass ? 'PASS' : '**FAIL**'} |`,
   );
 }
 
@@ -326,7 +424,11 @@ if (failures.length === 0) {
   lines.push(`**All ${passed} scenario${passed === 1 ? '' : 's'} passed.**`);
 } else {
   lines.push(`**${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:**`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids, combined, status } of failures) {
+  for (const {
+    sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras,
+    pass_allowlisted_phrase, pass_no_probe_suite_warn, pass_no_probe_suite_allowed,
+    pass_exit, pass_ids, combined, status,
+  } of failures) {
     lines.push('');
     lines.push(`### ${sc.name}`);
     if (!pass_advisory) {
@@ -364,6 +466,20 @@ if (failures.length === 0) {
           : `- Expected no allowlisted-count phrase but "${ALLOWLISTED_PHRASE}" appeared in output.`,
       );
     }
+    if (!pass_no_probe_suite_warn) {
+      lines.push(
+        sc.expectNoProbeSuiteWarn
+          ? `- Expected no-probe-suite advisory ("${NO_PROBE_SUITE_WARN_PHRASE}") but it was absent from output.`
+          : `- Expected no no-probe-suite advisory but "${NO_PROBE_SUITE_WARN_PHRASE}" appeared in output.`,
+      );
+    }
+    if (!pass_no_probe_suite_allowed) {
+      lines.push(
+        sc.expectNoProbeSuiteAllowlisted
+          ? `- Expected no-probe-suite-allowlisted phrase ("${NO_PROBE_SUITE_ALLOWLISTED_PHRASE}") in summary but it was absent from output.`
+          : `- Expected no no-probe-suite-allowlisted phrase but "${NO_PROBE_SUITE_ALLOWLISTED_PHRASE}" appeared in output.`,
+      );
+    }
     if (!pass_exit) {
       lines.push(
         sc.expectExit0
@@ -391,7 +507,11 @@ if (failures.length === 0) {
   console.log(`[suite-probe-counts-advisory] All ${passed} scenario${passed === 1 ? '' : 's'} passed. ✓`);
 } else {
   console.error(`[suite-probe-counts-advisory] ${failures.length} scenario${failures.length === 1 ? '' : 's'} failed:`);
-  for (const { sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras, pass_allowlisted_phrase, pass_exit, pass_ids, status } of failures) {
+  for (const {
+    sc, pass_advisory, pass_missing_warn, pass_stale_extras, pass_redundant_extras,
+    pass_allowlisted_phrase, pass_no_probe_suite_warn, pass_no_probe_suite_allowed,
+    pass_exit, pass_ids, status,
+  } of failures) {
     console.error(`  • ${sc.name}`);
     if (!pass_advisory) {
       console.error(
@@ -426,6 +546,20 @@ if (failures.length === 0) {
         sc.expectAllowlistedPhrase
           ? '    allowlisted-count phrase expected in summary but not found in output'
           : '    allowlisted-count phrase unexpectedly present in output',
+      );
+    }
+    if (!pass_no_probe_suite_warn) {
+      console.error(
+        sc.expectNoProbeSuiteWarn
+          ? '    no-probe-suite advisory expected but not found in output'
+          : '    no-probe-suite advisory unexpectedly present in output',
+      );
+    }
+    if (!pass_no_probe_suite_allowed) {
+      console.error(
+        sc.expectNoProbeSuiteAllowlisted
+          ? '    no-probe-suite-allowlisted phrase expected in summary but not found in output'
+          : '    no-probe-suite-allowlisted phrase unexpectedly present in output',
       );
     }
     if (!pass_exit) {

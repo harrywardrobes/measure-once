@@ -23,8 +23,16 @@
  * NO_PROBE_LABELS_ALLOWLIST below with a reason comment.  Any suite NOT in
  * that allowlist emits a warning so new additions are visible immediately.
  *
+ * Tertiary scan (non-failing): detects suites whose docs row has NO bold **(X)**
+ * probe callouts at all — i.e. the suite was never enrolled in the probe system.
+ * Every such suite must either be listed in NO_PROBE_SUITES_ALLOWLIST below with
+ * a short reason, or it will trigger an advisory warning so new un-labelled
+ * additions are visible immediately.  This prevents the set of un-tracked suites
+ * from silently growing over time without a recorded reason.
+ *
  * Suites are fully skipped when:
- *   - The docs row has no bold **(X)** probe callouts, OR
+ *   - The docs row has no bold **(X)** probe callouts AND the suite is listed in
+ *     NO_PROBE_SUITES_ALLOWLIST (confirmed intentional — no probes needed), OR
  *   - The test file cannot be located from package.json scripts.
  *
  * Per-suite suppression for the reverse check:
@@ -71,11 +79,15 @@
  *      to suppress a reverse-check ID, that ID must not also appear in
  *      PROBE_LABELS; duplicate entries across both arrays are a CI error.
  *
- * Suites with no named probes should omit PROBE_LABELS entirely; rows with no
- * bold callouts are silently skipped.
+ * When adding a new suite that genuinely has no named probes (static lints,
+ * binary pass/fail checks, narrative integration tests, etc.), add it to
+ * NO_PROBE_SUITES_ALLOWLIST below with a one-line reason.  Omitting it will
+ * cause a non-failing advisory on every CI run until it is either enrolled or
+ * given real probe labels.
  *
  * See docs/TEST_SUITES.md § "Adding a new test suite" for the full checklist
- * and edge-case guidance (PROBE_LABELS_DOC_EXTRAS, NO_PROBE_LABELS_ALLOWLIST).
+ * and edge-case guidance (PROBE_LABELS_DOC_EXTRAS, NO_PROBE_LABELS_ALLOWLIST,
+ * NO_PROBE_SUITES_ALLOWLIST).
  * ---------------------------------------------------------------------------
  */
 
@@ -95,6 +107,120 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const NO_PROBE_LABELS_ALLOWLIST = new Map([
   // All legacy suites have been migrated to PROBE_LABELS.
+]);
+
+// ---------------------------------------------------------------------------
+// Allowlist — suites that intentionally have NO probe callouts in docs and NO
+// PROBE_LABELS array in their test file.  Each entry must carry a short reason
+// explaining why named probes are not appropriate for that suite.  Any suite
+// without bold **(X)** callouts in its docs row that is NOT listed here will
+// trigger a non-failing advisory so new un-labelled additions are visible
+// immediately.
+//
+// Categories used in reason comments:
+//   static-lint      — binary pass/fail scan; no discrete named probes
+//   static-check     — static build/artifact/drift check; binary pass/fail
+//   unit-flat        — flat unit assertions on a pure function; no named probes
+//   meta-test        — exercises the test infrastructure itself; probe labels N/A
+//   capability-matrix— broad actor×route matrix; not decomposed into named probes
+//   narrative        — integration/e2e with narrative flow; no discrete probe labels
+//   smoke            — presence/smoke check; binary result, no named probes
+// ---------------------------------------------------------------------------
+
+const NO_PROBE_SUITES_ALLOWLIST = new Map([
+  // -- static lints ---------------------------------------------------------
+  ['test:privilege-reads',              'static-lint — binary file scan, no discrete named probes'],
+  ['test:typo-vars',                    'static-lint — binary typography drift check'],
+  ['test:color-radius-vars',            'static-lint — binary colour/radius drift check'],
+  ['test:css-hex-colors',               'static-lint — binary hex-literal scan'],
+  ['test:var-hex-fallbacks',            'static-lint — binary var() hex-fallback scan'],
+  ['test:mui-select-click',             'static-lint — binary anti-pattern scan'],
+  ['test:ci-runner-sync',               'static-lint — binary CI runner sync check'],
+  ['test:ci-doc-sync',                  'static-lint — binary CI doc sync check'],
+  ['test:suite-descriptions',           'static-lint — binary suite description sync check'],
+  ['test:browser-launch-pattern',       'static-lint — binary browser-launch pattern check'],
+  ['test:story-count-sync',             'static-lint — binary story-count drift check'],
+  ['test:offline-capability-sync',      'static-lint — binary offline capability sync check'],
+  ['test:icon-lint',                    'static-lint — binary two-pass icon import check'],
+  ['test:mount-ids',                    'static-lint — binary four-pass mount-id check'],
+  ['test:inline-styles',                'static-lint — binary inline-style scan'],
+  ['test:story-hex-colors',             'static-lint — binary hex-literal scan for stories'],
+  ['test:component-hex-colors',         'static-lint — binary hex-literal scan for components'],
+  ['test:workflow-js-no-dups',          'static-lint — binary duplicate function guard'],
+  ['test:nav-key-sync',                 'static-lint — binary nav-key allow-list sync check'],
+  ['test:no-config-handler-types',      'static-lint — binary contradiction check'],
+  ['test:status-key-fields',            'static-lint — binary cross-check of handler config props'],
+  ['test:bottom-nav-lint',              'static-lint — binary Icon/IconOutlined completeness check'],
+  ['test:retired-tokens',               'static-lint — binary retired CSS token scan'],
+  ['test:tokens-css',                   'static-lint — binary tokens.css naming convention check'],
+  // -- static / build checks ------------------------------------------------
+  ['test:stale-bundle',                 'static-check — binary build artifact check'],
+  ['test:storybook-output-clean',       'static-check — binary Storybook output guard'],
+  ['test:hubspot-credentials',          'static-check — binary CI credential presence check'],
+  // -- meta test ------------------------------------------------------------
+  ['test:suite-probe-counts-advisory',  'meta-test — exercises the advisory mechanism; PROBE_LABELS N/A'],
+  // -- unit tests (flat assertions, no named probes) ------------------------
+  ['test:resolve-action-label',         'unit-flat — 10 pure-function paths tested in flat assertions'],
+  ['test:bundle-size-trend',            'unit-flat — flat assertions on trend-regression logic'],
+  ['test:bundle-spike-warning',         'unit-flat — flat assertions on spike-detection logic'],
+  ['test:handler-config-blocks',        'unit-flat — Vitest render checks on pure React config blocks'],
+  ['test:conflicts-review-logic',       'unit-flat — Vitest assertions on pure diff/restore logic'],
+  ['test:keyboard-shortcuts',           'unit-flat — pure function smoke across platform paths'],
+  // -- capability matrix ----------------------------------------------------
+  ['test:privileges',                   'capability-matrix — 5-actor × 123-route matrix; not decomposed into named probes'],
+  // -- smoke tests ----------------------------------------------------------
+  ['test:window-ui-smoke',              'smoke — static chrome mount-point presence check'],
+  ['test:storybook-smoke',              'smoke — story render error check across all stories'],
+  // -- narrative integration / regression / e2e tests -----------------------
+  ['test:lead-status-sync-customer-detail-viewer',   'narrative — single-scenario viewer role gate check'],
+  ['test:lead-status-sync-customer-detail-editable', 'narrative — single-scenario manager/admin role gate check'],
+  ['test:design-visit-list',            'narrative — scoping + rail assertions in narrative flow'],
+  ['test:design-visit-qb-resubmit',     'narrative — QB sparse-update vs create-new branches, narrative'],
+  ['test:design-visit-submitter-name',  'narrative — regression guard for submitter identity in outputs'],
+  ['test:duplicate-phone-warnings',     'narrative — alert copy + disabled-submit + link checks'],
+  ['test:lead-status-counts-rate-limit','narrative — single-flight, stale-cache, and retry behaviour'],
+  ['test:phone-directory',              'narrative — auth gating + payload coverage, narrative'],
+  ['test:phone-directory-customers',    'narrative — mock-HubSpot field mapping, narrative'],
+  ['test:chunk-cache-headers',          'narrative — HTTP HEAD probes for cache-control headers'],
+  ['test:admin-tab-skeletons-new',      'narrative — Suspense skeleton check for admin tabs'],
+  ['test:admin-tab-skeletons-suspense', 'narrative — Suspense fallback layer check for admin tabs'],
+  ['test:admin-tab-skeletons',          'narrative — in-component data skeleton layer check'],
+  ['test:photo-storage-errors',         'narrative — error sanitisation across upload/delete/download paths'],
+  ['test:turnstile-signout',            'narrative — bfcache fix + signed-out redirect regression guard'],
+  ['test:invoice-panel-hidden',         'narrative — CSS visibility regression guard across six pages'],
+  ['test:onboarding-conflicts',         'narrative — conflict detection + admin resolution e2e'],
+  ['test:ideas',                        'narrative — CRUD + privilege checks for Ideas page'],
+  ['test:settings-tab-load',            'narrative — race-condition regression guard for settings tab'],
+  ['test:invoice-admin-controls',       'narrative — privilege gates + data scoping for QB routes'],
+  ['test:project-contacts-unknown-status', 'narrative — orphan-check regression guard'],
+  ['test:hubspot-credential-audit',     'narrative — audit log entries on credential changes'],
+  ['test:lead-status-delete-substatus-clear', 'narrative — background job verification after status delete'],
+  ['test:customer-info',                'narrative — full customer-info HTTP probe suite'],
+  ['test:customer-info-email-attachments', 'narrative — photo attachment path regression guard'],
+  ['test:photo-approval-notification',  'narrative — audit log entries on photo approve/reject'],
+  ['test:photo-reviews',                'narrative — integration test for photo-review routes'],
+  ['test:design-visit',                 'narrative — full design-visit wizard + sign-off e2e'],
+  ['test:visit-edit-cancel',            'narrative — PATCH + cancel confirmation e2e'],
+  ['test:dv-catalogue-image-upload',    'narrative — catalogue image upload flow e2e'],
+  ['test:dv-catalogue-reorder',         'narrative — catalogue reorder arrow controls e2e'],
+  ['test:sign-off-stale-link',          'narrative — superseded sign-off link e2e'],
+  ['test:react-admin-tabs',             'narrative — React admin island smoke test'],
+  ['test:new-customer-flow',            'narrative — new customer modal e2e'],
+  ['test:new-customer-counts-retry',    'narrative — count-retry logic focused integration test'],
+  ['test:hubspot-429-retry',            'narrative — 429 recovery via hubspotRequestWithRetry'],
+  ['test:hubspot-429-retry-contacts',   'narrative — 429 recovery for contacts-all and open-leads'],
+  ['test:room-assignments-outage',      'narrative — room data served stale during HubSpot outage'],
+  ['test:change-password',              'narrative — change-password dialog e2e'],
+  ['test:set-password',                 'narrative — set-password page + autofill crash guard'],
+  ['test:bottom-nav',                   'narrative — More drawer across roles e2e'],
+  ['test:nav-active-tab',               'narrative — matchPath active-tab regression guard'],
+  ['test:nav-customise',                'narrative — nav customisation dialog e2e'],
+  ['test:trades',                       'narrative — trades CRUD + role gating e2e'],
+  ['test:dev-mode-bc-sync',             'narrative — dev_mode_changed BroadcastChannel wiring regression'],
+  ['test:skipped-photo-dashboard-link', 'narrative — dashboard link in skipped-photo notification emails'],
+  ['test:active-projects-hubspot-outage','narrative — Active Projects error branch during HubSpot 502'],
+  ['test:stage-scoped-pills',           'narrative — stage-tab pill filter update regression guard'],
+  ['test:bundle-sizes',                 'narrative — post-build gzip size snapshot (standalone only)'],
 ]);
 
 // ---------------------------------------------------------------------------
@@ -197,15 +323,23 @@ const docExtrasStaleFailures     = [];  // PROBE_LABELS_DOC_EXTRAS entries not p
 const docExtrasRedundantFailures = [];  // PROBE_LABELS_DOC_EXTRAS entries that also have a dedicated PROBE_LABELS entry
 const noArrayWarn                = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
 const docExtrasWarn              = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
+const noProbeSuiteWarn           = [];  // suites with no probe callouts AND not in NO_PROBE_SUITES_ALLOWLIST
 let   checked                    = 0;
 let   skipped                    = 0;
 let   allowlisted                = 0;
+let   noProbeSuiteAllowlisted    = 0;
 
 for (const [suiteName, rowText] of suiteRows) {
   const docIds = extractDocProbeIds(rowText);
 
   if (docIds.size === 0) {
-    // No probe callouts in docs — nothing to compare against.
+    // No probe callouts in docs — check whether this is a confirmed no-probe
+    // suite (listed in NO_PROBE_SUITES_ALLOWLIST) or a new unlisted addition.
+    if (NO_PROBE_SUITES_ALLOWLIST.has(suiteName)) {
+      noProbeSuiteAllowlisted++;
+    } else {
+      noProbeSuiteWarn.push(suiteName);
+    }
     skipped++;
     continue;
   }
@@ -309,6 +443,30 @@ for (const [suiteName, rowText] of suiteRows) {
 }
 
 // ---------------------------------------------------------------------------
+// Report advisories (non-failing) for suites with no probe callouts not in
+// the NO_PROBE_SUITES_ALLOWLIST
+// ---------------------------------------------------------------------------
+
+if (noProbeSuiteWarn.length > 0) {
+  console.warn(
+    `ℹ️   suite-probe-counts: ${noProbeSuiteWarn.length} suite` +
+    `${noProbeSuiteWarn.length === 1 ? '' : 's'} ` +
+    `${noProbeSuiteWarn.length === 1 ? 'has' : 'have'} no probe callouts in` +
+    ` TEST_SUITES.md and ${noProbeSuiteWarn.length === 1 ? 'is' : 'are'} not` +
+    ` listed in NO_PROBE_SUITES_ALLOWLIST:\n`,
+  );
+  for (const suite of noProbeSuiteWarn) {
+    console.warn(`  ${suite}`);
+  }
+  console.warn(
+    `\n    Fix: either add probe labels (bold **(X)** callouts in the docs row\n` +
+    `    and a PROBE_LABELS array in the test file), or add the suite to\n` +
+    `    NO_PROBE_SUITES_ALLOWLIST in scripts/check-suite-probe-counts.mjs\n` +
+    `    with a one-line reason explaining why named probes are not needed.\n`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Report warnings (non-failing) for suites with doc probes but no PROBE_LABELS
 // ---------------------------------------------------------------------------
 
@@ -359,7 +517,12 @@ const totalFailures = forwardFailures.length + reverseFailures.length + docExtra
 
 if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
-  if (skipped > 0)              parts.push(`${skipped} skipped (no probe callouts in docs or file not found)`);
+  if (noProbeSuiteAllowlisted > 0) parts.push(`${noProbeSuiteAllowlisted} confirmed no-probe (see NO_PROBE_SUITES_ALLOWLIST)`);
+  if (noProbeSuiteWarn.length > 0) parts.push(`${noProbeSuiteWarn.length} advisory (no probe callouts — add to NO_PROBE_SUITES_ALLOWLIST or label)`);
+  if (skipped - noProbeSuiteAllowlisted - noProbeSuiteWarn.length > 0) {
+    const fileNotFound = skipped - noProbeSuiteAllowlisted - noProbeSuiteWarn.length;
+    parts.push(`${fileNotFound} skipped (file not found via package.json scripts)`);
+  }
   if (allowlisted > 0)          parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
   if (noArrayWarn.length > 0)   parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
   if (docExtrasWarn.length > 0) parts.push(`${docExtrasWarn.length} advisory (PROBE_LABELS_DOC_EXTRAS used — prefer distinct labels)`);
