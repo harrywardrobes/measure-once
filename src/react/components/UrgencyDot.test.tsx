@@ -34,4 +34,20 @@ describe('UrgencyDot', () => {
     render(<UrgencyDot urgency="orange" />);
     expect(screen.getByRole('generic', { name: 'Task due soon' })).toBeInTheDocument();
   });
+
+  it('red dot background colour is #dc2626 (rgb 220 38 38)', () => {
+    const { container } = render(<UrgencyDot urgency="red" />);
+    const dot = container.querySelector('span');
+    expect(dot).not.toBeNull();
+    const bg = window.getComputedStyle(dot!).backgroundColor;
+    expect(bg).toBe('rgb(220, 38, 38)');
+  });
+
+  it('orange dot background colour is #f59e0b (rgb 245 158 11)', () => {
+    const { container } = render(<UrgencyDot urgency="orange" />);
+    const dot = container.querySelector('span');
+    expect(dot).not.toBeNull();
+    const bg = window.getComputedStyle(dot!).backgroundColor;
+    expect(bg).toBe('rgb(245, 158, 11)');
+  });
 });
