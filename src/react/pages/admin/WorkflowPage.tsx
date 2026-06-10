@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
 import {
   Accordion,
@@ -9,8 +9,17 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Divider,
+  GlobalStyles,
+  InputAdornment,
+  Paper,
   Stack,
+  Step,
+  StepConnector,
+  StepLabel,
+  Stepper,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -18,10 +27,22 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BoltIcon from '@mui/icons-material/Bolt';
 import EmailIcon from '@mui/icons-material/Email';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import SearchIcon from '@mui/icons-material/Search';
+import CodeIcon from '@mui/icons-material/Code';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMoreRounded from '@mui/icons-material/ExpandMore';
 import { GET } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import {
+  HANDLER_MODAL_SUMMARY,
+  HANDLER_EMAIL_TEMPLATES,
+  HANDLER_TYPE_LABELS,
+  HANDLER_COMPONENT_META,
+} from '../../utils/handlerMeta';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
+import { STAGE_COLORS } from '../../theme';
+import { resolveActionLabel } from '../../utils/resolveActionLabel.mjs';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,12 +55,72 @@ interface Substatus {
   label: string; action_label: string; sort_order: number;
 }
 interface CALabel { stage_key: string; status_key: string; label: string; }
-interface Binding { stage_key?: string; status_key?: string; }
+interface Binding { stage_key?: string; status_key?: string; substatus_id?: number | null; }
 interface Handler {
   id: number; name: string; type: string;
   config: Record<string, unknown>; bindings: Binding[];
 }
 interface EmailTemplate { key: string; label: string; }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/** Canonical stage ordering (sales → aftercare). Extra stages fall to the end. */
+const CANONICAL_STAGE_ORDER = Object.keys(STAGE_COLORS);
+
+/** show_message is the implicit default — any other type is a "real" binding. */
+function isNonDefaultHandler(h: Handler): boolean {
+  return h.type !== 'show_message';
+}
+
+const CALL_CHAIN_STEPS = [
+  { label: 'DOM target',  code: '[data-card-action-handler-id]' },
+  { label: 'Hook',        code: 'useCardActionHandlers.ts' },
+  { label: 'Dispatcher',  code: 'dispatchCardActionHandler.ts' },
+  { label: 'Registry',    code: 'cardActionModalRegistry.ts' },
+  { label: 'Host',        code: 'CardActionModalsHost.tsx' },
+  { label: 'Modal',       code: null }, // resolved per handler
+];
+
+const SHARED_COMPONENTS = [
+  {
+    name: 'useCardActionHandlers',
+    filePath: 'src/react/hooks/useCardActionHandlers.ts',
+    role: 'Fetches handler bindings and resolves action labels; re-fetches on BroadcastChannel events',
+  },
+  {
+    name: 'CardActionModalsHost',
+    filePath: 'src/react/components/CardActionModalsHost.tsx',
+    role: 'Registers itself as the modal opener; renders the correct modal component on dispatch',
+  },
+  {
+    name: 'WorkflowDataContext',
+    filePath: 'src/react/context/WorkflowDataContext.tsx',
+    role: 'Provides lead statuses and workflow definition across the app via React context',
+  },
+  {
+    name: 'STAGE_COLORS',
+    filePath: 'src/react/theme.ts',
+    role: 'Maps stage keys to bg/light/text colour tokens used by all stage-aware UI',
+  },
+  {
+    name: 'resolveActionLabel',
+    filePath: 'src/react/utils/resolveActionLabel.mjs',
+    role: 'Pure resolver for action-strip button labels; shared between hook and test suite',
+  },
+];
+
+// ── Keyframe styles ────────────────────────────────────────────────────────────
+
+const flashKeyframes = (
+  <GlobalStyles styles={`
+    @keyframes wf-flash-border {
+      0%   { outline: 2px solid transparent; outline-offset: 0px; }
+      10%  { outline: 2px solid #8B2BFF;     outline-offset: 1px; }
+      80%  { outline: 2px solid #8B2BFF;     outline-offset: 1px; }
+      100% { outline: 2px solid transparent; outline-offset: 0px; }
+    }
+  `} />
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -51,10 +132,12 @@ function handlersForSlot(
   handlers: Handler[],
   stageKey: string,
   statusKey: string,
+  substatusId?: number,
 ): Handler[] {
   return handlers.filter(h => h.bindings?.some(b =>
     (b.stage_key || '').toLowerCase()  === (stageKey  || '').toLowerCase()
-    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase(),
+    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase()
+    && (substatusId == null ? b.substatus_id == null : b.substatus_id === substatusId),
   ));
 }
 
@@ -74,166 +157,759 @@ function navigateToTab(tabId: string) {
   }
 }
 
-// ── HandlerRow ────────────────────────────────────────────────────────────────
+function buildStageActionLabelMap(labels: CALabel[]): Record<string, string | null> {
+  const m: Record<string, string | null> = {};
+  for (const l of labels) {
+    const s = l.stage_key.toLowerCase();
+    const k = l.status_key.toLowerCase();
+    m[`${s}|${k}`] = l.label || null;
+  }
+  return m;
+}
 
-function HandlerRow({
+function buildBindingSnapshot(handlers: Handler[]): Record<string, number> {
+  const snap: Record<string, number> = {};
+  for (const h of handlers) {
+    for (const b of h.bindings ?? []) {
+      if (b.substatus_id != null) continue;
+      if (!b.stage_key || !b.status_key) continue;
+      const key = `${b.stage_key.toLowerCase()}|${b.status_key.toLowerCase()}`;
+      snap[key] = h.id;
+    }
+  }
+  return snap;
+}
+
+// ── SharedChip ────────────────────────────────────────────────────────────────
+
+function SharedChip() {
+  return (
+    <Chip
+      label="Shared"
+      size="small"
+      variant="outlined"
+      sx={{
+        height: 16,
+        fontSize: '0.6rem',
+        fontWeight: 700,
+        letterSpacing: '0.03em',
+        color: 'text.secondary',
+        borderColor: 'divider',
+        '.MuiChip-label': { px: 0.5 },
+      }}
+    />
+  );
+}
+
+// ── ActionButtonPreview ───────────────────────────────────────────────────────
+
+function ActionButtonPreview({
+  label,
+  stageKey,
+  hasHandler,
+}: {
+  label: string;
+  stageKey: string;
+  hasHandler: boolean;
+}) {
+  const colors = STAGE_COLORS[stageKey];
+  if (!hasHandler || !label) {
+    return (
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          px: 1.5,
+          py: 0.5,
+          borderRadius: 1,
+          bgcolor: 'action.hover',
+          border: '1px dashed',
+          borderColor: 'divider',
+          opacity: 0.6,
+        }}
+      >
+        <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+          No button label
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        px: 1.5,
+        py: 0.625,
+        borderRadius: 1,
+        bgcolor: colors?.bg ?? '#8B2BFF',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+        maxWidth: 200,
+      }}
+    >
+      <Typography
+        variant="caption"
+        sx={{
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: '0.7rem',
+          lineHeight: 1.2,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+// ── CallChainStepper ─────────────────────────────────────────────────────────
+
+function CallChainStepper({ handlerType }: { handlerType?: string }) {
+  const modalCode = handlerType
+    ? (HANDLER_COMPONENT_META[handlerType]?.component ?? '(unknown component)')
+    : '(no handler bound)';
+
+  const SHARED_STEP_INDICES = new Set([1, 2, 3, 4]);
+
+  return (
+    <Stepper
+      orientation="vertical"
+      connector={
+        <StepConnector
+          sx={{
+            '& .MuiStepConnector-line': {
+              minHeight: 8,
+              borderLeftWidth: 1,
+              borderColor: 'divider',
+              ml: '3px',
+            },
+          }}
+        />
+      }
+      sx={{ py: 0 }}
+    >
+      {CALL_CHAIN_STEPS.map((step, idx) => {
+        const code = idx === 5 ? modalCode : step.code;
+        const isShared = SHARED_STEP_INDICES.has(idx);
+        return (
+          <Step key={step.label} active completed={false} expanded>
+            <StepLabel
+
+              sx={{
+                py: 0.125,
+                '.MuiStepLabel-iconContainer': { pr: 0.75, '& .MuiStepIcon-root': { fontSize: 10, color: '#9ca3af' } },
+                '.MuiStepLabel-label': { fontSize: '0.68rem', color: 'text.secondary', lineHeight: 1.3 },
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem', minWidth: 52 }}>
+                  {step.label}
+                </Typography>
+                <Box
+                  component="code"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.62rem',
+                    bgcolor: 'rgba(0,0,0,0.05)',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 0.5,
+                    px: 0.5,
+                    py: 0.1,
+                    color: 'text.secondary',
+                    lineHeight: 1.3,
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {code}
+                </Box>
+                {isShared && <SharedChip />}
+              </Box>
+            </StepLabel>
+          </Step>
+        );
+      })}
+    </Stepper>
+  );
+}
+
+// ── ModalDetailCard ───────────────────────────────────────────────────────────
+
+function ModalDetailCard({
   handler,
-  buttonLabel,
   emailTemplates,
 }: {
   handler: Handler;
-  buttonLabel?: string;
   emailTemplates: EmailTemplate[];
 }) {
-  const displayName = handlerDisplayName(handler);
   const summary = HANDLER_MODAL_SUMMARY[handler.type];
+  const meta    = HANDLER_COMPONENT_META[handler.type];
 
   const hubspotText = handler.type === 'start_design_visit' && handler.config?.submittedLeadStatus
     ? `Sets lead status to in-progress on open; to ${handler.config.submittedLeadStatus} on submit`
     : summary?.hubspot ?? '';
 
-  const templateKeys = HANDLER_EMAIL_TEMPLATES[handler.type] ?? [];
+  const templateKeys  = HANDLER_EMAIL_TEMPLATES[handler.type] ?? [];
   const templateItems = templateKeys
     .map(k => emailTemplates.find(t => t.key === k))
     .filter((t): t is EmailTemplate => t !== undefined);
 
   return (
-    <Box sx={{ pl: 0 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.75, mb: 0.5 }}>
-        <Tooltip title={`Handler type: ${handler.type}`} arrow>
-          <Chip
-            icon={<BoltIcon sx={{ fontSize: 13 }} />}
-            label={displayName}
-            size="small"
-            clickable
-            onClick={() => navigateToTab('actionhandlers')}
-            sx={{
-              fontWeight: 600,
-              bgcolor: 'rgba(124,58,237,0.1)',
-              color: 'rgb(109,40,217)',
-              '&:hover': { bgcolor: 'rgba(124,58,237,0.2)' },
-              '.MuiChip-icon': { color: 'rgb(109,40,217) !important' },
-            }}
-          />
-        </Tooltip>
-        {buttonLabel && (
-          <Typography variant="caption" color="text.secondary">
-            Button: <strong>{buttonLabel}</strong>
-          </Typography>
-        )}
-      </Box>
-      {summary && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-          {summary.steps}
-        </Typography>
-      )}
-      {hubspotText && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25, fontStyle: 'italic' }}>
-          HubSpot: {hubspotText}
-        </Typography>
-      )}
-      {templateItems.length > 0 && (
-        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.25 }}>Emails:</Typography>
-          {templateItems.map(t => (
-            <Chip
-              key={t.key}
-              icon={<EmailIcon sx={{ fontSize: 12 }} />}
-              label={t.label}
-              size="small"
-              clickable
-              onClick={() => navigateToTab('emailtemplates')}
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 1.25,
+        borderRadius: 1,
+        bgcolor: 'background.default',
+        mt: 1,
+      }}
+    >
+      <Stack spacing={0.75}>
+        {meta && (
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <CodeIcon sx={{ fontSize: 13, color: 'text.disabled', mt: 0.1 }} />
+              <Typography variant="caption" sx={{ fontWeight: 700, fontSize: '0.7rem' }}>
+                {meta.component}
+              </Typography>
+            </Box>
+            <Box
+              component="code"
               sx={{
-                fontSize: '0.68rem',
-                height: 20,
-                bgcolor: 'rgba(16,185,129,0.08)',
-                color: 'rgb(5,150,105)',
-                '&:hover': { bgcolor: 'rgba(16,185,129,0.15)' },
-                '.MuiChip-icon': { color: 'rgb(5,150,105) !important', fontSize: '11px !important' },
-                '.MuiChip-label': { px: 0.75 },
+                fontFamily: 'monospace',
+                fontSize: '0.62rem',
+                color: 'text.disabled',
+                bgcolor: 'rgba(0,0,0,0.04)',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 0.5,
+                px: 0.5,
+                py: 0.1,
+                lineHeight: 1.4,
               }}
-            />
-          ))}
+            >
+              {meta.filePath}
+            </Box>
+          </Box>
+        )}
+
+        {summary?.steps && (
+          <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'baseline' }}>
+            <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontSize: '0.65rem' }}>
+              Steps:
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+              {summary.steps}
+            </Typography>
+          </Box>
+        )}
+
+        {hubspotText && (
+          <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'baseline' }}>
+            <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontSize: '0.65rem' }}>
+              HubSpot:
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
+              {hubspotText}
+            </Typography>
+          </Box>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+          <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontSize: '0.65rem', mt: 0.15 }}>
+            Emails:
+          </Typography>
+          {templateItems.length === 0 ? (
+            <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
+              No emails triggered
+            </Typography>
+          ) : (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+              {templateItems.map(t => (
+                <Chip
+                  key={t.key}
+                  icon={<EmailIcon sx={{ fontSize: 11 }} />}
+                  label={t.label}
+                  size="small"
+                  clickable
+                  onClick={() => navigateToTab('emailtemplates')}
+                  sx={{
+                    height: 18,
+                    fontSize: '0.62rem',
+                    bgcolor: 'rgba(16,185,129,0.08)',
+                    color: 'rgb(5,150,105)',
+                    '&:hover': { bgcolor: 'rgba(16,185,129,0.15)' },
+                    '.MuiChip-icon': { color: 'rgb(5,150,105) !important', fontSize: '10px !important' },
+                    '.MuiChip-label': { px: 0.5 },
+                  }}
+                />
+              ))}
+            </Box>
+          )}
         </Box>
-      )}
-    </Box>
+      </Stack>
+    </Paper>
   );
 }
 
-// ── NoHandler ─────────────────────────────────────────────────────────────────
+// ── SubstatusRow ──────────────────────────────────────────────────────────────
 
-function NoHandlerNote() {
-  return (
-    <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-      No handler bound
-    </Typography>
-  );
-}
-
-// ── SlotRow ───────────────────────────────────────────────────────────────────
-
-function SlotRow({
-  label,
-  rowKind,
+function SubstatusRow({
+  sub,
+  stageKey,
+  lsKey,
   handlers,
-  buttonLabel,
   emailTemplates,
+  labelMap,
 }: {
-  label: string;
-  rowKind: 'status' | 'substatus';
+  sub: Substatus;
+  stageKey: string;
+  lsKey: string;
   handlers: Handler[];
-  buttonLabel?: string;
   emailTemplates: EmailTemplate[];
+  labelMap: Record<string, string | null>;
 }) {
-  const isFirst = handlers.length > 0;
+  const subHandlers      = handlersForSlot(handlers, stageKey, lsKey, sub.id);
+  const nonDefaultSubs   = subHandlers.filter(isNonDefaultHandler);
+  const hasNonDefault    = nonDefaultSubs.length > 0;
+  const resolvedLabel    = hasNonDefault
+    ? (sub.action_label || resolveActionLabel(labelMap, stageKey, lsKey, undefined))
+    : '';
+
   return (
     <Box
       sx={{
-        py: 1,
-        pl: rowKind === 'substatus' ? 3 : 0,
-        pr: 1,
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: '160px 1fr 160px' },
+        gap: 1,
+        py: 0.75,
+        px: 1.5,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.default',
+      }}
+    >
+      {/* Sub-status identity */}
+      <Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', color: 'text.secondary' }}>
+          {sub.label}
+        </Typography>
+        {sub.substatus_key && (
+          <Box
+            component="code"
+            sx={{
+              display: 'block',
+              fontFamily: 'monospace',
+              fontSize: '0.6rem',
+              color: 'text.disabled',
+              mt: 0.15,
+            }}
+          >
+            {sub.substatus_key}
+          </Box>
+        )}
+      </Box>
+
+      {/* Action button preview */}
+      <Box>
+        {hasNonDefault ? (
+          <>
+            <Box sx={{ mb: 0.5 }}>
+              <ActionButtonPreview label={resolvedLabel} stageKey={stageKey} hasHandler />
+            </Box>
+            {nonDefaultSubs.map(h => (
+              <Box key={h.id} sx={{ mb: 0.5 }}>
+                <Chip
+                  icon={<BoltIcon sx={{ fontSize: 11 }} />}
+                  label={handlerDisplayName(h)}
+                  size="small"
+                  clickable
+                  onClick={() => navigateToTab('actionhandlers')}
+                  sx={{
+                    height: 18,
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    bgcolor: 'rgba(124,58,237,0.1)',
+                    color: 'rgb(109,40,217)',
+                    '&:hover': { bgcolor: 'rgba(124,58,237,0.2)' },
+                    '.MuiChip-icon': { color: 'rgb(109,40,217) !important', fontSize: '10px !important' },
+                    '.MuiChip-label': { px: 0.5 },
+                    mr: 0.5,
+                  }}
+                />
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem' }}>
+                  {h.type}
+                </Typography>
+              </Box>
+            ))}
+            {nonDefaultSubs.map(h => (
+              <ModalDetailCard key={h.id} handler={h} emailTemplates={emailTemplates} />
+            ))}
+          </>
+        ) : (
+          <Chip
+            label="Inherits parent"
+            size="small"
+            variant="outlined"
+            sx={{
+              height: 18,
+              fontSize: '0.62rem',
+              color: 'text.disabled',
+              borderColor: 'divider',
+              '.MuiChip-label': { px: 0.5 },
+            }}
+          />
+        )}
+      </Box>
+
+      {/* Abbreviated modal step */}
+      <Box>
+        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, mb: 0.4 }}>
+          Modal step
+        </Typography>
+        {hasNonDefault ? (
+          nonDefaultSubs.map(h => {
+            const meta = HANDLER_COMPONENT_META[h.type];
+            return (
+              <Box key={h.id} sx={{ mb: 0.4 }}>
+                <Box
+                  component="code"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.6rem',
+                    color: 'text.secondary',
+                    bgcolor: 'rgba(0,0,0,0.05)',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 0.5,
+                    px: 0.5,
+                    py: 0.1,
+                    display: 'inline-block',
+                  }}
+                >
+                  {meta?.component ?? h.type}
+                </Box>
+              </Box>
+            );
+          })
+        ) : (
+          <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: '0.65rem' }}>
+            Inherits parent modal
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+// ── StatusRow ─────────────────────────────────────────────────────────────────
+
+function StatusRow({
+  ls,
+  stageKey,
+  handlers,
+  substatuses,
+  emailTemplates,
+  labelMap,
+  isFlashing,
+}: {
+  ls: LeadStatus;
+  stageKey: string;
+  handlers: Handler[];
+  substatuses: Substatus[];
+  emailTemplates: EmailTemplate[];
+  labelMap: Record<string, string | null>;
+  isFlashing: boolean;
+}) {
+  const [subOpen, setSubOpen] = useState(false);
+  const lsKey          = String(ls.key || '').toLowerCase();
+  const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
+  const hasNonDefault  = statusHandlers.some(isNonDefaultHandler);
+  const hasHandler     = hasNonDefault;
+  const resolvedLabel  = resolveActionLabel(labelMap, stageKey, lsKey, undefined);
+
+  const subs = substatuses
+    .filter(s => String(s.status_key).toUpperCase() === ls.key.toUpperCase())
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+  const colors = STAGE_COLORS[stageKey];
+
+  return (
+    <Box
+      sx={{
         borderBottom: '1px solid',
         borderColor: 'divider',
         '&:last-child': { borderBottom: 'none' },
+        opacity: hasHandler ? 1 : 0.45,
+        animation: isFlashing ? 'wf-flash-border 1.4s ease-in-out' : 'none',
+        borderRadius: 0.5,
+        overflow: 'hidden',
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: isFirst ? 0.75 : 0 }}>
-        <Typography
-          variant="body2"
-          sx={{
-            fontWeight: rowKind === 'status' ? 600 : 400,
-            fontSize: rowKind === 'substatus' ? '0.8125rem' : '0.875rem',
-            color: rowKind === 'substatus' ? 'text.secondary' : 'text.primary',
-            minWidth: 120,
-            pt: 0.15,
-          }}
-        >
-          {label}
-        </Typography>
-      </Box>
-      {handlers.length === 0 ? (
-        <Box sx={{ pl: rowKind === 'substatus' ? 0 : 0 }}>
-          <NoHandlerNote />
+      {/* Three-column row */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '220px 200px 1fr' },
+          gap: { xs: 1, md: 1.5 },
+          p: 1.5,
+          alignItems: 'start',
+        }}
+      >
+        {/* Column 1 — Status Identity */}
+        <Box>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 700, fontSize: '0.82rem', mb: 0.5, lineHeight: 1.3 }}
+          >
+            {ls.label}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.4 }}>
+            {ls.shorthand && (
+              <Chip
+                label={ls.shorthand}
+                size="small"
+                sx={{
+                  height: 17,
+                  fontSize: '0.6rem',
+                  fontFamily: 'monospace',
+                  bgcolor: 'rgba(0,0,0,0.05)',
+                  color: 'text.secondary',
+                  '.MuiChip-label': { px: 0.5 },
+                }}
+              />
+            )}
+            {ls.is_null_row && (
+              <Chip
+                label="stage default"
+                size="small"
+                variant="outlined"
+                sx={{
+                  height: 17,
+                  fontSize: '0.6rem',
+                  color: 'text.disabled',
+                  borderColor: 'divider',
+                  '.MuiChip-label': { px: 0.5 },
+                }}
+              />
+            )}
+            {ls.excluded_from_sales && (
+              <Chip
+                label="excluded from sales"
+                size="small"
+                variant="outlined"
+                sx={{
+                  height: 17,
+                  fontSize: '0.6rem',
+                  color: '#92400e',
+                  borderColor: '#fbbf24',
+                  bgcolor: '#fffbeb',
+                  '.MuiChip-label': { px: 0.5 },
+                }}
+              />
+            )}
+          </Box>
+          {colors && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.bg, flexShrink: 0 }} />
+              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.6rem' }}>
+                {stageKey}
+              </Typography>
+              <SharedChip />
+            </Box>
+          )}
         </Box>
-      ) : (
-        <Stack spacing={1}>
-          {handlers.map(h => (
-            <HandlerRow
-              key={h.id}
-              handler={h}
-              buttonLabel={buttonLabel}
-              emailTemplates={emailTemplates}
+
+        {/* Column 2 — Action Button Preview */}
+        <Box>
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '0.62rem', mb: 0.5, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+            Action button
+          </Typography>
+          <Box sx={{ mb: 0.75 }}>
+            <ActionButtonPreview
+              label={resolvedLabel}
+              stageKey={stageKey}
+              hasHandler={hasHandler}
             />
+          </Box>
+          {hasHandler ? (
+            statusHandlers.map(h => (
+              <Box key={h.id} sx={{ mb: 0.4 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                  <Chip
+                    icon={<BoltIcon sx={{ fontSize: 12 }} />}
+                    label={handlerDisplayName(h)}
+                    size="small"
+                    clickable
+                    onClick={() => navigateToTab('actionhandlers')}
+                    sx={{
+                      height: 20,
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      bgcolor: 'rgba(124,58,237,0.1)',
+                      color: 'rgb(109,40,217)',
+                      '&:hover': { bgcolor: 'rgba(124,58,237,0.2)' },
+                      '.MuiChip-icon': { color: 'rgb(109,40,217) !important', fontSize: '11px !important' },
+                      '.MuiChip-label': { px: 0.75 },
+                    }}
+                  />
+                </Box>
+                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem', display: 'block', mt: 0.25 }}>
+                  type: <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>{h.type}</Box>
+                </Typography>
+              </Box>
+            ))
+          ) : (
+            <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
+              Default (show message)
+            </Typography>
+          )}
+        </Box>
+
+        {/* Column 3 — Component & Call Chain */}
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+            <AccountTreeIcon sx={{ fontSize: 11, color: 'text.disabled' }} />
+            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700 }}>
+              Call chain
+            </Typography>
+          </Box>
+          <CallChainStepper handlerType={hasHandler ? statusHandlers[0]?.type : undefined} />
+        </Box>
+      </Box>
+
+      {/* Modal Detail Card */}
+      {hasHandler && (
+        <Box sx={{ px: 1.5, pb: 1.25 }}>
+          {statusHandlers.map(h => (
+            <ModalDetailCard key={h.id} handler={h} emailTemplates={emailTemplates} />
           ))}
-        </Stack>
+        </Box>
+      )}
+
+      {/* Substatus expansion */}
+      {subs.length > 0 && (
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => setSubOpen(o => !o)}
+            endIcon={subOpen ? <ExpandLess sx={{ fontSize: 14 }} /> : <ExpandMoreRounded sx={{ fontSize: 14 }} />}
+            sx={{
+              fontSize: '0.68rem',
+              color: 'text.secondary',
+              fontWeight: 600,
+              textTransform: 'none',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 0,
+              width: '100%',
+              justifyContent: 'flex-start',
+              bgcolor: 'rgba(0,0,0,0.02)',
+              '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+            }}
+          >
+            {subs.length} sub-status{subs.length === 1 ? '' : 'es'}
+          </Button>
+          <Collapse in={subOpen}>
+            {subs.map(sub => (
+              <SubstatusRow
+                key={sub.id}
+                sub={sub}
+                stageKey={stageKey}
+                lsKey={lsKey}
+                handlers={handlers}
+                emailTemplates={emailTemplates}
+                labelMap={labelMap}
+              />
+            ))}
+          </Collapse>
+        </Box>
       )}
     </Box>
   );
 }
 
-// ── StageAccordion ────────────────────────────────────────────────────────────
+// ── SharedLegend ──────────────────────────────────────────────────────────────
 
-function StageAccordion({
+function SharedLegend() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Box
+      sx={{
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        overflow: 'hidden',
+      }}
+    >
+      <Button
+        size="small"
+        variant="text"
+        onClick={() => setOpen(o => !o)}
+        endIcon={open ? <ExpandLess sx={{ fontSize: 14 }} /> : <ExpandMoreRounded sx={{ fontSize: 14 }} />}
+        sx={{
+          width: '100%',
+          justifyContent: 'flex-start',
+          textTransform: 'none',
+          px: 1.5,
+          py: 0.875,
+          borderRadius: 0,
+          fontSize: '0.78rem',
+          fontWeight: 700,
+          color: 'text.secondary',
+          bgcolor: 'rgba(0,0,0,0.02)',
+          '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
+          gap: 0.5,
+        }}
+      >
+        <SharedChip />
+        Shared Components Legend
+      </Button>
+      <Collapse in={open}>
+        <Stack divider={<Divider />}>
+          {SHARED_COMPONENTS.map(sc => (
+            <Box key={sc.name} sx={{ px: 1.5, py: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25, flexWrap: 'wrap' }}>
+                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.78rem' }}>
+                  {sc.name}
+                </Typography>
+                <SharedChip />
+                <Box
+                  component="code"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.62rem',
+                    color: 'text.disabled',
+                    bgcolor: 'rgba(0,0,0,0.04)',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 0.5,
+                    px: 0.5,
+                    py: 0.1,
+                  }}
+                >
+                  {sc.filePath}
+                </Box>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                {sc.role}
+              </Typography>
+            </Box>
+          ))}
+        </Stack>
+      </Collapse>
+    </Box>
+  );
+}
+
+// ── StageAccordionNew ─────────────────────────────────────────────────────────
+
+function StageAccordionNew({
   stageKey,
   stageLabel,
   statuses,
@@ -241,6 +917,9 @@ function StageAccordion({
   labels,
   handlers,
   emailTemplates,
+  searchText,
+  flashedSlots,
+  accordionRef,
 }: {
   stageKey: string;
   stageLabel: string;
@@ -249,221 +928,112 @@ function StageAccordion({
   labels: CALabel[];
   handlers: Handler[];
   emailTemplates: EmailTemplate[];
+  searchText: string;
+  flashedSlots: Set<string>;
+  accordionRef?: React.RefObject<HTMLDivElement>;
 }) {
-  const stageStatuses = statuses
-    .filter(s => lsStageToKey(s.stage || '') === stageKey)
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const labelMap = useMemo(() => buildStageActionLabelMap(labels), [labels]);
 
-  const labelMap = new Map<string, string>();
-  for (const l of labels) {
-    if (l.stage_key === stageKey) {
-      labelMap.set(l.status_key, l.label);
+  const stageStatuses = useMemo(() => {
+    const q = searchText.toLowerCase().trim();
+    let list = statuses
+      .filter(s => lsStageToKey(s.stage || '') === stageKey)
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    if (q) {
+      list = list.filter(ls => {
+        const lsKey = ls.key.toLowerCase();
+        if (ls.label.toLowerCase().includes(q)) return true;
+        if (ls.shorthand?.toLowerCase().includes(q)) return true;
+        const hs = handlersForSlot(handlers, stageKey, lsKey);
+        return hs.some(h => {
+          if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
+          const meta = HANDLER_COMPONENT_META[h.type];
+          if (meta?.component.toLowerCase().includes(q)) return true;
+          return false;
+        });
+      });
     }
-  }
+    return list;
+  }, [statuses, stageKey, handlers, searchText, labels]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const subsByLs = new Map<string, Substatus[]>();
-  for (const s of substatuses) {
-    const k = String(s.status_key).toUpperCase();
-    const list = subsByLs.get(k) ?? [];
-    list.push(s);
-    subsByLs.set(k, list);
-  }
+  const colors = STAGE_COLORS[stageKey];
+  const borderColor = colors?.bg ?? '#8B2BFF';
 
-  const hasAnyHandler = stageStatuses.some(ls => {
-    const lsKey = String(ls.key || '').toLowerCase();
-    return handlersForSlot(handlers, stageKey, lsKey).length > 0;
-  });
+  if (searchText && stageStatuses.length === 0) return null;
+
+  const boundCount = stageStatuses.filter(ls => {
+    const lsKey = ls.key.toLowerCase();
+    return handlersForSlot(handlers, stageKey, lsKey).some(isNonDefaultHandler);
+  }).length;
 
   return (
-    <Accordion defaultExpanded={false} disableGutters variant="outlined" sx={{ '&:not(:last-child)': { borderBottom: 0 } }}>
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%' }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{stageLabel}</Typography>
-          {!hasAnyHandler && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-              No action handlers configured
-            </Typography>
-          )}
-        </Box>
-      </AccordionSummary>
-      <AccordionDetails sx={{ p: 0 }}>
-        {stageStatuses.length === 0 ? (
-          <Box sx={{ px: 2, py: 1.5 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-              No lead statuses configured for this stage.
-            </Typography>
+    <Box ref={accordionRef} id={`stage-accordion-${stageKey}`}>
+      <Accordion
+        defaultExpanded={false}
+        disableGutters
+        variant="outlined"
+        sx={{
+          borderLeft: `4px solid ${borderColor}`,
+          borderRadius: 1,
+          '&:not(:last-child)': { mb: 0 },
+          '&:before': { display: 'none' },
+        }}
+      >
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 48 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', pr: 1, flexWrap: 'wrap' }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: borderColor,
+                flexShrink: 0,
+              }}
+            />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{stageLabel}</Typography>
+            <Chip
+              label={`${boundCount} / ${stageStatuses.length} bound`}
+              size="small"
+              sx={{
+                height: 18,
+                fontSize: '0.62rem',
+                bgcolor: boundCount > 0 ? 'rgba(124,58,237,0.08)' : 'rgba(0,0,0,0.04)',
+                color: boundCount > 0 ? 'rgb(109,40,217)' : 'text.disabled',
+                '.MuiChip-label': { px: 0.75 },
+              }}
+            />
           </Box>
-        ) : (
-          stageStatuses.map(ls => {
-            const lsKey = String(ls.key || '').toLowerCase();
-            const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
-            const buttonLabel = labelMap.get(lsKey) || labelMap.get(ls.key.toLowerCase()) || undefined;
-            const subs = (subsByLs.get(ls.key.toUpperCase()) ?? [])
-              .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
-            return (
-              <Accordion
-                key={ls.key}
-                defaultExpanded={false}
-                disableGutters
-                variant="outlined"
-                sx={{
-                  borderRadius: '0 !important',
-                  borderLeft: 'none',
-                  borderRight: 'none',
-                  '&:not(:last-child)': { borderBottom: 0 },
-                  '&:before': { display: 'none' },
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon sx={{ fontSize: 18 }} />}
-                  sx={{ minHeight: 44, pl: 2, '& .MuiAccordionSummary-content': { my: 0.5 } }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', pr: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 160 }}>
-                      {ls.label}
-                      {ls.is_null_row && (
-                        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
-                          (stage default)
-                        </Typography>
-                      )}
-                    </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                      {statusHandlers.length > 0 ? (
-                        statusHandlers.map(h => (
-                          <Chip
-                            key={h.id}
-                            icon={<BoltIcon sx={{ fontSize: 12 }} />}
-                            label={handlerDisplayName(h)}
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              fontWeight: 600,
-                              bgcolor: 'rgba(124,58,237,0.1)',
-                              color: 'rgb(109,40,217)',
-                              '.MuiChip-icon': { color: 'rgb(109,40,217) !important', fontSize: '11px !important' },
-                              '.MuiChip-label': { px: 0.75 },
-                            }}
-                          />
-                        ))
-                      ) : (
-                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                          No handler bound
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ px: 2, pt: 0, pb: 1 }}>
-                  <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1.5, mb: subs.length > 0 ? 1.5 : 0 }}>
-                    {statusHandlers.length > 0 ? (
-                      <Stack spacing={1.5}>
-                        {statusHandlers.map(h => (
-                          <HandlerRow
-                            key={h.id}
-                            handler={h}
-                            buttonLabel={buttonLabel}
-                            emailTemplates={emailTemplates}
-                          />
-                        ))}
-                      </Stack>
-                    ) : (
-                      <NoHandlerNote />
-                    )}
-                  </Box>
-
-                  {subs.length > 0 && (
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', mb: 0.75 }}>
-                        Sub-statuses
-                      </Typography>
-                      <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                        {subs.map(sub => {
-                          const subHandlers = handlersForSlot(handlers, stageKey, lsKey);
-                          const subButtonLabel = sub.action_label || undefined;
-                          return (
-                            <Accordion
-                              key={sub.id}
-                              defaultExpanded={false}
-                              disableGutters
-                              variant="outlined"
-                              sx={{
-                                borderRadius: '0 !important',
-                                borderLeft: 'none',
-                                borderRight: 'none',
-                                borderTop: 'none',
-                                '&:first-of-type': { borderTop: 'none' },
-                                '&:not(:last-child)': { borderBottom: '1px solid', borderBottomColor: 'divider' },
-                                '&:last-child': { borderBottom: 'none' },
-                                '&:before': { display: 'none' },
-                                bgcolor: 'background.default',
-                              }}
-                            >
-                              <AccordionSummary
-                                expandIcon={<ExpandMoreIcon sx={{ fontSize: 16 }} />}
-                                sx={{ minHeight: 36, pl: 1.5, '& .MuiAccordionSummary-content': { my: 0.5 } }}
-                              >
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', pr: 1 }}>
-                                  <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 120 }}>
-                                    {sub.label}
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                                    {subHandlers.length > 0 ? (
-                                      subHandlers.map(h => (
-                                        <Chip
-                                          key={h.id}
-                                          icon={<BoltIcon sx={{ fontSize: 10 }} />}
-                                          label={handlerDisplayName(h)}
-                                          size="small"
-                                          sx={{
-                                            height: 18,
-                                            fontSize: '0.68rem',
-                                            fontWeight: 600,
-                                            bgcolor: 'rgba(124,58,237,0.1)',
-                                            color: 'rgb(109,40,217)',
-                                            '.MuiChip-icon': { color: 'rgb(109,40,217) !important', fontSize: '10px !important' },
-                                            '.MuiChip-label': { px: 0.5 },
-                                          }}
-                                        />
-                                      ))
-                                    ) : (
-                                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                        No handler bound
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                </Box>
-                              </AccordionSummary>
-                              <AccordionDetails sx={{ px: 1.5, pt: 0.5, pb: 1.5 }}>
-                                {subHandlers.length > 0 ? (
-                                  <Stack spacing={1}>
-                                    {subHandlers.map(h => (
-                                      <HandlerRow
-                                        key={h.id}
-                                        handler={h}
-                                        buttonLabel={subButtonLabel}
-                                        emailTemplates={emailTemplates}
-                                      />
-                                    ))}
-                                  </Stack>
-                                ) : (
-                                  <NoHandlerNote />
-                                )}
-                              </AccordionDetails>
-                            </Accordion>
-                          );
-                        })}
-                      </Box>
-                    </Box>
-                  )}
-                </AccordionDetails>
-              </Accordion>
-            );
-          })
-        )}
-      </AccordionDetails>
-    </Accordion>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 0 }}>
+          {stageStatuses.length === 0 ? (
+            <Box sx={{ px: 2, py: 1.5 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                No lead statuses configured for this stage.
+              </Typography>
+            </Box>
+          ) : (
+            <Box>
+              {stageStatuses.map(ls => {
+                const slotKey = `${stageKey}|${ls.key.toLowerCase()}`;
+                return (
+                  <StatusRow
+                    key={ls.key}
+                    ls={ls}
+                    stageKey={stageKey}
+                    handlers={handlers}
+                    substatuses={substatuses}
+                    emailTemplates={emailTemplates}
+                    labelMap={labelMap}
+                    isFlashing={flashedSlots.has(slotKey)}
+                  />
+                );
+              })}
+            </Box>
+          )}
+        </AccordionDetails>
+      </Accordion>
+    </Box>
   );
 }
 
@@ -482,8 +1052,20 @@ export function WorkflowPage() {
   const [refreshing,     setRefreshing]     = useState(false);
   const [lastRefreshed,  setLastRefreshed]  = useState<Date | null>(null);
   const [error,          setError]          = useState<string | null>(null);
+  const [searchText,     setSearchText]     = useState('');
+  const [flashedSlots,   setFlashedSlots]   = useState<Set<string>>(new Set());
 
-  const isFirstLoad = useRef(true);
+  const isFirstLoad          = useRef(true);
+  const prevSnapshotRef      = useRef<Record<string, number>>({});
+  const flashTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accordionRefs        = useRef<Record<string, React.RefObject<HTMLDivElement>>>({});
+
+  const getAccordionRef = (key: string): React.RefObject<HTMLDivElement> => {
+    if (!accordionRefs.current[key]) {
+      accordionRefs.current[key] = React.createRef<HTMLDivElement>();
+    }
+    return accordionRefs.current[key];
+  };
 
   const fetchAll = useCallback(async (showRefreshing = false) => {
     if (isFirstLoad.current) {
@@ -502,18 +1084,51 @@ export function WorkflowPage() {
         GET<WorkflowDef | null>('/api/workflow'),
       ]);
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
+      const newHandlers = safeArr<Handler>(hdl);
+
+      // Diff for flash animation (only after first load)
+      if (!isFirstLoad.current && showRefreshing) {
+        const newSnapshot = buildBindingSnapshot(newHandlers);
+        const changed = new Set<string>();
+        const allKeys = new Set([
+          ...Object.keys(prevSnapshotRef.current),
+          ...Object.keys(newSnapshot),
+        ]);
+        for (const key of allKeys) {
+          if (prevSnapshotRef.current[key] !== newSnapshot[key]) {
+            changed.add(key);
+          }
+        }
+        if (changed.size > 0) {
+          if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+          setFlashedSlots(changed);
+          flashTimerRef.current = setTimeout(() => setFlashedSlots(new Set()), 1500);
+        }
+        prevSnapshotRef.current = newSnapshot;
+      } else if (isFirstLoad.current) {
+        prevSnapshotRef.current = buildBindingSnapshot(newHandlers);
+      }
+
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
       setSubstatuses(safeArr(sub));
-      setHandlers(safeArr(hdl));
+      setHandlers(newHandlers);
       setEmailTemplates(safeArr(tpl));
 
       const wfDef: WorkflowDef = (wf && typeof wf === 'object' && wf.stages) ? wf : DEFAULT_WORKFLOW;
-      const stages = Object.entries(wfDef.stages ?? {}).map(([key, val]: [string, WorkflowStage]) => ({
+      const stageEntries = Object.entries(wfDef.stages ?? {}).map(([key, val]: [string, WorkflowStage]) => ({
         key,
         label: val.label ?? key,
       }));
-      setWorkflowStages(stages);
+      // Enforce canonical sales→aftercare order; unknown stages fall to the end.
+      stageEntries.sort((a, b) => {
+        const ai = CANONICAL_STAGE_ORDER.indexOf(a.key);
+        const bi = CANONICAL_STAGE_ORDER.indexOf(b.key);
+        const an = ai === -1 ? 9999 : ai;
+        const bn = bi === -1 ? 9999 : bi;
+        return an - bn;
+      });
+      setWorkflowStages(stageEntries);
       setLastRefreshed(new Date());
     } catch (e) {
       setError((e as Error).message || 'Failed to load workflow data.');
@@ -567,90 +1182,177 @@ export function WorkflowPage() {
     };
   }, [fetchAll]);
 
+  // Clean up flash timer on unmount
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
   const formattedTime = lastRefreshed
     ? lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null;
 
+  const scrollToStage = (key: string) => {
+    const ref = accordionRefs.current[key];
+    ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <Stack spacing={2} sx={{ py: 1 }}>
-      <Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>Workflow</Typography>
-          {!isFirstLoad.current && formattedTime && (
-            <Typography variant="caption" color="text.secondary">
-              Updated {formattedTime}
-            </Typography>
-          )}
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={refreshing ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon />}
-            disabled={refreshing || loading}
-            onClick={() => fetchAll(true)}
-            data-testid="wf-refresh"
-          >
-            Refresh
-          </Button>
-        </Box>
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Read-only reference showing each stage's card-action bindings — which handler fires, what steps it runs, what HubSpot status changes, and which emails are sent.
-        </Alert>
-      </Box>
-
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
-        </Box>
-      )}
-
-      {error && !loading && (
-        <Alert severity="error">{error}</Alert>
-      )}
-
-      {!loading && !error && (
+    <>
+      {flashKeyframes}
+      <Stack spacing={2} sx={{ py: 1 }}>
+        {/* ── Header ── */}
         <Box>
-          <Divider sx={{ mb: 2 }} />
-          {workflowStages.length === 0 ? (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              No stages configured. Add stages in the <strong>Stages</strong> tab to set up your workflow.
-            </Alert>
-          ) : (
-            <Stack spacing={0}>
-              {workflowStages.map(stage => (
-                <StageAccordion
-                  key={stage.key}
-                  stageKey={stage.key}
-                  stageLabel={stage.label}
-                  statuses={statuses}
-                  substatuses={substatuses}
-                  labels={labels}
-                  handlers={handlers}
-                  emailTemplates={emailTemplates}
-                />
-              ))}
-            </Stack>
-          )}
-          <Stack direction="row" spacing={1.5} sx={{ mt: 2.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h6">Workflow</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.72rem' }}>
+                This page is a live reference — refresh to reflect the latest handler configuration.
+              </Typography>
+            </Box>
+            {!isFirstLoad.current && formattedTime && (
+              <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                Updated {formattedTime}
+              </Typography>
+            )}
             <Button
               size="small"
-              variant="text"
-              data-testid="wf-go-action-handlers"
-              onClick={() => navigateToTab('actionhandlers')}
+              variant="outlined"
+              startIcon={refreshing ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon />}
+              disabled={refreshing || loading}
+              onClick={() => fetchAll(true)}
+              data-testid="wf-refresh"
             >
-              Go to Action handlers →
+              Refresh
             </Button>
-            <Button
-              size="small"
-              variant="text"
-              data-testid="wf-go-stages"
-              onClick={() => navigateToTab('stages')}
-            >
-              Go to Stages →
-            </Button>
-          </Stack>
+          </Box>
         </Box>
-      )}
-    </Stack>
+
+        {/* ── Search ── */}
+        <TextField
+          size="small"
+          placeholder="Filter by status label, shorthand, handler name, or component…"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ '& .MuiInputBase-input': { fontSize: '0.82rem' } }}
+        />
+
+        {/* ── Sticky stage-jump nav ── */}
+        {!loading && !error && workflowStages.length > 0 && (
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              bgcolor: 'background.default',
+              pt: 0.5,
+              pb: 0.75,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              mx: -0.5,
+              px: 0.5,
+            }}
+          >
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {workflowStages.map(stage => {
+                const colors = STAGE_COLORS[stage.key];
+                return (
+                  <Tooltip key={stage.key} title={`Jump to ${stage.label}`} arrow>
+                    <Chip
+                      label={stage.label}
+                      size="small"
+                      clickable
+                      onClick={() => scrollToStage(stage.key)}
+                      sx={{
+                        height: 22,
+                        fontSize: '0.68rem',
+                        fontWeight: 600,
+                        bgcolor: colors?.bg ?? '#8B2BFF',
+                        color: '#fff',
+                        '&:hover': { opacity: 0.85, bgcolor: colors?.bg ?? '#8B2BFF' },
+                        '.MuiChip-label': { px: 0.75 },
+                      }}
+                    />
+                  </Tooltip>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+
+        {/* ── Shared Components Legend ── */}
+        {!loading && !error && <SharedLegend />}
+
+        {/* ── Loading / error ── */}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        )}
+
+        {error && !loading && (
+          <Alert severity="error">{error}</Alert>
+        )}
+
+        {/* ── Stage accordions ── */}
+        {!loading && !error && (
+          <Box>
+            {workflowStages.length === 0 ? (
+              <Alert severity="warning">
+                No stages configured. Add stages in the <strong>Stages</strong> tab to set up your workflow.
+              </Alert>
+            ) : (
+              <Stack spacing={1}>
+                {workflowStages.map(stage => (
+                  <StageAccordionNew
+                    key={stage.key}
+                    stageKey={stage.key}
+                    stageLabel={stage.label}
+                    statuses={statuses}
+                    substatuses={substatuses}
+                    labels={labels}
+                    handlers={handlers}
+                    emailTemplates={emailTemplates}
+                    searchText={searchText}
+                    flashedSlots={flashedSlots}
+                    accordionRef={getAccordionRef(stage.key)}
+                  />
+                ))}
+              </Stack>
+            )}
+
+            <Stack direction="row" spacing={1.5} sx={{ mt: 2.5 }}>
+              <Button
+                size="small"
+                variant="text"
+                data-testid="wf-go-action-handlers"
+                onClick={() => navigateToTab('actionhandlers')}
+              >
+                Go to Action handlers →
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                data-testid="wf-go-stages"
+                onClick={() => navigateToTab('stages')}
+              >
+                Go to Stages →
+              </Button>
+            </Stack>
+          </Box>
+        )}
+      </Stack>
+    </>
   );
 }
 

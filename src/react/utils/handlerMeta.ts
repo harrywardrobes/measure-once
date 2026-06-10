@@ -8,11 +8,20 @@
  * HANDLER_EMAIL_TEMPLATES — maps handler type → email template key array,
  *   used in WorkflowPage to show which templates fire and in
  *   EmailTemplatesPage to show "Used by" chips.
+ *
+ * HANDLER_COMPONENT_META — maps handler type → { component, filePath }
+ *   used in WorkflowPage to show the modal component name and source path
+ *   in the call-chain column and Modal Detail Card.
  */
 
 export interface HandlerModalSummary {
   steps: string;
   hubspot: string;
+}
+
+export interface HandlerComponentMeta {
+  component: string;
+  filePath: string;
 }
 
 export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
@@ -88,4 +97,51 @@ export const HANDLER_EMAIL_TEMPLATES: Record<string, string[]> = {
   show_message:                 [],
   schedule_delivery_window:     [],
   schedule_installation_slot:   [],
+};
+
+export const HANDLER_COMPONENT_META: Record<string, HandlerComponentMeta> = {
+  show_message: {
+    component: 'MessagePopupModal',
+    filePath:  'src/react/components/modals/MessagePopupModal.tsx',
+  },
+  add_design_visit_to_calendar: {
+    component: 'DesignVisitCalendarModal',
+    filePath:  'src/react/components/modals/DesignVisitCalendarModal.tsx',
+  },
+  schedule_visit: {
+    component: 'VisitCalendarModal',
+    filePath:  'src/react/components/modals/VisitCalendarModal.tsx',
+  },
+  schedule_delivery_window: {
+    component: 'DeliveryWindowModal',
+    filePath:  'src/react/components/modals/DeliveryWindowModal.tsx',
+  },
+  schedule_installation_slot: {
+    component: 'InstallationSlotModal',
+    filePath:  'src/react/components/modals/InstallationSlotModal.tsx',
+  },
+  summarise_phone_call: {
+    component: 'PhoneSummaryModal',
+    filePath:  'src/react/components/modals/PhoneSummaryModal.tsx',
+  },
+  start_design_visit: {
+    component: 'DesignVisitWizard',
+    filePath:  'src/react/components/DesignVisitWizard.tsx',
+  },
+  upload_photos_and_info: {
+    component: 'UploadPhotosModal',
+    filePath:  'src/react/components/modals/UploadPhotosModal.tsx',
+  },
+  review_customer_photos: {
+    component: 'ReviewCustomerPhotosDrawer',
+    filePath:  'src/react/components/modals/ReviewCustomerPhotosDrawer.tsx',
+  },
+  arrange_visit: {
+    component: 'ArrangeVisitModal',
+    filePath:  'src/react/components/modals/ArrangeVisitModal.tsx',
+  },
+  contact_customer: {
+    component: 'ContactCustomerModal',
+    filePath:  'src/react/components/modals/ContactCustomerModal.tsx',
+  },
 };
