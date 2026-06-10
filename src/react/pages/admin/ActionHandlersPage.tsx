@@ -18,6 +18,7 @@ import {
   Select,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
@@ -1235,25 +1236,31 @@ export function ActionHandlersPage() {
                                   <div className="adm-handlers-slot-label">{slot.label}</div>
                                   <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
                                   {slot.kind === 'ls' && slot.hasLabel === false && (
-                                    <Chip
-                                      data-testid="no-label-warning"
-                                      color="warning"
-                                      size="small"
-                                      label="No action label"
-                                      onClick={() => {
-                                        const win = window as unknown as Record<string, unknown>;
-                                        if (typeof win.adminSwitchToTab === 'function') {
-                                          (win.adminSwitchToTab as (id: string) => void)('cardactions');
-                                        } else {
-                                          try {
-                                            localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
-                                            localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
-                                          } catch { /* restricted context */ }
-                                          location.href = '/admin';
-                                        }
-                                      }}
-                                      sx={{ mt: 0.5, cursor: 'pointer' }}
-                                    />
+                                    <Tooltip
+                                      title="This slot has no card-action label. Click to go to Card Actions and add one."
+                                      arrow
+                                      placement="top"
+                                    >
+                                      <Chip
+                                        data-testid="no-label-warning"
+                                        color="warning"
+                                        size="small"
+                                        label="No action label"
+                                        onClick={() => {
+                                          const win = window as unknown as Record<string, unknown>;
+                                          if (typeof win.adminSwitchToTab === 'function') {
+                                            (win.adminSwitchToTab as (id: string) => void)('cardactions');
+                                          } else {
+                                            try {
+                                              localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+                                              localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
+                                            } catch { /* restricted context */ }
+                                            location.href = '/admin';
+                                          }
+                                        }}
+                                        sx={{ mt: 0.5, cursor: 'pointer' }}
+                                      />
+                                    </Tooltip>
                                   )}
                                 </td>
                                 <td className="adm-handlers-cell">
