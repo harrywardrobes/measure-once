@@ -51,6 +51,18 @@ interface EditProps {
 
 type Props = CreateProps | CreateDirectProps | EditProps;
 
+function _broadcastLeadStatusChange(
+  contactId: string,
+  props: { hs_lead_status: string; hw_lead_substatus: string },
+): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    const ch = new BroadcastChannel('contact_properties_changed');
+    ch.postMessage({ contactId, props });
+    ch.close();
+  } catch { /* ignore — non-fatal */ }
+}
+
 export function InstallationSlotModal(props: Props) {
   const showToast = useToast();
   const isEdit = props.mode === 'edit';
@@ -200,6 +212,14 @@ export function InstallationSlotModal(props: Props) {
           handleClose();
           props.onSaved?.();
           return;
+        }
+
+        const _d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
+        if (_d?.hs_lead_status || _d?.hw_lead_substatus) {
+          _broadcastLeadStatusChange(contactId ?? '', {
+            hs_lead_status: _d.hs_lead_status ?? '',
+            hw_lead_substatus: _d.hw_lead_substatus ?? '',
+          });
         }
 
         if (updateGcal && visit.googleEventId) {

@@ -57,6 +57,18 @@ interface CreateProps {
 
 type Props = EditProps | CreateProps;
 
+function _broadcastLeadStatusChange(
+  contactId: string,
+  props: { hs_lead_status: string; hw_lead_substatus: string },
+): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    const ch = new BroadcastChannel('contact_properties_changed');
+    ch.postMessage({ contactId, props });
+    ch.close();
+  } catch { /* ignore — non-fatal */ }
+}
+
 export function GenericVisitEditModal(props: Props) {
   const showToast = useToast();
   const isCreate = props.mode === 'create';
@@ -208,6 +220,14 @@ export function GenericVisitEditModal(props: Props) {
           handleClose();
           props.onSaved?.();
           return;
+        }
+
+        const _d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
+        if (_d?.hs_lead_status || _d?.hw_lead_substatus) {
+          _broadcastLeadStatusChange(contactId ?? '', {
+            hs_lead_status: _d.hs_lead_status ?? '',
+            hw_lead_substatus: _d.hw_lead_substatus ?? '',
+          });
         }
 
         if (gcalChecked && visit.googleEventId) {
