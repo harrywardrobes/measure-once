@@ -671,11 +671,11 @@ function CustomerCard({
    */
   syncFailedIds?: number[];
   /**
-   * Most-recent contact attempt timestamp and author name, sourced from the
-   * local `contact_attempt_tracking` table. Shown as a lightweight history
-   * row beneath the action strip.
+   * Most-recent contact attempt timestamp, author name, total attempt count,
+   * and method, sourced from the local tracking + log tables. Shown as a
+   * lightweight history row beneath the action strip.
    */
-  lastAttempt?: { at: string; by: string | null } | null;
+  lastAttempt?: { at: string; by: string | null; count: number; method: string | null } | null;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -868,8 +868,17 @@ function CustomerCard({
           }}
         >
           <Typography variant="caption" color="text.secondary">
-            Contacted {relativeTime(lastAttempt.at)}
-            {lastAttempt.by ? ` · ${lastAttempt.by}` : ''}
+            {lastAttempt.count > 0
+              ? `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'} · ${
+                  lastAttempt.method === 'call'
+                    ? 'Called'
+                    : lastAttempt.method === 'email'
+                    ? 'Emailed'
+                    : lastAttempt.method === 'whatsapp'
+                    ? "WhatsApp'd"
+                    : 'Contacted'
+                } ${relativeTime(lastAttempt.at)}`
+              : `Contacted ${relativeTime(lastAttempt.at)}${lastAttempt.by ? ` · ${lastAttempt.by}` : ''}`}
           </Typography>
         </Box>
       )}
@@ -898,7 +907,7 @@ export function CustomersPage(): React.ReactElement {
   const { invoices: qbInvoices, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
-  const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null } | null>>({});
+  const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null } | null>>({});
 
   // Invoice drawer state
   const [invDrawerOpen, setInvDrawerOpen]     = React.useState(false);
@@ -1270,7 +1279,7 @@ export function CustomersPage(): React.ReactElement {
     if (!ids.length) return;
     (async () => {
       let urgencyById: Record<string, Urgency> = {};
-      let lastAttemptById: Record<string, { at: string; by: string | null } | null> = {};
+      let lastAttemptById: Record<string, { at: string; by: string | null; count: number; method: string | null } | null> = {};
       try {
         const res = await fetch('/api/contacts/urgency', {
           method: 'POST',
@@ -1281,7 +1290,7 @@ export function CustomersPage(): React.ReactElement {
         if (res.ok) {
           const data = (await res.json()) as {
             urgency?: Record<string, Urgency>;
-            lastAttempt?: Record<string, { at: string; by: string | null } | null>;
+            lastAttempt?: Record<string, { at: string; by: string | null; count: number; method: string | null } | null>;
           };
           urgencyById = data.urgency || {};
           lastAttemptById = data.lastAttempt || {};
@@ -1334,7 +1343,7 @@ export function CustomersPage(): React.ReactElement {
         if (!res.ok) return;
         const data = (await res.json()) as {
           urgency?: Record<string, Urgency>;
-          lastAttempt?: Record<string, { at: string; by: string | null } | null>;
+          lastAttempt?: Record<string, { at: string; by: string | null; count: number; method: string | null } | null>;
         };
         const urgencyById = data.urgency || {};
         const lastAttemptById = data.lastAttempt || {};
