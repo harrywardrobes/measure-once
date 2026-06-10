@@ -125,19 +125,24 @@ function surfaceConflict(entry: QueueEntry): void {
 }
 
 /**
- * After a successful replay of an `arrange-visit/outcome` write, broadcast the
- * resulting lead-status change so any open Projects board tabs update without a
- * manual refresh. Mirrors the `_broadcastLeadStatusChange` call in
- * ArrangeVisitModal that is intentionally skipped when the write is queued.
+ * After a successful replay of any queued write, broadcast the resulting
+ * lead-status change so any open Projects board tabs update without a manual
+ * refresh. Fired whenever the response body carries `hs_lead_status` or
+ * `hw_lead_substatus` — covers arrange-visit/outcome, delivery-window edits,
+ * installation-slot edits, and any future modal that changes lead status.
+ *
+ * The contact ID is read from `body.contactId` (ArrangeVisitModal) or
+ * `body.customerId` (DeliveryWindowModal / InstallationSlotModal /
+ * GenericVisitEditModal), both of which hold the HubSpot contact ID.
  */
 function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void {
-  if (!entry.url.endsWith('/arrange-visit/outcome')) return;
-  const body = entry.body as { contactId?: string } | null | undefined;
-  const contactId = body?.contactId;
-  if (!contactId) return;
   const d = data as { hs_lead_status?: string; hw_lead_substatus?: string } | null | undefined;
-  const hs_lead_status = d?.hs_lead_status ?? '';
-  const hw_lead_substatus = d?.hw_lead_substatus ?? '';
+  if (!d?.hs_lead_status && !d?.hw_lead_substatus) return;
+  const body = entry.body as { contactId?: string; customerId?: string } | null | undefined;
+  const contactId = body?.contactId ?? body?.customerId;
+  if (!contactId) return;
+  const hs_lead_status = d.hs_lead_status ?? '';
+  const hw_lead_substatus = d.hw_lead_substatus ?? '';
   if (typeof BroadcastChannel === 'undefined') return;
   try {
     const ch = new BroadcastChannel('contact_properties_changed');
