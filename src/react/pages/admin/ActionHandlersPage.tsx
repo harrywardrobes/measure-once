@@ -283,7 +283,7 @@ function _buildActionSlotGroups(): ActionStage[] {
     ),
   );
   const globalStage: ActionStage | null = (globalLabel || hasGlobalHandler) ? {
-    stage: { key: '__global__', label: 'No lead status (global)' },
+    stage: { key: '__global__', label: 'No lead status' },
     groups: [{
       ls: { key: '__GLOBAL_NULL__', label: '', isNullRow: false },
       slots: [{
@@ -294,17 +294,7 @@ function _buildActionSlotGroups(): ActionStage[] {
     }],
   } : null;
 
-  // Null-status row (sales stage) — kept for legacy bindings where stage_key='sales', status_key=''.
-  if (nullRow) {
-    const dflt = labelsByKey.get('sales|') || '';
-    if (dflt) {
-      const salesStage = stageMap.get('sales')!;
-      salesStage.groups.push({
-        ls: { key: '__NULL__', label: nullRow.label, isNullRow: true },
-        slots: [{ kind: 'ls', stage_key: 'sales', status_key: '', label: dflt, rowLabel: 'Default action' }],
-      });
-    }
-  }
+  // Legacy Sales null-row omitted — superseded by the global null slot above.
 
   for (const ls of statuses) {
     const stageKey = STAGE_FOR_LS[ls.stage || ''];
@@ -950,7 +940,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
           } else {
             const stage = String(b.stage_key || '');
             if (stage.toLowerCase() === '__global__' && (b.status_key || '') === '') {
-              chipLabel = 'No lead status (global)';
+              chipLabel = 'No lead status';
             } else {
               const ck = String(b.status_key || '').toLowerCase();
               const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
