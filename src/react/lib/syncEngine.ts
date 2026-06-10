@@ -34,7 +34,7 @@ import {
   type QueueMethod,
 } from './offlineQueue';
 import { detectConflict, type ConflictDecision } from './conflictDetection';
-import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
+import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 
 // ── Tunables ────────────────────────────────────────────────────────────────────
 
@@ -142,14 +142,10 @@ function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void 
   const body = entry.body as { contactId?: string; customerId?: string } | null | undefined;
   const contactId = body?.contactId ?? body?.customerId;
   if (!contactId) return;
-  const hs_lead_status = d.hs_lead_status ?? '';
-  const hw_lead_substatus = d.hw_lead_substatus ?? '';
-  if (typeof BroadcastChannel === 'undefined') return;
-  try {
-    const ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
-    ch.postMessage({ contactId, props: { hs_lead_status, hw_lead_substatus } });
-    ch.close();
-  } catch { /* non-fatal */ }
+  broadcastLeadStatusChange(contactId, {
+    hs_lead_status: d.hs_lead_status ?? '',
+    hw_lead_substatus: d.hw_lead_substatus ?? '',
+  });
 }
 
 // ── Replay primitives ────────────────────────────────────────────────────────────
