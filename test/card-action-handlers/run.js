@@ -1152,13 +1152,12 @@ async function main() {
   //
   //   PRIV-01  member POST  /api/admin/card-action-handlers        → 403
   //   PRIV-02  member PATCH /api/admin/card-action-handlers/:id    → 403
-  //   PRIV-03  member DELETE /api/admin/card-action-handlers/:id   → 403
 
   console.log('\n  [PRIV] Member-privilege probes');
 
   const memberClient = await login(users.member.email, PASSWORD);
 
-  // Create a scaffold handler as admin so PRIV-02 / PRIV-03 have a real ID.
+  // Create a scaffold handler as admin so PRIV-02 has a real ID.
   let privScaffoldId = null;
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
@@ -1214,23 +1213,8 @@ async function main() {
     );
   }
 
-  // PRIV-03: member DELETE
-  {
-    const targetId = privScaffoldId ?? 999999;
-    const r = await memberClient.delete(`/api/admin/card-action-handlers/${targetId}`);
-    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
-    record(
-      'PRIV-03: member DELETE /api/admin/card-action-handlers/:id blocked',
-      'status=403 (or 401/302)',
-      `status=${r.status}`,
-      blocked,
-    );
-  }
-
-  // Clean up the scaffold handler (admin delete).
-  if (privScaffoldId) {
-    await adminClient.delete(`/api/admin/card-action-handlers/${privScaffoldId}`);
-  }
+  // No PRIV-03 — the whole-handler DELETE endpoint has been retired.
+  // The scaffold handler (no bindings) is left for the ephemeral test DB to drop.
 
   // ── puppeteer required ─────────────────────────────────────────────────────
   if (!puppeteer) {
@@ -4822,11 +4806,11 @@ async function writeReport(runId, findings) {
     '',
     '- **(API pre-checks)**: verify `GET /api/admin/card-action-handlers` and',
     '  `GET /api/card-action-handlers` respond before any browser tab opens.',
-    '- **(PRIV) Member-privilege probes** — 3 pure-REST probes that confirm a',
+    '- **(PRIV) Member-privilege probes** — 2 pure-REST probes that confirm a',
     '  regular approved member is blocked (403) from mutating admin routes:',
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
-    '  - PRIV-03: member DELETE `/api/admin/card-action-handlers/:id` → 403.',
+    '  (PRIV-03 — member DELETE whole-handler — removed; endpoint retired.)',
     '- **(NEG) Negative-path validation probes** — 30 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',

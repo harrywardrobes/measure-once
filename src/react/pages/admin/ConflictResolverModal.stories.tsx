@@ -328,7 +328,7 @@ function RemoveInteractionDemo() {
         (typeof input === 'object' && 'method' in input ? (input as Request).method : '') ||
         'GET'
       ).toUpperCase();
-      if (method === 'DELETE' && /\/api\/admin\/card-action-handlers\/\d+/.test(url)) {
+      if (method === 'DELETE' && /\/api\/admin\/card-action-handlers\/\d+\/binding/.test(url)) {
         return Promise.resolve(
           new Response(JSON.stringify({ ok: true }), {
             status: 200,
@@ -373,7 +373,7 @@ export const RemoveInteraction: Story = {
       description: {
         story:
           'Exercises the **real** remove code path: no `onRemove` prop is passed, so ' +
-          'clicking "Remove" issues `DELETE /api/admin/card-action-handlers/:id` via the ' +
+          'clicking "Remove" issues `DELETE /api/admin/card-action-handlers/:id/binding` via the ' +
           'normal `fetch`-based helper. A story-level `window.fetch` override intercepts ' +
           'that request and returns a 200 OK with no real server involved. ' +
           'After the mock DELETE resolves the dialog auto-closes — the same behaviour ' +
