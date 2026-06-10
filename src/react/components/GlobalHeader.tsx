@@ -161,6 +161,7 @@ export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps)
           }}
         >
           <Box
+            data-testid="service-status-icon"
             sx={{
               display: 'flex',
               alignItems: 'center',

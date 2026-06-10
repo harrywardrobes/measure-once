@@ -141,6 +141,7 @@ function GateStatusBadge({ state }: { state: ViewState }) {
 
   return (
     <Box
+      data-testid="gate-status-badge"
       sx={{
         width: 56, height: 56, borderRadius: '50%',
         bgcolor: colors.bg, color: colors.fg,
