@@ -11,6 +11,8 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 
 interface FollowUpProps {
   handler: CardActionHandlerData;
@@ -76,7 +78,6 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [savedSummary, setSavedSummary] = useState('');
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   const hasUnsavedChanges = summary.trim().length > 0;
 
@@ -86,14 +87,11 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
     onClose();
   }
 
-  function handleRequestClose() {
-    if (submitting) return;
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleClose();
-    }
-  }
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleClose,
+    submitting,
+  );
 
   async function handleSubmit() {
     setError('');
@@ -168,16 +166,11 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
         open={showFollowUp}
         onClose={() => setShowFollowUp(false)}
       />
-      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Discard changes?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-          <Button color="error" onClick={handleClose}>Discard changes</Button>
-        </DialogActions>
-      </Dialog>
+      <DiscardConfirmDialog
+        open={confirmDiscardOpen}
+        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onDiscard={handleClose}
+      />
     </>
   );
 }

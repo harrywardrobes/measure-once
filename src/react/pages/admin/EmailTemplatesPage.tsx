@@ -27,6 +27,8 @@ import {
 
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import {
@@ -287,7 +289,6 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [hadDraft] = useState<boolean>(() => loadDraft(template.key) !== null);
   const [saving, setSaving] = useState(false);
   const [confirmUnknownOpen, setConfirmUnknownOpen] = useState(false);
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   const hasUnsavedChanges =
     fields.subject    !== template.subject    ||
@@ -369,13 +370,10 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     onClose();
   }, [template.key, onClose]);
 
-  const handleRequestClose = useCallback(() => {
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleCancel();
-    }
-  }, [hasUnsavedChanges, handleCancel]);
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleCancel,
+  );
 
   const handleConfirmedSave = useCallback(async () => {
     if (!fields.subject.trim()) {
@@ -572,16 +570,11 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       </DialogActions>
 
       {/* Discard-changes confirmation */}
-      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Discard changes?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-          <Button color="error" onClick={handleCancel}>Discard changes</Button>
-        </DialogActions>
-      </Dialog>
+      <DiscardConfirmDialog
+        open={confirmDiscardOpen}
+        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onDiscard={handleCancel}
+      />
 
       {/* Confirmation dialog when unknown or malformed tokens are present */}
       <Dialog open={confirmUnknownOpen} onClose={() => setConfirmUnknownOpen(false)} maxWidth="xs" fullWidth>

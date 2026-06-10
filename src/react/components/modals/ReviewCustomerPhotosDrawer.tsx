@@ -3,10 +3,6 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import Stack from '@mui/material/Stack';
@@ -18,6 +14,8 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -140,7 +138,6 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   const hasUnsavedChanges =
     step !== 'done' &&
@@ -295,14 +292,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     onClose();
   }
 
-  function handleRequestClose() {
-    if (submitting) return;
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleClose();
-    }
-  }
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleClose,
+    submitting,
+  );
 
   const contactDisplay  = ctx.contactName || submission?.contactName || 'Customer';
   // Show masked email in the UI; the actual send target is resolved server-side from the submission record
@@ -640,16 +634,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
       </Box>
     </Drawer>
 
-    <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-      <DialogTitle>Discard changes?</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-        <Button color="error" onClick={() => { setConfirmDiscardOpen(false); handleClose(); }}>Discard changes</Button>
-      </DialogActions>
-    </Dialog>
+    <DiscardConfirmDialog
+      open={confirmDiscardOpen}
+      onKeepEditing={() => setConfirmDiscardOpen(false)}
+      onDiscard={handleClose}
+    />
     </>
   );
 }

@@ -7,9 +7,10 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
-import Typography from '@mui/material/Typography';
 import { Contact } from './types';
 import { updateRecentCustomer } from '../../utils/formatters';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -95,7 +96,6 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   const [values,  setValues]  = useState<FormValues>(() => toFormValues(contact));
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   const savedValues = toFormValues(contact);
   const hasUnsavedChanges = (Object.keys(savedValues) as (keyof FormValues)[]).some(
@@ -126,20 +126,16 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     } catch { /* noop */ }
   }, [values, open, contact.id]);
 
-  function handleRequestClose() {
-    if (saving) return;
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      onClose();
-    }
-  }
-
   function handleDiscard() {
     try { localStorage.removeItem(draftKey(contact.id)); } catch { /* noop */ }
-    setConfirmDiscardOpen(false);
     onClose();
   }
+
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleDiscard,
+    saving,
+  );
 
   function handleChange(field: keyof FormValues) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -310,16 +306,11 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
         </Button>
       </DialogActions>
     </Dialog>
-    <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-      <DialogTitle>Discard changes?</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-        <Button color="error" onClick={handleDiscard}>Discard changes</Button>
-      </DialogActions>
-    </Dialog>
+    <DiscardConfirmDialog
+      open={confirmDiscardOpen}
+      onKeepEditing={() => setConfirmDiscardOpen(false)}
+      onDiscard={handleDiscard}
+    />
     </>
   );
 }

@@ -20,6 +20,8 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
 import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 
 interface CreateProps {
   mode?: 'create';
@@ -102,7 +104,6 @@ export function InstallationSlotModal(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
 
   const hasUnsavedChanges =
     title !== initialTitleRef.current ||
@@ -138,14 +139,11 @@ export function InstallationSlotModal(props: Props) {
     props.onClose();
   }
 
-  function handleRequestClose() {
-    if (submitting) return;
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleClose();
-    }
-  }
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleClose,
+    submitting,
+  );
 
   async function doSubmit() {
     if (!startDt || !startDt.isValid()) return;
@@ -464,16 +462,11 @@ export function InstallationSlotModal(props: Props) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Discard changes?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-          <Button color="error" onClick={handleClose}>Discard changes</Button>
-        </DialogActions>
-      </Dialog>
+      <DiscardConfirmDialog
+        open={confirmDiscardOpen}
+        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onDiscard={handleClose}
+      />
     </LocalizationProvider>
   );
 }

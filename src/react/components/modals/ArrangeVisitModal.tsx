@@ -21,6 +21,8 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -99,7 +101,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   // Becomes true the first time the user progresses past the initial 'call' step.
   // Stays true even if they navigate back to 'call', so closing still prompts.
   // Initialized from restored draft so a draft on booked/email step already counts.
@@ -199,14 +200,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     onClose();
   }
 
-  function handleRequestClose() {
-    if (submitting) return;
-    if (_hasUnsavedChangesRef.current) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleClose();
-    }
+  function handleDiscard() {
+    clearDraft(key);
+    handleClose();
   }
+
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+    _hasUnsavedChangesRef.current,
+    handleDiscard,
+    submitting,
+  );
 
   async function handleOutcome(outcome: 'not_proceeding' | 'call_back_later') {
     if (outcome === 'call_back_later') {
@@ -569,16 +572,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
         )}
       </Dialog>
 
-      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Discard changes?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-          <Button color="error" onClick={() => { clearDraft(key); setConfirmDiscardOpen(false); handleClose(); }}>Discard changes</Button>
-        </DialogActions>
-      </Dialog>
+      <DiscardConfirmDialog
+        open={confirmDiscardOpen}
+        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onDiscard={handleDiscard}
+      />
     </LocalizationProvider>
   );
 }
