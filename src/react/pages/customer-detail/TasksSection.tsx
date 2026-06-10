@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
@@ -45,6 +46,10 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
   const [stageKey, setStageKey] = useState('');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
+
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editDueDate, setEditDueDate]     = useState('');
+  const [editSaving, setEditSaving]       = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
     const aDone = a.properties?.hs_task_status === 'COMPLETED';
@@ -131,6 +136,44 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     }
     if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, tasks, onTasksChange, notifyApiError]);
+
+  const startEditDue = useCallback((task: HubSpotTask) => {
+    const dueTsMs = task.properties?.hs_timestamp ? parseInt(task.properties.hs_timestamp, 10) : null;
+    const dateStr = dueTsMs ? new Date(dueTsMs).toISOString().slice(0, 10) : '';
+    setEditDueDate(dateStr);
+    setEditingTaskId(task.id);
+  }, []);
+
+  const saveDueDate = useCallback(async (taskId: string) => {
+    setEditSaving(true);
+    const newTimestamp = editDueDate
+      ? new Date(editDueDate + 'T12:00:00').toISOString()
+      : '';
+    const newTsMs = editDueDate ? String(new Date(editDueDate + 'T12:00:00').getTime()) : '';
+    const optimistic = tasks.map(t =>
+      t.id === taskId
+        ? { ...t, properties: { ...t.properties, hs_timestamp: newTsMs } }
+        : t,
+    );
+    onTasksChange(optimistic);
+    let succeeded = false;
+    try {
+      const r = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId, hs_timestamp: newTimestamp }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      succeeded = true;
+      setEditingTaskId(null);
+    } catch (e) {
+      notifyApiError('hubspot', e);
+      onTasksChange(tasks);
+    } finally {
+      setEditSaving(false);
+    }
+    if (succeeded) broadcastUrgencyChanged(contactId);
+  }, [contactId, editDueDate, tasks, onTasksChange, notifyApiError]);
 
   return (
     <div id="tasks-section" className="mb-6">
@@ -273,7 +316,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                     {subj}
                   </Typography>
 
-                  {(slabel || dueLabel) && (
+                  {(slabel || dueLabel || (!isDone && !isViewer)) && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
                       {slabel && colour && (
                         <Chip
@@ -291,17 +334,76 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                           }}
                         />
                       )}
-                      {dueLabel && (
-                        <Typography
-                          component="span"
-                          sx={{
-                            fontSize: '0.72rem',
-                            color: overdue ? 'error.main' : 'var(--ink-3)',
-                            fontWeight: overdue ? 700 : 500,
-                          }}
-                        >
-                          {overdue ? '⚠ ' : ''}{dueLabel}
-                        </Typography>
+                      {!isDone && !isViewer && editingTaskId === task.id ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <input
+                            type="date"
+                            value={editDueDate}
+                            onChange={e => setEditDueDate(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveDueDate(task.id);
+                              if (e.key === 'Escape') setEditingTaskId(null);
+                            }}
+                            style={{ fontSize: 13, borderRadius: 6, border: '1px solid var(--stone-deep)', padding: '2px 6px' }}
+                          />
+                          <Box
+                            component="button"
+                            onClick={() => saveDueDate(task.id)}
+                            disabled={editSaving}
+                            title="Save due date"
+                            sx={{
+                              background: 'none', border: 'none', cursor: editSaving ? 'default' : 'pointer',
+                              color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
+                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
+                            }}
+                          >
+                            <CheckIcon sx={{ fontSize: '0.875rem' }} />
+                          </Box>
+                          <Box
+                            component="button"
+                            onClick={() => setEditingTaskId(null)}
+                            title="Cancel"
+                            sx={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
+                              '&:hover': { color: 'error.main' },
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                          </Box>
+                        </Box>
+                      ) : (
+                        <>
+                          {dueLabel && (
+                            <Typography
+                              component="span"
+                              sx={{
+                                fontSize: '0.72rem',
+                                color: overdue ? 'error.main' : 'var(--ink-3)',
+                                fontWeight: overdue ? 700 : 500,
+                              }}
+                            >
+                              {overdue ? '⚠ ' : ''}{dueLabel}
+                            </Typography>
+                          )}
+                          {!isDone && !isViewer && (
+                            <Box
+                              component="button"
+                              onClick={() => startEditDue(task)}
+                              title="Edit due date"
+                              sx={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
+                                opacity: 0.6,
+                                '&:hover': { color: 'var(--orchid)', opacity: 1 },
+                              }}
+                            >
+                              <EditCalendarIcon sx={{ fontSize: '0.8rem' }} />
+                            </Box>
+                          )}
+                        </>
                       )}
                     </Box>
                   )}
