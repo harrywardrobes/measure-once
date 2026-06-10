@@ -6721,22 +6721,31 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }
     catch (e) { logger.error({ err: e }, '  hw_test_user property setup failed'); }
-    // One-time HubSpot property deletion: remove hw_lead_substatus from HubSpot contacts.
-    // This runs fire-and-forget so it never blocks startup.
+    // One-time cleanup: delete the stale hw_lead_substatus HubSpot property.
+    // Runs fire-and-forget so it never blocks startup.  If deletion is blocked
+    // because the property is still referenced by a workflow or active list, run:
+    //   node scripts/cleanup-hw-lead-substatus.mjs               (dry-run: shows blockers)
+    //   node scripts/cleanup-hw-lead-substatus.mjs --fix         (preview destructive ops)
+    //   node scripts/cleanup-hw-lead-substatus.mjs --fix --yes   (archives blockers + deletes)
+    // Remove this block once the script reports a clean deletion.
     (async () => {
       const token = process.env.HUBSPOT_ACCESS_TOKEN || '';
       if (!token) return;
       try {
         await axios.delete(
-          `https://api.hubapi.com/crm/v3/properties/contacts/hw_lead_substatus`,
+          `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
           { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
         );
-        logger.info('  [startup] hw_lead_substatus HubSpot property deleted (or already absent).');
+        logger.info('  [startup] hw_lead_substatus HubSpot property deleted successfully.');
       } catch (e) {
         if (e.response?.status === 404) {
           logger.info('  [startup] hw_lead_substatus property not found in HubSpot — already removed.');
         } else {
-          logger.warn({ err: e.response?.data?.message || e.message }, '  [startup] hw_lead_substatus HubSpot property deletion failed (non-fatal):');
+          const msg = e.response?.data?.message || e.message;
+          logger.warn(
+            { err: msg },
+            '  [startup] hw_lead_substatus deletion blocked — run: node scripts/cleanup-hw-lead-substatus.mjs --fix'
+          );
         }
       }
     })();
