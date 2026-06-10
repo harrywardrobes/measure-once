@@ -44,7 +44,7 @@ const rootTokens = {
   'color-scheme': 'light',
 
   /* ── Layout ─────────────────────────────────────────────────────────────── */
-  '--header-h': 'calc(52px + env(safe-area-inset-top))',
+  '--header-h': 'calc(64px + env(safe-area-inset-top))',
   '--banner-h': '37px',
 
   /* ── Brand colours (auto-derived from BRAND_COLORS in theme.ts) ──────────

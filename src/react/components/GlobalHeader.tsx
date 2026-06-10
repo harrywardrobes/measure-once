@@ -306,8 +306,8 @@ export function GlobalHeader() {
       <Toolbar
         disableGutters
         sx={{
-          minHeight: 52,
-          height: 52,
+          minHeight: 64,
+          height: 64,
           px: 1.5,
           gap: 1,
           maxWidth: 640,

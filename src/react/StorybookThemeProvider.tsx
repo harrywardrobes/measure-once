@@ -38,7 +38,7 @@ function camelToKebab(s: string): string {
 
 const rootTokens = {
   'color-scheme': 'light',
-  '--header-h': 'calc(52px + env(safe-area-inset-top))',
+  '--header-h': 'calc(64px + env(safe-area-inset-top))',
   '--banner-h': '37px',
   ...Object.fromEntries(
     Object.entries(BRAND_COLORS).map(([k, v]) => [`--${camelToKebab(k)}`, v])
