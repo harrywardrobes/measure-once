@@ -23,6 +23,7 @@ import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -244,7 +245,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       showToast(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
       if (!res.queued) {
         const d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
-        _broadcastLeadStatusChange(ctx.contactId, {
+        broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
           hw_lead_substatus: d?.hw_lead_substatus ?? '',
         });
@@ -296,7 +297,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
       if (!res.queued) {
         const d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
-        _broadcastLeadStatusChange(ctx.contactId, {
+        broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
           hw_lead_substatus: d?.hw_lead_substatus ?? '',
         });
@@ -356,7 +357,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       }) as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
       clearDraft(key);
       showToast('Email sent and status updated', false);
-      _broadcastLeadStatusChange(ctx.contactId, {
+      broadcastLeadStatusChange(ctx.contactId, {
         hs_lead_status: outcomeData?.hs_lead_status ?? '',
         hw_lead_substatus: outcomeData?.hw_lead_substatus ?? '',
       });
@@ -595,18 +596,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       />
     </LocalizationProvider>
   );
-}
-
-function _broadcastLeadStatusChange(
-  contactId: string,
-  props: { hs_lead_status: string; hw_lead_substatus: string },
-): void {
-  if (typeof BroadcastChannel === 'undefined') return;
-  try {
-    const ch = new BroadcastChannel('contact_properties_changed');
-    ch.postMessage({ contactId, props });
-    ch.close();
-  } catch { /* ignore — non-fatal */ }
 }
 
 function _findCalendarHandler(): CardActionHandlerData | null {

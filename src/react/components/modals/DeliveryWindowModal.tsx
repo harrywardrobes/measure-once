@@ -23,6 +23,7 @@ import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../util
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 
 interface CreateProps {
   mode?: 'create';
@@ -51,18 +52,6 @@ interface EditProps {
 }
 
 type Props = CreateProps | CreateDirectProps | EditProps;
-
-function _broadcastLeadStatusChange(
-  contactId: string,
-  props: { hs_lead_status: string; hw_lead_substatus: string },
-): void {
-  if (typeof BroadcastChannel === 'undefined') return;
-  try {
-    const ch = new BroadcastChannel('contact_properties_changed');
-    ch.postMessage({ contactId, props });
-    ch.close();
-  } catch { /* ignore — non-fatal */ }
-}
 
 export function DeliveryWindowModal(props: Props) {
   const showToast = useToast();
@@ -216,7 +205,7 @@ export function DeliveryWindowModal(props: Props) {
 
         const _d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
         if (_d?.hs_lead_status || _d?.hw_lead_substatus) {
-          _broadcastLeadStatusChange(contactId ?? '', {
+          broadcastLeadStatusChange(contactId ?? '', {
             hs_lead_status: _d.hs_lead_status ?? '',
             hw_lead_substatus: _d.hw_lead_substatus ?? '',
           });
