@@ -99,7 +99,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
-  const allTicked = callAttempted && emailSent && whatsappSent;
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   async function toggleAttempt(
@@ -348,16 +347,14 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             >
               Send Upload Link
             </Button>
-            {allTicked && (
-              <Button
-                onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
-                variant="outlined"
-                color="warning"
-                data-testid="cc-no-response"
-              >
-                No Response
-              </Button>
-            )}
+            <Button
+              onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
+              variant="outlined"
+              color="warning"
+              data-testid="cc-no-response"
+            >
+              No Response
+            </Button>
             <Button
               onClick={handleDone}
               variant="contained"
@@ -375,8 +372,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
           <DialogContent>
             <Stack spacing={1.5} sx={{ mt: 0.5 }}>
               <Typography variant="body2">
-                All three contact methods were tried without success. This will advance the lead
-                status to <strong>No Response</strong>.
+                This will advance the lead status to <strong>No Response</strong>.
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Are you sure you want to continue?
