@@ -1,0 +1,241 @@
+The hw_lead_substatus HubSpot property and the sub-status system are being permanently removed. The app will rely solely on lead_status (hs_lead_status) going forward. Make every change described below.
+
+1. Database Migration
+Create a new migration file migrations/1749200000019_remove-substatuses.js:
+
+exports.up = async pgm => {
+  pgm.sql(`
+    ALTER TABLE card_action_handler_bindings DROP COLUMN IF EXISTS substatus_id;
+    DROP TABLE IF EXISTS lead_substatuses CASCADE;
+    DROP TABLE IF EXISTS substatus_clear_failures CASCADE;
+  `);
+};
+exports.down = async pgm => { pgm.sql(`SELECT 1`); };
+2. server.js — All Changes
+A. Top-level declarations (near line 70):
+
+Remove the _clearInProgress Set (only used for orphaned-substatus clear jobs).
+B. HubSpot webhook watcher (near line 130):
+
+Remove 'hw_lead_substatus' from the WATCHED_PROPS Set. Keep 'hs_lead_status'.
+C. ALL_CONTACTS_PROPERTIES array (near line 675):
+
+Remove 'hw_lead_substatus' from the array.
+D. HS_WATCHED_PROPS array (near line 1089):
+
+Remove 'hw_lead_substatus'. Keep 'hs_lead_status'.
+E. Remove entire /api/contacts-substatus-counts endpoint (the one that counts contacts grouped by hw_lead_substatus value). Remove the whole route handler.
+
+F. HubSpot search properties arrays (near lines 1809 and 1910):
+
+Remove 'hw_lead_substatus' from both properties arrays used in hubspotSearchWithRetry calls.
+G. Single contact GET (near line 2056):
+
+Remove hw_lead_substatus from the params.properties string.
+H. PATCH /api/contacts/:id (near lines 2077–2091):
+
+Remove 'hw_lead_substatus' from the allowed array.
+Remove the permission-gate check that references hw_lead_substatus (keep the hs_lead_status check only — just remove the || clause for hw_lead_substatus).
+Update the comment to remove the mention of hw_lead_substatus.
+I. Remove the following functions entirely:
+
+_recordSubstatusClearFailure()
+clearOrphanedSubstatusesForDeletedStatus()
+clearOrphanedSubstatusesForDeletedSubstatus()
+backfillMisspelledAwphSubstatus()
+ensureHwLeadSubstatusProperty()
+syncLeadSubstatusesToHubSpot()
+_validateSubstatusBody()
+_SUBSTATUS_KEY_RE constant
+J. DELETE /api/admin/lead-statuses/:key handler (near lines 5299–5328):
+
+Remove the block that queries lead_substatuses and returns a 409 if any exist.
+Remove the substatus_id IS NULL condition from the DELETE FROM card_action_handler_bindings query — just delete by status_key.
+Remove the SSE broadcast for lead_substatuses_changed (keep the one for lead_statuses_changed).
+Remove the call to clearOrphanedSubstatusesForDeletedStatus().
+K. Remove these entire endpoint blocks:
+
+GET /api/admin/substatus-clear-failures
+POST /api/admin/substatus-clear-failures/retry
+DELETE /api/admin/substatus-clear-failures/:id
+GET /api/lead-substatuses
+GET /api/admin/lead-substatuses
+POST /api/admin/lead-substatuses
+PATCH /api/admin/lead-substatuses/:id
+DELETE /api/admin/lead-substatuses/:id
+POST /api/admin/lead-substatuses/sync-hubspot
+L. _validateHandlerBinding() (near lines 6165–6189):
+
+Remove the hasSubstatus branch entirely.
+Change the error message from 'Each binding requires a stage_key or substatus_id.' to 'Each binding requires a stage_key.'
+Remove substatus_id: null from all returned value objects (just return { stage_key, status_key }).
+M. checkDuplicateHandlerBindings() (near lines 6193–6219):
+
+Remove the substatusDups query and all references to it.
+Simplify: only check for label/stage+status duplicate bindings.
+Remove the WHERE substatus_id IS NULL filter on the label dups query (it's now the only type).
+N. _loadHandlerWithBindings() (near line 6230):
+
+Remove substatus_id from the SELECT in the bindings query.
+O. _replaceHandlerBindings() (near line 6272):
+
+Remove substatus_id from the INSERT statement. Only insert handler_id, stage_key, status_key.
+P. GET /api/card-action-handlers and GET /api/admin/card-action-handlers (near lines 6281–6326):
+
+Remove substatus_id from all SELECT queries and from the binding objects pushed into bindings arrays.
+Q. GET /api/admin/card-action-handlers/conflicts (near lines 6329–6378):
+
+Remove the substatusDups query entirely.
+Remove the ...substatusDups.rows.map(...) spread in the conflicts array.
+The conflicts response now only contains label/stage conflicts.
+R. /api/card-actions/arrange-visit/outcome handler (near lines 6586–6608):
+
+Update the OUTCOME_MAP as follows:
+
+booked: Set hs_lead_status to SURVEY_SCHEDULED (survey) or DESIGN_SCHEDULED (design). No substatus.
+email_sent: Do NOT change the lead status at all. Just return { ok: true }.
+not_proceeding: Set hs_lead_status to NOT_SUITABLE. No substatus.
+Update patchContactProperties call to only send hs_lead_status (no hw_lead_substatus).
+Update the response to only return { ok: true, hs_lead_status: newLeadStatus } (no hw_lead_substatus).
+For email_sent, skip the patchContactProperties call entirely and return { ok: true }.
+
+S. Startup block (near lines 7218–7236):
+
+Remove the ensureHwLeadSubstatusProperty() call and its try/catch.
+Remove the syncLeadSubstatusesToHubSpot() call and its try/catch.
+Remove the backfillMisspelledAwphSubstatus() call.
+Remove the ensureSubstatusHandlerBindings() call and its try/catch.
+T. Import line for photo-reviews (near line 25):
+
+Remove ensureSubstatusHandlerBindings from the destructured imports.
+U. Add a one-time HubSpot property deletion at startup (after the existing HubSpot property setup calls):
+
+// Delete hw_lead_substatus property from HubSpot (sub-statuses removed)
+(async () => {
+  if (!getCredential('access_token')) return;
+  try {
+    await axios.delete(
+      `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
+      { headers: getHubSpotHeaders() }
+    );
+    logger.info('  Deleted HubSpot property: hw_lead_substatus');
+  } catch (e) {
+    if (e.response?.status !== 404) {
+      logger.warn({ err: e.response?.data?.message || e.message }, '  hw_lead_substatus deletion skipped:');
+    }
+  }
+})();
+3. photo-reviews.js — All Changes
+A. Remove the clearHubSpotSubstatus() function entirely.
+
+B. Remove the call to clearHubSpotSubstatus(cid) in the review outcome handler (the call near await _patchContactProperties(...)). Only the _patchContactProperties call should remain.
+
+C. Simplify ensurePhotoReviewOutcomesTable(): remove the entire substatus migration block (the BEGIN/COMMIT transaction that renames AWPH_RECIEVED → AWPH_RECEIVED in lead_substatuses). The function body should be empty (just return, or remove the function if it's only called once and now does nothing — but keep the export if it's referenced at startup).
+
+D. Replace ensureDefaultReviewHandlerBinding() with a no-op:
+
+async function ensureDefaultReviewHandlerBinding() {
+  // Substatuses removed — binding is configured manually via admin panel.
+}
+E. Replace ensureSubstatusHandlerBindings() with a no-op:
+
+async function ensureSubstatusHandlerBindings() {
+  // Substatuses removed.
+  return 0;
+}
+F. Remove the SUBSTATUS_HANDLER_MAP constant and the helper functions _handlerCacheKey() and _findOrCreateHandler() only if they are exclusively used by ensureSubstatusHandlerBindings. If _findOrCreateHandler is used elsewhere, keep it.
+
+G. In the INSERT INTO card_action_handler_bindings near line 704, remove substatus_id from the column list and values.
+
+4. React / Frontend Files
+src/react/pages/customer-detail/types.ts
+Remove hw_lead_substatus?: string from ContactProperties interface.
+Remove the LeadSubstatus interface entirely.
+src/react/context/WorkflowDataContext.tsx
+Remove the LeadSubstatus interface.
+Remove leadSubstatuses: LeadSubstatus[] from the context value type.
+Remove the fetchLeadSubstatuses() function.
+Remove the leadSubstatuses state and dispatch.
+Remove the BroadcastChannel listener for lead_substatuses_changed.
+Remove leadSubstatuses from the context value returned.
+src/react/hooks/useCardActionHandlers.ts
+Remove substatus_id?: number from CardActionHandlerBinding interface.
+Remove the LeadSubstatus interface.
+Remove the fetch of /api/lead-substatuses.
+Remove all substatus action label resolution logic.
+Remove the BroadcastChannel listener for lead_substatuses_changed.
+Handler action label resolution should now use: substatus label → stage label → default (just remove the substatus layer).
+src/react/pages/CustomerDetailPage.tsx
+Remove all hw_lead_substatus property reads and writes.
+Remove handleSubstatusChange() callback.
+Remove _quickSetLeadStatusWithSub() global function — keep _quickSetLeadStatus() if it exists, or simplify to only set hs_lead_status.
+Remove any substatus state variables.
+src/react/pages/customer-detail/LeadStatusRail.tsx
+Remove the substatus picker UI entirely.
+Remove all LeadSubstatus-related props, state, and rendering.
+src/react/pages/customer-detail/CustomerDetailHeader.tsx
+Remove the substatus display chip/label.
+Remove any substatus lookup logic.
+src/react/components/pickers/LeadStatusPicker.tsx
+Remove the LeadSubstatus interface.
+Remove all substatus checkbox/selection UI.
+Remove substatus filtering from the picker.
+src/react/pages/CustomersPage.tsx
+Remove substatusCounts from store state.
+Remove the fetch of /api/contacts-substatus-counts.
+Remove the fetch of /api/lead-substatuses.
+Remove substatus filtering logic from the filter panel and _filterContactsBySubstatus (or equivalent).
+Remove the substatusMap lookup.
+Remove substatus from the filter state/URL params.
+src/react/hooks/usePaginatedContacts.ts
+Remove hw_lead_substatus?: string from the contact properties type.
+Remove the substatus filter parameter.
+Remove substatus from the dependency tracking for filter changes.
+src/react/components/modals/ArrangeVisitModal.tsx
+Update _broadcastLeadStatusChange() to only broadcast hs_lead_status (remove hw_lead_substatus from its parameter type and message).
+Update all three call sites (handleOutcome, handleBooked, handleEmailSent) to not pass hw_lead_substatus.
+For handleEmailSent: since the server no longer updates the status, remove the _broadcastLeadStatusChange call entirely (no status change to broadcast), and change the toast message to 'Email sent' instead of 'Email sent and status updated'.
+Remove hw_lead_substatus from the response type casts.
+Update _findCalendarHandler() to remove the hwSubstatusValue parameter.
+src/react/components/PhotosReceivedBadge.tsx
+Change the condition from checking hw_lead_substatus === 'AWPH_RECEIVED' (or similar) to checking hs_lead_status === 'PHOTOS_RECEIVED'.
+Remove any hw_lead_substatus prop or state.
+src/react/lib/syncEngine.ts
+Remove the substatus change queueing logic — offline sync should only queue hs_lead_status changes.
+src/react/utils/resolveActionLabel.mjs
+Remove the substatusActionLabelMap parameter.
+Remove the substatus lookup branch from the resolution logic.
+Admin pages
+src/react/pages/admin/CardActionsPage.tsx:
+
+Remove the entire substatus management section (create/edit/delete substatus UI, substatus list, all CRUD calls to /api/admin/lead-substatuses).
+Remove BroadcastChannel posts for lead_substatuses_changed.
+Remove the substatus_key field from any interfaces.
+src/react/pages/admin/ActionHandlersPage.tsx:
+
+Remove Substatus interface and all substatus display/lookup logic.
+Remove substatus from handler binding display.
+src/react/pages/admin/WorkflowPage.tsx:
+
+Remove substatus_key from type definitions and any substatus-related rendering.
+src/react/pages/admin/HubSpotPage.tsx:
+
+Remove the "Sync sub-statuses to HubSpot" button and its handler.
+Remove any UI copy referring to sub-statuses.
+src/react/pages/admin/HandlerConfigBlocks.tsx:
+
+Remove all substatus-related type definitions, validation, and UI rendering.
+5. Stories / Tests
+Remove or update src/react/components/pickers/Pickers.stories.tsx — remove substatus fixture data.
+Remove or update src/react/pages/CustomerCard.stories.tsx — remove substatus chip rendering stories.
+Remove or update src/react/pages/admin/ConflictResolverModal.stories.tsx — remove substatus_key fixture.
+Remove or update src/react/components/PhotosReceivedBadge.stories.tsx — update to use hs_lead_status: 'PHOTOS_RECEIVED' fixture.
+Remove test/substatus-hubspot-label-format/ directory entirely.
+Remove test/lead-status-delete-substatus-clear/ directory entirely.
+Summary of Rules
+Never read, write, or reference hw_lead_substatus anywhere after these changes.
+Never query lead_substatuses or substatus_clear_failures tables — they are dropped.
+card_action_handler_bindings only uses (stage_key, status_key) pairs — no substatus_id.
+All UI must show no sub-status chips, pickers, or filters.
+The arrange-visit email_sent outcome does not change lead status — it just returns { ok: true }.
+PhotosReceivedBadge shows when hs_lead_status === 'PHOTOS_RECEIVED' only.
