@@ -5,7 +5,7 @@ import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import { BRAND_COLORS, STAGE_COLORS, RADIUS } from './theme';
+import { BRAND_COLORS, STAGE_COLORS, RADIUS, TRADE_TYPE_COLORS } from './theme';
 
 const meta: Meta = {
   title: 'Foundations/Tokens',
@@ -181,6 +181,34 @@ export const SpacingScale: Story = {
       </Section>
     );
   },
+};
+
+export const TradeTypeColours: Story = {
+  name: 'Trade Type Colours',
+  render: () => (
+    <Section title="Trade Type Colours">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        One colour per trade category, sourced from <code>TRADE_TYPE_COLORS</code> in{' '}
+        <code>theme.ts</code>. Used on trade badges and filter chips throughout the app.
+      </Typography>
+      <SwatchGrid>
+        {(Object.entries(TRADE_TYPE_COLORS) as [string, string][]).map(([name, hex]) => (
+          <Paper key={name} variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Box sx={{ height: 64, bgcolor: hex, borderBottom: '1px solid', borderColor: 'divider' }} />
+            <Box sx={{ p: 1.25 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{name}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block' }}>
+                {hex.toUpperCase()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block', fontSize: 10 }}>
+                {`TRADE_TYPE_COLORS['${name}']`}
+              </Typography>
+            </Box>
+          </Paper>
+        ))}
+      </SwatchGrid>
+    </Section>
+  ),
 };
 
 export const RadiiTokens: Story = {
