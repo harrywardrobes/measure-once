@@ -64,4 +64,16 @@ describe('OfflinePill colour guards', () => {
     const pill = getByTestId('offline-pill');
     expect(window.getComputedStyle(pill).color).toBe('rgb(252, 211, 77)');
   });
+
+  it('offline pill background colour is rgba(245,158,11,0.16)', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).backgroundColor).toBe('rgba(245, 158, 11, 0.16)');
+  });
+
+  it('offline pill border colour is rgba(252,211,77,0.4)', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).borderTopColor).toBe('rgba(252, 211, 77, 0.4)');
+  });
 });
