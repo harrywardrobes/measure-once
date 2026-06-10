@@ -402,7 +402,7 @@ export const PhotosReceived: Story = {
     docs: {
       description: {
         story:
-          'Shown when `hs_lead_status === "AWAITING_PHOTOS"` **and** `hw_lead_substatus` contains `"AWPH_RECEIVED"` — set automatically after the customer submits the upload form. The badge disappears as soon as the lead status advances past AWAITING_PHOTOS.',
+          'Shown when `hs_lead_status === "AWAITING_PHOTOS"` and photos have been received — set automatically after the customer submits the upload form. The badge disappears as soon as the lead status advances past AWAITING_PHOTOS.',
       },
     },
   },

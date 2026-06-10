@@ -15,7 +15,6 @@ export interface ProjectContact {
     closedate?: string;
     lastmodifieddate?: string;
     hs_lead_status?: string;
-    hw_lead_substatus?: string;
     customer_number?: string;
     zip?: string;
   };

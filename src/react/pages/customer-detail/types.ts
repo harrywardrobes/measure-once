@@ -11,7 +11,6 @@ export interface ContactProperties {
   zip?: string;
   customer_number?: string;
   hs_lead_status?: string;
-  hw_lead_substatus?: string;
   hs_object_id?: string;
 }
 
@@ -56,14 +55,6 @@ export interface LeadStatus {
   stage?: string | null;
   excluded_from_sales?: boolean;
   sort_order?: number;
-}
-
-export interface LeadSubstatus {
-  substatus_key: string;
-  status_key: string;
-  label: string;
-  sort_order?: number;
-  action_label?: string;
 }
 
 export interface DesignVisit {

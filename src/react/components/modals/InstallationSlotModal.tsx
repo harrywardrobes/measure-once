@@ -203,11 +203,10 @@ export function InstallationSlotModal(props: Props) {
           return;
         }
 
-        const _d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
-        if (_d?.hs_lead_status || _d?.hw_lead_substatus) {
+        const _d = res.data as { hs_lead_status?: string } | undefined;
+        if (_d?.hs_lead_status) {
           broadcastLeadStatusChange(contactId ?? '', {
             hs_lead_status: _d.hs_lead_status ?? '',
-            hw_lead_substatus: _d.hw_lead_substatus ?? '',
           });
         }
 

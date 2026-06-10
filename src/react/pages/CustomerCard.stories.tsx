@@ -429,7 +429,7 @@ export const SubstatusWithLeadStatus: Story = {
     docs: {
       description: {
         story:
-          'When both `hs_lead_status` and `hw_lead_substatus` are set and a matching label is found in `substatusMap`, **both chips** appear in the right column. The lead-status chip uses `color="primary"` (blue outlined); the substatus chip uses the default neutral outlined style, stacked below.',
+          'When `hs_lead_status` is set and a substatus label is found in `substatusMap`, **both chips** appear in the right column. The lead-status chip uses `color="primary"` (blue outlined); the substatus chip uses the default neutral outlined style, stacked below.',
       },
     },
   },
@@ -451,7 +451,7 @@ export const SubstatusLeadStatusOnly: Story = {
     docs: {
       description: {
         story:
-          'When `hs_lead_status` is set but `hw_lead_substatus` is absent (or has no matching label in `substatusMap`), only the lead-status chip appears. The substatus chip is not rendered.',
+          'When `hs_lead_status` is set but no substatus label is found in `substatusMap`, only the lead-status chip appears. The substatus chip is not rendered.',
       },
     },
   },
@@ -471,7 +471,7 @@ export const SubstatusNeitherSet: Story = {
     docs: {
       description: {
         story:
-          'When neither `hs_lead_status` nor `hw_lead_substatus` is set, no status chips are rendered at all. The right column is empty and the card shows only stage pills and contact-detail chips.',
+          'When neither `hs_lead_status` nor a substatus is set, no status chips are rendered at all. The right column is empty and the card shows only stage pills and contact-detail chips.',
       },
     },
   },
