@@ -15,6 +15,7 @@ const ReviewCustomerPhotosDrawer = React.lazy(() =>
   import('./modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
 );
 import { broadcastDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
+import { broadcastContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../utils/dispatchCardActionHandler';
@@ -94,10 +95,8 @@ export function CardActionModalsHost() {
     if (closing.type === 'start_design_visit') {
       broadcastDesignVisitDraftChanged();
     }
-    if (closing.type === 'contact_customer' && typeof BroadcastChannel !== 'undefined') {
-      const bc = new BroadcastChannel('contact_attempt_logged');
-      bc.postMessage({ contactId: closing.contactId, ts: Date.now() });
-      bc.close();
+    if (closing.type === 'contact_customer') {
+      broadcastContactAttemptLogged(closing.contactId);
     }
   }
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECTS_STALENESS_KEY, PROJECTS_SUBSTAGE_KEY } from '../constants/localStorageKeys';
+import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import {
   Alert,
   Avatar,
@@ -1066,13 +1067,9 @@ export function ProjectsPage() {
   // After the Contact Customer modal closes, re-fetch urgency for just that
   // contact so the board card's dot updates without a full reload.
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('contact_attempt_logged');
-    bc.onmessage = (evt: MessageEvent<{ contactId?: string }>) => {
-      const contactId = evt.data?.contactId;
-      if (contactId) refetchUrgencyForIds([contactId]);
-    };
-    return () => bc.close();
+    return subscribeContactAttemptLogged(({ contactId }) => {
+      refetchUrgencyForIds([contactId]);
+    });
   }, [refetchUrgencyForIds]);
 
   // Re-fetch urgency for all visible contacts when:

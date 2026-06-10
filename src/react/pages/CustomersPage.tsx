@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
 import { formatCurrency } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
+import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -1193,10 +1194,7 @@ export function CustomersPage(): React.ReactElement {
   // for just that one contact so the card shows the updated "last contacted"
   // row without a full page reload.
   React.useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('contact_attempt_logged');
-    bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
-      const contactId = evt.data?.contactId;
+    return subscribeContactAttemptLogged(async ({ contactId }) => {
       if (!contactId) return;
       try {
         const res = await fetch('/api/contacts/urgency', {
@@ -1220,8 +1218,7 @@ export function CustomersPage(): React.ReactElement {
       } catch {
         /* best-effort — stale data is fine on failure */
       }
-    };
-    return () => bc.close();
+    });
   }, []);
 
   // Pre-fill the customer name cache so that clicking any contact from the
