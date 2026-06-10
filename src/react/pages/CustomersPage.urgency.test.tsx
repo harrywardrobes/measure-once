@@ -17,6 +17,7 @@ import React from 'react';
 import {
   CONTACT_ATTEMPT_CHANNEL,
   broadcastContactAttemptLogged,
+  subscribeContactAttemptLogged,
 } from '../utils/broadcastContactAttempt';
 
 // ── BroadcastChannel mock ────────────────────────────────────────────────────
@@ -81,12 +82,8 @@ function UrgencyRefreshHarness({
     Record<string, { at: string; by: string | null } | null>
   >({});
 
-  // Exact copy of the BroadcastChannel effect from CustomersPage.
   React.useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel(CONTACT_ATTEMPT_CHANNEL);
-    bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
-      const contactId = evt.data?.contactId;
+    return subscribeContactAttemptLogged(async ({ contactId }) => {
       if (!contactId) return;
       try {
         const res = await fetch('/api/contacts/urgency', {
@@ -114,8 +111,7 @@ function UrgencyRefreshHarness({
       } catch {
         /* best-effort */
       }
-    };
-    return () => bc.close();
+    });
   }, []);
 
   const urgency = urgencyMap[testContactId];
