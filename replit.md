@@ -17,6 +17,15 @@ Project management dashboard (HubSpot CRM integration).
   or page refresh does not lose the user's work. Use localStorage (or
   sessionStorage where appropriate) to draft-save form values and restore them
   on re-mount. Clear the draft only after a successful submit.
+- **localStorage key registry:** Every localStorage and sessionStorage key
+  used in `src/react/` must be declared as a named export in
+  `src/react/constants/localStorageKeys.ts` and imported from there. Never
+  pass a raw string literal directly to `getItem`, `setItem`, or
+  `removeItem`. The `test:ls-keys` CI check enforces this automatically and
+  will fail if a raw string literal is found outside the registry file. If a
+  line genuinely needs a raw string (e.g. a one-off migration shim clearing
+  an old key by its original name), suppress it with a trailing
+  `// ls-key-ok: <reason>` comment.
 - **Component reuse:** Always reuse existing site components before writing new
   ones. When a genuinely new MUI component type is required, reference the
   official MUI documentation before implementing it. If something outside MUI
