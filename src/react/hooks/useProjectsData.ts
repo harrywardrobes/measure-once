@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
 
 export interface ProjectContact {
   id: string;
@@ -237,7 +238,7 @@ export function useProjectsData(): ProjectsData {
     if (typeof BroadcastChannel === 'undefined') return;
     let ch: BroadcastChannel | null = null;
     try {
-      ch = new BroadcastChannel('contact_properties_changed');
+      ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
       ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<ProjectContact['properties']> }>) => {
         const { contactId, props } = e.data ?? {};
         if (!contactId || !props) return;

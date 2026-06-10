@@ -34,6 +34,7 @@ import {
   type QueueMethod,
 } from './offlineQueue';
 import { detectConflict, type ConflictDecision } from './conflictDetection';
+import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
 
 // ── Tunables ────────────────────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void 
   const hw_lead_substatus = d.hw_lead_substatus ?? '';
   if (typeof BroadcastChannel === 'undefined') return;
   try {
-    const ch = new BroadcastChannel('contact_properties_changed');
+    const ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
     ch.postMessage({ contactId, props: { hs_lead_status, hw_lead_substatus } });
     ch.close();
   } catch { /* non-fatal */ }

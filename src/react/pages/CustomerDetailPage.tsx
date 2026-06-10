@@ -26,6 +26,7 @@ import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -436,7 +437,7 @@ export function CustomerDetailPage() {
     if (typeof BroadcastChannel === 'undefined') return;
     let ch: BroadcastChannel | null = null;
     try {
-      ch = new BroadcastChannel('contact_properties_changed');
+      ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
       ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<Contact['properties']> }>) => {
         const { contactId: changedId, props } = e.data ?? {};
         if (!changedId || !props || changedId !== contactId) return;
