@@ -1152,6 +1152,7 @@ async function main() {
   //
   //   PRIV-01  member POST  /api/admin/card-action-handlers        → 403
   //   PRIV-02  member PATCH /api/admin/card-action-handlers/:id    → 403
+  //   PRIV-04  member PUT   /api/admin/stage-action-labels         → 403
 
   console.log('\n  [PRIV] Member-privilege probes');
 
@@ -1215,6 +1216,22 @@ async function main() {
 
   // No PRIV-03 — the whole-handler DELETE endpoint has been retired.
   // The scaffold handler (no bindings) is left for the ephemeral test DB to drop.
+
+  // PRIV-04: member PUT stage-action-labels
+  {
+    const r = await memberClient.put('/api/admin/stage-action-labels', {
+      stage_key: 'sales',
+      status_key: 'privtest_priv04',
+      action_label: 'Test',
+    });
+    const blocked = r.status === 403 || r.status === 401 || r.status === 302;
+    record(
+      'PRIV-04: member PUT /api/admin/stage-action-labels blocked',
+      'status=403 (or 401/302)',
+      `status=${r.status}`,
+      blocked,
+    );
+  }
 
   // ── puppeteer required ─────────────────────────────────────────────────────
   if (!puppeteer) {
@@ -4806,10 +4823,12 @@ async function writeReport(runId, findings) {
     '',
     '- **(API pre-checks)**: verify `GET /api/admin/card-action-handlers` and',
     '  `GET /api/card-action-handlers` respond before any browser tab opens.',
-    '- **(PRIV) Member-privilege probes** — 2 pure-REST probes that confirm a',
+    '- **(PRIV) Member-privilege probes** — 3 pure-REST probes that confirm a',
     '  regular approved member is blocked (403) from mutating admin routes:',
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
+    '  (PRIV-03 — member DELETE whole-handler — removed; endpoint retired.)',
+    '  - PRIV-04: member PUT `/api/admin/stage-action-labels` → 403.',
     '- **(NEG) Negative-path validation probes** — 30 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
