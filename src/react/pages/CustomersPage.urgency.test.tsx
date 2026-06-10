@@ -14,6 +14,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import React from 'react';
+import {
+  CONTACT_ATTEMPT_CHANNEL,
+  broadcastContactAttemptLogged,
+} from '../utils/broadcastContactAttempt';
 
 // ── BroadcastChannel mock ────────────────────────────────────────────────────
 // jsdom does not implement BroadcastChannel.  We provide a minimal in-memory
@@ -80,7 +84,7 @@ function UrgencyRefreshHarness({
   // Exact copy of the BroadcastChannel effect from CustomersPage.
   React.useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('contact_attempt_logged');
+    const bc = new BroadcastChannel(CONTACT_ATTEMPT_CHANNEL);
     bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
       const contactId = evt.data?.contactId;
       if (!contactId) return;
@@ -157,9 +161,7 @@ describe('urgency dot + last-attempted refresh on contact_attempt_logged', () =>
 
     // Simulate CardActionModalsHost broadcasting after modal close.
     await act(async () => {
-      const sender = new BroadcastChannel('contact_attempt_logged');
-      sender.postMessage({ contactId, ts: Date.now() });
-      sender.close();
+      broadcastContactAttemptLogged(contactId);
     });
 
     await waitFor(() => {
@@ -199,9 +201,7 @@ describe('urgency dot + last-attempted refresh on contact_attempt_logged', () =>
     expect(screen.getByTestId('urgency').textContent).toBe('red');
 
     await act(async () => {
-      const sender = new BroadcastChannel('contact_attempt_logged');
-      sender.postMessage({ contactId, ts: Date.now() });
-      sender.close();
+      broadcastContactAttemptLogged(contactId);
     });
 
     // Urgency clears to null (dot disappears) and lastAttempt populates.
@@ -217,7 +217,7 @@ describe('urgency dot + last-attempted refresh on contact_attempt_logged', () =>
     render(<UrgencyRefreshHarness testContactId={contactId} />);
 
     await act(async () => {
-      const sender = new BroadcastChannel('contact_attempt_logged');
+      const sender = new BroadcastChannel(CONTACT_ATTEMPT_CHANNEL);
       sender.postMessage({ ts: Date.now() }); // no contactId
       sender.close();
     });
@@ -244,9 +244,7 @@ describe('urgency dot + last-attempted refresh on contact_attempt_logged', () =>
     );
 
     await act(async () => {
-      const sender = new BroadcastChannel('contact_attempt_logged');
-      sender.postMessage({ contactId, ts: Date.now() });
-      sender.close();
+      broadcastContactAttemptLogged(contactId);
     });
 
     await waitFor(() => {
