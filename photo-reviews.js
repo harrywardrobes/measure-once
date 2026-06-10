@@ -360,7 +360,7 @@ router.post('/api/card-actions/review-customer-photos',
 
 // ── Seed contact_customer handler + stage-based bindings ─────────────────────
 // Ensures a contact_customer handler row exists and two stage-based bindings:
-//   (sales, '')                → the "no lead status" card slot → "Call Customer"
+//   (__global__, '')                → the "no lead status" card slot → "Call Customer"
 //   (sales, 'attempted_to_contact') → the ATTEMPTED_TO_CONTACT card slot → "Call Again"
 // Also seeds initial stage_action_labels rows (ON CONFLICT DO NOTHING so admin
 // edits always win). Idempotent.
@@ -381,24 +381,34 @@ async function ensureContactCustomerHandlerBindings() {
     handlerId = ins.rows[0].id;
   }
 
-  // Step 2: ensure bindings for (sales, '') and (sales, 'attempted_to_contact').
+  // Step 2: ensure bindings for (__global__, '') and (sales, 'attempted_to_contact').
+  // Note: the global "no lead status" slot uses '__global__' as the sentinel stage key —
+  // NOT 'sales'. Using 'sales' here creates a legacy orphaned row flagged as invalid.
+  //
+  // Use WHERE NOT EXISTS rather than ON CONFLICT DO NOTHING — card_action_handler_bindings
+  // has no unique constraint on (stage_key, status_key), so ON CONFLICT DO NOTHING is a
+  // no-op that lets the seed insert duplicate rows on every boot.
   const bindings = [
-    { stage_key: 'sales', status_key: '' },
-    { stage_key: 'sales', status_key: 'attempted_to_contact' },
+    { stage_key: '__global__', status_key: '' },
+    { stage_key: 'sales',      status_key: 'attempted_to_contact' },
   ];
   for (const b of bindings) {
     await pool.query(
       `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key)
-       VALUES ($1, $2, $3)
-       ON CONFLICT DO NOTHING`,
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (
+         SELECT 1 FROM card_action_handler_bindings
+         WHERE stage_key IS NOT DISTINCT FROM $2
+           AND status_key IS NOT DISTINCT FROM $3
+       )`,
       [handlerId, b.stage_key, b.status_key]
     );
   }
 
   // Step 3: seed stage_action_labels defaults (ON CONFLICT DO NOTHING preserves admin edits).
   const labels = [
-    { stage_key: 'sales', status_key: '',                      label: 'Call Customer' },
-    { stage_key: 'sales', status_key: 'attempted_to_contact',  label: 'Call Again' },
+    { stage_key: '__global__', status_key: '',                      label: 'Call Customer' },
+    { stage_key: 'sales',      status_key: 'attempted_to_contact',  label: 'Call Again' },
   ];
   for (const l of labels) {
     await pool.query(

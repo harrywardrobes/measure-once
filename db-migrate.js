@@ -60,6 +60,54 @@ async function applyMigrationRenames(databaseUrl) {
   }
 }
 
+// Known migrations for the @acpr/rate-limit-postgresql package, tracked in the
+// public.migrations table (managed by postgres-migrations, NOT node-pg-migrate).
+// These records must be present for the package to skip its already-applied SQL
+// files on startup — without them it tries to re-run init.sql and crashes on the
+// already-existing unique_session_key constraint.
+//
+// Hashes are SHA1(fileName + fileContent) as computed by postgres-migrations'
+// files-loader.  If the package is ever upgraded these will need updating.
+const RATE_LIMIT_MIGRATIONS = [
+  { id: 1, name: '1-init.sql',                      hash: '208eb8a4ca26ba263dee8cf9ecaa67d62457ff66' },
+  { id: 2, name: '2-add-db-functions-agg.sql',       hash: '317e301e29395196eb085666baa6460895bb735e' },
+  { id: 3, name: '3-add-db-functions-ind.sql',       hash: '6ad38534d3f44e57259031b0a544051b66accab9' },
+  { id: 4, name: '4-add-db-functions-sessions.sql',  hash: '020ef3175794fe0fcacc951f94f9eee1a7a269a6' },
+  { id: 5, name: '5-hotfix-update-constraints.sql',  hash: '575425e72a16d6a483c08b2d45e47d1bc014bedc' },
+  { id: 6, name: '6-move-session-to-db-agg.sql',     hash: 'b8b8483e1c452db0d9611520aa91b780d2519605' },
+  { id: 7, name: '7-move-session-to-db-ind.sql',     hash: '2fb7791420cba1696b4d9d53f6d50a1af02af666' },
+];
+
+/**
+ * Ensure the rate-limit migration records are present in the public.migrations
+ * table.  If they are missing (e.g. because the table was recreated or truncated)
+ * the @acpr/rate-limit-postgresql store crashes on startup with
+ * "relation unique_session_key already exists".
+ *
+ * This is idempotent — it only inserts rows that are absent.
+ */
+async function ensureRateLimitMigrations(databaseUrl) {
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    // Nothing to do if the migrations table doesn't exist yet.
+    const { rows: tbl } = await pool.query(
+      `SELECT to_regclass('public.migrations'::text) AS t`,
+    );
+    if (!tbl[0].t) return;
+
+    for (const m of RATE_LIMIT_MIGRATIONS) {
+      await pool.query(
+        `INSERT INTO migrations (id, name, hash)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (id) DO NOTHING`,
+        [m.id, m.name, m.hash],
+      );
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
 /**
  * Run database migrations.
  *
@@ -81,6 +129,7 @@ async function runMigrations(opts = {}) {
     : (direction === 'down' ? 1 : Infinity);
 
   await applyMigrationRenames(databaseUrl);
+  await ensureRateLimitMigrations(databaseUrl);
 
   const migrations = await runner({
     databaseUrl,
