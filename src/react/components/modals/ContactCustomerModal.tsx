@@ -511,8 +511,16 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                     opacity: 0.85,
                                   }}
                                 >
-                                  <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
-                                    {sessionMethods || 'No methods'}
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      fontWeight: sessionMethods ? 600 : 400,
+                                      fontStyle: sessionMethods ? 'normal' : 'italic',
+                                      color: sessionMethods ? 'text.primary' : 'text.disabled',
+                                      minWidth: 56,
+                                    }}
+                                  >
+                                    {sessionMethods || 'No contact logged'}
                                   </Typography>
                                   <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                                     {relativeTime(entry.attemptedAt)}
