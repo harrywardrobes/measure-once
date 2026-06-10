@@ -134,8 +134,6 @@
     "test:design-visit-hubspot-retry:ci": "node scripts/with-test-db.js test/design-visit-hubspot-retry/run.js",
     "gc:design-visit-photos": "node scripts/gc-design-visit-photos.mjs",
     "gc:design-visit-photos:dry-run": "node scripts/gc-design-visit-photos.mjs --dry-run",
-    "patch:rough-estimate-sent": "node scripts/patch-rough-estimate-sent-contacts.mjs",
-    "patch:rough-estimate-sent:dry-run": "node scripts/patch-rough-estimate-sent-contacts.mjs --dry-run",
     "test:visits-past-time": "node test/visits-past-time/run.js",
     "test:visits-past-time:ci": "node scripts/with-test-db.js test/visits-past-time/run.js",
     "test:hubspot-credential-audit": "node test/hubspot-credential-audit/run.js",
