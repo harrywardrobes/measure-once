@@ -79,6 +79,19 @@ export const STATUS_COLORS: Record<string, { bg: string; text: string; border?: 
   violet:       { bg: '#ede9fe', text: '#5b21b6' },
 };
 
+// ── Trade-type category colours (used by TradesPage chips/badges) ──────────
+export const TRADE_TYPE_COLORS: Record<string, string> = {
+  'Electrical':             '#f59e0b',
+  'Plumbing':               '#3b82f6',
+  'Carpentry / Roofing':    '#f97316',
+  'Carpet Fitting':         '#ec4899',
+  'Handyman Services':      '#14b8a6',
+  'Internal Joinery':       '#92400e',
+  'Landscaping / Outdoors': '#22c55e',
+  'Painting + Decorating':  '#8b5cf6',
+  'Plasterer':              '#94a3b8',
+};
+
 // ── Calendar event type colours ────────────────────────────────────────
 export const CALENDAR_EVENT_COLORS: Record<string, { label: string; color: string }> = {
   design:       { label: 'Design visit',  color: '#3b82f6' },

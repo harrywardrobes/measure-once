@@ -123,7 +123,7 @@ type WorkflowDef = {
   stages?: Record<string, { label?: string }>;
 };
 
-// Fallback stage palette (matches STAGE_COLOURS in workflow-core.js — kept
+// Fallback stage labels (matches STAGE_COLOURS in workflow-core.js — kept
 // in sync intentionally; if workflow-core.js is loaded on the page we
 // prefer the live globals).
 const DEFAULT_STAGE_LABELS: Record<string, string> = {
@@ -137,18 +137,6 @@ const DEFAULT_STAGE_LABELS: Record<string, string> = {
   installation: 'Installation',
   aftercare: 'Aftercare',
 };
-const DEFAULT_STAGE_COLOURS: Record<string, { bg: string; light: string; text: string }> = {
-  sales:        { bg: '#8B2BFF', light: '#F3EAFF', text: '#6A12D9' },
-  designvisit:  { bg: '#0d9488', light: '#ccfbf1', text: '#0f766e' },
-  survey:       { bg: '#d97706', light: '#fef3c7', text: '#b45309' },
-  order:        { bg: '#2563eb', light: '#dbeafe', text: '#1d4ed8' },
-  workshop:     { bg: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
-  packing:      { bg: '#059669', light: '#d1fae5', text: '#047857' },
-  delivery:     { bg: '#0891b2', light: '#cffafe', text: '#0e7490' },
-  installation: { bg: '#8A5A3B', light: '#fdf6ee', text: '#5c3820' },
-  aftercare:    { bg: '#200842', light: '#ede0ff', text: '#3d0f7a' },
-};
-
 function stageColour(stageKey: string): { bg: string; light: string; text: string } {
   const w = (window as unknown as { stageColour?: (k: string) => { bg: string; light: string; text: string } }).stageColour;
   if (typeof w === 'function') {
@@ -158,7 +146,7 @@ function stageColour(stageKey: string): { bg: string; light: string; text: strin
       /* fall through */
     }
   }
-  return DEFAULT_STAGE_COLOURS[stageKey] || DEFAULT_STAGE_COLOURS.sales;
+  return STAGE_COLORS[stageKey] || STAGE_COLORS.sales;
 }
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
@@ -1383,7 +1371,7 @@ export function CustomersPage(): React.ReactElement {
             value={currentTab}
             onChange={onTabChange}
             tabs={stageTabs}
-            stageColors={DEFAULT_STAGE_COLOURS}
+            stageColors={STAGE_COLORS}
           />
         </PageFilterBar>
 

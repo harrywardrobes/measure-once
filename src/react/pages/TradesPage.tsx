@@ -47,6 +47,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import SearchIcon from '@mui/icons-material/Search';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { TRADE_TYPE_COLORS, NEUTRAL_COLORS } from '../theme';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -140,24 +141,12 @@ const TRADE_AREAS = [
   'Wrexham',
 ];
 
-const TRADE_TYPE_COLORS: Record<string, string> = {
-  'Electrical':             '#f59e0b',
-  'Plumbing':               '#3b82f6',
-  'Carpentry / Roofing':    '#f97316',
-  'Carpet Fitting':         '#ec4899',
-  'Handyman Services':      '#14b8a6',
-  'Internal Joinery':       '#92400e',
-  'Landscaping / Outdoors': '#22c55e',
-  'Painting + Decorating':  '#8b5cf6',
-  'Plasterer':              '#94a3b8',
-};
-
 const MAX_CONTACTS = 3;
 
 // ── Utility ────────────────────────────────────────────────────────────────────
 
 function tradeTypeColor(type: string): string {
-  return TRADE_TYPE_COLORS[type] || '#9ca3af';
+  return TRADE_TYPE_COLORS[type] || NEUTRAL_COLORS[400];
 }
 
 function phoneKey(s: string | undefined | null): string {
