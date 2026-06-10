@@ -1,0 +1,113 @@
+/src/react/pages/admin/WorkflowPage.tsx (662 lines) is currently a read-only admin reference page that shows which handlers fire per lead status. It needs to become a much richer, fully dynamic developer reference — almost like inline documentation that stays in sync with live configuration.
+
+The page already fetches from six API endpoints on load and has a Refresh button. That data-fetching architecture is correct and should be kept. All new sections must derive from the same six data sources so the page stays accurate as config changes.
+
+Data Sources (already wired up — do not change)
+Endpoint	Data
+/api/admin/stage-action-labels	Action button label per stage
+/api/admin/lead-statuses	All LeadStatus rows (key, label, stage, shorthand, sort_order)
+/api/admin/lead-substatuses	All LeadSubstatus rows (id, status_key, label)
+/api/admin/card-action-handlers	All Handler rows (id, name, type, config, bindings)
+/api/admin/email-templates	All email template rows (key, subject)
+/api/workflow	Pipeline stage definitions from workflow.json
+Page Structure
+Reorganise the page into one accordion section per pipeline stage, in this order:
+sales → designvisit → survey → order → workshop → packing → delivery → installation → aftercare
+
+Each stage accordion should use the stage colour from STAGE_COLORS in /src/react/theme.ts as its accent colour (left border or header chip).
+
+Inside each stage accordion, render one row per lead status that belongs to that stage, sorted by sort_order. If a status has no non-default handler bound, still show it but grey it out clearly with a "Default (show message)" label — do not hide it.
+
+Per-Status Row: What to Show
+Each lead-status row must contain three distinct columns/panels:
+
+Column 1 — Status Identity
+Status label (bold) + shorthand chip (e.g. AWPH)
+Stage key badge using the stage colour
+excluded_from_sales warning tag if true
+is_null_row tag if true ("Stage default")
+Column 2 — Action Button Preview
+Render a visual preview of the action button as it appears on a customer card. Use the same button styles the real app renders:
+
+Button label: resolved from resolveActionLabel() in /src/react/utils/resolveActionLabel.mjs — pass the status key and null substatus to get the default label for this status, then fall back to the stage-level default, then the global fallback
+Button colour: the stage colour (STAGE_COLORS[stageKey])
+If no handler is bound, show a greyed-out placeholder button with label "Show message"
+Below the visual preview, show a small metadata line: Handler: <handler.name> (linked to the handler ID anchor lower on the page) and Type: <handler.type>
+
+Column 3 — Component & Function Call Chain
+Show the exact code path as a vertical timeline/stepper:
+
+DOM click target — [data-card-action-handler-id="${handler.id}"] attribute on the rendered button
+Hook — useCardActionHandlers() in /src/react/hooks/useCardActionHandlers.ts:436 — document-level click listener
+Dispatcher — dispatchCardActionHandler(handler, ctx) in /src/react/utils/dispatchCardActionHandler.ts
+Registry — openCardActionModal() from /src/react/utils/cardActionModalRegistry.ts
+Host — CardActionModalsHost in /src/react/components/CardActionModalsHost.tsx — sets ModalState to { type: handler.type }
+Modal — the specific modal component (see modal map below), rendered by the host
+Each step should show the file path as a monospace chip that looks clickable (style only — no actual navigation needed).
+
+Substatus Expansion
+If a status has substatuses, show a collapsible sub-row beneath it. Each substatus row shows:
+
+Substatus label
+Overriding action button preview (if a different handler is bound at the substatus level) OR an "Inherits parent" pill if no substatus-specific binding exists
+The same Component & Function call chain (abbreviated: just the modal step, since the chain above the host is identical)
+Modal Reference Section
+Below each handler binding (in columns 2 and 3), show a Modal Detail Card using the metadata from /src/react/utils/handlerMeta.ts.
+
+Use this mapping of handler types → components and metadata:
+
+Handler type	Component	Steps	HubSpot outcome
+show_message	MessagePopupModal	1 step — informational popup only	No HubSpot record changed
+start_design_visit	DesignVisitWizard	3 steps — visit details → rooms → review	Updates deal stage
+add_design_visit_to_calendar	DesignVisitCalendarModal	1 step — date, time, duration, title, notes	No HubSpot record changed
+schedule_visit	VisitCalendarModal	1 step — date, time, duration, notes	Updates visit date property
+schedule_delivery_window	DeliveryWindowModal	1 step — start/end date + time window	Updates delivery window
+schedule_installation_slot	InstallationSlotModal	1 step — date, time, duration	Updates installation date
+summarise_phone_call	PhoneSummaryModal	2 steps — call notes → LLM summary	Logs note to HubSpot
+upload_photos_and_info	UploadPhotosModal	1 step — confirmation + unique form link	Sends email to customer
+review_customer_photos	ReviewCustomerPhotosDrawer	2 steps — review photos → outcome	Updates deal stage
+contact_customer	ContactCustomerModal	1 step — call/email/WhatsApp log	Logs activity to HubSpot
+arrange_visit	ArrangeVisitModal	Call outcome flow — Booked / No answer / Call back / Not proceeding	Updates contact attempt count
+Show:
+
+Component name (monospace, bolded)
+Location: /src/react/components/modals/<ComponentName>.tsx
+Steps summary
+HubSpot outcome
+Email templates triggered (cross-reference from HANDLER_EMAIL_TEMPLATES in handlerMeta.ts) — show each template's key and subject
+If no email templates are associated, show "No emails triggered".
+
+Shared Component Callouts
+Anywhere a component, hook, or utility is used by more than one handler type, add a small "Shared" badge (outlined chip, neutral colour). Include a tooltip or footnote explaining:
+
+useCardActionHandlers — shared across all 11 handler types; owns the click delegation listener
+CardActionModalsHost — single host that routes all modal types; shared by entire app
+WorkflowDataContext (useWorkflowData) — provides leadStatuses, leadSubstatuses, and workflow definition to every component on this page and the customer detail page
+STAGE_COLORS — shared colour token used by stage accordions, action button previews, LeadStatusRail, DesignVisitStatusPill, and all customer card components
+resolveActionLabel() — shared pure function used by the action button preview here and by useCardActionHandlers at runtime
+Add a "Shared Components Legend" section at the top of the page (collapsible) listing these five shared elements with their file path and a one-line description of their role.
+
+Page-Level Changes
+Header area: Add a subtitle: "This page is a live reference — refresh to reflect the latest handler configuration."
+Refresh button: Keep it. After a refresh, briefly animate changed rows (flash border) so it's obvious what updated.
+Search/filter bar: Add a text input that filters visible statuses by label, shorthand, handler name, or modal component name. No server call — purely client-side filter over already-fetched data.
+Stage jump nav: A sticky horizontal row of stage-colour chips (Sales, Design Visit, etc.) that scroll the page to the relevant accordion when clicked.
+Key Files to Modify
+Primary: /src/react/pages/admin/WorkflowPage.tsx — full redesign of the render logic; keep all existing useState/useEffect data-fetching hooks intact
+Reference (read, do not modify):
+/src/react/utils/handlerMeta.ts — HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS, HANDLER_EMAIL_TEMPLATES
+/src/react/utils/resolveActionLabel.mjs — for resolving button labels
+/src/react/theme.ts — STAGE_COLORS
+/src/react/components/CardActionModalsHost.tsx — for understanding ModalState union type
+/src/react/context/WorkflowDataContext.tsx — for useWorkflowData shape
+Visual Design Notes
+Use MUI components (Accordion, AccordionSummary, AccordionDetails, Chip, Tooltip, Stepper, Step, StepLabel, TextField) — already imported in the project
+Stage colour as left border accent on each accordion (4px solid STAGE_COLORS[stageKey])
+Greyed-out rows: opacity: 0.45, italic "Default (show message)" label — do not remove from DOM
+Code path stepper: use MUI Stepper with orientation="vertical" and small dot connectors; each step label is monospace text in a <code> tag
+Modal detail cards: use MUI Paper with variant="outlined" inside each row's third column
+Out of Scope
+Do not add a Storybook story (deferred)
+Do not modify any API routes or DB schema
+Do not change how actions are configured (that's CardActionsPage.tsx and ActionHandlersPage.tsx)
+Do not change CardActionModalsHost.tsx, dispatchCardActionHandler.ts, or resolveActionLabel.mjs
