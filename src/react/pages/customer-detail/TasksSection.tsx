@@ -69,6 +69,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       if (!r.ok) throw new Error(`${r.status}`);
       const task: HubSpotTask = await r.json();
       onTasksChange([...tasks, task]);
+      broadcastUrgencyChanged(contactId);
       setSubject('');
       setDueDate('');
       setStageKey('');
