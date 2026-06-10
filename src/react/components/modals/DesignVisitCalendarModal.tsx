@@ -85,6 +85,12 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
       ? restoredStart
       : freshStart;
 
+  // INVARIANT: seed from the post-adjustment value (initialStart), never from the raw
+  // restoredStart draft value. The discard-guard compares live state against this ref
+  // to decide whether the user has made changes. If we seeded from the raw draft (which
+  // may be stale and was already silently reset to freshStart above), then every stale-
+  // draft open would show a mismatch vs. the displayed freshStart and incorrectly fire
+  // "unsaved changes" — even though the user has not touched anything yet.
   const initialStartRef = React.useRef(initialStart);
 
   const [title, setTitle] = useState(draft.title ?? defaultTitle);
