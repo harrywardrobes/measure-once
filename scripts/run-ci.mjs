@@ -49,6 +49,7 @@ const STEPS = [
   'test:css-hex-colors',
   'test:var-hex-fallbacks',
   'test:no-config-handler-types',
+  'test:handler-meta',
   'test:lead-status-keys',
   'test:status-key-fields',
   'test:mui-select-click',
