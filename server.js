@@ -4485,7 +4485,7 @@ const HARDCODED_LEAD_STATUS_KEYS = [
   { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                   featureLabel: 'Booking design visits' },
   { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js', featureLabel: 'Marking visits as not suitable & photo review outcomes' },
   { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission',                     featureLabel: 'Customer photo submission' },
-  { key: 'ROUGH_ESTIMATE_SENT', source: 'photo-reviews.js — review outcome',                       featureLabel: 'Photo review outcomes' },
+  { key: 'ROUGH_ESTIMATE',      source: 'photo-reviews.js — review outcome',                       featureLabel: 'Photo review outcomes' },
 ];
 
 async function checkHardcodedLeadStatusKeys() {

@@ -3,7 +3,7 @@
  *
  * One-time backfill: move ALL HubSpot contacts currently sitting on
  * hs_lead_status = AWAITING_PHOTOS to hs_lead_status = ROUGH_ESTIMATE
- * (the HubSpot enum value; the app's internal key is ROUGH_ESTIMATE_SENT).
+ * (the HubSpot enum value; the app's lead status key is also ROUGH_ESTIMATE).
  *
  * The user confirmed every AWAITING_PHOTOS contact has already been manually
  * reviewed and a rough estimate was sent.  This script makes HubSpot and the
@@ -95,11 +95,7 @@ async function fetchAwaitingPhotosContacts() {
 }
 
 /**
- * Patch a single HubSpot contact to ROUGH_ESTIMATE (HubSpot enum value),
- * clearing substatus.
- *
- * NOTE: The app's internal key is ROUGH_ESTIMATE_SENT; the HubSpot property
- * enum stores it as ROUGH_ESTIMATE.  The two names are not the same.
+ * Patch a single HubSpot contact to ROUGH_ESTIMATE, clearing substatus.
  */
 async function patchContact(contactId) {
   await http.patch(
@@ -122,22 +118,10 @@ async function fetchSubmittedContactIds() {
   return new Set(rows.map(r => String(r.contact_id)));
 }
 
-/**
- * Ensure a row exists in lead_status_config for ROUGH_ESTIMATE_SENT so the
- * dashboard renders the label correctly after the backfill.
- */
-async function ensureRoughEstimateSentLocal() {
-  await pool.query(
-    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
-     VALUES ('ROUGH_ESTIMATE_SENT', 'Rough estimate sent', 50, false)
-     ON CONFLICT (key) DO NOTHING`
-  );
-}
-
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`\n🔍  Backfill: AWAITING_PHOTOS → ROUGH_ESTIMATE_SENT`);
+  console.log(`\n🔍  Backfill: AWAITING_PHOTOS → ROUGH_ESTIMATE`);
   if (DRY_RUN) console.log('    (DRY RUN — no writes will be made)\n');
   else console.log('');
 
@@ -199,18 +183,8 @@ async function main() {
     return;
   }
 
-  // 4a. Ensure local lead_status_config row exists (hard precondition)
+  // 4. Patch each contact in HubSpot
   console.log('\n4/4  Applying updates…');
-  try {
-    await ensureRoughEstimateSentLocal();
-    console.log('     ✓  ROUGH_ESTIMATE_SENT ensured in local lead_status_config.');
-  } catch (err) {
-    console.error('❌  Could not ensure local lead_status_config row — aborting before HubSpot writes:', err.message);
-    await pool.end();
-    process.exit(1);
-  }
-
-  // 4b. Patch each contact in HubSpot
   let successCount = 0;
   let failCount    = 0;
 
@@ -228,7 +202,7 @@ async function main() {
     await delay(120);
   }
 
-  // 4c. Post-run verification: count remaining AWAITING_PHOTOS contacts
+  // Post-run verification: count remaining AWAITING_PHOTOS contacts
   let remaining = '(skipped — failures present)';
   if (failCount === 0) {
     try {

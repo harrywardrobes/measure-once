@@ -18,8 +18,8 @@
 //                            POST returns 400 when outcome=rough_estimate_sent
 //                            and priceRange is absent.
 //   (POST.rough_estimate.*)  POST outcome=rough_estimate_sent happy path: HubSpot
-//                            status=ROUGH_ESTIMATE_SENT, lead_status_config upserted,
-//                            photo_review_outcomes row has price_range.
+//                            status=ROUGH_ESTIMATE, photo_review_outcomes row has
+//                            price_range.
 //   (POST.404)               POST returns 404 for a submissionId that belongs to a
 //                            different contactId (numeric mismatch only).
 //   (POST.404.cross-contact) POST returns 404 when submissionId belongs to a real
@@ -139,9 +139,6 @@ async function cleanup(pool) {
       [cid]
     );
   }
-  await pool.query(
-    `DELETE FROM lead_status_config WHERE key = 'ROUGH_ESTIMATE_SENT'`
-  );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -361,23 +358,12 @@ async function main() {
         ok ? 'POST rough_estimate_sent → 200 { ok: true }'
            : `status=${r.status} body=${r.text.slice(0, 200)}`);
 
-      // HubSpot PATCH with ROUGH_ESTIMATE_SENT
-      const lsPatch = hs.patches.find(p => p.properties.hs_lead_status === 'ROUGH_ESTIMATE_SENT');
+      // HubSpot PATCH with ROUGH_ESTIMATE
+      const lsPatch = hs.patches.find(p => p.properties.hs_lead_status === 'ROUGH_ESTIMATE');
       record('POST.rough_estimate.hubspot', !!lsPatch,
         lsPatch
-          ? 'HubSpot PATCH sent hs_lead_status=ROUGH_ESTIMATE_SENT'
-          : `no ROUGH_ESTIMATE_SENT patch; all patches: ${JSON.stringify(hs.patches).slice(0, 300)}`);
-
-      // lead_status_config upserted
-      const lscRes = await pool.query(
-        `SELECT key, label FROM lead_status_config WHERE key = 'ROUGH_ESTIMATE_SENT' LIMIT 1`
-      );
-      const lscOk = lscRes.rows.length === 1
-        && lscRes.rows[0].label === 'Rough estimate sent';
-      record('POST.rough_estimate.lead_status_config', lscOk,
-        lscOk
-          ? 'lead_status_config row upserted (key=ROUGH_ESTIMATE_SENT, label=Rough estimate sent)'
-          : `rows=${JSON.stringify(lscRes.rows).slice(0, 200)}`);
+          ? 'HubSpot PATCH sent hs_lead_status=ROUGH_ESTIMATE'
+          : `no ROUGH_ESTIMATE patch; all patches: ${JSON.stringify(hs.patches).slice(0, 300)}`);
 
       // DB row records price_range
       const dbRes = await pool.query(

@@ -50,7 +50,7 @@ export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
   },
   review_customer_photos: {
     steps: '2 steps — review drawer → Not Suitable or Send Rough Estimate',
-    hubspot: 'Sets lead status to NOT_SUITABLE or ROUGH_ESTIMATE_SENT on confirm',
+    hubspot: 'Sets lead status to NOT_SUITABLE or ROUGH_ESTIMATE on confirm',
   },
   arrange_visit: {
     steps: '2+ steps — call outcome → Booked / No answer / Call back / Not proceeding',

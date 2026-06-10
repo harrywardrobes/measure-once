@@ -282,7 +282,7 @@ router.post('/api/card-actions/review-customer-photos',
 
     // Reject early if the target lead status no longer exists in lead_status_config,
     // so we never commit the review outcome and then fail the HubSpot patch.
-    const hsStatusForCheck = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE_SENT';
+    const hsStatusForCheck = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE';
     try {
       await assertLeadStatusKey(hsStatusForCheck);
     } catch (e) {
@@ -416,12 +416,9 @@ router.post('/api/card-actions/review-customer-photos',
     }
 
     // Update HubSpot (non-fatal — don't fail the whole request if HubSpot is down)
-    const hsStatus = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE_SENT';
+    const hsStatus = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE';
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
       try {
-        if (outcome === 'rough_estimate_sent') {
-          await ensureLeadStatusExists('ROUGH_ESTIMATE_SENT', 'Rough estimate sent');
-        }
         await updateHubSpotLeadStatus(cid, hsStatus);
         await clearHubSpotSubstatus(cid);
       } catch (err) {

@@ -24,7 +24,7 @@
  *   hardcoded hs_lead_status values, not only those passed to
  *   assertLeadStatusKey().  Some keys (e.g. SURVEY_SCHEDULED, DESIGN_SCHEDULED)
  *   appear only as inline `hs_lead_status: 'KEY'` values in HubSpot mutation
- *   objects; others (e.g. NOT_SUITABLE, ROUGH_ESTIMATE_SENT) are passed
+ *   objects; others (e.g. NOT_SUITABLE, ROUGH_ESTIMATE) are passed
  *   dynamically via a variable rather than as a literal string argument.  A
  *   strict assertLeadStatusKey-only reverse check would therefore produce
  *   false positives on the current codebase.  The broader "appears as any

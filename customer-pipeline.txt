@@ -105,13 +105,13 @@ HubSpot lead statuses in pipeline order:
      fit within the email size limit. Large photos are skipped with a note to
      view them on the dashboard.
 
-5. ROUGH_ESTIMATE_SENT
+5. ROUGH_ESTIMATE
    Staff have reviewed the photos and sent a rough price estimate to the
    customer.
 
    Photo Review Flow (two outcomes):
    a) rough_estimate_sent — The rooms and photos look suitable. Staff send a
-      rough estimate and advance the status to ROUGH_ESTIMATE_SENT.
+      rough estimate and advance the status to ROUGH_ESTIMATE.
    b) not_suitable — The enquiry is not a good fit (e.g. property type,
       scale, or scope). Staff mark the lead NOT_SUITABLE (see closed exits
       below). The customer may be informed by email outside the dashboard.
@@ -299,7 +299,7 @@ Sales          ATTEMPTED_CONTACT       Staff tried to reach customer; no reply
 Sales          IN_PROGRESS             Active conversation underway
 Sales          AWAITING_PHOTOS         Customer-info form link sent; waiting
                  (substatus AWPH_RECEIVED)  for customer to submit
-Sales          ROUGH_ESTIMATE_SENT     Photos reviewed; rough estimate sent
+Sales          ROUGH_ESTIMATE          Photos reviewed; rough estimate sent
 Sales          UNQUALIFIED             Lead does not qualify; closed
 Sales          NOT_SUITABLE            Lead unsuitable after review; closed
 Sales          BAD_TIMING              Customer interested but not ready; follow

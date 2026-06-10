@@ -125,7 +125,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     'Clicking the action on a card opens a review drawer showing the customer\'s most recent submitted info (address, room count, notes, and photo thumbnails).\n' +
     '• The reviewer picks one of two outcomes: Not Suitable or Send Rough Estimate.\n' +
     '• Not Suitable: opens an editable confirmation step with a pre-filled email. On confirm, the email is sent and HubSpot lead status is set to NOT_SUITABLE (sub-status cleared).\n' +
-    '• Send Rough Estimate: opens a confirmation step with a price-range field and an editable pre-filled email. On confirm, the email is sent and HubSpot lead status is set to ROUGH_ESTIMATE_SENT (sub-status cleared).\n' +
+    '• Send Rough Estimate: opens a confirmation step with a price-range field and an editable pre-filled email. On confirm, the email is sent and HubSpot lead status is set to ROUGH_ESTIMATE (sub-status cleared).\n' +
     '• The review outcome is recorded in the dashboard.\n' +
     '• No config keys required.',
   arrange_visit:
