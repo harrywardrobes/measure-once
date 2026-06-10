@@ -8,6 +8,7 @@ import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToa
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../components/InvoiceDetailDrawer';
+import { UrgencyDot, type Urgency } from '../components/UrgencyDot';
 import { createPortal } from 'react-dom';
 import {
   Alert,
@@ -128,8 +129,6 @@ type Room = {
 type WorkflowDef = {
   stages?: Record<string, { label?: string }>;
 };
-
-type Urgency = 'red' | 'orange' | null;
 
 // Fallback stage palette (matches STAGE_COLOURS in workflow-core.js — kept
 // in sync intentionally; if workflow-core.js is loaded on the page we
@@ -499,30 +498,6 @@ function relativeTime(iso: string): string {
   if (weeks < 8) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
   const months = Math.floor(days / 30);
   return `${months} month${months === 1 ? '' : 's'} ago`;
-}
-
-function UrgencyDot({ urgency }: { urgency: Urgency }) {
-  if (!urgency) return null;
-  const bg = urgency === 'red' ? '#dc2626' : '#f59e0b';
-  const title =
-    urgency === 'red' ? 'Urgent: task due within 1 working day' : 'Task due within 2 working days';
-  return (
-    <Box
-      component="span"
-      title={title}
-      aria-label={urgency === 'red' ? 'Urgent' : 'Task due soon'}
-      sx={{
-        display: 'inline-block',
-        width: 9,
-        height: 9,
-        borderRadius: '50%',
-        bgcolor: bg,
-        mr: 0.75,
-        verticalAlign: 'middle',
-        flexShrink: 0,
-      }}
-    />
-  );
 }
 
 function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInvoice[] {
