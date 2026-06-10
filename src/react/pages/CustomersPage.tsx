@@ -637,6 +637,7 @@ function CustomerCard({
   draftVisitId,
   syncStatus,
   syncFailedIds,
+  lastAttempt,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
