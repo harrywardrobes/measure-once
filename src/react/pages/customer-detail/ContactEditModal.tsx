@@ -131,7 +131,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     hasUnsavedChanges,
     handleDiscard,
     saving,
@@ -308,7 +308,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     </Dialog>
     <DiscardConfirmDialog
       open={confirmDiscardOpen}
-      onKeepEditing={() => setConfirmDiscardOpen(false)}
+      onKeepEditing={handleKeepEditing}
       onDiscard={handleDiscard}
     />
     </>

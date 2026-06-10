@@ -13,7 +13,9 @@ import { useState } from 'react';
  *   - `handleRequestClose` – Attach to the modal's onClose / Cancel button.
  *                            Calls `onDiscard` directly when there are no unsaved changes,
  *                            or opens the confirmation dialog otherwise.
- *   - `setConfirmOpen`     – Escape hatch for programmatic control (e.g. "Keep editing" button).
+ *   - `handleKeepEditing`  – Pass directly to `DiscardConfirmDialog` as `onKeepEditing`.
+ *                            Closes the confirmation dialog and returns the user to the form.
+ *   - `setConfirmOpen`     – Escape hatch for programmatic control.
  */
 export function useDiscardGuard(
   hasUnsavedChanges: boolean,
@@ -22,6 +24,7 @@ export function useDiscardGuard(
 ): {
   confirmOpen: boolean;
   handleRequestClose: () => void;
+  handleKeepEditing: () => void;
   setConfirmOpen: (open: boolean) => void;
 } {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -35,5 +38,9 @@ export function useDiscardGuard(
     }
   }
 
-  return { confirmOpen, handleRequestClose, setConfirmOpen };
+  function handleKeepEditing() {
+    setConfirmOpen(false);
+  }
+
+  return { confirmOpen, handleRequestClose, handleKeepEditing, setConfirmOpen };
 }

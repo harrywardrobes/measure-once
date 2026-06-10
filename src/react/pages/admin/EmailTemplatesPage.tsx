@@ -370,7 +370,7 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     onClose();
   }, [template.key, onClose]);
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     hasUnsavedChanges,
     handleCancel,
   );
@@ -572,7 +572,7 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       {/* Discard-changes confirmation */}
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleCancel}
       />
 

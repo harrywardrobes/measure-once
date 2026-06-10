@@ -205,7 +205,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     handleClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     _hasUnsavedChangesRef.current,
     handleDiscard,
     submitting,
@@ -574,7 +574,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleDiscard}
       />
     </LocalizationProvider>

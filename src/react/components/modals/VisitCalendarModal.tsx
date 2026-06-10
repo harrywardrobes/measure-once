@@ -103,7 +103,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
     onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } =
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
     useDiscardGuard(hasUnsavedChanges, handleClose, submitting);
 
   async function doSubmit() {
@@ -271,7 +271,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleClose}
       />
     </LocalizationProvider>

@@ -87,7 +87,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
     onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     hasUnsavedChanges,
     handleClose,
     submitting,
@@ -168,7 +168,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
       />
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleClose}
       />
     </>

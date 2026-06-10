@@ -139,7 +139,7 @@ export function InstallationSlotModal(props: Props) {
     props.onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     hasUnsavedChanges,
     handleClose,
     submitting,
@@ -464,7 +464,7 @@ export function InstallationSlotModal(props: Props) {
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleClose}
       />
     </LocalizationProvider>

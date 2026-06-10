@@ -292,7 +292,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } = useDiscardGuard(
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
     hasUnsavedChanges,
     handleClose,
     submitting,
@@ -636,7 +636,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
     <DiscardConfirmDialog
       open={confirmDiscardOpen}
-      onKeepEditing={() => setConfirmDiscardOpen(false)}
+      onKeepEditing={handleKeepEditing}
       onDiscard={handleClose}
     />
     </>

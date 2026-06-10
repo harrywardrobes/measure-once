@@ -112,7 +112,7 @@ export function GenericVisitEditModal(props: Props) {
     props.onClose();
   }
 
-  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } =
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
     useDiscardGuard(hasUnsavedChanges, handleClose, submitting);
 
   async function handleSubmit() {
@@ -325,7 +325,7 @@ export function GenericVisitEditModal(props: Props) {
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}
-        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onKeepEditing={handleKeepEditing}
         onDiscard={handleClose}
       />
     </LocalizationProvider>
