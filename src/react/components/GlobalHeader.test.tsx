@@ -105,4 +105,16 @@ describe('OfflinePill colour guards', () => {
     const pill = getByTestId('offline-pill');
     expect(window.getComputedStyle(pill).borderRadius).toBe('8px');
   });
+
+  it('offline pill font size is 11px', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).fontSize).toBe('11px');
+  });
+
+  it('offline pill font weight is 600', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).fontWeight).toBe('600');
+  });
 });
