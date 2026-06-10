@@ -20,13 +20,10 @@ Measure Once Dashboard
   records, schedule visits, and advance customers through stages.
 
 HubSpot CRM
-  The authoritative record of each customer (contact). Two custom properties
-  drive the pipeline display in the dashboard:
+  The authoritative record of each customer (contact). One custom property
+  drives the pipeline display in the dashboard:
     hs_lead_status      — primary pipeline status (e.g. IN_PROGRESS, SCHEDULED)
-    hw_lead_substatus   — secondary qualifier beneath certain statuses
-                          (e.g. DS_CONFIRMED / DS_UNCONFIRMED under SCHEDULED,
-                          or AWPH_RECEIVED under AWAITING_PHOTOS)
-  The dashboard reads these properties to place each contact on the board.
+  The dashboard reads this property to place each contact on the board.
   Staff update them via the dashboard or directly in HubSpot. All CRM notes
   are written back to HubSpot automatically on certain events (e.g. design
   visit submission).
@@ -88,8 +85,7 @@ HubSpot lead statuses in pipeline order:
 
 4. AWAITING_PHOTOS
    Staff are waiting for the customer to submit their photos and home details
-   via the customer-info form. The AWPH_RECEIVED substatus (hw_lead_substatus)
-   is set automatically when the customer submits the form.
+   via the customer-info form.
 
    Customer-Info Form Flow:
    - Staff click "Send info form" on the dashboard contact card.
@@ -100,7 +96,7 @@ HubSpot lead statuses in pipeline order:
      (up to 15 images, JPEG/PNG/WebP).
    - On submission: the dashboard stores the answers, emails an admin
      notification (with photos attached where possible), emails the customer a
-     thank-you, and updates hs_lead_status and hw_lead_substatus in HubSpot.
+     thank-you, and updates hs_lead_status in HubSpot.
    - The admin notification includes all submitted details and any photos that
      fit within the email size limit. Large photos are skipped with a note to
      view them on the dashboard.
@@ -144,11 +140,8 @@ It is distinct from the Survey visit (see Stage 3).
 HubSpot lead statuses in pipeline order:
 
 1. SCHEDULED
-   A design visit appointment has been booked. Two substatuses (hw_lead_substatus)
-   are used to track confirmation:
-     DS_CONFIRMED    — the customer has confirmed the appointment
-     DS_UNCONFIRMED  — the appointment is tentative, awaiting customer confirmation
-   The date is added to the shared calendar from the dashboard.
+   A design visit appointment has been booked. The date is added to the shared
+   calendar from the dashboard.
 
 2. OPEN_DEAL
    The design visit has taken place and a design visit record has been submitted.
@@ -298,14 +291,13 @@ Sales          FORM_SUBMISSION         Initial customer enquiry received
 Sales          ATTEMPTED_CONTACT       Staff tried to reach customer; no reply
 Sales          IN_PROGRESS             Active conversation underway
 Sales          AWAITING_PHOTOS         Customer-info form link sent; waiting
-                 (substatus AWPH_RECEIVED)  for customer to submit
+                                        for customer to submit
 Sales          ROUGH_ESTIMATE          Photos reviewed; rough estimate sent
 Sales          UNQUALIFIED             Lead does not qualify; closed
 Sales          NOT_SUITABLE            Lead unsuitable after review; closed
 Sales          BAD_TIMING              Customer interested but not ready; follow
                                         up at agreed date
 Design Visit   SCHEDULED               Design visit booked
-                 (substatus DS_CONFIRMED / DS_UNCONFIRMED)
 Design Visit   OPEN_DEAL               Design visit submitted; sign-off sent
                                         to customer; QB estimate created
 Survey         DESIGN_ACCEPTED         Customer signed off design
@@ -324,14 +316,6 @@ HubSpot Contact Properties:
     Primary pipeline position. Values correspond to the statuses listed in the
     Pipeline Summary Table above. This is the field the dashboard board reads
     to place a contact in the correct column.
-
-  hw_lead_substatus
-    Secondary qualifier. Relevant values in the pipeline:
-      AWPH_RECEIVED     — customer has submitted the info form (under
-                          AWAITING_PHOTOS)
-      DS_CONFIRMED      — design visit appointment confirmed (under SCHEDULED)
-      DS_UNCONFIRMED    — design visit appointment not yet confirmed (under
-                          SCHEDULED)
 
 Design Visits Table Fields (design_visits):
 
@@ -379,8 +363,6 @@ NOTES FOR AI AGENTS
 
 1. hs_lead_status is the primary pipeline signal. When determining where a
    customer is in the pipeline, always read hs_lead_status from HubSpot first.
-   hw_lead_substatus is a secondary qualifier that provides extra detail within
-   a status; it does not replace hs_lead_status.
 
 2. Design visit and survey visit are two different physical appointments.
    A "design visit" (Stage 2) is an aesthetic consultation about styles,

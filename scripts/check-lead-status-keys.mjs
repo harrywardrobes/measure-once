@@ -146,7 +146,7 @@ function findLiteralCallKeys(files) {
 
 // ─── Find inline hs_lead_status: 'KEY' object-literal values ─────────────────
 // Catches hardcoded keys set directly in HubSpot mutation objects, e.g.:
-//   { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: '...' }
+//   { hs_lead_status: 'SURVEY_SCHEDULED' }
 //   { hs_lead_status: "SURVEY_SCHEDULED" }
 //   { hs_lead_status: `SURVEY_SCHEDULED` }        ← template literal, no interpolation
 //   { hs_lead_status: 'KEY' as const }             ← TypeScript `as const` assertion

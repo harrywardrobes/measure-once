@@ -69,7 +69,7 @@ async function fetchAwaitingPhotosContacts() {
           ],
         },
       ],
-      properties: ['hs_lead_status', 'hw_lead_substatus', 'email', 'firstname', 'lastname'],
+      properties: ['hs_lead_status', 'email', 'firstname', 'lastname'],
       limit: 100,
       ...(after ? { after } : {}),
     };
@@ -95,12 +95,12 @@ async function fetchAwaitingPhotosContacts() {
 }
 
 /**
- * Patch a single HubSpot contact to ROUGH_ESTIMATE, clearing substatus.
+ * Patch a single HubSpot contact to ROUGH_ESTIMATE.
  */
 async function patchContact(contactId) {
   await http.patch(
     `${HS_BASE}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-    { properties: { hs_lead_status: 'ROUGH_ESTIMATE', hw_lead_substatus: '' } },
+    { properties: { hs_lead_status: 'ROUGH_ESTIMATE' } },
     { headers: HS_HEADERS }
   );
 }
@@ -162,7 +162,7 @@ async function main() {
     const p        = c.properties || {};
     const name     = [p.firstname, p.lastname].filter(Boolean).join(' ') || p.email || id;
     const hasLocal = submittedIds.has(id);
-    toUpdate.push({ id, name, email: p.email || '—', substatus: p.hw_lead_substatus || '', hasLocal });
+    toUpdate.push({ id, name, email: p.email || '—', hasLocal });
   }
 
   console.log(`\n3/4  Will update ${toUpdate.length} contact(s):`);
