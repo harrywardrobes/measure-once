@@ -127,4 +127,16 @@ describe('OfflinePill colour guards', () => {
     const pill = getByTestId('offline-pill');
     expect(window.getComputedStyle(pill).fontWeight).toBe('600');
   });
+
+  it('offline pill letter spacing is 0.03em', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).letterSpacing).toBe('0.03em');
+  });
+
+  it('offline pill line height is 1', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).lineHeight).toBe('1');
+  });
 });
