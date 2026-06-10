@@ -75,6 +75,16 @@ describe('ServiceStatusBadge badge dot colour guards', () => {
   });
 });
 
+describe('ServiceStatusBadge icon wrapper border colour guards', () => {
+  it('checking status icon wrapper border colour is rgba(255,255,255,0.12) — neutral', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="checking" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderTopColor).toBe('rgba(255, 255, 255, 0.12)');
+  });
+});
+
 describe('OfflinePill colour guards', () => {
   it('offline pill text colour is #fcd34d (rgb 252 211 77)', () => {
     const { getByTestId } = render(<OfflinePill />);
