@@ -611,6 +611,12 @@ async function main() {
   //   NEG-22  PATCH with a well-formed but unknown status_key → 400
   //   NEG-23  POST with a known existing status_key → 201 (happy-path guard)
   //   NEG-24  PATCH with a known existing status_key → 200 (happy-path guard)
+  //
+  // __global__ binding probes:
+  //   NEG-25  POST with stage_key='__global__' and status_key='' → 201 (accepted)
+  //   NEG-26  POST with stage_key='__global__' and non-empty status_key → 400
+  //   NEG-27  PATCH with stage_key='__global__' and status_key='' → 200 (accepted)
+  //   NEG-28  PATCH with stage_key='__global__' and non-empty status_key → 400
 
   console.log('\n  [NEG] Negative-path validation probes');
 
@@ -1038,6 +1044,67 @@ async function main() {
       bindings: [{ stage_key: '__global__', status_key: 'some_status' }],
     });
     assertBadRequest('NEG-26: POST with __global__ stage_key and non-empty status_key rejected', r, '__global__');
+  }
+
+  // NEG-27: PATCH an existing handler with stage_key='__global__' and
+  // status_key='' — must be accepted (200).  Companion PATCH happy-path for
+  // the __global__ binding slot, mirroring NEG-25 for POST.
+  {
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg27-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId) {
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        bindings: [{ stage_key: '__global__', status_key: '' }],
+      });
+      const ok = r.status === 200 && Number.isInteger(r.json?.id);
+      record(
+        'NEG-27: PATCH with __global__ stage_key and empty status_key accepted',
+        'status=200 with integer id',
+        `status=${r.status} id=${JSON.stringify(r.json?.id)}`,
+        ok,
+        ok ? '' : JSON.stringify(r.json),
+      );
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      record(
+        'NEG-27: PATCH with __global__ stage_key and empty status_key accepted',
+        'status=200 with integer id',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status})`,
+        false,
+      );
+    }
+  }
+
+  // NEG-28: PATCH an existing handler with stage_key='__global__' and a
+  // non-empty status_key — must be rejected with 400.  Companion PATCH
+  // negative probe, mirroring NEG-26 for POST.
+  {
+    const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg28-scaffold',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [],
+    });
+    const scaffoldId = scaffoldRes.json?.id;
+    if (scaffoldId) {
+      const r = await adminClient.patch(`/api/admin/card-action-handlers/${scaffoldId}`, {
+        bindings: [{ stage_key: '__global__', status_key: 'something' }],
+      });
+      assertBadRequest('NEG-28: PATCH with __global__ stage_key and non-empty status_key rejected', r, '__global__');
+      await adminClient.delete(`/api/admin/card-action-handlers/${scaffoldId}`);
+    } else {
+      record(
+        'NEG-28: PATCH with __global__ stage_key and non-empty status_key rejected',
+        'status=400 with error containing "__global__"',
+        `skipped — scaffold POST failed (status=${scaffoldRes.status})`,
+        false,
+      );
+    }
   }
 
   // ── (PRIV) Member-privilege probes ────────────────────────────────────────
@@ -4724,7 +4791,7 @@ async function writeReport(runId, findings) {
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
     '  - PRIV-03: member DELETE `/api/admin/card-action-handlers/:id` → 403.',
-    '- **(NEG) Negative-path validation probes** — 22 pure-REST probes that',
+    '- **(NEG) Negative-path validation probes** — 28 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
     '  - NEG-01/02/03: `defaultDurationMin` below 5, above 1440, non-numeric.',
@@ -4747,6 +4814,10 @@ async function writeReport(runId, findings) {
     '  - NEG-22: PATCH with a well-formed but unknown `status_key` → 400.',
     '  - NEG-23: POST with a known existing `status_key` → 201 (over-rejection guard).',
     '  - NEG-24: PATCH with a known existing `status_key` → 200 (over-rejection guard).',
+    '  - NEG-25: POST with `stage_key=__global__` and empty `status_key` → 201 (accepted).',
+    '  - NEG-26: POST with `stage_key=__global__` and non-empty `status_key` → 400.',
+    '  - NEG-27: PATCH with `stage_key=__global__` and empty `status_key` → 200 (accepted).',
+    '  - NEG-28: PATCH with `stage_key=__global__` and non-empty `status_key` → 400.',
     '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
     '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',
