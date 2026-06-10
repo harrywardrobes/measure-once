@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Accordion,
   AccordionDetails,
@@ -16,34 +16,11 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BoltIcon from '@mui/icons-material/Bolt';
 import EmailIcon from '@mui/icons-material/Email';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { GET } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES } from '../../utils/handlerMeta';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const CARD_ACTION_STAGES: Array<{ key: string; label: string; lsStage: string }> = [
-  { key: 'sales',       label: 'Sales',        lsStage: 'SALES'        },
-  { key: 'designvisit', label: 'Design Visit', lsStage: 'DESIGN_VISIT' },
-  { key: 'survey',      label: 'Survey',       lsStage: 'SURVEY'       },
-];
-
-const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
-  CARD_ACTION_STAGES.map(s => [s.lsStage, s.key]),
-);
-
-const HANDLER_TYPE_LABELS: Record<string, string> = {
-  add_design_visit_to_calendar: 'Add design visit to calendar',
-  schedule_visit:               'Schedule visit',
-  summarise_phone_call:         'Summarise phone call',
-  show_message:                 'Show informational message',
-  start_design_visit:           'Start design visit wizard',
-  schedule_delivery_window:     'Schedule delivery window',
-  schedule_installation_slot:   'Schedule installation slot',
-  upload_photos_and_info:       'Upload photos & info',
-  review_customer_photos:       'Review customer photos',
-  arrange_visit:                'Arrange visit',
-};
+import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +41,10 @@ interface Handler {
 interface EmailTemplate { key: string; label: string; }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function lsStageToKey(stage: string): string {
+  return stage.toLowerCase().replace(/_/g, '');
+}
 
 function handlersForSlot(
   handlers: Handler[],
@@ -255,6 +236,7 @@ function SlotRow({
 // ── StageAccordion ────────────────────────────────────────────────────────────
 
 function StageAccordion({
+  stageKey,
   stageLabel,
   statuses,
   substatuses,
@@ -262,6 +244,7 @@ function StageAccordion({
   handlers,
   emailTemplates,
 }: {
+  stageKey: string;
   stageLabel: string;
   statuses: LeadStatus[];
   substatuses: Substatus[];
@@ -269,12 +252,8 @@ function StageAccordion({
   handlers: Handler[];
   emailTemplates: EmailTemplate[];
 }) {
-  const stageKey = CARD_ACTION_STAGES.find(s => s.label === stageLabel)?.key ?? '';
   const stageStatuses = statuses
-    .filter(s => {
-      const sk = STAGE_FOR_LS[s.stage || ''];
-      return sk === stageKey;
-    })
+    .filter(s => lsStageToKey(s.stage || '') === stageKey)
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const labelMap = new Map<string, string>();
@@ -502,19 +481,29 @@ export function WorkflowPage() {
   const [substatuses,    setSubstatuses]    = useState<Substatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
   const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [lastRefreshed,  setLastRefreshed]  = useState<Date | null>(null);
   const [error,          setError]          = useState<string | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
+  const isFirstLoad = useRef(true);
+
+  const fetchAll = useCallback(async (showRefreshing = false) => {
+    if (isFirstLoad.current) {
+      setLoading(true);
+    } else if (showRefreshing) {
+      setRefreshing(true);
+    }
     setError(null);
     try {
-      const [lbl, sta, sub, hdl, tpl] = await Promise.all([
+      const [lbl, sta, sub, hdl, tpl, wf] = await Promise.all([
         GET<CALabel[]>('/api/admin/stage-action-labels'),
         GET<LeadStatus[]>('/api/admin/lead-statuses'),
         GET<Substatus[]>('/api/admin/lead-substatuses'),
         GET<Handler[]>('/api/admin/card-action-handlers'),
         GET<EmailTemplate[]>('/api/admin/email-templates'),
+        GET<WorkflowDef | null>('/api/workflow'),
       ]);
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       setLabels(safeArr(lbl));
@@ -522,19 +511,91 @@ export function WorkflowPage() {
       setSubstatuses(safeArr(sub));
       setHandlers(safeArr(hdl));
       setEmailTemplates(safeArr(tpl));
+
+      const wfDef: WorkflowDef = (wf && typeof wf === 'object' && wf.stages) ? wf : DEFAULT_WORKFLOW;
+      const stages = Object.entries(wfDef.stages ?? {}).map(([key, val]: [string, WorkflowStage]) => ({
+        key,
+        label: val.label ?? key,
+      }));
+      setWorkflowStages(stages);
+      setLastRefreshed(new Date());
     } catch (e) {
       setError((e as Error).message || 'Failed to load workflow data.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      isFirstLoad.current = false;
     }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // Re-fetch when the workflow tab becomes active
+  useEffect(() => {
+    const tabBtn = document.querySelector('.tab-btn[data-tab="workflow"]');
+    if (!tabBtn) return;
+    const observer = new MutationObserver(() => {
+      if (tabBtn.classList.contains('active')) {
+        fetchAll();
+      }
+    });
+    observer.observe(tabBtn, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [fetchAll]);
+
+  // Re-fetch when sibling tabs save changes
+  useEffect(() => {
+    const EVENTS = ['lead_statuses_changed', 'card_action_handlers_changed'] as const;
+    const handler = () => fetchAll();
+
+    for (const evt of EVENTS) {
+      window.addEventListener(evt, handler);
+    }
+
+    let channels: BroadcastChannel[] = [];
+    try {
+      channels = EVENTS.map(evt => {
+        const bc = new BroadcastChannel(evt);
+        bc.addEventListener('message', handler);
+        return bc;
+      });
+    } catch { /* BroadcastChannel not available */ }
+
+    return () => {
+      for (const evt of EVENTS) {
+        window.removeEventListener(evt, handler);
+      }
+      for (const bc of channels) {
+        bc.close();
+      }
+    };
+  }, [fetchAll]);
+
+  const formattedTime = lastRefreshed
+    ? lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
+
   return (
     <Stack spacing={2} sx={{ py: 1 }}>
       <Box>
-        <Typography variant="h6" sx={{ mb: 0.5 }}>Workflow</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>Workflow</Typography>
+          {!isFirstLoad.current && formattedTime && (
+            <Typography variant="caption" color="text.secondary">
+              Updated {formattedTime}
+            </Typography>
+          )}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={refreshing ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon />}
+            disabled={refreshing || loading}
+            onClick={() => fetchAll(true)}
+            data-testid="wf-refresh"
+          >
+            Refresh
+          </Button>
+        </Box>
         <Alert severity="info" sx={{ mb: 2 }}>
           Read-only reference showing each stage's card-action bindings — which handler fires, what steps it runs, what HubSpot status changes, and which emails are sent.
         </Alert>
@@ -554,11 +615,12 @@ export function WorkflowPage() {
         <Box>
           <Divider sx={{ mb: 2 }} />
           <Stack spacing={0}>
-            {CARD_ACTION_STAGES.map(stage => (
+            {workflowStages.map(stage => (
               <StageAccordion
                 key={stage.key}
+                stageKey={stage.key}
                 stageLabel={stage.label}
-                statuses={statuses.filter(s => !s.is_null_row || STAGE_FOR_LS[s.stage || ''] === stage.key)}
+                statuses={statuses}
                 substatuses={substatuses}
                 labels={labels}
                 handlers={handlers}
