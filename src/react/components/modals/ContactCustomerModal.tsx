@@ -403,6 +403,41 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Contact history
                   </Typography>
+                  {(() => {
+                    const methodOrder: Array<AttemptLogEntry['method']> = ['call', 'email', 'whatsapp'];
+                    const methodLabels: Record<AttemptLogEntry['method'], (n: number) => string> = {
+                      call:     (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
+                      email:    (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
+                      whatsapp: (n) => `${n} WhatsApp`,
+                    };
+                    const mc = attemptLog.reduce<Record<string, number>>((acc, e) => {
+                      acc[e.method] = (acc[e.method] ?? 0) + 1;
+                      return acc;
+                    }, {});
+                    const breakdown = [
+                      ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => methodLabels[m](mc[m])),
+                      ...Object.keys(mc).filter((m) => !methodOrder.includes(m as AttemptLogEntry['method']) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
+                    ].join(', ');
+                    const total = attemptLog.length;
+                    return (
+                      <Box
+                        sx={{
+                          px: 1,
+                          py: 0.5,
+                          mb: 0.75,
+                          bgcolor: 'grey.100',
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>{total} {total === 1 ? 'attempt' : 'attempts'}</strong>
+                          {breakdown ? ` · ${breakdown}` : ''}
+                        </Typography>
+                      </Box>
+                    );
+                  })()}
                   <Box
                     sx={{
                       maxHeight: 140,
