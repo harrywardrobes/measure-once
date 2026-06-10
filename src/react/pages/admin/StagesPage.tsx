@@ -82,11 +82,6 @@ interface LeadStatus {
   is_null_row: boolean;
 }
 
-interface SubstatusCount {
-  id: number;
-  status_key: string;
-}
-
 interface HandlerBinding {
   stage_key?: string;
   status_key?: string;
@@ -144,7 +139,7 @@ function notifyLsChanged() {
 
 // ── NullStatusRow ──────────────────────────────────────────────────────────
 
-function NullStatusRow({ status, subCount, handlerCount }: { status: LeadStatus; subCount: number; handlerCount: number }) {
+function NullStatusRow({ status, handlerCount }: { status: LeadStatus; handlerCount: number }) {
   return (
     <tr style={{ background: 'var(--neutral-50)' }} data-ls-key={status.key} data-ls-no-delete="1">
       <td style={{ ...TD, textAlign: 'center' }}>
@@ -168,7 +163,6 @@ function NullStatusRow({ status, subCount, handlerCount }: { status: LeadStatus;
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: subCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{subCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center', color: handlerCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{handlerCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
       <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
@@ -178,7 +172,7 @@ function NullStatusRow({ status, subCount, handlerCount }: { status: LeadStatus;
 
 // ── StatusRow ──────────────────────────────────────────────────────────────
 
-function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired, featureLabel, source, subCount, handlerCount }: {
+function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired, featureLabel, source, handlerCount }: {
   status: LeadStatus;
   index: number;
   total: number;
@@ -188,7 +182,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
   isRequired: boolean;
   featureLabel?: string;
   source?: string;
-  subCount: number;
   handlerCount: number;
 }) {
   return (
@@ -221,7 +214,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: subCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{subCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center', color: handlerCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{handlerCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center' }}>
         <input type="checkbox" defaultChecked={!!status.excluded_from_sales} data-key={status.key} />
@@ -277,7 +269,6 @@ export function StagesPage() {
   const [newLabel, setNewLabel] = useState('');
   const [addErr, setAddErr] = useState('');
   const [healthData,   setHealthData]   = useState<LeadStatusHealth | null>(null);
-  const [substatuses,  setSubstatuses]  = useState<SubstatusCount[]>([]);
   const [handlers,     setHandlers]     = useState<HandlerForCount[]>([]);
 
   interface HsOption { value: string; label: string; displayOrder: number; hidden: boolean; }
@@ -341,11 +332,7 @@ export function StagesPage() {
 
   const fetchCounts = useCallback(async () => {
     try {
-      const [sub, hdl] = await Promise.all([
-        GET<SubstatusCount[]>('/api/admin/lead-substatuses'),
-        GET<HandlerForCount[]>('/api/admin/card-action-handlers'),
-      ]);
-      setSubstatuses(Array.isArray(sub) ? sub : []);
+      const hdl = await GET<HandlerForCount[]>('/api/admin/card-action-handlers');
       setHandlers(Array.isArray(hdl) ? hdl : []);
     } catch {
       /* ignore — counts are informational only */
@@ -620,23 +607,13 @@ export function StagesPage() {
     }
   }
 
-  const subCountByLsKey = new Map<string, number>();
-  for (const s of substatuses) {
-    const k = String(s.status_key).toUpperCase();
-    subCountByLsKey.set(k, (subCountByLsKey.get(k) ?? 0) + 1);
-  }
-
   const handlerCountByLsKey = new Map<string, number>();
   for (const ls of statuses) {
     const lsKey = ls.key.toUpperCase();
-    const subIds = new Set(
-      substatuses.filter(s => String(s.status_key).toUpperCase() === lsKey).map(s => s.id),
-    );
     const count = handlers.filter(h =>
-      (h.bindings ?? []).some(b => {
-        if (b.substatus_id != null) return subIds.has(Number(b.substatus_id));
-        return String(b.status_key || '').toUpperCase() === lsKey;
-      }),
+      (h.bindings ?? []).some(b =>
+        String(b.status_key || '').toUpperCase() === lsKey,
+      ),
     ).length;
     if (count > 0) handlerCountByLsKey.set(lsKey, count);
   }
@@ -757,8 +734,7 @@ export function StagesPage() {
                       <th style={TH}>Key</th>
                       <th style={TH} title="4-character shorthand used to prefix sub-status keys">Shorthand</th>
                       <th style={TH}>Display Label</th>
-                      <th style={{ ...TH, textAlign: 'center' }} title="Number of sub-statuses for this lead status">Sub-statuses</th>
-                      <th style={{ ...TH, textAlign: 'center' }} title="Number of action handlers bound to this lead status or its sub-statuses">Handlers</th>
+                      <th style={{ ...TH, textAlign: 'center' }} title="Number of action handlers bound to this lead status">Handlers</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Excl. from Sales</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Delete</th>
                     </tr>
@@ -768,7 +744,6 @@ export function StagesPage() {
                       <NullStatusRow
                         key={`${nullRow.key}-${reloadKey}`}
                         status={nullRow}
-                        subCount={subCountByLsKey.get(nullRow.key.toUpperCase()) ?? 0}
                         handlerCount={handlerCountByLsKey.get(nullRow.key.toUpperCase()) ?? 0}
                       />
                     )}
@@ -780,7 +755,7 @@ export function StagesPage() {
                       return (
                         <React.Fragment key={stage ?? '__none__'}>
                           <tr>
-                            <td colSpan={9} style={{
+                            <td colSpan={8} style={{
                               padding: '3px 8px',
                               fontSize: '0.7rem',
                               fontWeight: 700,
@@ -805,7 +780,6 @@ export function StagesPage() {
                               isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)}
                               featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel}
                               source={healthData?.required?.find(r => r.key === s.key)?.source}
-                              subCount={subCountByLsKey.get(s.key.toUpperCase()) ?? 0}
                               handlerCount={handlerCountByLsKey.get(s.key.toUpperCase()) ?? 0}
                             />
                           ))}

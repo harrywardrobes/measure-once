@@ -237,13 +237,9 @@ function _buildActionSlotGroups(): ActionStage[] {
       ),
     );
 
-    if (dflt || hasHandler) {
-      slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action', hasLabel: !!dflt });
-    }
+    slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action', hasLabel: !!dflt });
 
-    if (slots.length) {
-      groups.push({ ls: { key: ls.key, label: ls.label, isNullRow: !!ls.is_null_row }, slots });
-    }
+    groups.push({ ls: { key: ls.key, label: ls.label, isNullRow: !!ls.is_null_row }, slots });
     return groups;
   };
 
@@ -1219,7 +1215,7 @@ export function ActionHandlersPage() {
             {loading ? (
               <p className="admin-msg admin-msg--muted">Loading…</p>
             ) : !stages.length ? (
-              <p className="admin-msg admin-msg--muted">No action labels defined yet — add labels in the Card actions card first.</p>
+              <p className="admin-msg admin-msg--muted">No lead statuses are assigned to a card-action stage yet.</p>
             ) : stages.map(stage => (
               <section key={stage.stage.key} className="adm-handlers-stage">
                 <div className="adm-handlers-stage-head">{stage.stage.label}</div>
