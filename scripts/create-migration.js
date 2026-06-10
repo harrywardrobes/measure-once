@@ -12,7 +12,12 @@
 //      that node-pg-migrate would produce.
 //
 // Usage (via npm scripts only):
-//   node scripts/create-migration.js <migration-name>
+//   node scripts/create-migration.js <migration-name> [--force]
+//
+// --force   Skip the duplicate-name guard and create the file even if a
+//           migration with the same descriptive name already exists.  Use this
+//           only when you intentionally need a second migration with the same
+//           base name (e.g. a follow-up fix to an already-applied migration).
 
 const fs = require('fs');
 const path = require('path');
