@@ -56,6 +56,15 @@ describe('ServiceStatusBadge badge dot colour guards', () => {
     expect(dot).not.toBeNull();
     expect(window.getComputedStyle(dot).backgroundColor).toBe('rgb(34, 197, 94)');
   });
+
+  it('checking status badge dot colour is rgba(255,255,255,0.35) — neutral', () => {
+    const { container } = render(
+      <ServiceStatusBadge service="hubspot" status="checking" />,
+    );
+    const dot = container.querySelector('.MuiBadge-dot') as HTMLElement;
+    expect(dot).not.toBeNull();
+    expect(window.getComputedStyle(dot).backgroundColor).toBe('rgba(255, 255, 255, 0.35)');
+  });
 });
 
 describe('OfflinePill colour guards', () => {
