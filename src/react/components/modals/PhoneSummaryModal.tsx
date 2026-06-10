@@ -76,11 +76,23 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [savedSummary, setSavedSummary] = useState('');
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges = summary.trim().length > 0;
 
   function handleClose() {
     setSummary('');
     setError('');
     onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
   }
 
   async function handleSubmit() {
@@ -113,7 +125,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
 
   return (
     <>
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
         <DialogTitle>
           {ctx.contactName ? `Phone call summary — ${ctx.contactName}` : 'Phone call summary'}
         </DialogTitle>
@@ -138,7 +150,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
@@ -156,6 +168,16 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
         open={showFollowUp}
         onClose={() => setShowFollowUp(false)}
       />
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleClose}>Discard changes</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

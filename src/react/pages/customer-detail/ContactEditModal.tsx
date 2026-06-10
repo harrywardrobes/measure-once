@@ -7,6 +7,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
+import Typography from '@mui/material/Typography';
 import { Contact } from './types';
 import { updateRecentCustomer } from '../../utils/formatters';
 
@@ -94,6 +95,12 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   const [values,  setValues]  = useState<FormValues>(() => toFormValues(contact));
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState<string | null>(null);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const savedValues = toFormValues(contact);
+  const hasUnsavedChanges = (Object.keys(savedValues) as (keyof FormValues)[]).some(
+    (k) => values[k] !== savedValues[k],
+  );
 
   // Restore draft or reset to contact values each time the modal opens.
   useEffect(() => {
@@ -118,6 +125,21 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
       localStorage.setItem(draftKey(contact.id), JSON.stringify(toPersistedDraft(values)));
     } catch { /* noop */ }
   }, [values, open, contact.id]);
+
+  function handleRequestClose() {
+    if (saving) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      onClose();
+    }
+  }
+
+  function handleDiscard() {
+    try { localStorage.removeItem(draftKey(contact.id)); } catch { /* noop */ }
+    setConfirmDiscardOpen(false);
+    onClose();
+  }
 
   function handleChange(field: keyof FormValues) {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,7 +205,8 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   const activePh = activePhoneField(values);
 
   return (
-    <Dialog open={open} onClose={saving ? undefined : onClose} fullWidth maxWidth="sm">
+    <>
+    <Dialog open={open} onClose={handleRequestClose} fullWidth maxWidth="sm">
       <DialogTitle>Edit contact</DialogTitle>
       <DialogContent>
         <Stack spacing={2.5} sx={{ pt: 1 }}>
@@ -281,11 +304,22 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={handleRequestClose} disabled={saving}>Cancel</Button>
         <Button onClick={() => void handleSave()} variant="contained" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>
+    <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+      <DialogTitle>Discard changes?</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+        <Button color="error" onClick={handleDiscard}>Discard changes</Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 }

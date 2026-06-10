@@ -496,7 +496,6 @@ export const TokenHighlightField = React.forwardRef<
     whiteSpace: multiline ? 'pre-wrap' : 'pre',
     overflowWrap: multiline ? 'break-word' : 'normal',
     wordBreak: 'normal',
-    overflow: 'hidden',
   };
 
   return (
@@ -543,6 +542,7 @@ export const TokenHighlightField = React.forwardRef<
           aria-hidden
           sx={{
             ...sharedLayer,
+            ...(!multiline && { overflow: 'hidden' }),
             position: 'absolute',
             inset: 0,
             color: 'text.primary',
@@ -615,6 +615,7 @@ export const TokenHighlightField = React.forwardRef<
           spellCheck={false}
           sx={{
             ...sharedLayer,
+            ...(!multiline && { overflow: 'hidden' }),
             position: 'relative',
             display: 'block',
             minHeight,

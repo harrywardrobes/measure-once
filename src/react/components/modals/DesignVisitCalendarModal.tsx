@@ -83,6 +83,8 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
       ? restoredStart
       : freshStart;
 
+  const initialStartRef = React.useRef(initialStart);
+
   const [title, setTitle] = useState(draft.title ?? defaultTitle);
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
   const [duration, setDuration] = useState(draft.duration ?? String(defaultDuration));
@@ -93,6 +95,14 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   const [startDtWasReset, setStartDtWasReset] = useState(restoredStartIsStale);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges =
+    title !== defaultTitle ||
+    location.trim() !== '' ||
+    notes.trim() !== '' ||
+    duration !== String(defaultDuration) ||
+    (startDt !== null && !startDt.isSame(initialStartRef.current));
 
   useEffect(() => {
     saveDraft(key, { title, duration, location, notes, startDt: startDt?.toISOString() });
@@ -127,6 +137,15 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     clearDraft(key);
     setError('');
     onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleDismiss();
+    }
   }
 
   async function doSubmit() {
@@ -203,7 +222,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
         </DialogActions>
       </Dialog>
 
-      <Dialog open={open} onClose={handleDismiss} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
         <DialogTitle>
           {ctx.contactName ? `Schedule design visit for ${ctx.contactName}` : 'Schedule design visit'}
         </DialogTitle>
@@ -287,7 +306,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancel} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
@@ -296,6 +315,17 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
           >
             {submitting ? 'Scheduling…' : 'Schedule'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleCancel}>Discard changes</Button>
         </DialogActions>
       </Dialog>
     </LocalizationProvider>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -55,6 +55,10 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
 
   const initialStart = dayjs().add(24, 'hour').startOf('hour');
 
+  const initialStartRef = useRef(initialStart);
+  const initialTitleRef = useRef(defaultTitle);
+  const initialDurationRef = useRef(String(defaultDuration));
+
   const [title, setTitle]       = useState(defaultTitle);
   const [startDt, setStartDt]   = useState<Dayjs | null>(initialStart);
   const [duration, setDuration] = useState(String(defaultDuration));
@@ -64,6 +68,14 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges =
+    title !== initialTitleRef.current ||
+    location.trim() !== '' ||
+    notes.trim() !== '' ||
+    duration !== initialDurationRef.current ||
+    (startDt !== null && !startDt.isSame(initialStartRef.current));
 
   useEffect(() => {
     if (!open) {
@@ -88,6 +100,15 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   function handleClose() {
     setError('');
     onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
   }
 
   async function doSubmit() {
@@ -167,7 +188,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -241,7 +262,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
@@ -250,6 +271,17 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
           >
             {submitting ? 'Scheduling…' : 'Schedule'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleClose}>Discard changes</Button>
         </DialogActions>
       </Dialog>
     </LocalizationProvider>

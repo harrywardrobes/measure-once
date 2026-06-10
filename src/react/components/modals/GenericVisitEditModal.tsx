@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -77,6 +77,13 @@ export function GenericVisitEditModal(props: Props) {
     ? initialStart.add(2, 'hour')
     : dayjs(props.visit.endAt);
 
+  const initialTitleRef    = useRef(defaultTitle);
+  const initialStartRef    = useRef(initialStart);
+  const initialEndRef      = useRef(initialEnd);
+  const initialLocationRef = useRef(isCreate ? '' : (props.visit.location || ''));
+  const initialNotesRef    = useRef(isCreate ? '' : (props.visit.notes || ''));
+  const initialGcalRef     = useRef(isCreate ? true : !!(props.visit.googleEventId));
+
   const [title, setTitle] = useState(defaultTitle);
   const [range, setRange] = useState<DateRange<Dayjs>>([initialStart, initialEnd]);
   const [location, setLocation] = useState(isCreate ? '' : (props.visit.location || ''));
@@ -86,10 +93,32 @@ export function GenericVisitEditModal(props: Props) {
   );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges = (() => {
+    const [rs, re] = range;
+    return (
+      title !== initialTitleRef.current ||
+      location !== initialLocationRef.current ||
+      notes !== initialNotesRef.current ||
+      (rs !== null && !rs.isSame(initialStartRef.current)) ||
+      (re !== null && !re.isSame(initialEndRef.current)) ||
+      gcalChecked !== initialGcalRef.current
+    );
+  })();
 
   function handleClose() {
     setError('');
     props.onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
   }
 
   async function handleSubmit() {
@@ -230,7 +259,7 @@ export function GenericVisitEditModal(props: Props) {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={props.open} onClose={submitting ? undefined : handleClose} maxWidth="sm" fullWidth>
+      <Dialog open={props.open} onClose={handleRequestClose} maxWidth="sm" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -285,7 +314,7 @@ export function GenericVisitEditModal(props: Props) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
@@ -297,6 +326,17 @@ export function GenericVisitEditModal(props: Props) {
               ? (isCreate ? 'Scheduling…' : 'Saving…')
               : (isCreate ? 'Schedule' : 'Save changes')}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleClose}>Discard changes</Button>
         </DialogActions>
       </Dialog>
     </LocalizationProvider>

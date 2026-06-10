@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -99,6 +99,20 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  // Becomes true the first time the user progresses past the initial 'call' step.
+  // Stays true even if they navigate back to 'call', so closing still prompts.
+  // Initialized from restored draft so a draft on booked/email step already counts.
+  const [madeProgress, setMadeProgress] = useState(
+    draft.step === 'booked' || draft.step === 'email'
+  );
+
+  const hasUnsavedChanges =
+    step === 'booked' ||
+    step === 'email' ||
+    (madeProgress && step === 'call');
+  const _hasUnsavedChangesRef = useRef(hasUnsavedChanges);
+  _hasUnsavedChangesRef.current = hasUnsavedChanges;
 
   const [address, setAddress]       = useState(draft.address ?? '');
   const [bookedSlot, setBookedSlot] = useState<Dayjs | null>(
@@ -181,7 +195,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
   function handleClose() {
     setActionError('');
+    setMadeProgress(false);
     onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (_hasUnsavedChangesRef.current) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
   }
 
   async function handleOutcome(outcome: 'not_proceeding' | 'call_back_later') {
@@ -341,7 +365,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
         {step === 'loading' && (
           <>
             <DialogTitle>Arrange {label}</DialogTitle>
@@ -354,7 +378,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
               )}
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleClose}>Cancel</Button>
+              <Button onClick={handleRequestClose}>Cancel</Button>
             </DialogActions>
           </>
         )}
@@ -400,7 +424,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', pb: 2, px: 2 }}>
               <Button
                 disabled={submitting}
-                onClick={() => { setActionError(''); setStep('booked'); }}
+                onClick={() => { setActionError(''); setMadeProgress(true); setStep('booked'); }}
                 variant="contained"
                 color="success"
                 data-testid="av-outcome-booked"
@@ -423,7 +447,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
                       setEmailBody(body);
                     }
                   }
-                  setStep('email');
+                  setMadeProgress(true); setStep('email');
                 }}
                 variant="outlined"
                 data-testid="av-outcome-no-answer"
@@ -543,6 +567,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={() => { clearDraft(key); setConfirmDiscardOpen(false); handleClose(); }}>Discard changes</Button>
+        </DialogActions>
       </Dialog>
     </LocalizationProvider>
   );

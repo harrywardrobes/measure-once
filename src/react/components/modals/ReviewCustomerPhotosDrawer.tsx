@@ -3,6 +3,10 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import Stack from '@mui/material/Stack';
@@ -136,6 +140,12 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges =
+    step !== 'done' &&
+    step !== 'loading' &&
+    (emailSubject.trim() !== '' || emailBody.trim() !== '' || priceRange.trim() !== '');
 
   // Fetch submission when drawer opens
   useEffect(() => {
@@ -285,15 +295,25 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     onClose();
   }
 
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
+  }
+
   const contactDisplay  = ctx.contactName || submission?.contactName || 'Customer';
   // Show masked email in the UI; the actual send target is resolved server-side from the submission record
   const emailDisplay    = submission?.maskedEmail || ctx.contactEmail || '';
 
   return (
+    <>
     <Drawer
       anchor="right"
       open={open}
-      onClose={handleClose}
+      onClose={handleRequestClose}
       slotProps={{ paper: { sx: { width: { xs: '100%', sm: 480 }, p: 0 } } }}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -552,7 +572,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           >
             {step === 'review' && (
               <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
-                <Button onClick={handleClose} color="inherit">
+                <Button onClick={handleRequestClose} color="inherit">
                   Cancel
                 </Button>
                 <Button
@@ -619,5 +639,17 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
         )}
       </Box>
     </Drawer>
+
+    <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+      <DialogTitle>Discard changes?</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+        <Button color="error" onClick={() => { setConfirmDiscardOpen(false); handleClose(); }}>Discard changes</Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 }

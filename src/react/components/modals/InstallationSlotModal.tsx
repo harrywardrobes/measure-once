@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -83,6 +83,14 @@ export function InstallationSlotModal(props: Props) {
     ? dayjs(visit.startAt)
     : dayjs().add(48, 'hour').startOf('hour');
 
+  const initialStartRef    = useRef(initialStart);
+  const initialTitleRef    = useRef(defaultTitle);
+  const initialDurationRef = useRef(String(defaultDuration));
+  const initialLocationRef = useRef(isEdit ? (visit?.location || '') : '');
+  const initialNotesRef    = useRef(isEdit ? (visit?.notes || '') : '');
+  const initialAddGcalRef    = useRef(addToGoogleDefault);
+  const initialUpdateGcalRef = useRef(isEdit && !!visit?.googleEventId);
+
   const [title, setTitle] = useState(defaultTitle);
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
   const [duration, setDuration] = useState(String(defaultDuration));
@@ -94,6 +102,16 @@ export function InstallationSlotModal(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges =
+    title !== initialTitleRef.current ||
+    location !== initialLocationRef.current ||
+    notes !== initialNotesRef.current ||
+    duration !== initialDurationRef.current ||
+    (startDt !== null && !startDt.isSame(initialStartRef.current)) ||
+    addGcal !== initialAddGcalRef.current ||
+    updateGcal !== initialUpdateGcalRef.current;
 
   useEffect(() => {
     if (!props.open) {
@@ -118,6 +136,15 @@ export function InstallationSlotModal(props: Props) {
   function handleClose() {
     setError('');
     props.onClose();
+  }
+
+  function handleRequestClose() {
+    if (submitting) return;
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleClose();
+    }
   }
 
   async function doSubmit() {
@@ -322,7 +349,7 @@ export function InstallationSlotModal(props: Props) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={props.open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <Dialog open={props.open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -425,7 +452,7 @@ export function InstallationSlotModal(props: Props) {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
           <Button
             variant="contained"
             onClick={handleSubmit}
@@ -434,6 +461,17 @@ export function InstallationSlotModal(props: Props) {
           >
             {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save changes' : 'Schedule')}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleClose}>Discard changes</Button>
         </DialogActions>
       </Dialog>
     </LocalizationProvider>

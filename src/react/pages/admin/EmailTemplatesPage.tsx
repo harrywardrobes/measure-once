@@ -287,6 +287,13 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   const [hadDraft] = useState<boolean>(() => loadDraft(template.key) !== null);
   const [saving, setSaving] = useState(false);
   const [confirmUnknownOpen, setConfirmUnknownOpen] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+
+  const hasUnsavedChanges =
+    fields.subject    !== template.subject    ||
+    fields.body_text  !== template.body_text  ||
+    fields.body_html  !== template.body_html  ||
+    fields.footer_text !== template.footer_text;
 
   // ── Click-to-insert variable chips ─────────────────────────────────────────
   // Track the most recently focused field so a chip click inserts the token at
@@ -362,6 +369,14 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     onClose();
   }, [template.key, onClose]);
 
+  const handleRequestClose = useCallback(() => {
+    if (hasUnsavedChanges) {
+      setConfirmDiscardOpen(true);
+    } else {
+      handleCancel();
+    }
+  }, [hasUnsavedChanges, handleCancel]);
+
   const handleConfirmedSave = useCallback(async () => {
     if (!fields.subject.trim()) {
       showToast('Subject is required.', true);
@@ -403,7 +418,7 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   }, [fields.subject, unknownTokens, malformedTokens, showToast, handleConfirmedSave]);
 
   return (
-    <Dialog open onClose={handleCancel} maxWidth="md" fullWidth>
+    <Dialog open onClose={handleRequestClose} maxWidth="md" fullWidth>
       <DialogTitle>Edit: {template.label}</DialogTitle>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
@@ -550,11 +565,23 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleCancel} disabled={saving}>Cancel</Button>
+        <Button onClick={handleRequestClose} disabled={saving}>Cancel</Button>
         <Button onClick={handleSave} variant="contained" disabled={saving}>
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </DialogActions>
+
+      {/* Discard-changes confirmation */}
+      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Discard changes?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
+          <Button color="error" onClick={handleCancel}>Discard changes</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Confirmation dialog when unknown or malformed tokens are present */}
       <Dialog open={confirmUnknownOpen} onClose={() => setConfirmUnknownOpen(false)} maxWidth="xs" fullWidth>
