@@ -15,6 +15,14 @@ const { assertLeadStatusKey } = require('./lead-status-guard');
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
 
+// ── patchContactProperties (wired by server.js at startup) ───────────────────
+// Delegates hs_lead_status PATCHes to the shared helper so cache invalidation
+// is guaranteed on every mutation, regardless of call site.
+let _patchContactProperties = async (_contactId, _props) => {
+  logger.warn('[photo-reviews] patchContactProperties called before wiring — HubSpot PATCH skipped');
+};
+function setPatchContactProperties(fn) { _patchContactProperties = fn; }
+
 // ── Utility helpers ───────────────────────────────────────────────────────────
 function appBaseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
@@ -419,7 +427,7 @@ router.post('/api/card-actions/review-customer-photos',
     const hsStatus = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE';
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
       try {
-        await updateHubSpotLeadStatus(cid, hsStatus);
+        await _patchContactProperties(cid, { hs_lead_status: hsStatus });
         await clearHubSpotSubstatus(cid);
       } catch (err) {
         logger.error({ err: err.message }, '[photo-reviews] HubSpot update failed (non-fatal):');
@@ -723,4 +731,5 @@ module.exports = {
   ensureDefaultReviewHandlerBinding,
   ensureSubstatusHandlerBindings,
   ensureContactCustomerHandlerBindings,
+  setPatchContactProperties,
 };

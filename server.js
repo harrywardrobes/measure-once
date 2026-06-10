@@ -21,8 +21,8 @@ const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter } = require('./visits');
 const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties } = require('./design-visits');
-const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
-const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings, ensureContactCustomerHandlerBindings } = require('./photo-reviews');
+const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
+const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const app = express();
@@ -76,10 +76,11 @@ const HS_SSE_GLOBAL_CAP   = 100; // max total SSE connections across all users
 const HS_SSE_MAX_DURATION = 30 * 60 * 1000; // forcibly close after 30 min
 const HS_SSE_HEARTBEAT_MS = 25 * 1000;      // heartbeat interval to detect dead connections
 setCustomerInfoSseClients(_hsWebhookSseClients);
-// Wire in the cache invalidator — called by customer-info.js before pushing
-// customer_info_submitted SSE so the board refetch gets fresh HubSpot data.
-setProjectContactsCacheInvalidator(() => _invalidateProjectContactsCache());
+// Wire the shared patchContactProperties helper into every module that mutates
+// hs_lead_status so cache invalidation is guaranteed on every PATCH path.
 setDvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+setCiPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+setPrPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),

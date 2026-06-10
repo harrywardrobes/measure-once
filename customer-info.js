@@ -22,10 +22,13 @@ const router = express.Router();
 let _sseClients = null;
 function setSharedSseClients(clients) { _sseClients = clients; }
 
-// ── Cache invalidator (wired by server.js at startup) ─────────────────────────
-// Called before emitting SSE so the next board refetch gets fresh HubSpot data.
-let _invalidateProjectContactsCache = null;
-function setProjectContactsCacheInvalidator(fn) { _invalidateProjectContactsCache = fn; }
+// ── patchContactProperties (wired by server.js at startup) ───────────────────
+// Delegates hs_lead_status PATCHes to the shared helper so cache invalidation
+// is guaranteed on every mutation, regardless of call site.
+let _patchContactProperties = async (_contactId, _props) => {
+  logger.warn('[customer-info] patchContactProperties called before wiring — HubSpot PATCH skipped');
+};
+function setPatchContactProperties(fn) { _patchContactProperties = fn; }
 
 function pushSseEvent(payload) {
   if (!_sseClients) return;
@@ -859,7 +862,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   // Update HubSpot lead status (non-fatal)
   try {
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
-      await updateHubSpotLeadStatus(lockedContactId, 'AWAITING_PHOTOS');
+      await _patchContactProperties(lockedContactId, { hs_lead_status: 'AWAITING_PHOTOS' });
       // Ensure sub-status exists locally, then patch HubSpot.
       // HubSpot hw_lead_substatus values are namespaced: STATUS_KEY__SUBSTATUS_KEY
       const awphId = await ensureSubstatusExists('AWPH_RECEIVED', 'Photos Received', 'AWAITING_PHOTOS');
@@ -872,13 +875,6 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     }
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
-  }
-
-  // Bust the project-contacts cache so the board refetch gets fresh HubSpot data
-  // (the cache has a 60 s TTL; without this the refetch would return the
-  // pre-submission snapshot and the badge would not appear).
-  if (typeof _invalidateProjectContactsCache === 'function') {
-    _invalidateProjectContactsCache();
   }
 
   // Notify all connected dashboard tabs so the "Photos received" badge appears
@@ -1291,5 +1287,5 @@ module.exports = {
   logNullFormLinkCount,
   signCustomerPhotoUrl,
   setSharedSseClients,
-  setProjectContactsCacheInvalidator,
+  setPatchContactProperties,
 };
