@@ -1315,6 +1315,41 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [contacts]);
 
+  // After the Contact Customer modal closes, re-fetch urgency + lastAttempt
+  // for just that one contact so the card shows the updated "last contacted"
+  // row without a full page reload.
+  React.useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('contact_attempt_logged');
+    bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
+      const contactId = evt.data?.contactId;
+      if (!contactId) return;
+      try {
+        const res = await fetch('/api/contacts/urgency', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [contactId] }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          urgency?: Record<string, Urgency>;
+          lastAttempt?: Record<string, { at: string; by: string | null } | null>;
+        };
+        const urgencyById = data.urgency || {};
+        const lastAttemptById = data.lastAttempt || {};
+        setUrgencyMap((prev) => ({ ...prev, [contactId]: urgencyById[contactId] ?? null }));
+        setLastAttemptMap((prev) => ({
+          ...prev,
+          [contactId]: contactId in lastAttemptById ? lastAttemptById[contactId] : null,
+        }));
+      } catch {
+        /* best-effort — stale data is fine on failure */
+      }
+    };
+    return () => bc.close();
+  }, []);
+
   // Pre-fill the customer name cache so that clicking any contact from the
   // list shows the correct name in the browser tab immediately, even on a
   // first visit. Existing cache entries (for recently-viewed contacts not

@@ -95,6 +95,11 @@ export function CardActionModalsHost() {
       bc.postMessage({ ts: Date.now() });
       bc.close();
     }
+    if (closing.type === 'contact_customer' && typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('contact_attempt_logged');
+      bc.postMessage({ contactId: closing.contactId, ts: Date.now() });
+      bc.close();
+    }
   }
 
   return (
