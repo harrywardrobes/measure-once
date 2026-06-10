@@ -5,6 +5,7 @@ import Chip from '@mui/material/Chip';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
+import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
@@ -50,6 +51,10 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editDueDate, setEditDueDate]     = useState('');
   const [editSaving, setEditSaving]       = useState(false);
+
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editSubject, setEditSubject]           = useState('');
+  const [editSubjectSaving, setEditSubjectSaving] = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
     const aDone = a.properties?.hs_task_status === 'COMPLETED';
@@ -136,6 +141,37 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     }
     if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, tasks, onTasksChange, notifyApiError]);
+
+  const startEditSubject = useCallback((task: HubSpotTask) => {
+    setEditSubject(task.properties?.hs_task_subject || '');
+    setEditingSubjectId(task.id);
+  }, []);
+
+  const saveSubject = useCallback(async (taskId: string) => {
+    const trimmed = editSubject.trim();
+    if (!trimmed) return;
+    setEditSubjectSaving(true);
+    const optimistic = tasks.map(t =>
+      t.id === taskId
+        ? { ...t, properties: { ...t.properties, hs_task_subject: trimmed } }
+        : t,
+    );
+    onTasksChange(optimistic);
+    try {
+      const r = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId, hs_task_subject: trimmed }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      setEditingSubjectId(null);
+    } catch (e) {
+      notifyApiError('hubspot', e);
+      onTasksChange(tasks);
+    } finally {
+      setEditSubjectSaving(false);
+    }
+  }, [contactId, editSubject, tasks, onTasksChange, notifyApiError]);
 
   const startEditDue = useCallback((task: HubSpotTask) => {
     const dueTsMs = task.properties?.hs_timestamp ? parseInt(task.properties.hs_timestamp, 10) : null;
@@ -306,15 +342,84 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
                 </Box>
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography sx={{
-                    fontSize: '0.875rem',
-                    color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
-                    lineHeight: 1.4,
-                    wordBreak: 'break-word',
-                    textDecoration: isDone ? 'line-through' : 'none',
-                  }}>
-                    {subj}
-                  </Typography>
+                  {!isDone && !isViewer && editingSubjectId === task.id ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input
+                        type="text"
+                        value={editSubject}
+                        onChange={e => setEditSubject(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') saveSubject(task.id);
+                          if (e.key === 'Escape') setEditingSubjectId(null);
+                        }}
+                        autoFocus
+                        style={{
+                          flex: 1,
+                          fontSize: 13,
+                          borderRadius: 6,
+                          border: '1px solid var(--stone-deep)',
+                          padding: '2px 6px',
+                          fontFamily: 'inherit',
+                          minWidth: 0,
+                        }}
+                      />
+                      <Box
+                        component="button"
+                        onClick={() => saveSubject(task.id)}
+                        disabled={editSubjectSaving}
+                        title="Save subject"
+                        sx={{
+                          background: 'none', border: 'none', cursor: editSubjectSaving ? 'default' : 'pointer',
+                          color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
+                          borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                        }}
+                      >
+                        <CheckIcon sx={{ fontSize: '0.875rem' }} />
+                      </Box>
+                      <Box
+                        component="button"
+                        onClick={() => setEditingSubjectId(null)}
+                        title="Cancel"
+                        sx={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                          borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                          '&:hover': { color: 'error.main' },
+                        }}
+                      >
+                        <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                      <Typography sx={{
+                        fontSize: '0.875rem',
+                        color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
+                        lineHeight: 1.4,
+                        wordBreak: 'break-word',
+                        textDecoration: isDone ? 'line-through' : 'none',
+                        flex: 1,
+                      }}>
+                        {subj}
+                      </Typography>
+                      {!isDone && !isViewer && (
+                        <Box
+                          component="button"
+                          onClick={() => startEditSubject(task)}
+                          title="Edit subject"
+                          sx={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                            borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                            opacity: 0.6, mt: '2px',
+                            '&:hover': { color: 'var(--orchid)', opacity: 1 },
+                          }}
+                        >
+                          <DriveFileRenameOutlineIcon sx={{ fontSize: '0.8rem' }} />
+                        </Box>
+                      )}
+                    </Box>
+                  )}
 
                   {(slabel || dueLabel || (!isDone && !isViewer)) && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
