@@ -20,7 +20,7 @@ const {
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter } = require('./visits');
-const { router: designVisitsRouter, setProjectContactsCacheInvalidator: setDesignVisitsCacheInvalidator } = require('./design-visits');
+const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings, ensureContactCustomerHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
@@ -79,7 +79,7 @@ setCustomerInfoSseClients(_hsWebhookSseClients);
 // Wire in the cache invalidator — called by customer-info.js before pushing
 // customer_info_submitted SSE so the board refetch gets fresh HubSpot data.
 setProjectContactsCacheInvalidator(() => _invalidateProjectContactsCache());
-setDesignVisitsCacheInvalidator(() => _invalidateProjectContactsCache());
+setDvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),
@@ -1581,24 +1581,30 @@ function _invalidateOpenLeadsCache() {
 // ── Project-Contacts in-memory cache (single-flight + 60 s TTL) ──────────────
 // Fetches contacts across ALL pipeline stages (not just OPEN_DEAL). Used by
 // the Projects page to show cards for every configured lead-status key.
-/**
- * Invalidate the project-contacts cache.
- *
- * Call this in every code path that mutates hs_lead_status or hw_lead_substatus
- * in HubSpot so the next /api/project-contacts fetch returns fresh data.
- *
- * Current call-sites (keep this list up to date at code review):
- *  • PATCH /api/contacts/:id                              (server.js)
- *  • POST  /api/card-actions/arrange-visit/outcome        (server.js)
- *  • runSubmitSideEffects in design-visits.js             (via setDesignVisitsCacheInvalidator)
- *  • customer-info.js before customer_info_submitted SSE  (via setProjectContactsCacheInvalidator)
- *  • HubSpot webhook hs_lead_status_changed               (server.js ~line 142)
- */
 const PROJECT_CONTACTS_TTL_MS = 60_000;
 let _projectContactsCache    = null; // { results, total, fetchedAt }
 let _projectContactsInFlight = null;
 function _invalidateProjectContactsCache() {
   _projectContactsCache = null;
+}
+
+/**
+ * Patch HubSpot contact properties and automatically bust the project-contacts
+ * cache. Use this helper (or its injected counterpart in other modules) for
+ * every HubSpot contact property PATCH so cache invalidation is structurally
+ * guaranteed and cannot be forgotten at a future call-site.
+ *
+ * @param {string} contactId  - HubSpot numeric contact id (un-encoded)
+ * @param {object} properties - property key/value map to patch
+ * @returns {Promise<import('axios').AxiosResponse>} the HubSpot PATCH response
+ */
+async function patchContactProperties(contactId, properties) {
+  const resp = await hubspotRequestWithRetry('patch',
+    `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+    { properties }
+  );
+  _invalidateProjectContactsCache();
+  return resp;
 }
 
 async function _fetchLeadStatusCounts() {
@@ -2098,7 +2104,12 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     }
     const safeContactId = encodeURIComponent(contactId);
 
-    // Retry transient HubSpot failures (network errors, 429, 5xx) with small bounded backoff.
+    // patchContactProperties wraps hubspotRequestWithRetry + cache invalidation.
+    // _invalidateProjectContactsCache is called inside it on every successful PATCH.
+    const patchResp = await patchContactProperties(contactId, properties);
+
+    // Verify all submitted properties were saved by reading back from HubSpot.
+    const propsToVerify = Object.keys(properties);
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const isTransient = err => {
       const s = err.response?.status;
@@ -2107,33 +2118,9 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       if (!err.response) return true; // network / timeout
       return false;
     };
-
-    let lastErr;
-    let patchResp;
-    const delays = [250, 750, 1500];
-    for (let attempt = 0; attempt <= delays.length; attempt++) {
-      try {
-        patchResp = await axios.patch(
-          `${HS}/crm/v3/objects/contacts/${safeContactId}`,
-          { properties },
-          { headers: getHubSpotHeaders() }
-        );
-        lastErr = null;
-        break;
-      } catch (err) {
-        lastErr = err;
-        if (attempt < delays.length && isTransient(err)) {
-          await sleep(delays[attempt]);
-          continue;
-        }
-        throw err;
-      }
-    }
-
-    // Verify all submitted properties were saved by reading back from HubSpot.
-    const propsToVerify = Object.keys(properties);
     let verifyResp;
     let verifyErr;
+    const delays = [250, 750, 1500];
     for (let attempt = 0; attempt <= delays.length; attempt++) {
       try {
         verifyResp = await axios.get(
@@ -2174,7 +2161,6 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
-      _invalidateProjectContactsCache();
     }
     res.json(patchResp.data);
   } catch (e) {
@@ -6587,11 +6573,7 @@ app.post('/api/card-actions/arrange-visit/outcome',
 
     try {
       await assertLeadStatusKey(newLeadStatus);
-      await hubspotRequestWithRetry('patch',
-        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-        { properties: { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } }
-      );
-      _invalidateProjectContactsCache();
+      await patchContactProperties(contactId, { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
       res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
@@ -6722,14 +6704,10 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
 
     try {
       await assertLeadStatusKey(key);
-      await hubspotRequestWithRetry('patch',
-        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
-        { properties: { hs_lead_status: key } }
-      );
+      await patchContactProperties(contactId, { hs_lead_status: key });
       clearContactCache();
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
-      _invalidateProjectContactsCache();
       res.json({ ok: true, advancedTo: key });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {

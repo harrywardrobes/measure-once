@@ -14,8 +14,10 @@ const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLeve
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 
-let _invalidateProjectContactsCache = () => {};
-function setProjectContactsCacheInvalidator(fn) { _invalidateProjectContactsCache = fn; }
+let _patchContactProperties = async (_contactId, _props) => {
+  logger.warn('[design-visits] patchContactProperties called before wiring — HubSpot PATCH skipped');
+};
+function setPatchContactProperties(fn) { _patchContactProperties = fn; }
 
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
@@ -396,11 +398,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
   const submittedLeadStatus = submitterCanEditPipeline ? handlerConfig?.submittedLeadStatus : null;
   if (submittedLeadStatus && getHubSpotCredential('access_token') && visit.contact_id) {
     try {
-      await hubspotRequestWithRetry('patch',
-        `${hubspotApiBase()}/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
-        { properties: { hs_lead_status: submittedLeadStatus } }
-      );
-      _invalidateProjectContactsCache();
+      await _patchContactProperties(visit.contact_id, { hs_lead_status: submittedLeadStatus });
     } catch (e) {
       logger.warn({ err: e.message }, '[design-visits] HubSpot lead status update failed:');
     }
@@ -2183,4 +2181,4 @@ router.get('/api/design-visit-images/:key', async (req, res) => {
   }
 });
 
-module.exports = { router: router, setProjectContactsCacheInvalidator };
+module.exports = { router: router, setPatchContactProperties };
