@@ -1073,7 +1073,9 @@ export function ActionHandlersPage() {
       return null;
     }
   });
-  const [dismissed,             setDismissed]             = useState('');
+  const [dismissed,             setDismissed]             = useState<string>(() => {
+    try { return localStorage.getItem('cah_conflict_dismissed_key') ?? ''; } catch { return ''; }
+  });
   const [loading,               setLoading]               = useState(true);
   const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
   const [conflictResolverOpen,  setConflictResolverOpen]  = useState<ConflictResolverOpenState | null>(null);
@@ -1245,7 +1247,10 @@ export function ActionHandlersPage() {
                     aria-label="Dismiss"
                     className="adm-cab-dismiss"
                     id="cah-conflict-banner-dismiss"
-                    onClick={() => setDismissed(conflictKey)}>
+                    onClick={() => {
+                      try { localStorage.setItem('cah_conflict_dismissed_key', conflictKey); } catch { /* restricted context */ }
+                      setDismissed(conflictKey);
+                    }}>
                     ✕
                   </button>
                 </div>
