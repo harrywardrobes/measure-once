@@ -7,9 +7,9 @@
  * - Drops lead_substatuses table
  * - Drops substatus_clear_failures table
  *
- * The hw_lead_substatus HubSpot property deletion is handled at startup by a
- * fire-and-forget IIFE in server.js. If deletion is blocked by a referencing
- * workflow/list, run: node scripts/cleanup-hw-lead-substatus.mjs --fix
+ * The hw_lead_substatus HubSpot contact property must be deleted manually in
+ * HubSpot Settings → Properties → Contacts if it still exists. Use
+ * scripts/cleanup-hw-lead-substatus.mjs to check for blockers and attempt deletion.
  */
 
 exports.up = (pgm) => {
