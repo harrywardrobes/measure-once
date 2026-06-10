@@ -397,13 +397,13 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 </Stack>
               </Box>
 
-              {attemptLog.length > 0 && (
+              {(attemptLog.length > 0 || historySessionCount > 0) && (
                 <Box>
                   <Divider sx={{ mb: 1 }} />
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Contact history
                   </Typography>
-                  {(() => {
+                  {attemptLog.length > 0 && (() => {
                     const methodOrder: Array<AttemptLogEntry['method']> = ['call', 'email', 'whatsapp'];
                     const methodLabels: Record<AttemptLogEntry['method'], (n: number) => string> = {
                       call:     (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
@@ -438,38 +438,69 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                       </Box>
                     );
                   })()}
-                  <Box
-                    sx={{
-                      maxHeight: 140,
-                      overflowY: 'auto',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 0.5,
-                    }}
-                  >
-                    {attemptLog.map((entry, i) => (
+                  {historySessionCount > 0 && (() => {
+                    const historyMethods = [
+                      historyEverCalled      && 'calls',
+                      historyEverEmailed     && 'emails',
+                      historyEverWhatsapped  && 'WhatsApp',
+                    ].filter(Boolean).join(', ');
+                    return (
                       <Box
-                        key={i}
                         sx={{
-                          display: 'flex',
-                          alignItems: 'baseline',
-                          gap: 0.75,
                           px: 1,
                           py: 0.5,
-                          borderRadius: 1,
+                          mb: 0.75,
                           bgcolor: 'grey.50',
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
                         }}
                       >
-                        <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
-                          {METHOD_LABEL[entry.method]}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                          {relativeTime(entry.attemptedAt)}
-                          {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                        <Typography variant="caption" color="text.secondary">
+                          <strong>Across all sessions · {historyTotalAttempts} {historyTotalAttempts === 1 ? 'attempt' : 'attempts'}</strong>
+                          {historyMethods ? ` · ${historyMethods}` : ''}
+                          {' '}
+                          <Box component="span" sx={{ color: 'text.disabled' }}>
+                            ({historySessionCount} prior {historySessionCount === 1 ? 'session' : 'sessions'})
+                          </Box>
                         </Typography>
                       </Box>
-                    ))}
-                  </Box>
+                    );
+                  })()}
+                  {attemptLog.length > 0 && (
+                    <Box
+                      sx={{
+                        maxHeight: 140,
+                        overflowY: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.5,
+                      }}
+                    >
+                      {attemptLog.map((entry, i) => (
+                        <Box
+                          key={i}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: 0.75,
+                            px: 1,
+                            py: 0.5,
+                            borderRadius: 1,
+                            bgcolor: 'grey.50',
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
+                            {METHOD_LABEL[entry.method]}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                            {relativeTime(entry.attemptedAt)}
+                            {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               )}
 
