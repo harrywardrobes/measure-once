@@ -44,7 +44,6 @@ interface DemoCardProps {
   email?: string;
   phone?: string;
   leadStatusLabel?: string;
-  substatusLabel?: string;
   customerNum?: string;
   rooms?: DemoRoom[];
   actionLabel?: string;
@@ -84,7 +83,6 @@ function DemoCustomerCard({
   email = 'jane@example.com',
   phone,
   leadStatusLabel,
-  substatusLabel,
   customerNum,
   rooms = [{ room: 'Main', stageKey: 'sales' }],
   actionLabel,
@@ -130,13 +128,10 @@ function DemoCustomerCard({
               </Box>
             </Typography>
           </Box>
-          {/* Right column — lead-status chip + optional substatus chip, matching the real CustomerCard layout */}
+          {/* Right column — lead-status chip, matching the real CustomerCard layout */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', md: 'flex-end' }, gap: 0.75 }}>
             {leadStatusLabel ? (
               <Chip label={leadStatusLabel} size="small" color="primary" variant="outlined" />
-            ) : null}
-            {substatusLabel ? (
-              <Chip label={substatusLabel} size="small" variant="outlined" />
             ) : null}
           </Box>
         </Box>
@@ -421,92 +416,4 @@ export const AllStageVariants: Story = {
   ),
 };
 
-// ── Substatus chip stories ───────────────────────────────────────────────────
-
-export const SubstatusWithLeadStatus: Story = {
-  name: 'Substatus chip — lead status + substatus set',
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'When `hs_lead_status` is set and a substatus label is found in `substatusMap`, **both chips** appear in the right column. The lead-status chip uses `color="primary"` (blue outlined); the substatus chip uses the default neutral outlined style, stacked below.',
-      },
-    },
-  },
-  render: () => (
-    <DemoCustomerCard
-      name="Emma Clarke"
-      email="emma@example.com"
-      phone="07700 900 456"
-      leadStatusLabel="Interested"
-      substatusLabel="Ready to book"
-      rooms={[{ room: 'Main', stageKey: 'sales' }]}
-    />
-  ),
-};
-
-export const SubstatusLeadStatusOnly: Story = {
-  name: 'Substatus chip — lead status set, no substatus',
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'When `hs_lead_status` is set but no substatus label is found in `substatusMap`, only the lead-status chip appears. The substatus chip is not rendered.',
-      },
-    },
-  },
-  render: () => (
-    <DemoCustomerCard
-      name="Marcus Lee"
-      email="marcus@example.com"
-      leadStatusLabel="Qualified"
-      rooms={[{ room: 'Main', stageKey: 'designvisit' }]}
-    />
-  ),
-};
-
-export const SubstatusNeitherSet: Story = {
-  name: 'Substatus chip — neither lead status nor substatus set',
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'When neither `hs_lead_status` nor a substatus is set, no status chips are rendered at all. The right column is empty and the card shows only stage pills and contact-detail chips.',
-      },
-    },
-  },
-  render: () => (
-    <DemoCustomerCard
-      name="Fatima Hassan"
-      email="fatima@example.com"
-      phone="07700 912 345"
-      rooms={[{ room: 'Main', stageKey: 'survey' }]}
-    />
-  ),
-};
-
-export const NarrowWidthBothChips: Story = {
-  name: 'Substatus chip — narrow width (mobile stacking)',
-  parameters: {
-    viewport: {
-      defaultViewport: 'mobile2',
-    },
-    docs: {
-      description: {
-        story:
-          'At ~375 px (mobile viewport) the right column switches to `alignItems: flex-start`, so the lead-status chip and substatus chip both align to the **left edge** below the contact name. This mirrors the real CustomerCard responsive layout (`alignItems: { xs: "flex-start", md: "flex-end" }`) and lets designers verify that both chips are visible and correctly stacked when the card is narrow.',
-      },
-    },
-  },
-  render: () => (
-    <DemoCustomerCard
-      name="Emma Clarke"
-      email="emma@example.com"
-      phone="07700 900 456"
-      leadStatusLabel="Interested"
-      substatusLabel="Ready to book"
-      rooms={[{ room: 'Main', stageKey: 'sales' }]}
-    />
-  ),
-};
 
