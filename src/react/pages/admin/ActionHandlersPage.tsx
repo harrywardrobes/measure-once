@@ -1063,7 +1063,16 @@ export function ActionHandlersPage() {
   const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
   const [conflicts,             setConflicts]             = useState<ConflictData>({ total: 0, conflicts: [] });
   const [orphanedCount,         setOrphanedCount]         = useState(0);
-  const [orphanedDismissed,     setOrphanedDismissed]     = useState(false);
+  const [orphanedDismissed,     setOrphanedDismissed]     = useState<number | null>(() => {
+    try {
+      const v = localStorage.getItem('cah_orphaned_dismissed_count');
+      if (v === null) return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  });
   const [dismissed,             setDismissed]             = useState('');
   const [loading,               setLoading]               = useState(true);
   const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
@@ -1187,11 +1196,14 @@ export function ActionHandlersPage() {
           </Box>
 
           {/* Orphaned bindings banner */}
-          {orphanedCount > 0 && !orphanedDismissed && (
+          {orphanedCount > 0 && orphanedCount !== orphanedDismissed && (
             <Alert
               data-testid="orphaned-bindings-banner"
               severity="warning"
-              onClose={() => setOrphanedDismissed(true)}
+              onClose={() => {
+                try { localStorage.setItem('cah_orphaned_dismissed_count', String(orphanedCount)); } catch { /* restricted context */ }
+                setOrphanedDismissed(orphanedCount);
+              }}
               sx={{ mb: 2 }}
             >
               <strong>{orphanedCount} legacy orphaned handler {orphanedCount === 1 ? 'binding' : 'bindings'} detected.</strong>{' '}
