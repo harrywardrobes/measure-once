@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CONFLICT_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Dialog from '@mui/material/Dialog';
@@ -1217,9 +1218,9 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
             height: 28,
             px: 1,
             borderRadius: '8px',
-            color: '#fdba74', // hex-color-ok: conflict-warning orange; no STATUS_COLORS token maps to this amber shade
-            bgcolor: 'rgba(249,115,22,0.16)',
-            border: '1px solid rgba(253,186,116,0.4)',
+            color: CONFLICT_COLORS.color,
+            bgcolor: CONFLICT_COLORS.bg,
+            border: `1px solid ${CONFLICT_COLORS.border}`,
             fontSize: 11,
             fontWeight: 600,
             letterSpacing: '0.03em',
@@ -1227,7 +1228,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
             whiteSpace: 'nowrap',
             cursor: 'pointer',
             font: 'inherit',
-            '&:hover': { bgcolor: 'rgba(249,115,22,0.26)' },
+            '&:hover': { bgcolor: CONFLICT_COLORS.bgHover },
           }}
         >
           <MergeTypeIcon fontSize="small" />
@@ -1259,11 +1260,11 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
                 mb: 2,
                 p: 1.5,
                 borderRadius: 1,
-                border: '1px solid rgba(253,186,116,0.5)',
-                bgcolor: 'rgba(249,115,22,0.12)',
+                border: `1px solid ${CONFLICT_COLORS.noticeBorder}`,
+                bgcolor: CONFLICT_COLORS.noticeBg,
               }}
             >
-              <Typography variant="body2" sx={{ color: '#fdba74', fontWeight: 600 }}> {/* hex-color-ok: conflict-warning orange; matches pill colour above */}
+              <Typography variant="body2" sx={{ color: CONFLICT_COLORS.color, fontWeight: 600 }}>
                 The server copy changed again before your restore could be applied. Nothing was
                 overwritten — please review the refreshed conflict below.
               </Typography>

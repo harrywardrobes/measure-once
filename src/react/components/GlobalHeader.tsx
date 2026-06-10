@@ -21,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
 import { useServiceStatuses, useConnectionToast, useOnlineStatus, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
-import { BRAND_COLORS } from '../theme';
+import { BRAND_COLORS, SYNC_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
@@ -200,9 +200,9 @@ export function OfflinePill() {
           height: 28,
           px: 1,
           borderRadius: '8px',
-          color: '#fcd34d', // hex-color-ok: offline-warning amber; validated by getComputedStyle in GlobalHeader.test.tsx
-          bgcolor: 'rgba(245,158,11,0.16)',
-          border: '1px solid rgba(252,211,77,0.4)',
+          color: SYNC_COLORS.pending.color,
+          bgcolor: SYNC_COLORS.pending.bg,
+          border: `1px solid ${SYNC_COLORS.pending.border}`,
           fontSize: 11,
           fontWeight: 600,
           letterSpacing: '0.03em',

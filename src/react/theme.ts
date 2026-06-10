@@ -104,12 +104,31 @@ export const CALENDAR_EVENT_COLORS: Record<string, { label: string; color: strin
 
 // ── Third-party provider brand colours ─────────────────────────────────
 export const PROVIDER_COLORS = {
-  google:          '#4285F4',
-  microsoft:       '#0078D4',
-  apple:           '#1C1C1E',
-  whatsApp:        '#25D366',
-  quickBooks:      '#2ca01c',
-  quickBooksHover: '#208015',
+  google:           '#4285F4',
+  microsoft:        '#0078D4',
+  apple:            '#1C1C1E',
+  whatsApp:         '#25D366',
+  whatsAppBadgeBg:  '#e8f5e9',
+  whatsAppBadgeText:'#2e7d32',
+  quickBooks:       '#2ca01c',
+  quickBooksHover:  '#208015',
+} as const;
+
+// ── Sync-state pill colours (SyncPill, offline indicator) ───────────────
+export const SYNC_COLORS = {
+  error:    { color: '#fca5a5', bg: 'rgba(239,68,68,0.16)',  border: 'rgba(252,165,165,0.4)' },
+  progress: { color: '#93c5fd', bg: 'rgba(59,130,246,0.16)', border: 'rgba(147,197,253,0.4)' },
+  pending:  { color: '#fcd34d', bg: 'rgba(245,158,11,0.16)', border: 'rgba(252,211,77,0.4)'  },
+} as const;
+
+// ── Conflict-warning colours (ConflictsReview pill + notice banner) ─────
+export const CONFLICT_COLORS = {
+  color:        '#fdba74',
+  bg:           'rgba(249,115,22,0.16)',
+  border:       'rgba(253,186,116,0.4)',
+  bgHover:      'rgba(249,115,22,0.26)',
+  noticeBorder: 'rgba(253,186,116,0.5)',
+  noticeBg:     'rgba(249,115,22,0.12)',
 } as const;
 
 // ── Stage / semantic colours (lead-status pills, nav, badges) ──────────

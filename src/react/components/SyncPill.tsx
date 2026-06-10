@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SYNC_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Dialog from '@mui/material/Dialog';
@@ -197,18 +198,18 @@ export default function SyncPill(props: SyncPillProps) {
   let tooltip: string;
 
   if (failed > 0) {
-    tone = { color: '#fca5a5', bg: 'rgba(239,68,68,0.16)', border: 'rgba(252,165,165,0.4)' }; // hex-color-ok: sync-error red; validated by getComputedStyle in SyncPill.test.tsx
+    tone = SYNC_COLORS.error;
     Icon = SyncProblemIcon;
     label = `${failed} failed`;
     tooltip = `${failed} change${failed === 1 ? '' : 's'} couldn't be synced after several attempts. Tap to review and retry.`;
   } else if (syncing > 0) {
-    tone = { color: '#93c5fd', bg: 'rgba(59,130,246,0.16)', border: 'rgba(147,197,253,0.4)' }; // hex-color-ok: sync-in-progress blue; validated by getComputedStyle in SyncPill.test.tsx
+    tone = SYNC_COLORS.progress;
     Icon = CloudSyncIcon;
     label = 'Syncing…';
     tooltip = 'Sending your saved changes to the server.';
   } else {
     const n = pending;
-    tone = { color: '#fcd34d', bg: 'rgba(245,158,11,0.16)', border: 'rgba(252,211,77,0.4)' }; // hex-color-ok: sync-pending amber; validated by getComputedStyle in SyncPill.test.tsx
+    tone = SYNC_COLORS.pending;
     Icon = CloudQueueIcon;
     label = `${n} pending`;
     tooltip = `${n} change${n === 1 ? '' : 's'} saved on this device, waiting to sync when you're back online.`;
