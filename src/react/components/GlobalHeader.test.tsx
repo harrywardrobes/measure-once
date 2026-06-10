@@ -85,4 +85,16 @@ describe('OfflinePill colour guards', () => {
     const pill = getByTestId('offline-pill');
     expect(window.getComputedStyle(pill).borderTopColor).toBe('rgba(252, 211, 77, 0.4)');
   });
+
+  it('offline pill border width is 1px', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).borderTopWidth).toBe('1px');
+  });
+
+  it('offline pill border radius is 8px', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).borderRadius).toBe('8px');
+  });
 });
