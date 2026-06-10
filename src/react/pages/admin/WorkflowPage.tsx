@@ -614,20 +614,26 @@ export function WorkflowPage() {
       {!loading && !error && (
         <Box>
           <Divider sx={{ mb: 2 }} />
-          <Stack spacing={0}>
-            {workflowStages.map(stage => (
-              <StageAccordion
-                key={stage.key}
-                stageKey={stage.key}
-                stageLabel={stage.label}
-                statuses={statuses}
-                substatuses={substatuses}
-                labels={labels}
-                handlers={handlers}
-                emailTemplates={emailTemplates}
-              />
-            ))}
-          </Stack>
+          {workflowStages.length === 0 ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              No stages configured. Add stages in the <strong>Stages</strong> tab to set up your workflow.
+            </Alert>
+          ) : (
+            <Stack spacing={0}>
+              {workflowStages.map(stage => (
+                <StageAccordion
+                  key={stage.key}
+                  stageKey={stage.key}
+                  stageLabel={stage.label}
+                  statuses={statuses}
+                  substatuses={substatuses}
+                  labels={labels}
+                  handlers={handlers}
+                  emailTemplates={emailTemplates}
+                />
+              ))}
+            </Stack>
+          )}
           <Stack direction="row" spacing={1.5} sx={{ mt: 2.5 }}>
             <Button
               size="small"
