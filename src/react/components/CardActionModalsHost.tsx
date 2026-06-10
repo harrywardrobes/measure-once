@@ -8,7 +8,9 @@ import { InstallationSlotModal } from './modals/InstallationSlotModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
 import { ArrangeVisitModal } from './modals/ArrangeVisitModal';
-import { ContactCustomerModal } from './modals/ContactCustomerModal';
+const ContactCustomerModal = React.lazy(() =>
+  import('./modals/ContactCustomerModal').then(m => ({ default: m.ContactCustomerModal }))
+);
 const ReviewCustomerPhotosDrawer = React.lazy(() =>
   import('./modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
 );
