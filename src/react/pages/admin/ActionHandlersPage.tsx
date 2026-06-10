@@ -45,6 +45,9 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+const CAH_ORPHANED_DISMISSED_KEY  = 'cah_orphaned_dismissed_count';
+const CAH_CONFLICT_DISMISSED_KEY  = 'cah_conflict_dismissed_key';
+
 const HANDLER_TYPE_LABELS: Record<string, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',
   start_design_visit:           'Start design visit wizard',
@@ -1071,7 +1074,7 @@ export function ActionHandlersPage() {
   const [orphanedCount,         setOrphanedCount]         = useState(0);
   const [orphanedDismissed,     setOrphanedDismissed]     = useState<number | null>(() => {
     try {
-      const v = localStorage.getItem('cah_orphaned_dismissed_count');
+      const v = localStorage.getItem(CAH_ORPHANED_DISMISSED_KEY);
       if (v === null) return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
@@ -1080,7 +1083,7 @@ export function ActionHandlersPage() {
     }
   });
   const [dismissed,             setDismissed]             = useState<string>(() => {
-    try { return localStorage.getItem('cah_conflict_dismissed_key') ?? ''; } catch { return ''; }
+    try { return localStorage.getItem(CAH_CONFLICT_DISMISSED_KEY) ?? ''; } catch { return ''; }
   });
   const [loading,               setLoading]               = useState(true);
   const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
@@ -1209,7 +1212,7 @@ export function ActionHandlersPage() {
               data-testid="orphaned-bindings-banner"
               severity="warning"
               onClose={() => {
-                try { localStorage.setItem('cah_orphaned_dismissed_count', String(orphanedCount)); } catch { /* restricted context */ }
+                try { localStorage.setItem(CAH_ORPHANED_DISMISSED_KEY, String(orphanedCount)); } catch { /* restricted context */ }
                 setOrphanedDismissed(orphanedCount);
               }}
               sx={{ mb: 2 }}
@@ -1254,7 +1257,7 @@ export function ActionHandlersPage() {
                     className="adm-cab-dismiss"
                     id="cah-conflict-banner-dismiss"
                     onClick={() => {
-                      try { localStorage.setItem('cah_conflict_dismissed_key', conflictKey); } catch { /* restricted context */ }
+                      try { localStorage.setItem(CAH_CONFLICT_DISMISSED_KEY, conflictKey); } catch { /* restricted context */ }
                       setDismissed(conflictKey);
                     }}>
                     ✕
