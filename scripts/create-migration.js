@@ -52,13 +52,37 @@ function toKebab(name) {
     .replace(/^-|-$/g, '');
 }
 
-const rawName = process.argv.slice(2).join(' ');
+const args = process.argv.slice(2);
+const forceFlag = args.includes('--force');
+const rawName = args.filter((a) => a !== '--force').join(' ');
 if (!rawName) {
-  console.error('Usage: npm run db:migrate:create -- <migration-name>');
+  console.error('Usage: npm run db:migrate:create -- <migration-name> [--force]');
   process.exit(1);
 }
 
 const name = toKebab(rawName);
+
+// Sanity-check: warn and abort if a migration with the same descriptive name
+// already exists, regardless of its timestamp prefix.  Pass --force to skip.
+const existingWithSameName = fs
+  .readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith(`_${name}.js`));
+if (existingWithSameName.length > 0) {
+  if (forceFlag) {
+    console.warn(
+      `Warning: a migration named "${name}" already exists:\n` +
+        existingWithSameName.map((f) => `  migrations/${f}`).join('\n') +
+        '\nProceeding anyway because --force was passed.'
+    );
+  } else {
+    console.error(
+      `Error: a migration named "${name}" already exists:\n` +
+        existingWithSameName.map((f) => `  migrations/${f}`).join('\n') +
+        '\nRename your migration or pass --force to create it anyway.'
+    );
+    process.exit(1);
+  }
+}
 
 const template = `'use strict';
 
