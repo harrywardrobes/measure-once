@@ -14,6 +14,7 @@ export { NO_CONFIG_HANDLER_TYPES };
 
 export const HANDLER_TYPES = [
   { value: 'add_design_visit_to_calendar',  label: 'Add design visit to calendar' },
+  { value: 'contact_customer',              label: 'Contact customer (call / email / WhatsApp)' },
   { value: 'start_design_visit',            label: 'Start design visit wizard' },
   { value: 'upload_photos_and_info',        label: 'Upload photos & info' },
   { value: 'review_customer_photos',        label: 'Review customer photos' },

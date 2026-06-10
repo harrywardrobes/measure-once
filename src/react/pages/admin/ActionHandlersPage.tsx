@@ -51,6 +51,7 @@ const HANDLER_TYPE_LABELS: Record<string, string> = {
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
   arrange_visit:                'Arrange visit (call → book or email)',
+  contact_customer:             'Contact customer (call / email / WhatsApp)',
 };
 
 export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
@@ -59,6 +60,7 @@ export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'upload_photos_and_info',
   'review_customer_photos',
   'arrange_visit',
+  'contact_customer',
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {

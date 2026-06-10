@@ -25,6 +25,7 @@ function lsStageToKey(stage: string): string {
 const SELECTABLE_HANDLER_TYPES: Array<{ value: string; label: string }> = [
   { value: '',                             label: 'Show message (default)' },
   { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
+  { value: 'contact_customer',             label: 'Contact customer (call / email / WhatsApp)' },
   { value: 'review_customer_photos',       label: 'Review customer photos' },
   { value: 'start_design_visit',           label: 'Start design visit wizard' },
   { value: 'upload_photos_and_info',       label: 'Upload photos & info' },

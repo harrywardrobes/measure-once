@@ -56,6 +56,10 @@ export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
     steps: '2+ steps — call outcome → Booked / No answer / Call back / Not proceeding',
     hubspot: 'Sets lead status based on outcome (e.g. DSSC_AGREED, DSSC_SUGGESTED, not_suitable)',
   },
+  contact_customer: {
+    steps: '1–2 steps — log contact attempts → optionally advance lead status',
+    hubspot: 'Advances lead status to ATTEMPTED_TO_CONTACT or NO_RESPONSE',
+  },
 };
 
 export const HANDLER_TYPE_LABELS: Record<string, string> = {
@@ -69,12 +73,14 @@ export const HANDLER_TYPE_LABELS: Record<string, string> = {
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
   arrange_visit:                'Arrange visit',
+  contact_customer:             'Contact customer (call / email / WhatsApp)',
 };
 
 export const HANDLER_EMAIL_TEMPLATES: Record<string, string[]> = {
   upload_photos_and_info:       ['customer_invite', 'admin_notification', 'customer_thank_you'],
   review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
   arrange_visit:                ['arrange_visit_no_answer'],
+  contact_customer:             [],
   start_design_visit:           [],
   add_design_visit_to_calendar: [],
   schedule_visit:               [],

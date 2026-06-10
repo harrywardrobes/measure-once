@@ -531,6 +531,7 @@ const HANDLER_TYPE_NAMES = {
   schedule_installation_slot:   'Schedule installation slot',
   upload_photos_and_info:       'Upload photos and info',
   review_customer_photos:       'Review customer photos',
+  contact_customer:             'Contact customer',
 };
 
 // Fallback used when neither default_handler_type nor SUBSTATUS_HANDLER_MAP has an entry.
@@ -662,9 +663,64 @@ async function ensureSubstatusHandlerBindings() {
   return seeded;
 }
 
+// ── Seed contact_customer handler + stage-based bindings ─────────────────────
+// Ensures a contact_customer handler row exists and two stage-based bindings:
+//   (sales, '')                → the "no lead status" card slot → "Call Customer"
+//   (sales, 'attempted_to_contact') → the ATTEMPTED_TO_CONTACT card slot → "Call Again"
+// Also seeds initial stage_action_labels rows (ON CONFLICT DO NOTHING so admin
+// edits always win). Idempotent.
+async function ensureContactCustomerHandlerBindings() {
+  // Step 1: ensure a contact_customer handler exists.
+  let handlerId;
+  const existing = await pool.query(
+    `SELECT id FROM card_action_handlers WHERE type = 'contact_customer' ORDER BY id LIMIT 1`
+  );
+  if (existing.rows.length) {
+    handlerId = existing.rows[0].id;
+  } else {
+    const ins = await pool.query(
+      `INSERT INTO card_action_handlers (name, type, config)
+       VALUES ('Contact customer', 'contact_customer', '{}')
+       RETURNING id`
+    );
+    handlerId = ins.rows[0].id;
+  }
+
+  // Step 2: ensure bindings for (sales, '') and (sales, 'attempted_to_contact').
+  const bindings = [
+    { stage_key: 'sales', status_key: '' },
+    { stage_key: 'sales', status_key: 'attempted_to_contact' },
+  ];
+  for (const b of bindings) {
+    await pool.query(
+      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key, substatus_id)
+       VALUES ($1, $2, $3, NULL)
+       ON CONFLICT DO NOTHING`,
+      [handlerId, b.stage_key, b.status_key]
+    );
+  }
+
+  // Step 3: seed stage_action_labels defaults (ON CONFLICT DO NOTHING preserves admin edits).
+  const labels = [
+    { stage_key: 'sales', status_key: '',                      label: 'Call Customer' },
+    { stage_key: 'sales', status_key: 'attempted_to_contact',  label: 'Call Again' },
+  ];
+  for (const l of labels) {
+    await pool.query(
+      `INSERT INTO stage_action_labels (stage_key, status_key, label)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (stage_key, status_key) DO NOTHING`,
+      [l.stage_key, l.status_key, l.label]
+    );
+  }
+
+  logger.info('[card-action-seeds] contact_customer handler and bindings ensured.');
+}
+
 module.exports = {
   router,
   ensurePhotoReviewOutcomesTable,
   ensureDefaultReviewHandlerBinding,
   ensureSubstatusHandlerBindings,
+  ensureContactCustomerHandlerBindings,
 };

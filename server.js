@@ -22,7 +22,7 @@ const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter } = require('./visits');
 const { router: designVisitsRouter, setProjectContactsCacheInvalidator: setDesignVisitsCacheInvalidator } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
-const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
+const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings, ensureContactCustomerHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const app = express();
@@ -6118,6 +6118,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   arrange_visit(_cfg) {
     return { value: {} };
   },
+  // No required config keys — contact info and attempt state are fetched at open time.
+  contact_customer(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -6606,6 +6610,144 @@ app.post('/api/card-actions/arrange-visit/outcome',
   }
 );
 
+// ── contact_customer: load contact info + attempt tracking ───────────────────
+app.post('/api/card-actions/contact-customer',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,hs_lead_status' }, timeout: 15000 }
+      );
+      const props = r.data?.properties || {};
+      const firstName = String(props.firstname || '');
+      const lastName  = String(props.lastname  || '');
+      const contactName  = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactEmail = String(props.email || '');
+      const phone        = String(props.phone || '');
+      const mobile       = String(props.mobilephone || '');
+      const whatsapp     = String(props.hs_whatsapp_phone_number || '');
+      const leadStatus   = props.hs_lead_status || null;
+
+      const { rows } = await pool.query(
+        `SELECT call_attempted, email_sent, whatsapp_sent
+         FROM contact_attempt_tracking
+         WHERE hubspot_contact_id = $1`,
+        [contactId]
+      );
+      const attempts = rows[0] || { call_attempted: false, email_sent: false, whatsapp_sent: false };
+
+      res.json({
+        contactName,
+        contactEmail,
+        phone,
+        mobile,
+        whatsapp,
+        leadStatus,
+        callAttempted:  attempts.call_attempted,
+        emailSent:      attempts.email_sent,
+        whatsappSent:   attempts.whatsapp_sent,
+      });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/contact-customer error:');
+      res.status(502).json({ error: e.message || 'Unexpected error.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── contact_customer: upsert attempt-tracking flags ──────────────────────────
+app.patch('/api/card-actions/contact-customer/:contactId/attempts',
+  isAuthenticated, requirePrivilege('member'),
+  async (req, res) => {
+    const contactId = req.params.contactId;
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const allowed = ['call_attempted', 'email_sent', 'whatsapp_sent'];
+    const updates = {};
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        updates[field] = !!req.body[field];
+      }
+    }
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'At least one of call_attempted, email_sent, whatsapp_sent is required.' });
+    }
+
+    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`).join(', ');
+    const values     = [contactId, ...Object.values(updates)];
+
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO contact_attempt_tracking (hubspot_contact_id, ${Object.keys(updates).join(', ')}, updated_at)
+         VALUES ($1, ${Object.keys(updates).map((_, i) => `$${i + 2}`).join(', ')}, NOW())
+         ON CONFLICT (hubspot_contact_id) DO UPDATE
+         SET ${setClauses}, updated_at = NOW()
+         RETURNING call_attempted, email_sent, whatsapp_sent, updated_at`,
+        values
+      );
+      res.json(rows[0]);
+    } catch (e) {
+      logger.error({ err: e.message }, 'PATCH /api/card-actions/contact-customer/:contactId/attempts error:');
+      res.status(500).json({ error: 'Could not save attempt tracking.' });
+    }
+  }
+);
+
+// ── contact_customer: advance lead status ────────────────────────────────────
+app.post('/api/card-actions/contact-customer/:contactId/advance-status',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = req.params.contactId;
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const target = String(req.body?.target || '').toLowerCase();
+    const TARGET_MAP = {
+      attempted_to_contact: 'ATTEMPTED_TO_CONTACT',
+      no_response:          'NO_RESPONSE',
+    };
+    const key = TARGET_MAP[target];
+    if (!key) {
+      return res.status(400).json({ error: 'target must be "attempted_to_contact" or "no_response".' });
+    }
+
+    try {
+      await assertLeadStatusKey(key);
+      await hubspotRequestWithRetry('patch',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        { properties: { hs_lead_status: key } }
+      );
+      clearContactCache();
+      _invalidateLeadStatusCountsCache();
+      _invalidateOpenLeadsCache();
+      _invalidateProjectContactsCache();
+      res.json({ ok: true, advancedTo: key });
+    } catch (e) {
+      if (e.code === 'LEAD_STATUS_REMOVED') {
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
+      }
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/contact-customer/:contactId/advance-status error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
 // ── WhatsApp config probe (no creds needed — just reports if configured) ──────
 app.get('/api/whatsapp/config', isAuthenticated, (req, res) => {
   res.json({
@@ -6981,6 +7123,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Lead status shorthand backfill failed'); }
     try { await checkHardcodedLeadStatusKeys(); }
     catch (e) { logger.error({ err: e }, '  Hardcoded lead status key check failed'); }
+    try { await ensureContactCustomerHandlerBindings(); }
+    catch (e) { logger.error({ err: e }, '  Contact customer handler binding setup failed'); }
     try { await seedStageActionLabelsDefaults(); }
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }

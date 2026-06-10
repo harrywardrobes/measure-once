@@ -129,6 +129,9 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/phone-call-summary', level: 'member', body: { contactId: '0', summary: 'noop' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit',         level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit/outcome', level: 'member', body: { contactId: '0', outcome: 'booked', visitType: 'design' }, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },
+  { method: 'PATCH',  path: '/api/card-actions/contact-customer/0/attempts',                level: 'member', body: { call_attempted: true } },
+  { method: 'POST',   path: '/api/card-actions/contact-customer/0/advance-status',          level: 'member', body: { target: 'attempted_to_contact' }, needsHubspot: true },
   { method: 'PATCH',  path: '/api/visits/0',                  level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/visits/0',                  level: 'member' },
   // Design-visit member-level surface (design-visits.js).
