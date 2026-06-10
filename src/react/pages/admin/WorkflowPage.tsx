@@ -34,7 +34,7 @@ interface Substatus {
   label: string; action_label: string; sort_order: number;
 }
 interface CALabel { stage_key: string; status_key: string; label: string; }
-interface Binding { stage_key?: string; status_key?: string; substatus_id?: number | null; }
+interface Binding { stage_key?: string; status_key?: string; }
 interface Handler {
   id: number; name: string; type: string;
   config: Record<string, unknown>; bindings: Binding[];
@@ -51,14 +51,11 @@ function handlersForSlot(
   handlers: Handler[],
   stageKey: string,
   statusKey: string,
-  substatusId?: number | null,
 ): Handler[] {
-  return handlers.filter(h => h.bindings?.some(b => {
-    if (substatusId != null) return Number(b.substatus_id) === substatusId;
-    if (b.substatus_id != null) return false;
-    return (b.stage_key || '').toLowerCase()  === (stageKey  || '').toLowerCase()
-        && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase();
-  }));
+  return handlers.filter(h => h.bindings?.some(b =>
+    (b.stage_key || '').toLowerCase()  === (stageKey  || '').toLowerCase()
+    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase(),
+  ));
 }
 
 function handlerDisplayName(h: Handler): string {
@@ -274,9 +271,7 @@ function StageAccordion({
 
   const hasAnyHandler = stageStatuses.some(ls => {
     const lsKey = String(ls.key || '').toLowerCase();
-    if (handlersForSlot(handlers, stageKey, lsKey).length > 0) return true;
-    const subs = (subsByLs.get(ls.key.toUpperCase()) ?? []);
-    return subs.some(s => handlersForSlot(handlers, stageKey, lsKey, s.id).length > 0);
+    return handlersForSlot(handlers, stageKey, lsKey).length > 0;
   });
 
   return (
@@ -385,7 +380,7 @@ function StageAccordion({
                       </Typography>
                       <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
                         {subs.map(sub => {
-                          const subHandlers = handlersForSlot(handlers, stageKey, lsKey, sub.id);
+                          const subHandlers = handlersForSlot(handlers, stageKey, lsKey);
                           const subButtonLabel = sub.action_label || undefined;
                           return (
                             <Accordion

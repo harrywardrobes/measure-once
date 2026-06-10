@@ -5417,9 +5417,8 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
 //     note is created against the active contact, then the UI offers to draft
 //     a follow-up email.
 //
-// A handler can be bound to a (stage_key, status_key) pair OR a
-// lead_substatus_id. Both binding shapes are mutually exclusive per row, and
-// each target slot can hold at most one handler.
+// A handler is bound to a (stage_key, status_key) pair.
+// Each target slot can hold at most one handler.
 // Per-type config validators. The set of valid handler types is derived from
 // the keys of this map, so adding a new handler type here automatically adds
 // it to CARD_ACTION_HANDLER_TYPES — the two cannot drift out of sync.
@@ -5693,7 +5692,7 @@ app.get('/api/card-action-handlers', isAuthenticated, async (req, res) => {
     for (const r of h.rows) byId[r.id] = { ...r, bindings: [] };
     for (const r of b.rows) {
       if (byId[r.handler_id]) byId[r.handler_id].bindings.push({
-        stage_key: r.stage_key, status_key: r.status_key, substatus_id: r.substatus_id,
+        stage_key: r.stage_key, status_key: r.status_key,
       });
     }
     res.set('Cache-Control', 'no-store');
@@ -5711,14 +5710,14 @@ app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async 
        FROM card_action_handlers ORDER BY id ASC`
     );
     const b = await pool.query(
-      `SELECT id, handler_id, stage_key, status_key, substatus_id
+      `SELECT id, handler_id, stage_key, status_key
        FROM card_action_handler_bindings ORDER BY id ASC`
     );
     const byId = {};
     for (const r of h.rows) byId[r.id] = { ...r, bindings: [] };
     for (const r of b.rows) {
       if (byId[r.handler_id]) byId[r.handler_id].bindings.push({
-        id: r.id, stage_key: r.stage_key, status_key: r.status_key, substatus_id: r.substatus_id,
+        id: r.id, stage_key: r.stage_key, status_key: r.status_key,
       });
     }
     res.json(Object.values(byId));
@@ -5731,47 +5730,23 @@ app.get('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async 
 app.get('/api/admin/card-action-handlers/conflicts', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const labelDups = await pool.query(`
-      SELECT b.stage_key, b.status_key, NULL::int AS substatus_id,
+      SELECT b.stage_key, b.status_key,
              COUNT(*) AS cnt,
              array_agg(DISTINCT b.handler_id ORDER BY b.handler_id) AS handler_ids,
              array_agg(DISTINCT h.name ORDER BY h.name) AS handler_names
       FROM card_action_handler_bindings b
       JOIN card_action_handlers h ON h.id = b.handler_id
-      WHERE b.substatus_id IS NULL
       GROUP BY b.stage_key, b.status_key
       HAVING COUNT(*) > 1
     `);
-    const substatusDups = await pool.query(`
-      SELECT NULL AS stage_key, NULL AS status_key, b.substatus_id,
-             COUNT(*) AS cnt,
-             array_agg(DISTINCT b.handler_id ORDER BY b.handler_id) AS handler_ids,
-             array_agg(DISTINCT h.name ORDER BY h.name) AS handler_names
-      FROM card_action_handler_bindings b
-      JOIN card_action_handlers h ON h.id = b.handler_id
-      WHERE b.substatus_id IS NOT NULL
-      GROUP BY b.substatus_id
-      HAVING COUNT(*) > 1
-    `);
-    const conflicts = [
-      ...labelDups.rows.map(r => ({
-        type: 'label',
-        stage_key: r.stage_key,
-        status_key: r.status_key,
-        substatus_id: null,
-        count: parseInt(r.cnt, 10),
-        handler_ids: r.handler_ids,
-        handler_names: r.handler_names,
-      })),
-      ...substatusDups.rows.map(r => ({
-        type: 'substatus',
-        stage_key: null,
-        status_key: null,
-        substatus_id: r.substatus_id,
-        count: parseInt(r.cnt, 10),
-        handler_ids: r.handler_ids,
-        handler_names: r.handler_names,
-      })),
-    ];
+    const conflicts = labelDups.rows.map(r => ({
+      type: 'label',
+      stage_key: r.stage_key,
+      status_key: r.status_key,
+      count: parseInt(r.cnt, 10),
+      handler_ids: r.handler_ids,
+      handler_names: r.handler_names,
+    }));
     res.json({ conflicts, total: conflicts.length });
   } catch (e) {
     logger.error({ err: e.message }, 'GET /api/admin/card-action-handlers/conflicts error:');
@@ -5900,25 +5875,14 @@ app.delete('/api/admin/card-action-handlers/:id/binding', isAuthenticated, requi
   try {
     await client.query('BEGIN');
 
-    let delBinding;
-    if (value.substatus_id != null) {
-      delBinding = await client.query(
-        `DELETE FROM card_action_handler_bindings
-         WHERE handler_id = $1 AND substatus_id = $2
-         RETURNING id`,
-        [id, value.substatus_id]
-      );
-    } else {
-      delBinding = await client.query(
-        `DELETE FROM card_action_handler_bindings
-         WHERE handler_id = $1
-           AND substatus_id IS NULL
-           AND LOWER(COALESCE(stage_key, ''))  = $2
-           AND LOWER(COALESCE(status_key, '')) = $3
-         RETURNING id`,
-        [id, value.stage_key || '', value.status_key || '']
-      );
-    }
+    const delBinding = await client.query(
+      `DELETE FROM card_action_handler_bindings
+       WHERE handler_id = $1
+         AND LOWER(COALESCE(stage_key, ''))  = $2
+         AND LOWER(COALESCE(status_key, '')) = $3
+       RETURNING id`,
+      [id, value.stage_key || '', value.status_key || '']
+    );
 
     if (!delBinding.rows.length) {
       await client.query('ROLLBACK');
