@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
 import { formatCurrency } from '../utils/formatters';
+import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -940,10 +941,7 @@ export function CustomersPage(): React.ReactElement {
 
   // Listen for design_visit_draft_changed broadcast to refresh draft IDs.
   React.useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('design_visit_draft_changed');
-    bc.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
-    return () => bc.close();
+    return subscribeDesignVisitDraftChanged(() => setDraftRefreshTick((t) => t + 1));
   }, []);
 
   // After the first successful contacts render, restore the scroll

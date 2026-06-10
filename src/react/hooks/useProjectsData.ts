@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 
 export interface ProjectContact {
   id: string;
@@ -226,10 +227,7 @@ export function useProjectsData(): ProjectsData {
 
   // Listen for design_visit_draft_changed broadcast to refresh draft IDs.
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const draftChannel = new BroadcastChannel('design_visit_draft_changed');
-    draftChannel.addEventListener('message', () => setDraftRefreshTick((t) => t + 1));
-    return () => draftChannel.close();
+    return subscribeDesignVisitDraftChanged(() => setDraftRefreshTick((t) => t + 1));
   }, []);
 
   // ── Patch contact properties when renamed in another tab ───────────────────
