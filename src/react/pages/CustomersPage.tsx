@@ -842,7 +842,7 @@ function CustomerCard({
             borderColor: 'divider',
           }}
         >
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
             {lastAttempt.count > 0
               ? (() => {
                   const methodOrder = ['call', 'email', 'whatsapp'];
