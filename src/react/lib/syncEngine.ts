@@ -124,6 +124,28 @@ function surfaceConflict(entry: QueueEntry): void {
   }
 }
 
+/**
+ * After a successful replay of an `arrange-visit/outcome` write, broadcast the
+ * resulting lead-status change so any open Projects board tabs update without a
+ * manual refresh. Mirrors the `_broadcastLeadStatusChange` call in
+ * ArrangeVisitModal that is intentionally skipped when the write is queued.
+ */
+function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void {
+  if (!entry.url.endsWith('/arrange-visit/outcome')) return;
+  const body = entry.body as { contactId?: string } | null | undefined;
+  const contactId = body?.contactId;
+  if (!contactId) return;
+  const d = data as { hs_lead_status?: string; hw_lead_substatus?: string } | null | undefined;
+  const hs_lead_status = d?.hs_lead_status ?? '';
+  const hw_lead_substatus = d?.hw_lead_substatus ?? '';
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    const ch = new BroadcastChannel('contact_properties_changed');
+    ch.postMessage({ contactId, props: { hs_lead_status, hw_lead_substatus } });
+    ch.close();
+  } catch { /* non-fatal */ }
+}
+
 // ── Replay primitives ────────────────────────────────────────────────────────────
 
 interface ReplayResult {
@@ -250,6 +272,7 @@ async function processEntry(entry: QueueEntry): Promise<void> {
     await removeEntry(entry.id);
     await markSynced();
     surfaceSuccess(entry);
+    broadcastLeadStatusAfterReplay(entry, result.data);
     log('info', 'sync_ok', { area: entry.area, label: entry.label, status: result.status });
     return;
   }
