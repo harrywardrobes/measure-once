@@ -1063,7 +1063,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 .admin-page { min-height: 100vh; }
 
-.admin-page .page { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
+.admin-page .page { padding: 28px 20px 60px; }
 .admin-page .page-title { font-size: 1.25rem; font-weight: 700; margin: 0 0 2px; }
 .admin-page .page-sub   { color: var(--ink-3); font-size: .88rem; margin: 0 0 16px; }
 
