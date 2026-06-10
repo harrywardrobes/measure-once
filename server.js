@@ -20,7 +20,7 @@ const {
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter } = require('./visits');
-const { router: designVisitsRouter } = require('./design-visits');
+const { router: designVisitsRouter, setProjectContactsCacheInvalidator: setDesignVisitsCacheInvalidator } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setProjectContactsCacheInvalidator } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
@@ -79,6 +79,7 @@ setCustomerInfoSseClients(_hsWebhookSseClients);
 // Wire in the cache invalidator — called by customer-info.js before pushing
 // customer_info_submitted SSE so the board refetch gets fresh HubSpot data.
 setProjectContactsCacheInvalidator(() => _invalidateProjectContactsCache());
+setDesignVisitsCacheInvalidator(() => _invalidateProjectContactsCache());
 
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),
@@ -1580,7 +1581,19 @@ function _invalidateOpenLeadsCache() {
 // ── Project-Contacts in-memory cache (single-flight + 60 s TTL) ──────────────
 // Fetches contacts across ALL pipeline stages (not just OPEN_DEAL). Used by
 // the Projects page to show cards for every configured lead-status key.
-// Invalidated on any hs_lead_status mutation or lead_status_config change.
+/**
+ * Invalidate the project-contacts cache.
+ *
+ * Call this in every code path that mutates hs_lead_status or hw_lead_substatus
+ * in HubSpot so the next /api/project-contacts fetch returns fresh data.
+ *
+ * Current call-sites (keep this list up to date at code review):
+ *  • PATCH /api/contacts/:id                              (server.js)
+ *  • POST  /api/card-actions/arrange-visit/outcome        (server.js)
+ *  • runSubmitSideEffects in design-visits.js             (via setDesignVisitsCacheInvalidator)
+ *  • customer-info.js before customer_info_submitted SSE  (via setProjectContactsCacheInvalidator)
+ *  • HubSpot webhook hs_lead_status_changed               (server.js ~line 142)
+ */
 const PROJECT_CONTACTS_TTL_MS = 60_000;
 let _projectContactsCache    = null; // { results, total, fetchedAt }
 let _projectContactsInFlight = null;
@@ -6559,6 +6572,7 @@ app.post('/api/card-actions/arrange-visit/outcome',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         { properties: { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } }
       );
+      _invalidateProjectContactsCache();
       res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {

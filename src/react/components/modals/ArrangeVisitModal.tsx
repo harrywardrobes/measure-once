@@ -242,6 +242,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       }
       clearDraft(key);
       showToast(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
+      if (!res.queued) {
+        const d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
+        _broadcastLeadStatusChange(ctx.contactId, {
+          hs_lead_status: d?.hs_lead_status ?? '',
+          hw_lead_substatus: d?.hw_lead_substatus ?? '',
+        });
+      }
       setStep('done');
       onClose();
     } catch (e) {
@@ -288,6 +295,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       showToast(res.queued ? 'Booking saved offline — it will sync when you reconnect' : 'Visit booked and status updated', false);
 
       if (!res.queued) {
+        const d = res.data as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
+        _broadcastLeadStatusChange(ctx.contactId, {
+          hs_lead_status: d?.hs_lead_status ?? '',
+          hw_lead_substatus: d?.hw_lead_substatus ?? '',
+        });
         const calendarHandler = _findCalendarHandler();
         if (calendarHandler) {
           const d = window as unknown as {
@@ -337,13 +349,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
         subject: emailSubject,
         body: emailBody,
       });
-      await POST('/api/card-actions/arrange-visit/outcome', {
+      const outcomeData = await POST('/api/card-actions/arrange-visit/outcome', {
         contactId: ctx.contactId,
         outcome: 'email_sent',
         visitType,
-      });
+      }) as { hs_lead_status?: string; hw_lead_substatus?: string } | undefined;
       clearDraft(key);
       showToast('Email sent and status updated', false);
+      _broadcastLeadStatusChange(ctx.contactId, {
+        hs_lead_status: outcomeData?.hs_lead_status ?? '',
+        hw_lead_substatus: outcomeData?.hw_lead_substatus ?? '',
+      });
       setStep('done');
       onClose();
     } catch (e) {
@@ -579,6 +595,18 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       />
     </LocalizationProvider>
   );
+}
+
+function _broadcastLeadStatusChange(
+  contactId: string,
+  props: { hs_lead_status: string; hw_lead_substatus: string },
+): void {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try {
+    const ch = new BroadcastChannel('contact_properties_changed');
+    ch.postMessage({ contactId, props });
+    ch.close();
+  } catch { /* ignore — non-fatal */ }
 }
 
 function _findCalendarHandler(): CardActionHandlerData | null {

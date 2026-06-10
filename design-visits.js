@@ -14,6 +14,9 @@ const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLeve
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 
+let _invalidateProjectContactsCache = () => {};
+function setProjectContactsCacheInvalidator(fn) { _invalidateProjectContactsCache = fn; }
+
 const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
 if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
 
@@ -397,6 +400,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         `${hubspotApiBase()}/crm/v3/objects/contacts/${encodeURIComponent(visit.contact_id)}`,
         { properties: { hs_lead_status: submittedLeadStatus } }
       );
+      _invalidateProjectContactsCache();
     } catch (e) {
       logger.warn({ err: e.message }, '[design-visits] HubSpot lead status update failed:');
     }
@@ -2179,4 +2183,4 @@ router.get('/api/design-visit-images/:key', async (req, res) => {
   }
 });
 
-module.exports = { router: router };
+module.exports = { router: router, setProjectContactsCacheInvalidator };
