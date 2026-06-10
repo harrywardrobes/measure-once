@@ -49,6 +49,10 @@ export const TRADES_TYPE_FILTER_KEY = 'tradesTypeFilter';
 export const CAH_ORPHANED_DISMISSED_KEY = 'cah_orphaned_dismissed_count';
 export const CAH_CONFLICT_DISMISSED_KEY = 'cah_conflict_dismissed_key';
 
+// ── Admin deep-link ────────────────────────────────────────────────────────────
+/** Written by WorkflowPage before tab-switching; consumed + cleared by the target tab on mount. */
+export const ADMIN_DEEP_LINK_KEY = 'adminDeepLink';
+
 // ── Draft form prefixes (append a dynamic ID to get the full key) ─────────────
 
 /** Email template drafts: `${EMAIL_TEMPLATE_DRAFT_PREFIX}${templateKey}` */

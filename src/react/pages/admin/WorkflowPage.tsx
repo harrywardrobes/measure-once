@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
 import {
   Accordion,
   AccordionDetails,
@@ -145,7 +145,12 @@ function handlerDisplayName(h: Handler): string {
   return String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.name || h.type);
 }
 
-function navigateToTab(tabId: string) {
+function navigateToTab(tabId: string, itemKey?: string | number) {
+  try {
+    if (itemKey != null) {
+      localStorage.setItem(ADMIN_DEEP_LINK_KEY, String(itemKey));
+    }
+  } catch { /* ignore */ }
   if (typeof (window as unknown as Record<string, unknown>).adminSwitchToTab === 'function') {
     ((window as unknown as Record<string, unknown>).adminSwitchToTab as (id: string) => void)(tabId);
   } else {
@@ -436,7 +441,7 @@ function ModalDetailCard({
                   label={t.label}
                   size="small"
                   clickable
-                  onClick={() => navigateToTab('emailtemplates')}
+                  onClick={() => navigateToTab('emailtemplates', t.key)}
                   sx={{
                     height: 18,
                     fontSize: '0.62rem',
@@ -528,7 +533,7 @@ function SubstatusRow({
                   label={handlerDisplayName(h)}
                   size="small"
                   clickable
-                  onClick={() => navigateToTab('actionhandlers')}
+                  onClick={() => navigateToTab('actionhandlers', h.id)}
                   sx={{
                     height: 18,
                     fontSize: '0.65rem',
@@ -745,7 +750,7 @@ function StatusRow({
                     label={handlerDisplayName(h)}
                     size="small"
                     clickable
-                    onClick={() => navigateToTab('actionhandlers')}
+                    onClick={() => navigateToTab('actionhandlers', h.id)}
                     sx={{
                       height: 20,
                       fontSize: '0.68rem',

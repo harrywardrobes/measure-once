@@ -13,6 +13,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  GlobalStyles,
   InputLabel,
   MenuItem,
   Select,
@@ -42,7 +43,7 @@ import type {
   VisitType,
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
+import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1056,6 +1057,23 @@ export function ActionHandlersPage() {
     return () => { _reloadRef.fn = null; };
   }, [fetchAll]);
 
+  // ── Deep-link: scroll + flash the requested handler row ───────────────────
+
+  useEffect(() => {
+    if (loading) return;
+    try {
+      const key = localStorage.getItem(ADMIN_DEEP_LINK_KEY);
+      if (!key) return;
+      localStorage.removeItem(ADMIN_DEEP_LINK_KEY);
+      const el = document.querySelector<HTMLElement>(`[data-handler-id="${CSS.escape(key)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.animation = 'none';
+      el.getBoundingClientRect();
+      el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
+    } catch { /* ignore */ }
+  }, [loading]);
+
   // ── BroadcastChannel sync ──────────────────────────────────────────────────
 
   useEffect(() => {
@@ -1113,6 +1131,14 @@ export function ActionHandlersPage() {
 
   return (
     <Stack spacing={2}>
+      <GlobalStyles styles={`
+        @keyframes adm-deep-link-flash {
+          0%   { outline: 2px solid transparent; outline-offset: 0px; }
+          10%  { outline: 2px solid #8B2BFF;     outline-offset: 2px; }
+          80%  { outline: 2px solid #8B2BFF;     outline-offset: 2px; }
+          100% { outline: 2px solid transparent; outline-offset: 0px; }
+        }
+      `} />
       <Card variant="outlined">
         <CardContent>
           <Box sx={{ mb: 2 }}>
@@ -1231,7 +1257,7 @@ export function ActionHandlersPage() {
                           {g.slots.map(slot => {
                             const handler = _handlersForSlot(slot)[0] || null;
                             return (
-                              <tr key={`${slot.kind}-${slot.status_key}`} className="adm-handlers-row">
+                              <tr key={`${slot.kind}-${slot.status_key}`} className="adm-handlers-row" data-handler-id={handler?.id != null ? String(handler.id) : undefined}>
                                 <td className="adm-handlers-cell adm-handlers-cell--slot">
                                   <div className="adm-handlers-slot-label">{slot.label}</div>
                                   <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>

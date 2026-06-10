@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
 
 import {
   Alert,
@@ -11,6 +11,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  GlobalStyles,
   Stack,
   Tab,
   Table,
@@ -651,6 +652,23 @@ export default function EmailTemplatesPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ── Deep-link: scroll + flash the requested template row ──────────────────
+
+  useEffect(() => {
+    if (loading) return;
+    try {
+      const key = localStorage.getItem(ADMIN_DEEP_LINK_KEY);
+      if (!key) return;
+      localStorage.removeItem(ADMIN_DEEP_LINK_KEY);
+      const el = document.querySelector<HTMLElement>(`[data-template-key="${CSS.escape(key)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.animation = 'none';
+      el.getBoundingClientRect();
+      el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
+    } catch { /* ignore */ }
+  }, [loading]);
+
   const handleSaved = useCallback((updated: EmailTemplate) => {
     setTemplates((prev) => prev.map((t) => (t.key === updated.key ? updated : t)));
     setEditing(null);
@@ -658,6 +676,14 @@ export default function EmailTemplatesPage() {
 
   return (
     <Box sx={{ py: 1 }}>
+      <GlobalStyles styles={`
+        @keyframes adm-deep-link-flash {
+          0%   { outline: 2px solid transparent; outline-offset: 0px; }
+          10%  { outline: 2px solid #8B2BFF;     outline-offset: 2px; }
+          80%  { outline: 2px solid #8B2BFF;     outline-offset: 2px; }
+          100% { outline: 2px solid transparent; outline-offset: 0px; }
+        }
+      `} />
       <Typography variant="h6" sx={{ mb: 1 }}>Email templates</Typography>
       <Alert severity="info" sx={{ mb: 2 }}>
         Edit the subject, body and footer of the emails this app sends. Changes take effect immediately.
@@ -695,7 +721,7 @@ export default function EmailTemplatesPage() {
                   .filter(([, keys]) => keys.includes(t.key))
                   .map(([type]) => ({ type, label: HANDLER_TYPE_LABELS[type] || type }));
                 return (
-                  <TableRow key={t.key} hover>
+                  <TableRow key={t.key} hover data-template-key={t.key}>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.label}</Typography>
                       <Typography variant="caption" color="text.secondary">{t.key}</Typography>
