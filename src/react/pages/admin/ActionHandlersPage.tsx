@@ -41,7 +41,7 @@ import type {
   VisitType,
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY } from '../../constants/localStorageKeys';
+import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1234,13 +1234,25 @@ export function ActionHandlersPage() {
                                 <td className="adm-handlers-cell adm-handlers-cell--slot">
                                   <div className="adm-handlers-slot-label">{slot.label}</div>
                                   <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
-                                  {slot.kind === 'ls' && slot.hasLabel === false && handler && (
+                                  {slot.kind === 'ls' && slot.hasLabel === false && (
                                     <Chip
                                       data-testid="no-label-warning"
                                       color="warning"
                                       size="small"
-                                      label="No action label — add one in Card Actions"
-                                      sx={{ mt: 0.5 }}
+                                      label="No action label"
+                                      onClick={() => {
+                                        const win = window as unknown as Record<string, unknown>;
+                                        if (typeof win.adminSwitchToTab === 'function') {
+                                          (win.adminSwitchToTab as (id: string) => void)('cardactions');
+                                        } else {
+                                          try {
+                                            localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+                                            localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
+                                          } catch { /* restricted context */ }
+                                          location.href = '/admin';
+                                        }
+                                      }}
+                                      sx={{ mt: 0.5, cursor: 'pointer' }}
                                     />
                                   )}
                                 </td>
