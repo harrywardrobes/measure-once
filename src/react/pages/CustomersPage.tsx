@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from 'react';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
 import { formatCurrency } from '../utils/formatters';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
@@ -554,7 +555,6 @@ function QBBadge({
   );
 }
 
-const CUSTOMERS_SCROLL_KEY = 'customers_scroll';
 
 function saveCustomersScroll() {
   try {
@@ -1381,7 +1381,7 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     if (!contacts.length) return;
     try {
-      const KEY = 'cp_recent_customers';
+      const KEY = CP_RECENT_CUSTOMERS_KEY;
       type CacheEntry = { id: string; name: string; company: string; ts: number };
       const existing: CacheEntry[] = JSON.parse(localStorage.getItem(KEY) || '[]');
       const byId = new Map<string, CacheEntry>(existing.map((e) => [e.id, e]));

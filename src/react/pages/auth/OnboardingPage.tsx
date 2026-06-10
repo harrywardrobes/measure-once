@@ -1,4 +1,5 @@
 import React from 'react';
+import { ONBOARDING_DRAFT_KEY as DRAFT_KEY } from '../../constants/localStorageKeys';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { BRAND_COLORS } from '../../theme';
 import Alert from '@mui/material/Alert';
@@ -13,7 +14,6 @@ import Typography from '@mui/material/Typography';
 
 const LOGO_URL = '/harry-wardrobes-logo.png';
 const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: BRAND_COLORS.pageBackground } };
-const DRAFT_KEY = 'mo:onboarding:draft';
 
 interface FormData {
   first_name: string;

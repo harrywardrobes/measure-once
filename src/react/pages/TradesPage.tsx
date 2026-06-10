@@ -1,4 +1,5 @@
 import React from 'react';
+import { TRADES_TYPE_FILTER_KEY } from '../constants/localStorageKeys';
 import {
   Accordion,
   AccordionDetails,
@@ -1301,7 +1302,7 @@ export function TradesPage() {
   const [directory, setDirectory] = React.useState<PhoneDirectory>({ team: [], trades: [], customers: [] });
 
   const [typeFilter, setTypeFilter] = React.useState<string>(() => {
-    try { return localStorage.getItem('tradesTypeFilter') || ''; } catch { return ''; }
+    try { return localStorage.getItem(TRADES_TYPE_FILTER_KEY) || ''; } catch { return ''; }
   });
   const [search, setSearch] = React.useState<string>(() => {
     return new URLSearchParams(location.search).get('q') || '';
@@ -1408,7 +1409,7 @@ export function TradesPage() {
 
   const handleTypeFilter = (type: string) => {
     setTypeFilter(type);
-    try { localStorage.setItem('tradesTypeFilter', type); } catch { /* ignore */ }
+    try { localStorage.setItem(TRADES_TYPE_FILTER_KEY, type); } catch { /* ignore */ }
   };
 
   const handleEdit = (trade: Trade) => {

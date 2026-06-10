@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { INVOICE_DRAFT_KEY as DRAFT_KEY } from '../constants/localStorageKeys';
 import { useConnectionToast } from '../context/ConnectionToastContext';
 import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
 import {
@@ -56,8 +57,6 @@ export interface InvoiceDetail extends InvoiceSummary {
 }
 
 // ── Draft persistence (localStorage) ──────────────────────────────────────────
-
-const DRAFT_KEY = 'mo_invoice_draft';
 
 interface InvoiceDraft {
   due: string;

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMER_ROOM_IDX_PREFIX } from '../constants/localStorageKeys';
 import { flushSync } from 'react-dom';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { useWorkflowData } from '../context/WorkflowDataContext';
@@ -75,7 +76,7 @@ export function CustomerDetailPage() {
   const [contact,      setContact]      = useState<Contact | null>(null);
   const [cachedName] = useState<string | null>(() => {
     try {
-      const list = JSON.parse(localStorage.getItem('cp_recent_customers') || '[]') as Array<{ id: string; name: string }>;
+      const list = JSON.parse(localStorage.getItem(CP_RECENT_CUSTOMERS_KEY) || '[]') as Array<{ id: string; name: string }>;
       return list.find(r => r.id === contactId)?.name ?? null;
     } catch { return null; }
   });
@@ -311,7 +312,7 @@ export function CustomerDetailPage() {
       setNotes(initNotes);
 
       try {
-        const saved = localStorage.getItem(`customerRoomIdx_${contactId}`);
+        const saved = localStorage.getItem(CUSTOMER_ROOM_IDX_PREFIX + contactId);
         if (saved !== null) {
           const n = parseInt(saved, 10);
           if (!isNaN(n) && n >= 0 && n < initRooms.length) setSelectedRoom(n);
@@ -690,7 +691,7 @@ export function CustomerDetailPage() {
 
   const handleRoomSelect = useCallback((idx: number) => {
     setSelectedRoom(idx);
-    try { localStorage.setItem(`customerRoomIdx_${contactId}`, String(idx)); } catch { /* noop */ }
+    try { localStorage.setItem(CUSTOMER_ROOM_IDX_PREFIX + contactId, String(idx)); } catch { /* noop */ }
   }, [contactId]);
 
   // ── Invalid ID guard ───────────────────────────────────────────────────────

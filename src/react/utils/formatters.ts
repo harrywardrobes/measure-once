@@ -1,3 +1,5 @@
+import { CP_RECENT_CUSTOMERS_KEY } from '../constants/localStorageKeys';
+
 /**
  * Date, name, currency, and string formatters shared across React components.
  *
@@ -115,7 +117,7 @@ export function updateRecentCustomer(contact: {
   properties?: { firstname?: string; lastname?: string; email?: string; company?: string };
 }): void {
   try {
-    const KEY = 'cp_recent_customers';
+    const KEY = CP_RECENT_CUSTOMERS_KEY;
     const p = contact.properties || {};
     const parts = [p.firstname, p.lastname].filter(Boolean);
     const name = parts.length ? parts.join(' ') : (p.email || p.company || 'Unnamed');

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { ADMIN_ACTIVE_GROUP_KEY } from '../constants/localStorageKeys';
 import { TabBar } from './TabBar';
 import type { TabBarTab } from './TabBar';
 
@@ -184,7 +185,7 @@ export function AdminGroupedTabsBar() {
   const [activeTabId, setActiveTabId] = useState<string | null>(() => readActiveTabId());
   const [activeGroupId, setActiveGroupId] = useState<GroupId | null>(() => {
     try {
-      const saved = localStorage.getItem('adminActiveGroup') as GroupId | null;
+      const saved = localStorage.getItem(ADMIN_ACTIVE_GROUP_KEY) as GroupId | null;
       if (saved && TAB_GROUPS.some((g) => g.id === saved)) return saved;
     } catch (_) {}
     return null;
@@ -217,7 +218,7 @@ export function AdminGroupedTabsBar() {
   const handleGroupSelect = useCallback(
     (groupId: GroupId) => {
       setActiveGroupId(groupId);
-      try { localStorage.setItem('adminActiveGroup', groupId); } catch (_) {}
+      try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId); } catch (_) {}
 
       // Auto-select the first visible sub-tab in the newly selected group.
       const firstTab = firstVisibleTabInGroup(groupId, tabs);
@@ -237,7 +238,7 @@ export function AdminGroupedTabsBar() {
     const gid = groupForTab(tabId);
     if (gid) {
       setActiveGroupId(gid);
-      try { localStorage.setItem('adminActiveGroup', gid); } catch (_) {}
+      try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, gid); } catch (_) {}
     }
   }, []);
 
@@ -305,7 +306,7 @@ export function AdminGroupedTabsBar() {
     const gid = groupForTab(activeTabId);
     if (!gid) return;
     setActiveGroupId(gid);
-    try { localStorage.setItem('adminActiveGroup', gid); } catch (_) {}
+    try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, gid); } catch (_) {}
   }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (

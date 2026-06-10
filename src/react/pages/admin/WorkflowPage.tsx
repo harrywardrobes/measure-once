@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
 import {
   Accordion,
   AccordionDetails,
@@ -69,8 +70,8 @@ function navigateToTab(tabId: string) {
     ((window as unknown as Record<string, unknown>).adminSwitchToTab as (id: string) => void)(tabId);
   } else {
     try {
-      localStorage.setItem('adminActiveGroup', 'configuration');
-      localStorage.setItem('adminActiveTab', tabId);
+      localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+      localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, tabId);
     } catch { /* ignore */ }
     location.href = '/admin';
   }

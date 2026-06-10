@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { DV_WIZARD_DRAFT_PREFIX, DV_WIZARD_DRAFT_EDIT_PREFIX } from '../constants/localStorageKeys';
 import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -125,8 +126,8 @@ function normaliseRooms(existingVisit?: ExistingVisit | null): RoomData[] {
 }
 
 function draftKey(contactId: string, editId?: string | number | null): string {
-  if (editId) return `dv-wizard-draft-edit-${editId}`;
-  return `dv-wizard-draft-${contactId || 'new'}`;
+  if (editId) return DV_WIZARD_DRAFT_EDIT_PREFIX + editId;
+  return DV_WIZARD_DRAFT_PREFIX + (contactId || 'new');
 }
 
 function saveDraft(key: string, step1: Step1Data, rooms: RoomData[]) {

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { PUBLIC_ISLAND_IDS, BOOTSTRAP_ONLY_IDS } from '../lib/publicIslands';
+import { VIEWER_BANNER_DISMISSED_KEY } from '../constants/localStorageKeys';
 
 /**
  * Derived from PUBLIC_ISLAND_IDS ∪ BOOTSTRAP_ONLY_IDS, both defined in
@@ -33,7 +34,7 @@ function AppBootstrapInner({ children }: { children: React.ReactNode }) {
 
     if (
       privilegeLevel === 'viewer' &&
-      sessionStorage.getItem('viewerBannerDismissed') !== '1'
+      sessionStorage.getItem(VIEWER_BANNER_DISMISSED_KEY) !== '1'
     ) {
       const banner = document.getElementById('viewer-banner');
       if (banner) banner.style.display = '';

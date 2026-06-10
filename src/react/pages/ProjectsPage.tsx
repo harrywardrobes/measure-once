@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PROJECTS_STALENESS_KEY, PROJECTS_SUBSTAGE_KEY } from '../constants/localStorageKeys';
 import {
   Alert,
   Avatar,
@@ -80,8 +81,6 @@ const STAGE_LABEL_FALLBACK: Record<string, string> = {
 
 // ── Filter-persistence helpers ─────────────────────────────────────────────────
 
-const PROJECTS_STALENESS_KEY = 'projectsStalenessActive';
-const PROJECTS_SUBSTAGE_KEY = 'projectsHiddenSubstages';
 const PROJECTS_STALENESS_DAYS = 30;
 
 const STALENESS_STAGES = new Set(['sales', 'designvisit']);

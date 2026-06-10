@@ -37,6 +37,7 @@ import {
 import type { CacheStore } from './offlineDb';
 import { resolveConflictRoute, resolveQueueEntryRoute } from './conflictRoute';
 import { detectConflict } from './conflictDetection';
+import { LAST_SYNC_META_KEY } from '../constants/localStorageKeys';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -810,8 +811,6 @@ export async function reconcileAbortedRestore(entry: QueueEntry): Promise<void> 
 // A small `meta` timestamp the sync engine stamps after every confirmed (2xx)
 // replay, so the Phase 3 Offline Support admin view can show when the queue last
 // drained successfully. Stored as epoch ms.
-
-const LAST_SYNC_META_KEY = 'lastSuccessfulSyncAt';
 
 /** Record that a queued write just replayed successfully (epoch ms). */
 export async function markSynced(at: number = Date.now()): Promise<void> {

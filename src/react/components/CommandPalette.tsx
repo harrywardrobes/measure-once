@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, CP_RECENT_CUSTOMERS_KEY } from '../constants/localStorageKeys';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
 import { useQBInvoices } from '../hooks/useQBInvoices';
@@ -240,7 +241,7 @@ export function CommandPalette() {
       if (typeof window.adminSwitchGroup === 'function') {
         window.adminSwitchGroup(groupId);
       } else {
-        try { localStorage.setItem('adminActiveGroup', groupId); } catch (_) {}
+        try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId); } catch (_) {}
         location.href = '/admin';
       }
     };
@@ -251,8 +252,8 @@ export function CommandPalette() {
         window.adminSwitchToTab(tabId);
       } else {
         try {
-          localStorage.setItem('adminActiveGroup', groupId);
-          localStorage.setItem('adminActiveTab', tabId);
+          localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId);
+          localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, tabId);
         } catch (_) {}
         location.href = '/admin';
       }
@@ -400,7 +401,7 @@ export function CommandPalette() {
   let recentCustomers: Array<{ id: string; name: string; company?: string }> = [];
   if (!q) {
     try {
-      recentCustomers = JSON.parse(localStorage.getItem('cp_recent_customers') || '[]');
+      recentCustomers = JSON.parse(localStorage.getItem(CP_RECENT_CUSTOMERS_KEY) || '[]');
     } catch (_) {}
   }
 

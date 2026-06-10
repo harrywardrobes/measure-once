@@ -42,11 +42,9 @@ import type {
   VisitType,
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY } from '../../constants/localStorageKeys';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const CAH_ORPHANED_DISMISSED_KEY  = 'cah_orphaned_dismissed_count';
-const CAH_CONFLICT_DISMISSED_KEY  = 'cah_conflict_dismissed_key';
 
 const HANDLER_TYPE_LABELS: Record<string, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',

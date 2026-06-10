@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX } from '../../constants/localStorageKeys';
 
 import {
   Alert,
@@ -68,8 +69,6 @@ interface PreviewResult {
   text: string;
   html: string;
 }
-
-const DRAFT_PREFIX = 'emailTemplateDraft:';
 
 function draftKey(key: string): string {
   return DRAFT_PREFIX + key;

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -58,7 +59,7 @@ interface DraftState {
 }
 
 function draftKey(contactId: string): string {
-  return `mo-arrange-visit-draft-${contactId}`;
+  return ARRANGE_VISIT_DRAFT_PREFIX + contactId;
 }
 
 function loadDraft(key: string): Partial<DraftState> {

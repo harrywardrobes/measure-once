@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CONTACT_EDIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -54,7 +55,7 @@ function toFormValues(contact: Contact): FormValues {
 }
 
 function draftKey(contactId: string): string {
-  return `mo-contact-edit-${contactId}`;
+  return CONTACT_EDIT_DRAFT_PREFIX + contactId;
 }
 
 function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number'> {

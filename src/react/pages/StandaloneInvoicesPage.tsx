@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import { INVOICE_PAGE_KEY as PAGE_KEY } from '../constants/localStorageKeys';
 import {
   Alert,
   Box,
@@ -34,7 +35,6 @@ type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 // ── Pagination ────────────────────────────────────────────────────────────────
 
 const PAGE_LIMIT = 25;
-const PAGE_KEY   = 'mo_invoice_page';
 
 function loadPage(): number {
   try {

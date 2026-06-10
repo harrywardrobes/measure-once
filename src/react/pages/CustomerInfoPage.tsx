@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { CUSTOMER_INFO_DRAFT_PREFIX } from '../constants/localStorageKeys';
 import {
   Alert,
   Box,
@@ -59,7 +60,7 @@ function getToken(): string {
 }
 
 function lsKey(token: string): string {
-  return `ci_draft_${token}`;
+  return CUSTOMER_INFO_DRAFT_PREFIX + token;
 }
 
 function loadDraft(token: string): Partial<DraftPayload> {

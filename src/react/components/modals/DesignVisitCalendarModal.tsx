@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { DV_CAL_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -36,7 +37,7 @@ interface DraftState {
 }
 
 function draftKey(handlerId: string | number, contactId: string | number | null | undefined): string {
-  return `mo-dv-cal-draft-${handlerId}-${contactId ?? 'unknown'}`;
+  return `${DV_CAL_DRAFT_PREFIX}${handlerId}-${contactId ?? 'unknown'}`;
 }
 
 function loadDraft(key: string): Partial<DraftState> {

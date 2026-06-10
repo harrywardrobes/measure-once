@@ -1,8 +1,8 @@
 import React from 'react';
 import { cacheRecords, readRecords, getMeta, setMeta } from '../lib/offlineDb';
+import { CONTACTS_LAST_SYNC_META_KEY } from '../constants/localStorageKeys';
 
-/** Meta key holding the epoch-ms time of the last successful contacts fetch. */
-export const CONTACTS_LAST_SYNC_META_KEY = 'customersLastSyncAt';
+export { CONTACTS_LAST_SYNC_META_KEY };
 
 export type PaginatedContact = {
   id: string;
