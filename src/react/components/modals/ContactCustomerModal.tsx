@@ -426,8 +426,25 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 This will advance the lead status to <strong>No Response</strong>.
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Are you sure you want to continue?
+                Contact methods tried:
               </Typography>
+              {(callAttempted || emailSent || whatsappSent) ? (
+                <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
+                  <Typography variant="body2">
+                    Called {callAttempted ? '✓' : '✗'}
+                  </Typography>
+                  <Typography variant="body2">
+                    Emailed {emailSent ? '✓' : '✗'}
+                  </Typography>
+                  <Typography variant="body2">
+                    WhatsApp {whatsappSent ? '✓' : '✗'}
+                  </Typography>
+                </Stack>
+              ) : (
+                <Alert severity="warning" sx={{ py: 0 }}>
+                  No contact methods have been recorded. You can cancel and tick the boxes before continuing.
+                </Alert>
+              )}
             </Stack>
           </DialogContent>
           <DialogActions>
