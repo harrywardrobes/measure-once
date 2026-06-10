@@ -4,12 +4,15 @@
  *
  * Static lint: every handler type declared in the ModalState union in
  * `src/react/components/CardActionModalsHost.tsx` must have a matching
- * entry in `HANDLER_COMPONENT_META` in `src/react/utils/handlerMeta.ts`.
+ * entry in each of the three maps in `src/react/utils/handlerMeta.ts`:
+ *
+ *   • HANDLER_COMPONENT_META
+ *   • HANDLER_MODAL_SUMMARY
+ *   • HANDLER_TYPE_LABELS
  *
  * The check fails with a clear error listing any handler types that are
- * present in the host but absent from the meta map, so that a developer
- * adding a new modal cannot accidentally omit the WorkflowPage reference
- * entry.
+ * present in the host but absent from any map, so that a developer
+ * adding a new modal cannot accidentally omit entries.
  *
  * ── How handler types are detected ───────────────────────────────────────
  *
@@ -21,14 +24,15 @@
  * This script scans for those `type: '<name>'` patterns.  The sentinel
  * variant `{ type: 'none' }` is excluded because it is not a real handler.
  *
- * ── How HANDLER_COMPONENT_META keys are detected ─────────────────────────
+ * ── How map keys are detected ────────────────────────────────────────────
  *
- * The script reads `HANDLER_COMPONENT_META` as raw text and collects the
+ * The script reads each named export as raw text and collects the
  * object-literal keys from the block that follows the `= {` opening brace,
  * matching lines of the form:
  *
  *   show_message: {
  *   add_design_visit_to_calendar: {
+ *   arrange_visit:                'Arrange visit',
  *
  * Usage:
  *   node scripts/check-handler-meta.mjs    # exits 1 on any missing entry
@@ -41,9 +45,9 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT          = resolve(__dirname, '..');
-const HOST_FILE     = resolve(ROOT, 'src', 'react', 'components', 'CardActionModalsHost.tsx');
-const META_FILE     = resolve(ROOT, 'src', 'react', 'utils', 'handlerMeta.ts');
+const ROOT      = resolve(__dirname, '..');
+const HOST_FILE = resolve(ROOT, 'src', 'react', 'components', 'CardActionModalsHost.tsx');
+const META_FILE = resolve(ROOT, 'src', 'react', 'utils', 'handlerMeta.ts');
 
 // ── Parse handler types from the ModalState union ─────────────────────────
 //
@@ -60,71 +64,93 @@ for (const m of hostSrc.matchAll(HOST_TYPE_RE)) {
   if (t !== 'none') hostTypes.add(t);
 }
 
-// ── Parse HANDLER_COMPONENT_META keys from handlerMeta.ts ─────────────────
+// ── Generic map-key extractor ──────────────────────────────────────────────
 //
-// Find the block starting with `export const HANDLER_COMPONENT_META` and
-// scan each line for object keys of the form `  <identifier>: {`.
+// Given the source text and an export name, finds the block starting with
+// `export const <name>` and returns a Set of the top-level object keys.
+// Keys can be followed by `: {`, `: '`, or `:` (covers both object-value
+// and string-value entries, and padded alignment styles).
 
-const META_BLOCK_START_RE = /export\s+const\s+HANDLER_COMPONENT_META[^=]*=\s*\{/;
-const META_KEY_RE         = /^\s{2}([a-z_][a-z0-9_]*):\s*\{/;
+const TOP_KEY_RE = /^\s{2}([a-z_][a-z0-9_]*):/;
 
-const metaSrc   = readFileSync(META_FILE, 'utf8');
-const metaLines = metaSrc.split('\n');
-const metaKeys  = new Set();
+function extractMapKeys(src, exportName) {
+  const blockStartRe = new RegExp(
+    `export\\s+const\\s+${exportName}[^=]*=\\s*\\{`
+  );
+  const lines  = src.split('\n');
+  const keys   = new Set();
+  let inBlock  = false;
+  let depth    = 0;
 
-let inBlock = false;
-let depth   = 0;
-
-for (const line of metaLines) {
-  if (!inBlock) {
-    if (META_BLOCK_START_RE.test(line)) {
-      inBlock = true;
-      depth   = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+  for (const line of lines) {
+    if (!inBlock) {
+      if (blockStartRe.test(line)) {
+        inBlock = true;
+        depth   = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+      }
+      continue;
     }
-    continue;
+
+    depth += (line.match(/\{/g) || []).length;
+    depth -= (line.match(/\}/g) || []).length;
+
+    if (depth <= 0) break;
+
+    const km = TOP_KEY_RE.exec(line);
+    if (km) keys.add(km[1]);
   }
 
-  depth += (line.match(/\{/g) || []).length;
-  depth -= (line.match(/\}/g) || []).length;
-
-  if (depth <= 0) break;
-
-  const km = META_KEY_RE.exec(line);
-  if (km) metaKeys.add(km[1]);
+  return keys;
 }
 
-// ── Cross-reference ────────────────────────────────────────────────────────
+const metaSrc = readFileSync(META_FILE, 'utf8');
 
-const missing = [...hostTypes].filter(t => !metaKeys.has(t)).sort();
+const componentMetaKeys  = extractMapKeys(metaSrc, 'HANDLER_COMPONENT_META');
+const modalSummaryKeys   = extractMapKeys(metaSrc, 'HANDLER_MODAL_SUMMARY');
+const typeLabelKeys      = extractMapKeys(metaSrc, 'HANDLER_TYPE_LABELS');
+
+// ── Cross-reference each map ───────────────────────────────────────────────
+
+const checks = [
+  { mapName: 'HANDLER_COMPONENT_META', keys: componentMetaKeys },
+  { mapName: 'HANDLER_MODAL_SUMMARY',  keys: modalSummaryKeys  },
+  { mapName: 'HANDLER_TYPE_LABELS',    keys: typeLabelKeys     },
+];
 
 // ── Report ─────────────────────────────────────────────────────────────────
 
 console.log(
-  `check-handler-meta: found ${hostTypes.size} handler type(s) in ModalState ` +
-  `and ${metaKeys.size} key(s) in HANDLER_COMPONENT_META\n`
+  `check-handler-meta: found ${hostTypes.size} handler type(s) in ModalState\n`
 );
 
-if (missing.length === 0) {
+let anyFailed = false;
+
+for (const { mapName, keys } of checks) {
+  const missing = [...hostTypes].filter(t => !keys.has(t)).sort();
+  console.log(`  ${mapName}: ${keys.size} key(s) found`);
+
+  if (missing.length > 0) {
+    anyFailed = true;
+    console.error(
+      `\n  ✗ ${missing.length} handler type(s) missing from ${mapName}:`
+    );
+    for (const t of missing) {
+      console.error(`      - ${t}`);
+    }
+    console.error(
+      `\n    Fix: add an entry for each missing type to ${mapName} in\n` +
+      `         src/react/utils/handlerMeta.ts\n`
+    );
+  }
+}
+
+if (!anyFailed) {
   console.log(
-    '✓ Every handler type in CardActionModalsHost.tsx has a matching\n' +
-    '  entry in HANDLER_COMPONENT_META (src/react/utils/handlerMeta.ts).'
+    '\n✓ Every handler type in CardActionModalsHost.tsx has a matching entry\n' +
+    '  in HANDLER_COMPONENT_META, HANDLER_MODAL_SUMMARY, and HANDLER_TYPE_LABELS\n' +
+    '  (src/react/utils/handlerMeta.ts).'
   );
   process.exit(0);
 }
 
-console.error(
-  `✗ ${missing.length} handler type(s) are present in ModalState ` +
-  `(CardActionModalsHost.tsx) but missing from HANDLER_COMPONENT_META:\n`
-);
-for (const t of missing) {
-  console.error(`  - ${t}`);
-}
-console.error(
-  '\nFix: add an entry for each missing type to HANDLER_COMPONENT_META in\n' +
-  '     src/react/utils/handlerMeta.ts, e.g.:\n\n' +
-  '       <handler_type>: {\n' +
-  '         component: \'<ModalComponentName>\',\n' +
-  '         filePath:  \'src/react/components/modals/<ModalComponentName>.tsx\',\n' +
-  '       },\n'
-);
 process.exit(1);
