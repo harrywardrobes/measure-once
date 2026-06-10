@@ -4276,7 +4276,7 @@ async function syncLeadStatusesToHubSpot() {
   const options = rows.map((r, i) => ({
     value:        r.key,
     label:        r.label,
-    displayOrder: r.sort_order ?? i,
+    displayOrder: i,
     hidden:       false,
   }));
   await axios.patch(
