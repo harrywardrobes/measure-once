@@ -1005,6 +1005,41 @@ async function main() {
     }
   }
 
+  // NEG-25: POST with stage_key='__global__' and status_key='' — must be
+  // accepted (201).  Guards against the validator rejecting the "No lead
+  // status" binding slot that __global__ represents.
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: 'privtest-neg25',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: '__global__', status_key: '' }],
+    });
+    const ok = r.status === 201 && Number.isInteger(r.json?.id);
+    record(
+      'NEG-25: POST with __global__ stage_key and empty status_key accepted',
+      'status=201 with integer id',
+      `status=${r.status} id=${JSON.stringify(r.json?.id)}`,
+      ok,
+      ok ? '' : JSON.stringify(r.json),
+    );
+    if (r.json?.id) await adminClient.delete(`/api/admin/card-action-handlers/${r.json.id}`);
+  }
+
+  // NEG-26: POST with stage_key='__global__' and a non-empty status_key —
+  // must be rejected with 400.  The __global__ sentinel only supports
+  // status_key='' (the "No lead status" row), mirroring the guard in the
+  // label PUT endpoint.
+  {
+    const r = await adminClient.post('/api/admin/card-action-handlers', {
+      name: '',
+      type: 'summarise_phone_call',
+      config: {},
+      bindings: [{ stage_key: '__global__', status_key: 'some_status' }],
+    });
+    assertBadRequest('NEG-26: POST with __global__ stage_key and non-empty status_key rejected', r, '__global__');
+  }
+
   // ── (PRIV) Member-privilege probes ────────────────────────────────────────
   //
   // Verify that the `requireAdmin` middleware on the /api/admin/card-action-

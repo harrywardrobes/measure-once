@@ -6173,6 +6173,12 @@ function _validateHandlerBinding(b) {
     return { value: { substatus_id: id, stage_key: null, status_key: null } };
   }
   if (!stage) return { error: 'Each binding requires a stage_key or substatus_id.' };
+  if (stage === '__global__') {
+    if (status.length > 0) {
+      return { error: 'The __global__ stage only supports an empty status_key.' };
+    }
+    return { value: { stage_key: stage, status_key: '', substatus_id: null } };
+  }
   if (!STAGE_ACTION_STAGE_KEYS.has(stage)) {
     return { error: 'stage_key must be a valid pipeline stage key.' };
   }
