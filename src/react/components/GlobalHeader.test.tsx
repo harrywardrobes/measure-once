@@ -83,6 +83,30 @@ describe('ServiceStatusBadge icon wrapper border colour guards', () => {
     const icon = getByTestId('service-status-icon');
     expect(window.getComputedStyle(icon).borderTopColor).toBe('rgba(255, 255, 255, 0.12)');
   });
+
+  it('error status icon wrapper border colour is rgba(252,165,165,0.4)', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="error" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderTopColor).toBe('rgba(252, 165, 165, 0.4)');
+  });
+
+  it('warning status icon wrapper border colour is rgba(252,211,77,0.4)', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="warning" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderTopColor).toBe('rgba(252, 211, 77, 0.4)');
+  });
+
+  it('ok status icon wrapper border colour is rgba(134,239,172,0.35)', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="ok" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderTopColor).toBe('rgba(134, 239, 172, 0.35)');
+  });
 });
 
 describe('OfflinePill colour guards', () => {
