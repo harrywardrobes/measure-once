@@ -1039,6 +1039,32 @@ export function ProjectsPage() {
     return () => { cancelled = true; };
   }, [contacts]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After the Contact Customer modal closes, re-fetch urgency for just that
+  // contact so the board card's dot updates without a full reload.
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bc = new BroadcastChannel('contact_attempt_logged');
+    bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
+      const contactId = evt.data?.contactId;
+      if (!contactId) return;
+      try {
+        const res = await fetch('/api/contacts/urgency', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [contactId] }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+        const urgencyById = data.urgency || {};
+        setUrgencyMap((prev) => ({ ...prev, [contactId]: urgencyById[contactId] ?? null }));
+      } catch {
+        /* best-effort — stale data is fine on failure */
+      }
+    };
+    return () => bc.close();
+  }, []);
+
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
 
   // ── Apply prefs once they have loaded ──────────────────────────────────────
