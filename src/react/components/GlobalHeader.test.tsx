@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import React from 'react';
-import { ServiceStatusBadge } from './GlobalHeader';
+import { ServiceStatusBadge, OfflinePill } from './GlobalHeader';
 
 describe('ServiceStatusBadge colour guards', () => {
   it('error status icon colour is #fca5a5 (rgb 252 165 165)', () => {
@@ -26,5 +26,42 @@ describe('ServiceStatusBadge colour guards', () => {
     );
     const icon = getByTestId('service-status-icon');
     expect(window.getComputedStyle(icon).color).toBe('rgb(134, 239, 172)');
+  });
+});
+
+describe('ServiceStatusBadge badge dot colour guards', () => {
+  it('error status badge dot colour is #ef4444 (rgb 239 68 68)', () => {
+    const { container } = render(
+      <ServiceStatusBadge service="hubspot" status="error" />,
+    );
+    const dot = container.querySelector('.MuiBadge-dot') as HTMLElement;
+    expect(dot).not.toBeNull();
+    expect(window.getComputedStyle(dot).backgroundColor).toBe('rgb(239, 68, 68)');
+  });
+
+  it('warning status badge dot colour is #f59e0b (rgb 245 158 11)', () => {
+    const { container } = render(
+      <ServiceStatusBadge service="hubspot" status="warning" />,
+    );
+    const dot = container.querySelector('.MuiBadge-dot') as HTMLElement;
+    expect(dot).not.toBeNull();
+    expect(window.getComputedStyle(dot).backgroundColor).toBe('rgb(245, 158, 11)');
+  });
+
+  it('ok status badge dot colour is #22c55e (rgb 34 197 94)', () => {
+    const { container } = render(
+      <ServiceStatusBadge service="hubspot" status="ok" />,
+    );
+    const dot = container.querySelector('.MuiBadge-dot') as HTMLElement;
+    expect(dot).not.toBeNull();
+    expect(window.getComputedStyle(dot).backgroundColor).toBe('rgb(34, 197, 94)');
+  });
+});
+
+describe('OfflinePill colour guards', () => {
+  it('offline pill text colour is #fcd34d (rgb 252 211 77)', () => {
+    const { getByTestId } = render(<OfflinePill />);
+    const pill = getByTestId('offline-pill');
+    expect(window.getComputedStyle(pill).color).toBe('rgb(252, 211, 77)');
   });
 });

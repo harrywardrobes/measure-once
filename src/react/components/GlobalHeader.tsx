@@ -184,7 +184,7 @@ export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps)
 
 // ── Offline indicator ──────────────────────────────────────────────────────────
 
-function OfflinePill() {
+export function OfflinePill() {
   return (
     <Tooltip title="You're offline — showing saved data. Changes can't be sent until you reconnect.">
       <Box
