@@ -37,6 +37,14 @@ interface AttemptLogEntry {
   attemptedBy: string | null;
 }
 
+interface HistorySessionEntry {
+  attemptedAt: string;
+  attemptedBy: string | null;
+  callAttempted: boolean;
+  emailSent: boolean;
+  whatsappSent: boolean;
+}
+
 interface ContactData {
   contactName: string;
   contactEmail: string;
@@ -55,6 +63,7 @@ interface ContactData {
   historyEverCalled: boolean;
   historyEverEmailed: boolean;
   historyEverWhatsapped: boolean;
+  historyAttemptLog: HistorySessionEntry[];
 }
 
 const METHOD_LABEL: Record<AttemptLogEntry['method'], string> = {
@@ -101,6 +110,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [historyEverCalled,     setHistoryEverCalled]     = useState(false);
   const [historyEverEmailed,    setHistoryEverEmailed]    = useState(false);
   const [historyEverWhatsapped, setHistoryEverWhatsapped] = useState(false);
+  const [historyAttemptLog,     setHistoryAttemptLog]     = useState<HistorySessionEntry[]>([]);
 
   const [callInFlight,     setCallInFlight]     = useState(false);
   const [emailInFlight,    setEmailInFlight]     = useState(false);
@@ -135,6 +145,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         setHistoryEverCalled(d.historyEverCalled       ?? false);
         setHistoryEverEmailed(d.historyEverEmailed     ?? false);
         setHistoryEverWhatsapped(d.historyEverWhatsapped ?? false);
+        setHistoryAttemptLog(d.historyAttemptLog       ?? []);
         setPhase('contact');
       })
       .catch((e: Error) => {
@@ -445,26 +456,74 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                       historyEverWhatsapped  && 'WhatsApp',
                     ].filter(Boolean).join(', ');
                     return (
-                      <Box
-                        sx={{
-                          px: 1,
-                          py: 0.5,
-                          mb: 0.75,
-                          bgcolor: 'grey.50',
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                        }}
-                      >
-                        <Typography variant="caption" color="text.secondary">
-                          <strong>Across all sessions · {historyTotalAttempts} {historyTotalAttempts === 1 ? 'attempt' : 'attempts'}</strong>
-                          {historyMethods ? ` · ${historyMethods}` : ''}
-                          {' '}
-                          <Box component="span" sx={{ color: 'text.disabled' }}>
-                            ({historySessionCount} prior {historySessionCount === 1 ? 'session' : 'sessions'})
+                      <>
+                        <Box
+                          sx={{
+                            px: 1,
+                            py: 0.5,
+                            mb: historyAttemptLog.length > 0 ? 0.5 : 0.75,
+                            bgcolor: 'grey.50',
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            <strong>Across all sessions · {historyTotalAttempts} {historyTotalAttempts === 1 ? 'attempt' : 'attempts'}</strong>
+                            {historyMethods ? ` · ${historyMethods}` : ''}
+                            {' '}
+                            <Box component="span" sx={{ color: 'text.disabled' }}>
+                              ({historySessionCount} prior {historySessionCount === 1 ? 'session' : 'sessions'})
+                            </Box>
+                          </Typography>
+                        </Box>
+                        {historyAttemptLog.length > 0 && (
+                          <Box
+                            sx={{
+                              maxHeight: 120,
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 0.5,
+                              mb: 0.75,
+                              pl: 1,
+                              borderLeft: '2px solid',
+                              borderColor: 'divider',
+                            }}
+                          >
+                            {historyAttemptLog.map((entry, i) => {
+                              const sessionMethods = [
+                                entry.callAttempted  && METHOD_LABEL['call'],
+                                entry.emailSent      && METHOD_LABEL['email'],
+                                entry.whatsappSent   && METHOD_LABEL['whatsapp'],
+                              ].filter(Boolean).join(', ');
+                              return (
+                                <Box
+                                  key={i}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'baseline',
+                                    gap: 0.75,
+                                    px: 1,
+                                    py: 0.375,
+                                    borderRadius: 1,
+                                    bgcolor: 'grey.50',
+                                    opacity: 0.85,
+                                  }}
+                                >
+                                  <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
+                                    {sessionMethods || 'No methods'}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                                    {relativeTime(entry.attemptedAt)}
+                                    {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                                  </Typography>
+                                </Box>
+                              );
+                            })}
                           </Box>
-                        </Typography>
-                      </Box>
+                        )}
+                      </>
                     );
                   })()}
                   {attemptLog.length > 0 && (

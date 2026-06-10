@@ -6749,15 +6749,26 @@ app.post('/api/card-actions/contact-customer',
       const attempts = trackingResult.rows[0] || { call_attempted: false, email_sent: false, whatsapp_sent: false };
       const hist     = historyResult.rows[0]  || { total_sessions: 0, total_attempts: 0, ever_called: false, ever_emailed: false, ever_whatsapped: false };
 
-      const { rows: logRows } = await pool.query(
-        `SELECT cal.method, cal.attempted_at,
-                COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
-         FROM contact_attempt_log cal
-         LEFT JOIN users u ON u.id = cal.attempted_by
-         WHERE cal.hubspot_contact_id = $1
-         ORDER BY cal.attempted_at DESC`,
-        [contactId]
-      );
+      const [{ rows: logRows }, { rows: histLogRows }] = await Promise.all([
+        pool.query(
+          `SELECT cal.method, cal.attempted_at,
+                  COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+           FROM contact_attempt_log cal
+           LEFT JOIN users u ON u.id = cal.attempted_by
+           WHERE cal.hubspot_contact_id = $1
+           ORDER BY cal.attempted_at DESC`,
+          [contactId]
+        ),
+        pool.query(
+          `SELECT cahl.attempted_at, cahl.call_attempted, cahl.email_sent, cahl.whatsapp_sent,
+                  COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+           FROM contact_attempt_history_log cahl
+           LEFT JOIN users u ON u.id::text = cahl.attempted_by
+           WHERE cahl.hubspot_contact_id = $1
+           ORDER BY cahl.attempted_at DESC`,
+          [contactId]
+        ),
+      ]);
 
       res.json({
         contactName,
@@ -6781,6 +6792,13 @@ app.post('/api/card-actions/contact-customer',
         historyEverCalled:    hist.ever_called    || false,
         historyEverEmailed:   hist.ever_emailed   || false,
         historyEverWhatsapped: hist.ever_whatsapped || false,
+        historyAttemptLog: histLogRows.map(r => ({
+          attemptedAt:   r.attempted_at,
+          attemptedBy:   r.attempted_by_name || null,
+          callAttempted: r.call_attempted    || false,
+          emailSent:     r.email_sent        || false,
+          whatsappSent:  r.whatsapp_sent     || false,
+        })),
       });
     } catch (e) {
       const status = e.response?.status;
