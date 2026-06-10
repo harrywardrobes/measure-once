@@ -7,7 +7,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
-import type { LeadStatusOption, SubstatusOption } from './HandlerConfigBlocks';
+import type { LeadStatusOption } from './HandlerConfigBlocks';
 import { NO_CONFIG_HANDLER_TYPES } from './ActionHandlersPage';
 
 export { NO_CONFIG_HANDLER_TYPES };
@@ -33,11 +33,6 @@ export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [
   { key: 'won',             label: 'Won' },
 ];
 
-export const FIXTURE_SUBSTATUSES: SubstatusOption[] = [
-  { key: 'design_in_prog__booked',    label: 'Booked',    statusKey: 'design_in_prog' },
-  { key: 'design_in_prog__submitted', label: 'Submitted', statusKey: 'design_in_prog' },
-  { key: 'design_complete__approved', label: 'Approved',  statusKey: 'design_complete' },
-];
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   schedule_visit:

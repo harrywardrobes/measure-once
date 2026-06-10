@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,7 +10,7 @@ import { SubstagePicker } from './SubstagePicker';
 const meta: Meta = {
   title: 'Components/Pickers',
   tags: ['autodocs'],
-  parameters: { layout: 'padded' },
+  parameters: { layout: 'padded' }
 };
 export default meta;
 
@@ -23,7 +23,7 @@ function StagePickerDemo() {
   const STAGE_LABELS: Record<string, string> = {
     sales: 'Sales', designvisit: 'Design Visit', survey: 'Survey', order: 'Order',
     workshop: 'Workshop', packing: 'Packing', delivery: 'Delivery',
-    installation: 'Installation', aftercare: 'Aftercare', customerservice: 'Customer Service',
+    installation: 'Installation', aftercare: 'Aftercare', customerservice: 'Customer Service'
   };
 
   return (
@@ -47,7 +47,7 @@ function StagePickerDemo() {
 
 export const StagePickerStory: Story = {
   name: 'StagePicker',
-  render: () => <StagePickerDemo />,
+  render: () => <StagePickerDemo />
 };
 
 const MOCK_LEAD_STATUSES = [
@@ -60,28 +60,17 @@ const MOCK_LEAD_STATUSES = [
   { value: 'CLOSED_LOST',      label: 'Closed Lost' },
 ];
 
-const MOCK_SUBSTATUSES = [
-  { status_key: 'NEW_LEAD', substatus_key: 'WEBSITE', label: 'Website enquiry', sort_order: 1 },
-  { status_key: 'NEW_LEAD', substatus_key: 'REFERRAL', label: 'Referral', sort_order: 2 },
-  { status_key: 'CONTACTED', substatus_key: 'LEFT_VOICEMAIL', label: 'Left voicemail', sort_order: 1 },
-  { status_key: 'CONTACTED', substatus_key: 'EMAIL_SENT', label: 'Email sent', sort_order: 2 },
-];
-
 function patchWindowGlobals() {
   (window as unknown as Record<string, unknown>).LEAD_STATUS_OPTIONS = MOCK_LEAD_STATUSES;
-  (window as unknown as Record<string, unknown>).LEAD_SUBSTATUSES = MOCK_SUBSTATUSES;
   (window as unknown as Record<string, unknown>).quickSetLeadStatus = (contactId: string, status: string) => {
     console.log('[story] quickSetLeadStatus', { contactId, status });
-  };
-  (window as unknown as Record<string, unknown>)._quickSetLeadStatusWithSub = (contactId: string, statusKey: string, subKey: string) => {
-    console.log('[story] _quickSetLeadStatusWithSub', { contactId, statusKey, subKey });
   };
   (window as unknown as Record<string, unknown>).showToast = (msg: string) => {
     console.log('[story] toast:', msg);
   };
 }
 
-function LeadStatusPickerDemo({ showSubstatuses }: { showSubstatuses?: boolean }) {
+function LeadStatusPickerDemo() {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [current, setCurrent] = useState('NEW_LEAD');
 
@@ -108,8 +97,6 @@ function LeadStatusPickerDemo({ showSubstatuses }: { showSubstatuses?: boolean }
         onClose={() => setAnchorEl(null)}
         contactId="demo-contact-123"
         currentStatus={current}
-        currentHwSubstatus=""
-        showSubstatuses={showSubstatuses}
       />
     </Box>
   );
@@ -117,12 +104,7 @@ function LeadStatusPickerDemo({ showSubstatuses }: { showSubstatuses?: boolean }
 
 export const LeadStatusPickerStory: Story = {
   name: 'LeadStatusPicker',
-  render: () => <LeadStatusPickerDemo />,
-};
-
-export const LeadStatusPickerWithSubstatuses: Story = {
-  name: 'LeadStatusPicker — with sub-statuses',
-  render: () => <LeadStatusPickerDemo showSubstatuses />,
+  render: () => <LeadStatusPickerDemo />
 };
 
 const MOCK_STATUSES = [
@@ -163,5 +145,5 @@ function SubstagePickerDemo() {
 
 export const SubstagePickerStory: Story = {
   name: 'SubstagePicker',
-  render: () => <SubstagePickerDemo />,
+  render: () => <SubstagePickerDemo />
 };

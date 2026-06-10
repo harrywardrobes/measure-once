@@ -14,12 +14,6 @@ export interface LeadStatusOption {
   label: string;
 }
 
-export interface SubstatusOption {
-  key: string;
-  label: string;
-  statusKey: string;
-}
-
 // ── Shared utilities ────────────────────────────────────────────────────────────
 
 /**
@@ -35,31 +29,16 @@ export function isLeadStatusKeyValid(
 }
 
 /**
- * Returns true if `key` is a non-empty string that matches either a lead-status
- * key in `statuses` OR a sub-status key in `substatuses`.
- * An empty / absent key is considered valid (not stale).
- */
-export function isStatusKeyValid(
-  key: string | undefined | null,
-  statuses: LeadStatusOption[],
-  substatuses: SubstatusOption[],
-): boolean {
-  if (!key) return true;
-  return statuses.some(s => s.key === key) || substatuses.some(s => s.key === key);
-}
-
-/**
  * Canonical list of config fields that store a lead-status or sub-status key.
  * Used by both the dedicated config blocks and the JSON fallback editor to
  * detect stale references uniformly.
  *
  * - `'lead_status'`              → key must exist in lead statuses only
- * - `'lead_status_or_substatus'` → key must exist in either lead statuses or sub-statuses
  */
 export const KNOWN_STATUS_KEY_FIELDS: ReadonlyArray<{
   field: string;
   label: string;
-  type: 'lead_status' | 'lead_status_or_substatus';
+  type: 'lead_status';
 }> = [
   {
     field: 'intermediateLeadStatus',
@@ -69,7 +48,7 @@ export const KNOWN_STATUS_KEY_FIELDS: ReadonlyArray<{
   {
     field: 'submittedLeadStatus',
     label: 'Submitted lead status',
-    type: 'lead_status_or_substatus',
+    type: 'lead_status',
   },
 ] as const;
 
@@ -263,10 +242,9 @@ export interface StartDesignVisitConfigProps {
   submittedLeadStatus?: string;
   termsAndConditions?: string;
   leadStatuses?: LeadStatusOption[];
-  substatuses?: SubstatusOption[];
   /** True when the stored intermediateLeadStatus key no longer exists in the current lead status list. */
   intermediateLeadStatusInvalid?: boolean;
-  /** True when the stored submittedLeadStatus key no longer exists in any current lead status or sub-status list. */
+  /** True when the stored submittedLeadStatus key no longer exists in the current lead status list. */
   submittedLeadStatusInvalid?: boolean;
   onChange?: (value: StartDesignVisitConfigValue) => void;
 }
@@ -277,7 +255,6 @@ export function StartDesignVisitConfig({
   submittedLeadStatus: initialSubmitted = '',
   termsAndConditions: initialTerms = '',
   leadStatuses = [],
-  substatuses = [],
   intermediateLeadStatusInvalid = false,
   submittedLeadStatusInvalid = false,
   onChange,
@@ -386,28 +363,10 @@ export function StartDesignVisitConfig({
           SelectDisplayProps={{ 'data-testid': 'submitted-ls-select-trigger' } as React.HTMLAttributes<HTMLDivElement>}
         >
           <MenuItem value=""><em>— none —</em></MenuItem>
-          {leadStatuses.length > 0 && (
-            [
-              <MenuItem key="__ls_header__" disabled sx={{ fontSize: '0.75rem', opacity: 0.6, pointerEvents: 'none' }}>
-                Lead statuses
-              </MenuItem>,
-              ...leadStatuses.map(ls => (
-                <MenuItem key={`ls-${ls.key}`} value={ls.key}>{ls.label || ls.key}</MenuItem>
-              )),
-            ]
-          )}
-          {substatuses.length > 0 && (
-            [
-              <MenuItem key="__sub_header__" disabled sx={{ fontSize: '0.75rem', opacity: 0.6, pointerEvents: 'none' }}>
-                Lead sub-statuses
-              </MenuItem>,
-              ...substatuses.map(s => (
-                <MenuItem key={`sub-${s.key}`} value={s.key}>
-                  {s.label ? `${s.label} (${s.statusKey})` : `${s.key} (${s.statusKey})`}
-                </MenuItem>
-              )),
-            ]
-          )}
+          {leadStatuses.map(ls => (
+            <MenuItem key={ls.key} value={ls.key}>{ls.label || ls.key}</MenuItem>
+          ))}
+
         </Select>
         {submittedLeadStatusInvalid && (
           <Alert severity="warning" sx={{ mt: 0.75 }}>

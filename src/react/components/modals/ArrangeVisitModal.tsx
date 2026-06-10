@@ -605,7 +605,6 @@ function _findCalendarHandler(): CardActionHandlerData | null {
       cardActionHandlerFor?: (
         stageKey: string,
         leadStatusKey: string | undefined,
-        hwSubstatusValue: string | undefined,
       ) => CardActionHandlerData | null;
     };
     if (typeof w.cardActionHandlerFor !== 'function') return null;

@@ -49,8 +49,6 @@ export function HubSpotPage() {
   usePageTitle('HubSpot · Measure Once');
 
   const [hubStatus, setHubStatus] = useState<HubStatus | null>(null);
-  const [syncingHubspot, setSyncingHubspot] = useState(false);
-  const [syncResult, setSyncResult] = useState<'success' | { error: string } | null>(null);
 
   const [webhookStatus, setWebhookStatus] = useState<WebhookStatus | null>(null);
   const [webhookLoading, setWebhookLoading] = useState(true);
@@ -118,21 +116,6 @@ export function HubSpotPage() {
     }
   }, [fetchWebhookStatus]);
 
-  const syncSubstatusesToHubSpot = useCallback(async () => {
-    setSyncingHubspot(true);
-    setSyncResult(null);
-    try {
-      await POST('/api/admin/lead-substatuses/sync-hubspot');
-      setSyncResult('success');
-    } catch (e) {
-      const msg = (e as Error).message || 'HubSpot sync failed.';
-      setSyncResult({ error: msg });
-      showToast(msg, true);
-    } finally {
-      setSyncingHubspot(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchHubStatus();
     fetchWebhookStatus();
@@ -196,38 +179,6 @@ export function HubSpotPage() {
               Register a webhook for real-time sync.
             </Alert>
           )}
-
-          <Box sx={{ mt: 1.5, p: 1.25, borderRadius: 1, border: 1, borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-              <Box>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>Re-sync sub-statuses to HubSpot</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Push the current sub-status list to HubSpot as <Box component="code" sx={{ fontSize: '0.8em' }}>hw_lead_substatus</Box> enumeration options. Use this to recover from a sync failure.
-                </Typography>
-              </Box>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={syncingHubspot ? <CircularProgress size={14} color="inherit" /> : <SyncIcon />}
-                disabled={syncingHubspot}
-                onClick={syncSubstatusesToHubSpot}
-                sx={{ flexShrink: 0 }}
-              >
-                {syncingHubspot ? 'Syncing…' : 'Re-sync now'}
-              </Button>
-            </Box>
-            {syncResult === 'success' && (
-              <Alert severity="success" sx={{ mt: 1.5 }}>
-                Sub-statuses synced to HubSpot — the <Box component="code" sx={{ fontSize: '0.85em' }}>hw_lead_substatus</Box> property now has the latest options.
-                Note: existing contacts' sub-statuses will need to be set manually via the picker — there is no automatic backfill because values were never stored locally.
-              </Alert>
-            )}
-            {syncResult !== null && syncResult !== 'success' && (
-              <Alert severity="error" sx={{ mt: 1.5 }}>
-                Sync failed: {syncResult.error}
-              </Alert>
-            )}
-          </Box>
         </CardContent>
       </Card>
 

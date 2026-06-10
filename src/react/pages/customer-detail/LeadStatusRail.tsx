@@ -4,27 +4,23 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { LeadStatus, LeadSubstatus, Contact, STAGE_COLOURS } from './types';
+import { LeadStatus, Contact, STAGE_COLOURS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
 interface Props {
   contact: Contact | null;
   leadStatuses: LeadStatus[];
-  leadSubstatuses: LeadSubstatus[];
   loaded: boolean;
   focusedLeadStatus: string | null;
   onFocusChange: (value: string) => void;
-  onSubstatusChange: (statusValue: string, substatusKey: string, checked: boolean) => void;
 }
 
 export function LeadStatusRail({
   contact,
   leadStatuses,
-  leadSubstatuses,
   loaded,
   focusedLeadStatus,
   onFocusChange,
-  onSubstatusChange,
 }: Props) {
   const { isManager } = usePrivilege();
   const canEdit = isManager;
@@ -74,7 +70,6 @@ export function LeadStatusRail({
 
   const props      = contact?.properties || {};
   const currentLs  = String(props.hs_lead_status || '').toUpperCase();
-  const currentSub = String(props.hw_lead_substatus || '');
   const currentIdx = rail.findIndex(e => String(e.value).toUpperCase() === currentLs);
 
   let resolvedFocused = focusedLeadStatus;
@@ -88,16 +83,6 @@ export function LeadStatusRail({
   const isFocusedCurrent = focusedIdx === currentIdx;
   const isFocusedPast    = currentIdx !== -1 && focusedIdx < currentIdx;
   const isFocusedFuture  = currentIdx === -1 || focusedIdx > currentIdx;
-
-  const focusedSubs = leadSubstatuses
-    .filter(s => String(s.status_key).toUpperCase() === String(resolvedFocused).toUpperCase())
-    .slice()
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-
-  const focusPrefix  = `${String(resolvedFocused).toUpperCase()}__`;
-  const tickedSubKey = isFocusedCurrent && currentSub.toUpperCase().startsWith(focusPrefix)
-    ? currentSub.slice(focusPrefix.length).toUpperCase()
-    : '';
 
   const hasPrev = focusedIdx > 0;
   const hasNext = focusedIdx < rail.length - 1;
@@ -307,77 +292,6 @@ export function LeadStatusRail({
               </Box>
             </Box>
 
-            {/* sub-status list */}
-            <Box sx={{ borderTop: '1px solid var(--stone)', p: '4px 0' }}>
-              {focusedSubs.length === 0 ? (
-                <Typography sx={{ p: '18px 16px', fontSize: '0.82rem', color: 'var(--ink-4)', fontStyle: 'italic' }}>
-                  No sub-statuses configured for this stage.
-                </Typography>
-              ) : (
-                focusedSubs.map(s => {
-                  const subKey = String(s.substatus_key).toUpperCase();
-                  const done   = subKey === tickedSubKey;
-
-                  return (
-                    <Box
-                      key={s.substatus_key}
-                      data-substatus-key={subKey}
-                      data-ls-done={done || undefined}
-                      data-action={canEdit ? 'setLeadSubstatusChecked' : undefined}
-                      data-status-value={resolvedFocused ?? ''}
-                      data-checked={canEdit ? String(!done) : undefined}
-                      onClick={canEdit ? () => onSubstatusChange(resolvedFocused!, subKey, !done) : undefined}
-                      sx={{
-                        display: 'flex', alignItems: 'flex-start', gap: '12px',
-                        width: '100%', p: '12px 16px', minHeight: 48,
-                        cursor: canEdit ? 'pointer' : 'default',
-                        pointerEvents: canEdit ? 'auto' : 'none',
-                        WebkitTapHighlightColor: 'transparent',
-                        transition: 'background 0.1s',
-                        opacity: done ? 0.6 : 1,
-                        '&:hover': { bgcolor: canEdit ? 'var(--paper-deep)' : 'transparent' },
-                        '&:active': { bgcolor: canEdit ? 'var(--paper-deep)' : 'transparent' },
-                      }}
-                    >
-                      {/* checkbox indicator */}
-                      <Box sx={{
-                        width: 18, height: 18,
-                        borderRadius: 'var(--radius-sm)',
-                        border: '2px solid',
-                        borderColor: done ? 'transparent' : 'var(--stone-deep)',
-                        bgcolor: done ? focusedColour.bg : 'transparent',
-                        flexShrink: 0, mt: '2px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.15s, border-color 0.15s',
-                      }}>
-                        {done && (
-                          <svg width="10" height="8" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true" // hex-color-ok: svg stroke attr, no JSX block comment available in SVG element
-                          >
-                            <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </Box>
-
-                      {/* label */}
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                        <Typography
-                          component="span"
-                          data-ls-status-label
-                          sx={{
-                            fontSize: '0.875rem',
-                            color: done ? 'var(--ink-4)' : 'var(--ink-2)',
-                            lineHeight: 1.4,
-                            textDecoration: done ? 'line-through' : 'none',
-                          }}
-                        >
-                          {s.label}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  );
-                })
-              )}
-            </Box>
           </Box>
         )}
       </Box>

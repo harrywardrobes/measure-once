@@ -30,7 +30,6 @@ import {
   ShowMessageConfig,
   StartDesignVisitConfig,
   isLeadStatusKeyValid,
-  isStatusKeyValid,
   KNOWN_STATUS_KEY_FIELDS,
 } from './HandlerConfigBlocks';
 import type {
@@ -145,23 +144,21 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Binding    { stage_key?: string; status_key?: string; substatus_id?: number | null; }
+interface Binding    { stage_key?: string; status_key?: string; }
 interface Handler    { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
 interface LeadStatus { key: string; label: string; stage: string | null; shorthand: string; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
-interface Substatus  { id: number; status_key: string; substatus_key: string; label: string; action_label: string; sort_order: number; }
 interface CALabel    { stage_key: string; status_key: string; label: string; }
 
 interface ConflictItem {
-  type: 'label' | 'substatus';
-  stage_key?: string; status_key?: string; substatus_id?: number;
+  type: 'label';
+  stage_key?: string; status_key?: string;
   count: number; handler_ids: number[]; handler_names: string[];
 }
 interface ConflictData { total: number; conflicts: ConflictItem[]; }
 
 interface ActionSlot {
-  kind: 'ls' | 'sub';
+  kind: 'ls';
   stage_key?: string; status_key?: string;
-  substatus_id?: number;
   label: string; rowLabel: string;
   hasLabel?: boolean;
 }
@@ -175,13 +172,12 @@ const _nonce = Math.random().toString(36).slice(2);
 const _reloadRef:       { fn: (() => Promise<void>) | null }          = { fn: null };
 const _handlersRef:     { current: Handler[]    }                      = { current: [] };
 const _labelsRef:       { current: CALabel[]    }                      = { current: [] };
-const _substatusesRef:  { current: Substatus[]  }                      = { current: [] };
 const _statusesRef:     { current: LeadStatus[] }                      = { current: [] };
 const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
 // Refs to open modals from outside the React tree (e.g. window exposure)
 const _openEditorRef: { fn: ((slot: ActionSlot, existing?: Handler | null) => void) | null } = { fn: null };
-const _openConflictResolverRef: { fn: ((stageKey: string | null, statusKey: string | null, substatusId: number | null) => void) | null } = { fn: null };
+const _openConflictResolverRef: { fn: ((stageKey: string | null, statusKey: string | null) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -191,24 +187,16 @@ function showToast(msg: string, err?: boolean) {
 }
 
 function _handlersForSlot(slot: Partial<ActionSlot>): Handler[] {
-  return _handlersRef.current.filter(h => h.bindings?.some(b => {
-    if (slot.substatus_id != null) return Number(b.substatus_id) === slot.substatus_id;
-    if (b.substatus_id != null) return false;
-    return (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
-        && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase();
-  }));
+  return _handlersRef.current.filter(h => h.bindings?.some(b =>
+    (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
+    && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase(),
+  ));
 }
 
 function _resolveLeadStatusLabel(key: string): string {
   if (!key) return '';
   const ls = _statusesRef.current.find(s => s.key === key);
-  if (ls) return ls.label || ls.key;
-  const sub = _substatusesRef.current.find(s => s.substatus_key === key);
-  if (sub) {
-    const parent = _statusesRef.current.find(s => s.key === sub.status_key);
-    return `${sub.label || sub.substatus_key} (${parent ? (parent.label || parent.key) : sub.status_key})`;
-  }
-  return key;
+  return ls ? (ls.label || ls.key) : key;
 }
 
 function _buildActionSlotGroups(): ActionStage[] {
@@ -231,7 +219,6 @@ function _buildActionSlotGroups(): ActionStage[] {
 
   const statuses = _statusesRef.current.filter(s => !s.is_null_row);
   const nullRow  = _statusesRef.current.find(s => s.is_null_row);
-  const subs     = _substatusesRef.current;
 
   const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
     CARD_ACTION_STAGES.map(s => [s.lsStage, s.key]),
@@ -245,26 +232,13 @@ function _buildActionSlotGroups(): ActionStage[] {
     const dflt = labelsByKey.get(`${stageKey}|${lsKeyLower}`) || '';
     const hasHandler = _handlersRef.current.some(h =>
       (h.bindings || []).some(b =>
-        b.substatus_id == null &&
         (b.stage_key  || '').toLowerCase() === stageKey &&
         (b.status_key || '').toLowerCase() === lsKeyLower,
       ),
     );
 
-    const lsSubs = subs.filter(s => String(s.status_key).toUpperCase() === String(ls.key).toUpperCase())
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-
     if (dflt || hasHandler) {
       slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action', hasLabel: !!dflt });
-    }
-    for (const sub of lsSubs) {
-      const action = (sub.action_label || '').trim();
-      if (!action) continue;
-      slots.push({
-        kind: 'sub', substatus_id: sub.id,
-        status_key: sub.status_key,
-        label: action, rowLabel: `Sub-status${sub.label ? ' · ' + sub.label : ''}`,
-      });
     }
 
     if (slots.length) {
@@ -280,7 +254,6 @@ function _buildActionSlotGroups(): ActionStage[] {
   const globalLabelDisplay = globalLabel || labelsByKey.get('sales|') || (nullRow?.label ?? 'No lead status');
   const hasGlobalHandler = _handlersRef.current.some(h =>
     (h.bindings || []).some(b =>
-      b.substatus_id == null &&
       (b.stage_key || '').toLowerCase() === '__global__' &&
       (b.status_key || '') === '',
     ),
@@ -323,10 +296,9 @@ async function _reloadAndBroadcast() {
 
 function _flashResolvedBadge(slot: Partial<ActionSlot>): void {
   if (typeof W.flashResolvedSlot === 'function') {
-    (W.flashResolvedSlot as (a: string, b: string, c: number | null) => void)(
+    (W.flashResolvedSlot as (a: string, b: string) => void)(
       slot.stage_key || '',
       slot.status_key || '',
-      slot.substatus_id != null ? Number(slot.substatus_id) : null,
     );
     return;
   }
@@ -341,7 +313,6 @@ interface HandlerEditorModalProps {
   existing:    Handler | null;
   handlers:    Handler[];
   statuses:    LeadStatus[];
-  substatuses: Substatus[];
   onClose:     () => void;
   onSaved:     (isEdit: boolean) => void;
 }
@@ -351,7 +322,6 @@ function HandlerEditorModal({
   existing,
   handlers,
   statuses,
-  substatuses,
   onClose,
   onSaved,
 }: HandlerEditorModalProps) {
@@ -388,16 +358,11 @@ function HandlerEditorModal({
   const [conflictList, setConflictList] = useState<Handler[]>([]);
   const [saving,       setSaving]       = useState(false);
 
-  const binding: Binding = slot.kind === 'sub'
-    ? { substatus_id: slot.substatus_id }
-    : { stage_key: slot.stage_key, status_key: slot.status_key };
+  const binding: Binding = { stage_key: slot.stage_key, status_key: slot.status_key };
 
   const sdvLeadStatuses = statuses
     .filter(s => !s.is_null_row)
     .map(s => ({ key: s.key, label: s.label || s.key }));
-  const sdvSubstatuses = substatuses.map(s => ({
-    key: s.substatus_key, label: s.label, statusKey: s.status_key,
-  }));
 
   const validateName = (v: string): boolean => {
     if (v.length > 0 && !SNAKE_RE.test(v)) {
@@ -419,7 +384,7 @@ function HandlerEditorModal({
   const sdvInvalidIntermediate = showSdv
     && !isLeadStatusKeyValid(sdvVal.intermediateLeadStatus, sdvLeadStatuses);
   const sdvInvalidSubmitted = showSdv
-    && !isStatusKeyValid(sdvVal.submittedLeadStatus, sdvLeadStatuses, sdvSubstatuses);
+    && !isLeadStatusKeyValid(sdvVal.submittedLeadStatus, sdvLeadStatuses);
 
   // Detect stale status-key references inside the JSON fallback editor.
   // We parse the JSON on every render (cheap for small configs) and check every
@@ -431,9 +396,7 @@ function HandlerEditorModal({
       for (const knownField of KNOWN_STATUS_KEY_FIELDS) {
         const val = parsed[knownField.field];
         if (typeof val === 'string' && val !== '') {
-          const valid = knownField.type === 'lead_status'
-            ? isLeadStatusKeyValid(val, sdvLeadStatuses)
-            : isStatusKeyValid(val, sdvLeadStatuses, sdvSubstatuses);
+          const valid = isLeadStatusKeyValid(val, sdvLeadStatuses);
           if (!valid) {
             jsonStaleLsRefs.push({ field: knownField.field, label: knownField.label, key: val });
           }
@@ -523,12 +486,10 @@ function HandlerEditorModal({
     if (!payload) return;
 
     const conflicts = handlers.filter(h =>
-      (h.bindings ?? []).some((b: Binding) => {
-        if (slot.substatus_id != null) return Number(b.substatus_id) === slot.substatus_id;
-        if (b.substatus_id != null) return false;
-        return (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
-            && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase();
-      }) && (!existing || h.id !== existing.id),
+      (h.bindings ?? []).some((b: Binding) =>
+        (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
+        && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase(),
+      ) && (!existing || h.id !== existing.id),
     );
 
     if (conflicts.length > 0) {
@@ -637,7 +598,6 @@ function HandlerEditorModal({
                 submittedLeadStatus={sdvVal.submittedLeadStatus}
                 termsAndConditions={sdvVal.termsAndConditions}
                 leadStatuses={sdvLeadStatuses}
-                substatuses={sdvSubstatuses}
                 intermediateLeadStatusInvalid={sdvInvalidIntermediate}
                 submittedLeadStatusInvalid={sdvInvalidSubmitted}
                 onChange={setSdvVal}
@@ -712,9 +672,7 @@ function HandlerEditorModal({
                 </Typography>
                 {conflictList.map(h => {
                   const slotLabel = slot.label || (
-                    slot.substatus_id != null
-                      ? `sub-status #${slot.substatus_id}`
-                      : `${slot.stage_key} / ${slot.status_key}`
+`${slot.stage_key} / ${slot.status_key}`
                   );
                   return (
                     <Typography key={h.id} variant="body2">
@@ -749,10 +707,8 @@ function HandlerEditorModal({
 interface ConflictResolverModalProps {
   stageKey:    string | null;
   statusKey:   string | null;
-  substatusId: number | null;
   handlers:    Handler[];
   statuses:    LeadStatus[];
-  substatuses: Substatus[];
   onClose:     () => void;
   /** Optional override for the remove action (used by Storybook to avoid real API calls). */
   onRemove?:   (id: number) => Promise<void>;
@@ -761,32 +717,20 @@ interface ConflictResolverModalProps {
 export function ConflictResolverModal({
   stageKey,
   statusKey,
-  substatusId,
   handlers,
   statuses,
-  substatuses,
   onClose,
   onRemove,
 }: ConflictResolverModalProps) {
-  const slot: Partial<ActionSlot> = substatusId != null
-    ? { substatus_id: Number(substatusId) }
-    : { stage_key: stageKey || '', status_key: statusKey || '' };
+  const slot: Partial<ActionSlot> = { stage_key: stageKey || '', status_key: statusKey || '' };
 
-  const conflicting = handlers.filter(h => h.bindings?.some(b => {
-    if (slot.substatus_id != null) return Number(b.substatus_id) === slot.substatus_id;
-    if (b.substatus_id != null) return false;
-    return (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
-        && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase();
-  }));
+  const conflicting = handlers.filter(h => h.bindings?.some(b =>
+    (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
+    && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase(),
+  ));
 
-  let slotDesc: string;
-  if (substatusId != null) {
-    const sub = substatuses.find(s => Number(s.id) === Number(substatusId));
-    slotDesc = sub ? `sub-status "${sub.label || sub.substatus_key}"` : `sub-status #${substatusId}`;
-  } else {
-    const ls = statuses.find(s => s.key === statusKey);
-    slotDesc = ls ? `"${ls.label}"` : `${stageKey} / ${statusKey}`;
-  }
+  const ls = statuses.find(s => s.key === statusKey);
+  const slotDesc = ls ? `"${ls.label}"` : `${stageKey} / ${statusKey}`;
 
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [errorMsg,   setErrorMsg]   = useState('');
@@ -802,9 +746,7 @@ export function ConflictResolverModal({
       if (onRemove) {
         await onRemove(id);
       } else {
-        const bindingSpec = slot.substatus_id != null
-          ? { substatus_id: slot.substatus_id }
-          : { stage_key: slot.stage_key, status_key: slot.status_key };
+        const bindingSpec = { stage_key: slot.stage_key, status_key: slot.status_key };
         await DELETE(`/api/admin/card-action-handlers/${id}/binding`, bindingSpec);
         await _reloadAndBroadcast();
         showToast('Handler removed.');
@@ -893,9 +835,7 @@ export function ConflictResolverModal({
 
 async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>): Promise<void> {
   if (!confirm('Remove this action from the label?')) return;
-  const bindingSpec = slot.substatus_id != null
-    ? { substatus_id: slot.substatus_id }
-    : { stage_key: slot.stage_key, status_key: slot.status_key };
+  const bindingSpec = { stage_key: slot.stage_key, status_key: slot.status_key };
   try {
     await DELETE(`/api/admin/card-action-handlers/${id}/binding`, bindingSpec);
     await _reloadAndBroadcast();
@@ -938,24 +878,15 @@ function HandlerBoundTo({ h }: { h: Handler }) {
       <div className="adm-handler-bound-to-head">Bound to:</div>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
         {h.bindings.map((b, i) => {
+          const stage = String(b.stage_key || '');
           let chipLabel: string;
-          if (b.substatus_id != null) {
-            const sub = _substatusesRef.current.find(s => Number(s.id) === Number(b.substatus_id));
-            const parentLs = sub ? _statusesRef.current.find(s => String(s.key || '').toLowerCase() === String(sub.status_key || '').toLowerCase()) : null;
-            const stage = String(b.stage_key || '');
-            const lsLabel = parentLs ? (parentLs.label || parentLs.key) : (b.status_key || '?');
-            const subLabel = sub ? (sub.label || sub.substatus_key) : `#${b.substatus_id}`;
-            chipLabel = stage ? `${stage} / ${lsLabel} / ${subLabel}` : `${lsLabel} / ${subLabel}`;
+          if (stage.toLowerCase() === '__global__' && (b.status_key || '') === '') {
+            chipLabel = 'No lead status';
           } else {
-            const stage = String(b.stage_key || '');
-            if (stage.toLowerCase() === '__global__' && (b.status_key || '') === '') {
-              chipLabel = 'No lead status';
-            } else {
-              const ck = String(b.status_key || '').toLowerCase();
-              const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
-              const lsLabel = ls ? (ls.label || ls.key) : (b.status_key || '—');
-              chipLabel = stage ? `${stage} / ${lsLabel}` : lsLabel;
-            }
+            const ck = String(b.status_key || '').toLowerCase();
+            const ls = _statusesRef.current.find(s => String(s.key || '').toLowerCase() === ck);
+            const lsLabel = ls ? (ls.label || ls.key) : (b.status_key || '—');
+            chipLabel = stage ? `${stage} / ${lsLabel}` : lsLabel;
           }
           return <Chip key={i} label={chipLabel} size="small" sx={chipSx} />;
         })}
@@ -988,13 +919,10 @@ function HandlerSummary({ h }: { h: Handler }) {
     const liveStatusKeys = new Set(
       _statusesRef.current.filter(s => !s.is_null_row).map(s => s.key),
     );
-    const liveSubstatusKeys = new Set(
-      _substatusesRef.current.map(s => s.substatus_key),
-    );
     const interKey = h.config?.intermediateLeadStatus ? String(h.config.intermediateLeadStatus) : '';
     const submKey  = h.config?.submittedLeadStatus    ? String(h.config.submittedLeadStatus)    : '';
     const interStale = !!interKey && !liveStatusKeys.has(interKey);
-    const submStale  = !!submKey  && !liveStatusKeys.has(submKey) && !liveSubstatusKeys.has(submKey);
+    const submStale  = !!submKey  && !liveStatusKeys.has(submKey);
     hasStaleStatusRef = interStale || submStale;
 
     if (interKey) {
@@ -1059,14 +987,13 @@ function HandlerSummary({ h }: { h: Handler }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface EditorOpenState { slot: ActionSlot; existing: Handler | null; }
-interface ConflictResolverOpenState { stageKey: string | null; statusKey: string | null; substatusId: number | null; }
+interface ConflictResolverOpenState { stageKey: string | null; statusKey: string | null; }
 
 export function ActionHandlersPage() {
   usePageTitle('Action Handlers · Measure Once');
   const toast = useToast();
   const [handlers,              setHandlers]              = useState<Handler[]>([]);
   const [labels,                setLabels]                = useState<CALabel[]>([]);
-  const [substatuses,           setSubstatuses]           = useState<Substatus[]>([]);
   const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
   const [conflicts,             setConflicts]             = useState<ConflictData>({ total: 0, conflicts: [] });
   const [orphanedCount,         setOrphanedCount]         = useState(0);
@@ -1094,19 +1021,17 @@ export function ActionHandlersPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [hdl, lbl, sub, sta, cfl, orp] = await Promise.all([
+      const [hdl, lbl, sta, cfl, orp] = await Promise.all([
         GET('/api/admin/card-action-handlers'),
         GET('/api/admin/stage-action-labels'),
-        GET('/api/admin/lead-substatuses'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers/conflicts'),
         GET('/api/admin/card-action-handlers/orphaned'),
-      ]) as [Handler[], CALabel[], Substatus[], LeadStatus[], ConflictData, { count: number }];
+      ]) as [Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const h  = safeArr<Handler>(hdl);
       const lb = safeArr<CALabel>(lbl);
-      const sb = safeArr<Substatus>(sub);
       const st = safeArr<LeadStatus>(sta);
       const cf: ConflictData = cfl && typeof cfl === 'object'
         ? { total: Number((cfl as ConflictData).total) || 0, conflicts: safeArr<ConflictItem>((cfl as ConflictData).conflicts) }
@@ -1115,15 +1040,13 @@ export function ActionHandlersPage() {
 
       setHandlers(h);
       setLabels(lb);
-      setSubstatuses(sb);
       setStatuses(st);
       setConflicts(cf);
       setOrphanedCount(orphCount);
 
-      _handlersRef.current    = h;
-      _labelsRef.current      = lb;
-      _substatusesRef.current = sb;
-      _statusesRef.current    = st;
+      _handlersRef.current = h;
+      _labelsRef.current   = lb;
+      _statusesRef.current = st;
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -1155,13 +1078,13 @@ export function ActionHandlersPage() {
 
   useEffect(() => {
     _openEditorRef.fn = (slot, existing) => setEditorOpen({ slot, existing: existing ?? null });
-    _openConflictResolverRef.fn = (stageKey, statusKey, substatusId) =>
-      setConflictResolverOpen({ stageKey, statusKey, substatusId });
+    _openConflictResolverRef.fn = (stageKey, statusKey) =>
+      setConflictResolverOpen({ stageKey, statusKey });
     W.loadCardActionHandlersAdmin   = fetchAll;
     W.openHandlerEditor             = (slot: ActionSlot, existing?: Handler | null) =>
       _openEditorRef.fn?.(slot, existing);
-    W.openConflictResolver          = (stageKey: string | null, statusKey: string | null, substatusId: number | null) =>
-      _openConflictResolverRef.fn?.(stageKey, statusKey, substatusId);
+    W.openConflictResolver          = (stageKey: string | null, statusKey: string | null) =>
+      _openConflictResolverRef.fn?.(stageKey, statusKey);
     W.refreshHandlerConflictsBanner = fetchAll;
     return () => {
       _openEditorRef.fn = null;
@@ -1178,7 +1101,7 @@ export function ActionHandlersPage() {
   const stages = _buildActionSlotGroups();
 
   const conflictKey = conflicts.conflicts.map(c =>
-    c.substatus_id != null ? `s:${c.substatus_id}` : `l:${c.stage_key}/${c.status_key}`
+    `l:${c.stage_key}/${c.status_key}`
   ).sort().join('|');
 
   const bannerVisible = conflicts.total > 0 && dismissed !== conflictKey;
@@ -1263,21 +1186,11 @@ export function ActionHandlersPage() {
                 </div>
                 <ul className="adm-cab-list">
                   {conflicts.conflicts.map((c, idx) => {
-                    let slotDesc: string;
-                    let args: [string | null, string | null, number | null];
-                    if (c.substatus_id != null) {
-                      const sub = substatuses.find(s => Number(s.id) === Number(c.substatus_id));
-                      slotDesc = sub
-                        ? `Sub-status "${sub.label || sub.substatus_key}"`
-                        : `Sub-status #${c.substatus_id}`;
-                      args = [null, null, c.substatus_id];
-                    } else {
-                      const ck = String(c.status_key || '').toLowerCase();
-                      const ls = statuses.find(s => String(s.key || '').toLowerCase() === ck);
-                      const lsLbl = ls ? (ls.label || ls.key) : c.status_key;
-                      slotDesc = `${c.stage_key} / ${lsLbl}`;
-                      args = [String(c.stage_key || ''), String(c.status_key || ''), null];
-                    }
+                    const ck = String(c.status_key || '').toLowerCase();
+                    const ls = statuses.find(s => String(s.key || '').toLowerCase() === ck);
+                    const lsLbl = ls ? (ls.label || ls.key) : c.status_key;
+                    const slotDesc = `${c.stage_key} / ${lsLbl}`;
+                    const args: [string | null, string | null] = [String(c.stage_key || ''), String(c.status_key || '')];
                     const names = Array.isArray(c.handler_names) ? c.handler_names.filter(Boolean) : [];
                     return (
                       <li key={idx} className="adm-cab-item">
@@ -1290,7 +1203,7 @@ export function ActionHandlersPage() {
                           )}.
                         </div>
                         <button type="button" className="btn adm-cab-fix-btn" data-cah-fix
-                          onClick={() => setConflictResolverOpen({ stageKey: args[0], statusKey: args[1], substatusId: args[2] })}>
+                          onClick={() => setConflictResolverOpen({ stageKey: args[0], statusKey: args[1] })}>
                           Fix
                         </button>
                       </li>
@@ -1321,7 +1234,7 @@ export function ActionHandlersPage() {
                           {g.slots.map(slot => {
                             const handler = _handlersForSlot(slot)[0] || null;
                             return (
-                              <tr key={`${slot.kind}-${slot.substatus_id ?? slot.status_key}`} className="adm-handlers-row">
+                              <tr key={`${slot.kind}-${slot.status_key}`} className="adm-handlers-row">
                                 <td className="adm-handlers-cell adm-handlers-cell--slot">
                                   <div className="adm-handlers-slot-label">{slot.label}</div>
                                   <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
@@ -1377,12 +1290,11 @@ export function ActionHandlersPage() {
       {/* Handler editor modal — rendered in React, outside the card */}
       {editorOpen && (
         <HandlerEditorModal
-          key={`${editorOpen.existing?.id ?? 'new'}-${editorOpen.slot.kind}-${editorOpen.slot.substatus_id ?? editorOpen.slot.status_key}`}
+          key={`${editorOpen.existing?.id ?? 'new'}-${editorOpen.slot.kind}-${editorOpen.slot.status_key}`}
           slot={editorOpen.slot}
           existing={editorOpen.existing}
           handlers={handlers}
           statuses={statuses}
-          substatuses={substatuses}
           onClose={() => setEditorOpen(null)}
           onSaved={handleEditorSaved}
         />
@@ -1391,13 +1303,11 @@ export function ActionHandlersPage() {
       {/* Conflict resolver modal — rendered in React, outside the card */}
       {conflictResolverOpen && (
         <ConflictResolverModal
-          key={`cr-${conflictResolverOpen.substatusId ?? ''}-${conflictResolverOpen.stageKey ?? ''}-${conflictResolverOpen.statusKey ?? ''}`}
+          key={`cr-${conflictResolverOpen.stageKey ?? ''}-${conflictResolverOpen.statusKey ?? ''}`}
           stageKey={conflictResolverOpen.stageKey}
           statusKey={conflictResolverOpen.statusKey}
-          substatusId={conflictResolverOpen.substatusId}
           handlers={handlers}
           statuses={statuses}
-          substatuses={substatuses}
           onClose={() => setConflictResolverOpen(null)}
         />
       )}

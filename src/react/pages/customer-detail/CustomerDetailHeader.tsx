@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { PROVIDER_COLORS } from '../../theme';
-import { Contact, LeadStatus, LeadSubstatus, contactName } from './types';
+import { Contact, LeadStatus, contactName } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
@@ -8,36 +8,15 @@ import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
 interface Props {
   contact: Contact;
   leadStatuses: LeadStatus[];
-  leadSubstatuses: LeadSubstatus[];
   nullLeadStatusLabel: string;
   onEditContact?: () => void;
   onOpenWhatsApp?: () => void;
   whatsappEnabled?: boolean;
 }
 
-function currentSubstatusFor(
-  contact: Contact,
-  leadSubstatuses: LeadSubstatus[],
-): { key: string; label: string } | null {
-  const statusKey = contact?.properties?.hs_lead_status || '';
-  const hwVal     = contact?.properties?.hw_lead_substatus || '';
-  if (!statusKey || !hwVal) return null;
-  const sk = String(statusKey).toUpperCase();
-  const v  = String(hwVal).toUpperCase();
-  const prefix = `${sk}__`;
-  if (!v.startsWith(prefix)) return null;
-  const subKey = v.slice(prefix.length);
-  const sorted = leadSubstatuses
-    .filter(s => String(s.status_key).toUpperCase() === sk)
-    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  const row = sorted.find(s => String(s.substatus_key).toUpperCase() === subKey);
-  return row ? { key: row.substatus_key, label: row.label || row.substatus_key } : null;
-}
-
 export function CustomerDetailHeader({
   contact,
   leadStatuses,
-  leadSubstatuses,
   nullLeadStatusLabel,
   onEditContact,
   onOpenWhatsApp,
@@ -64,9 +43,7 @@ export function CustomerDetailHeader({
   const customerNum = props.customer_number || '';
   const cityLine   = [city, zip].filter(Boolean).join(' ');
 
-  const rawStatus       = props.hs_lead_status || '';
-  const hwSubstatusVal  = props.hw_lead_substatus || '';
-  const currentSub  = currentSubstatusFor(contact, leadSubstatuses);
+  const rawStatus = props.hs_lead_status || '';
 
   const pillContent = (() => {
     if (!rawStatus) {
@@ -77,14 +54,6 @@ export function CustomerDetailHeader({
     const parentLabel = opt
       ? opt.label
       : rawStatus.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    if (currentSub) {
-      return {
-        label: currentSub.label,
-        subLabel: parentLabel,
-        title: 'Change lead status / sub-status',
-        empty: false,
-      };
-    }
     return { label: parentLabel, subLabel: null, title: 'Change lead status', empty: false };
   })();
 
@@ -191,7 +160,7 @@ export function CustomerDetailHeader({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
-            <PhotosReceivedBadge leadStatus={rawStatus} hwSubstatus={hwSubstatusVal} />
+            <PhotosReceivedBadge leadStatus={rawStatus} />
             <span
               className={`lead-status-badge${pillContent.empty ? ' lsb-empty' : ''}${canEdit ? ' lsb-clickable' : ''}`}
               title={pillContent.title}
@@ -213,8 +182,6 @@ export function CustomerDetailHeader({
         onClose={() => setPickerAnchorEl(null)}
         contactId={contact.id}
         currentStatus={props.hs_lead_status || ''}
-        currentHwSubstatus={props.hw_lead_substatus || ''}
-        showSubstatuses
       />
     </div>
   );

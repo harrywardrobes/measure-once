@@ -15,19 +15,9 @@ interface LeadStatusOption {
   excluded_from_sales?: boolean;
 }
 
-interface LeadSubstatus {
-  id?: number;
-  status_key: string;
-  substatus_key: string;
-  label?: string;
-  sort_order?: number;
-}
-
 interface WindowGlobals {
   LEAD_STATUS_OPTIONS?: LeadStatusOption[];
-  LEAD_SUBSTATUSES?: LeadSubstatus[];
   quickSetLeadStatus?: (contactId: string, newStatus: string) => void;
-  _quickSetLeadStatusWithSub?: (contactId: string, statusKey: string, substatusKey: string) => void;
   showToast?: (msg: string, isError?: boolean) => void;
 }
 
@@ -37,39 +27,13 @@ function getLeadStatuses(): LeadStatusOption[] {
   return (window as unknown as WindowGlobals).LEAD_STATUS_OPTIONS || [];
 }
 
-function getLeadSubstatuses(): LeadSubstatus[] {
-  return (window as unknown as WindowGlobals).LEAD_SUBSTATUSES || [];
-}
-
-function substatusesForStatus(statusKey: string): LeadSubstatus[] {
-  if (!statusKey) return [];
-  const sk = String(statusKey).toUpperCase();
-  return getLeadSubstatuses()
-    .filter((s) => String(s.status_key).toUpperCase() === sk)
-    .slice()
-    .sort(
-      (a, b) =>
-        (b.sort_order ?? 0) - (a.sort_order ?? 0) ||
-        String(b.substatus_key).localeCompare(String(a.substatus_key)),
-    );
-}
-
-function currentSubstatusKey(statusKey: string, hwSubstatus: string): string {
-  if (!statusKey || !hwSubstatus) return '';
-  const prefix = `${String(statusKey).toUpperCase()}__`;
-  const v = String(hwSubstatus).toUpperCase();
-  if (!v.startsWith(prefix)) return '';
-  return v.slice(prefix.length);
-}
-
-// ── Sub-item button ────────────────────────────────────────────────────────────
+// ── Picker button ──────────────────────────────────────────────────────────────
 
 function PickerButton({
   label,
   isActive,
   isDisabled,
   isClear,
-  isSub,
   onClick,
   extraClass,
   leadStatusKey,
@@ -78,7 +42,6 @@ function PickerButton({
   isActive?: boolean;
   isDisabled?: boolean;
   isClear?: boolean;
-  isSub?: boolean;
   onClick?: () => void;
   extraClass?: string;
   leadStatusKey?: string;
@@ -98,9 +61,9 @@ function PickerButton({
         background: isActive ? BRAND_COLORS.orchidTintDeep : 'none',
         color: isClear ? 'error.main' : isActive ? BRAND_COLORS.orchidDeep : isDisabled ? BRAND_COLORS.stoneDeep : BRAND_COLORS.ink1,
         fontWeight: isActive ? 700 : isClear ? 500 : 400,
-        fontSize: isSub ? '0.78rem' : '0.82rem',
+        fontSize: '0.82rem',
         fontFamily: 'inherit',
-        px: isSub ? '20px' : '12px',
+        px: '12px',
         py: '7px',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         borderRadius: '4px',
@@ -123,8 +86,6 @@ export interface LeadStatusPickerProps {
   onClose: () => void;
   contactId: string;
   currentStatus: string;
-  currentHwSubstatus: string;
-  showSubstatuses?: boolean;
 }
 
 export function LeadStatusPicker({
@@ -133,12 +94,9 @@ export function LeadStatusPicker({
   onClose,
   contactId,
   currentStatus,
-  currentHwSubstatus,
-  showSubstatuses = false,
 }: LeadStatusPickerProps) {
   const [loading, setLoading] = useState(false);
   const [liveStatus, setLiveStatus] = useState(currentStatus);
-  const [liveHwSub, setLiveHwSub] = useState(currentHwSubstatus);
   const closedRef = useRef(false);
 
   useEffect(() => {
@@ -147,19 +105,16 @@ export function LeadStatusPicker({
       return;
     }
     setLiveStatus(currentStatus);
-    setLiveHwSub(currentHwSubstatus);
     setLoading(true);
     closedRef.current = false;
 
     fetch(`/api/contacts/${encodeURIComponent(contactId)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((fresh: { properties?: { hs_lead_status?: string; hw_lead_substatus?: string } } | null) => {
+      .then((fresh: { properties?: { hs_lead_status?: string } } | null) => {
         if (closedRef.current || !fresh) return;
         const freshStatus = fresh.properties?.hs_lead_status || '';
-        const freshHw = fresh.properties?.hw_lead_substatus || '';
         const drifted = freshStatus !== currentStatus;
         setLiveStatus(freshStatus);
-        setLiveHwSub(freshHw);
         if (drifted) {
           const statuses = getLeadStatuses();
           const newLabel = freshStatus
@@ -193,14 +148,6 @@ export function LeadStatusPicker({
     }
   };
 
-  const handleSelectWithSub = (statusKey: string, subKey: string) => {
-    onClose();
-    const w = window as unknown as WindowGlobals;
-    if (typeof w._quickSetLeadStatusWithSub === 'function') {
-      w._quickSetLeadStatusWithSub(contactId, statusKey, subKey);
-    }
-  };
-
   const handleClear = () => {
     onClose();
     const w = window as unknown as WindowGlobals;
@@ -210,7 +157,6 @@ export function LeadStatusPicker({
   };
 
   const statuses = getLeadStatuses();
-  const curSubKey = currentSubstatusKey(liveStatus, liveHwSub);
 
   return (
     <Popover
@@ -253,39 +199,16 @@ export function LeadStatusPicker({
             onClick={liveStatus ? handleClear : undefined}
             extraClass="card-picker-opt card-picker-opt--clear"
           />
-          {statuses.map(({ value, label }) => {
-            const subs = showSubstatuses ? substatusesForStatus(value) : [];
-            const parentIsActive = showSubstatuses
-              ? value === liveStatus && !curSubKey
-              : value === liveStatus;
-            return (
-              <React.Fragment key={value}>
-                <PickerButton
-                  label={label}
-                  isActive={parentIsActive}
-                  onClick={() => handleSelect(value)}
-                  extraClass="card-picker-opt"
-                  leadStatusKey={value}
-                />
-                {showSubstatuses &&
-                  subs.map((sub) => {
-                    const subIsActive =
-                      value === liveStatus &&
-                      String(sub.substatus_key).toUpperCase() === curSubKey;
-                    return (
-                      <PickerButton
-                        key={sub.substatus_key}
-                        label={sub.label || sub.substatus_key}
-                        isActive={subIsActive}
-                        isSub
-                        onClick={() => handleSelectWithSub(value, sub.substatus_key)}
-                        extraClass="card-picker-opt card-picker-opt--sub"
-                      />
-                    );
-                  })}
-              </React.Fragment>
-            );
-          })}
+          {statuses.map(({ value, label }) => (
+            <PickerButton
+              key={value}
+              label={label}
+              isActive={value === liveStatus}
+              onClick={() => handleSelect(value)}
+              extraClass="card-picker-opt"
+              leadStatusKey={value}
+            />
+          ))}
         </>
       )}
     </Popover>

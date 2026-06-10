@@ -22,7 +22,7 @@ const { getCredential, CRED_MAP } = require('./hubspot-creds');
 const { router: visitsRouter } = require('./visits');
 const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
-const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureDefaultReviewHandlerBinding, ensureSubstatusHandlerBindings, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
+const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const app = express();
@@ -67,7 +67,6 @@ app.use('/__mockup', (req, res) => {
 // signature verification. A separate express.raw() middleware is applied
 // inline to this single route only.
 const _hsWebhookSseClients = new Set();
-const _clearInProgress = new Set(); // guard against concurrent orphaned-substatus clear jobs for the same deleted key
 // Per-user connection tracking for SSE abuse prevention.
 // Maps userId -> Set of active response objects.
 const _hsWebhookSseByUser = new Map();
@@ -127,7 +126,7 @@ app.post('/api/hubspot/webhook',
     }
 
     // Collect contact IDs where a relevant lead-status property changed.
-    const WATCHED_PROPS = new Set(['hs_lead_status', 'hw_lead_substatus']);
+    const WATCHED_PROPS = new Set(['hs_lead_status']);
     const affectedIds   = new Set();
     for (const ev of events) {
       if (ev.subscriptionType === 'contact.propertyChange' &&
@@ -672,7 +671,7 @@ let _allContactsLastGood = null;  // { contacts: [...], fetchedAt } — survives
 let _allContactsInflight = null;  // Promise while a scan is running
 
 const ALL_CONTACTS_PROPERTIES = [
-  'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status', 'hw_lead_substatus',
+  'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
   'measure_once_rooms', 'hw_test_user',
 ];
@@ -1086,7 +1085,7 @@ function _getWebhookBaseUrl(req) {
   return `${req.headers['x-forwarded-proto'] || req.protocol || 'https'}://${req.get('host')}`;
 }
 
-const HS_WATCHED_PROPS = ['hs_lead_status', 'hw_lead_substatus'];
+const HS_WATCHED_PROPS = ['hs_lead_status'];
 
 // GET /api/admin/hubspot-webhook — returns webhook config status
 app.get('/api/admin/hubspot-webhook', isAuthenticated, requireAdmin, async (req, res) => {
@@ -1735,55 +1734,6 @@ app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken
   res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
 });
 
-// ── HubSpot: Substatus counts (for stage-scoped substatus chip filtering) ──────
-// Returns per-substatus contact counts for the given leadStatus (required) and
-// optional stage. When stage is provided, counts only contacts that have at
-// least one room in that stage. Uses the shared contacts cache — no extra
-// HubSpot API calls.
-// Response shape: { "STATUSKEY__SUBKEY": N, ... }
-app.get('/api/contacts-substatus-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
-  const leadStatus = (req.query.leadStatus || '').trim();
-  const stageParam = (req.query.stage || '').trim();
-  if (!leadStatus) {
-    return res.status(400).json({ error: 'leadStatus query param is required.' });
-  }
-  try {
-    const { contacts: allContacts, stale, unavailable } = await getSharedContactsCache();
-    if (unavailable) {
-      return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
-    }
-    if (stale) res.setHeader('X-Cache-Status', 'stale');
-
-    let contacts = allContacts;
-    // Filter by stage if provided.
-    if (stageParam) {
-      contacts = _filterContactsByStage(contacts, stageParam);
-    }
-    // Filter by lead status.
-    if (leadStatus === '__no_status__') {
-      contacts = contacts.filter(c => !c.properties?.hs_lead_status);
-    } else {
-      contacts = contacts.filter(c => c.properties?.hs_lead_status === leadStatus);
-    }
-
-    // Count by substatus value.
-    const counts = {};
-    for (const c of contacts) {
-      const sub = (c.properties?.hw_lead_substatus || '').toUpperCase();
-      if (sub) {
-        const key = `${leadStatus.toUpperCase()}__${sub}`;
-        counts[key] = (counts[key] || 0) + 1;
-      }
-    }
-    return res.json(counts);
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
-  }
-});
-
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────
 app.get('/api/open-leads', async (req, res) => {
   // Fresh cache hit — return immediately.
@@ -1806,7 +1756,7 @@ app.get('/api/open-leads', async (req, res) => {
                 { propertyName: 'hs_lead_status', operator: 'EQ', value: 'OPEN_DEAL' },
               ]
             }],
-            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate'],
             sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
             limit: 100
           };
@@ -1907,7 +1857,7 @@ app.get('/api/project-contacts', async (req, res) => {
                 { propertyName: 'hs_lead_status', operator: 'IN', values: keys },
               ]
             }],
-            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'hw_lead_substatus', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate', 'hw_test_user'],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate', 'hw_test_user'],
             sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
             limit: 100
           };
@@ -2053,7 +2003,7 @@ app.get('/api/contacts/:id', requireHubspotToken, async (req, res) => {
     const safeContactId = encodeURIComponent(contactId);
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: getHubSpotHeaders(),
-      params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,customer_number,hs_lead_status,hw_lead_substatus,createdate' }
+      params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,customer_number,hs_lead_status,createdate' }
     });
     res.json(r.data);
   } catch (e) {
@@ -2074,7 +2024,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (!/^\d+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id.' });
     }
-    const allowed = ['hs_lead_status', 'hw_lead_substatus', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number', 'address', 'city', 'zip'];
+    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number', 'address', 'city', 'zip'];
     const properties = {};
     for (const key of allowed) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
@@ -2084,11 +2034,9 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
-    // Pipeline-field gate: only managers/admins may change hs_lead_status or
-    // hw_lead_substatus. Other contact fields remain editable at the route's
-    // base member level.
-    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status') ||
-        Object.prototype.hasOwnProperty.call(properties, 'hw_lead_substatus')) {
+    // Pipeline-field gate: only managers/admins may change hs_lead_status.
+    // Other contact fields remain editable at the route's base member level.
+    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       try {
         const userId = req.user?.claims?.sub;
         const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
@@ -5087,200 +5035,7 @@ app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmi
   res.json(rendered);
 });
 
-// ── Substatus clear failure tracking ─────────────────────────────────────────
-// When the fire-and-forget orphaned-substatus clear job fails (search error or
-// per-contact PATCH error after retries), an entry is written here so admins
-// can see what was missed and re-trigger the clear manually.
-
-
-async function _recordSubstatusClearFailure({ deletedKey, failureType, contactId, errorMessage }) {
-  try {
-    await pool.query(
-      `INSERT INTO substatus_clear_failures (deleted_key, failure_type, contact_id, error_message)
-         VALUES ($1, $2, $3, $4)`,
-      [deletedKey, failureType, contactId || null, errorMessage || null]
-    );
-  } catch (dbErr) {
-    logger.error({ err: dbErr.message }, '[substatus-clear] Failed to persist failure record:');
-  }
-}
-
-// Admin: delete a status row (null sentinel is protected)
-// After a lead status is deleted, find all HubSpot contacts that still carry
-// it as hs_lead_status AND have a hw_lead_substatus set, and clear the stale
-// substatus value.  Runs fire-and-forget so it never blocks the DELETE response.
-async function clearOrphanedSubstatusesForDeletedStatus(deletedKey) {
-  if (_clearInProgress.has(deletedKey)) {
-    logger.info(`[clear-orphaned-substatuses key=${deletedKey}] already in progress — skipping duplicate invocation`);
-    return;
-  }
-  if (!getCredential('access_token')) return;
-  _clearInProgress.add(deletedKey);
-  const label = `[clear-orphaned-substatuses key=${deletedKey}]`;
-  try {
-    let cleared = 0;
-    let failed = 0;
-    let after;
-    do {
-      const body = {
-        filterGroups: [{
-          filters: [
-            { propertyName: 'hs_lead_status',    operator: 'EQ',           value: deletedKey },
-            { propertyName: 'hw_lead_substatus',  operator: 'HAS_PROPERTY'                   },
-          ],
-        }],
-        properties: ['hs_lead_status', 'hw_lead_substatus'],
-        limit: 100,
-      };
-      if (after) body.after = after;
-      const r = await hubspotSearchWithRetry(body);
-      const contacts = r.data.results || [];
-      after = r.data.paging?.next?.after;
-      for (const contact of contacts) {
-        const cid = contact.id;
-        try {
-          await hubspotRequestWithRetry(
-            'patch',
-            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
-            { properties: { hw_lead_substatus: '' } }
-          );
-          cleared++;
-        } catch (patchErr) {
-          failed++;
-          const errMsg = patchErr.response?.data?.message || patchErr.message;
-          logger.warn({ err: errMsg }, `${label} PATCH contact ${cid} failed:`);
-          await _recordSubstatusClearFailure({
-            deletedKey,
-            failureType: 'patch',
-            contactId: cid,
-            errorMessage: errMsg,
-          });
-        }
-      }
-    } while (after);
-    if (cleared > 0 || failed > 0) {
-      logger.info(`${label} cleared=${cleared} failed=${failed}`);
-    }
-  } catch (e) {
-    const errMsg = e.response?.data?.message || e.message;
-    logger.warn({ err: errMsg }, `${label} search failed:`);
-    await _recordSubstatusClearFailure({
-      deletedKey,
-      failureType: 'search',
-      contactId: null,
-      errorMessage: errMsg,
-    });
-  } finally {
-    _clearInProgress.delete(deletedKey);
-  }
-}
-
-// After a sub-status is deleted, find all HubSpot contacts that still carry
-// it as hw_lead_substatus and clear the stale value.  Runs fire-and-forget.
-async function clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey) {
-  if (!deletedSubstatusKey) return;
-  if (!getCredential('access_token')) return;
-  const guardKey = `substatus:${deletedSubstatusKey}`;
-  if (_clearInProgress.has(guardKey)) {
-    logger.info(`[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}] already in progress, skipping duplicate run`);
-    return;
-  }
-  _clearInProgress.add(guardKey);
-  const label = `[clear-orphaned-substatuses substatus_key=${deletedSubstatusKey}]`;
-  try {
-    let cleared = 0;
-    let failed = 0;
-    let after;
-    do {
-      const body = {
-        filterGroups: [{
-          filters: [
-            { propertyName: 'hw_lead_substatus', operator: 'EQ', value: deletedSubstatusKey },
-          ],
-        }],
-        properties: ['hw_lead_substatus'],
-        limit: 100,
-      };
-      if (after) body.after = after;
-      const r = await hubspotSearchWithRetry(body);
-      const contacts = r.data.results || [];
-      after = r.data.paging?.next?.after;
-      for (const contact of contacts) {
-        const cid = contact.id;
-        try {
-          await hubspotRequestWithRetry(
-            'patch',
-            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
-            { properties: { hw_lead_substatus: '' } }
-          );
-          cleared++;
-        } catch (patchErr) {
-          failed++;
-          logger.warn({ err: patchErr.response?.data?.message || patchErr.message }, `${label} PATCH contact ${cid} failed:`);
-        }
-      }
-    } while (after);
-    if (cleared > 0 || failed > 0) {
-      logger.info(`${label} cleared=${cleared} failed=${failed}`);
-    }
-  } catch (e) {
-    logger.warn({ err: e.response?.data?.message || e.message }, `${label} search failed:`);
-  } finally {
-    _clearInProgress.delete(guardKey);
-  }
-}
-
-// One-time boot backfill: find HubSpot contacts still carrying the misspelled
-// substatus value 'AWAITING_PHOTOS__AWPH_RECIEVED' (typo from an earlier
-// customer-info.js seed) and PATCH them to the canonical 'AWAITING_PHOTOS__AWPH_RECEIVED'.
-// Idempotent — no-ops when no contacts carry the old value.
-// Runs fire-and-forget so it never blocks startup.
-async function backfillMisspelledAwphSubstatus() {
-  if (!getCredential('access_token')) return;
-  const OLD_VAL = 'AWAITING_PHOTOS__AWPH_RECIEVED';
-  const NEW_VAL = 'AWAITING_PHOTOS__AWPH_RECEIVED';
-  const label   = '[backfill-awph-typo]';
-  try {
-    let patched = 0;
-    let failed  = 0;
-    let after;
-    do {
-      const body = {
-        filterGroups: [{
-          filters: [{ propertyName: 'hw_lead_substatus', operator: 'EQ', value: OLD_VAL }],
-        }],
-        properties: ['hw_lead_substatus'],
-        limit: 100,
-      };
-      if (after) body.after = after;
-      const r = await hubspotSearchWithRetry(body);
-      const contacts = r.data.results || [];
-      after = r.data.paging?.next?.after;
-      if (contacts.length === 0 && patched === 0 && failed === 0 && !after) {
-        return;
-      }
-      for (const contact of contacts) {
-        const cid = contact.id;
-        try {
-          await hubspotRequestWithRetry(
-            'patch',
-            `${HS}/crm/v3/objects/contacts/${encodeURIComponent(cid)}`,
-            { properties: { hw_lead_substatus: NEW_VAL } }
-          );
-          patched++;
-        } catch (patchErr) {
-          failed++;
-          logger.warn({ err: patchErr.response?.data?.message || patchErr.message }, `${label} PATCH contact ${cid} failed:`);
-        }
-      }
-    } while (after);
-    if (patched > 0 || failed > 0) {
-      logger.info(`${label} patched=${patched} failed=${failed}`);
-    }
-  } catch (e) {
-    logger.warn({ err: e.response?.data?.message || e.message }, `${label} search failed:`);
-  }
-}
+// (substatus helper functions removed)
 
 app.get('/api/admin/lead-statuses/:key/usage', isAuthenticated, requireAdmin, async (req, res) => {
   const key = req.params.key;
@@ -5331,18 +5086,9 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       const featurePart = hardcoded.featureLabel ? ` Required by: ${hardcoded.featureLabel}.` : '';
       return res.status(409).json({ error: `"${key}" is a pipeline-critical status and cannot be deleted.${featurePart}` });
     }
-    const { rows: substatuses } = await pool.query(
-      'SELECT id FROM lead_substatuses WHERE status_key = $1',
-      [key]
-    );
-    if (substatuses.length > 0) {
-      return res.status(409).json({
-        error: `Remove all sub-statuses before deleting this status (${substatuses.length} sub-status${substatuses.length === 1 ? '' : 'es'} remain)`,
-      });
-    }
     await pool.query(
       `DELETE FROM card_action_handler_bindings
-        WHERE status_key = LOWER($1) AND status_key <> '' AND substatus_id IS NULL`,
+        WHERE status_key = LOWER($1) AND status_key <> ''`,
       [key]
     );
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
@@ -5352,93 +5098,13 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
     _invalidateProjectContactsCache();
     res.json({ ok: true });
     const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
-    const _lsscSseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
     for (const client of _hsWebhookSseClients) {
       try { client.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
     }
-    for (const client of _hsWebhookSseClients) {
-      try { client.write(_lsscSseMsg); } catch { _hsWebhookSseClients.delete(client); }
-    }
     syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
-    clearOrphanedSubstatusesForDeletedStatus(key).catch(e => logger.warn({ err: e.message }, 'Orphaned substatus clear failed:'));
   } catch (e) {
     logger.error({ err: e.message }, 'DELETE /api/admin/lead-statuses/:key error:');
     res.status(500).json({ error: 'Could not delete lead status.' });
-  }
-});
-
-// GET /api/admin/substatus-clear-failures — list unresolved (or all) failure records
-// Query params: ?resolved=true to include resolved entries, ?key=<deleted_key> to filter
-app.get('/api/admin/substatus-clear-failures', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const includeResolved = req.query.resolved === 'true';
-    const keyFilter = req.query.key || null;
-    const conditions = [];
-    const params = [];
-    if (!includeResolved) {
-      params.push(false);
-      conditions.push(`resolved = $${params.length}`);
-    }
-    if (keyFilter) {
-      params.push(keyFilter);
-      conditions.push(`deleted_key = $${params.length}`);
-    }
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const { rows } = await pool.query(
-      `SELECT id, failed_at, deleted_key, failure_type, contact_id, error_message, resolved, resolved_at
-         FROM substatus_clear_failures
-         ${where}
-         ORDER BY failed_at DESC
-         LIMIT 200`,
-      params
-    );
-    res.json({ failures: rows });
-  } catch (e) {
-    logger.error({ err: e.message }, 'GET /api/admin/substatus-clear-failures error:');
-    res.status(500).json({ error: 'Could not load substatus clear failures.' });
-  }
-});
-
-// POST /api/admin/substatus-clear-failures/retry — re-trigger the clear job for a deleted key
-// Body: { deletedKey: string }
-// Marks all unresolved failures for that key as resolved, then re-runs the job.
-app.post('/api/admin/substatus-clear-failures/retry', isAuthenticated, requireAdmin, async (req, res) => {
-  const { deletedKey } = req.body || {};
-  if (!deletedKey || typeof deletedKey !== 'string') {
-    return res.status(400).json({ error: 'deletedKey is required.' });
-  }
-  try {
-    await pool.query(
-      `UPDATE substatus_clear_failures
-          SET resolved = TRUE, resolved_at = NOW()
-        WHERE deleted_key = $1 AND resolved = FALSE`,
-      [deletedKey]
-    );
-    res.json({ ok: true, message: `Re-triggering substatus clear for key "${deletedKey}".` });
-    clearOrphanedSubstatusesForDeletedStatus(deletedKey).catch(e =>
-      logger.warn({ err: e.message }, 'Orphaned substatus clear (manual retry) failed:')
-    );
-  } catch (e) {
-    logger.error({ err: e.message }, 'POST /api/admin/substatus-clear-failures/retry error:');
-    res.status(500).json({ error: 'Could not retry substatus clear.' });
-  }
-});
-
-// DELETE /api/admin/substatus-clear-failures/:id — dismiss / mark a single record resolved
-app.delete('/api/admin/substatus-clear-failures/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id.' });
-  try {
-    const { rowCount } = await pool.query(
-      `UPDATE substatus_clear_failures SET resolved = TRUE, resolved_at = NOW()
-         WHERE id = $1 AND resolved = FALSE`,
-      [id]
-    );
-    if (rowCount === 0) return res.status(404).json({ error: 'Record not found or already resolved.' });
-    res.json({ ok: true });
-  } catch (e) {
-    logger.error({ err: e.message }, 'DELETE /api/admin/substatus-clear-failures/:id error:');
-    res.status(500).json({ error: 'Could not dismiss failure record.' });
   }
 });
 
@@ -5583,14 +5249,6 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
     res.status(500).json({ error: 'Could not delete stage action label.' });
   }
 });
-
-// ── Lead sub-statuses (per lead_status, synced to HubSpot hw_lead_substatus) ──
-// Each lead status can have any number of sub-statuses, each with its own
-// action label. Sub-statuses are surfaced on the HubSpot contact via the
-// `hw_lead_substatus` enumeration property (single-select radio). Option
-// values are namespaced as `${STATUS_KEY}__${SUBSTATUS_KEY}` so the single
-// HubSpot dropdown can list options for every parent lead status without
-// collisions.
 
 // ── hw_test_user HubSpot property ─────────────────────────────────────────────
 // Registers a boolean contact property used to mark dev/test contacts.
@@ -5745,279 +5403,6 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
   }
   _leadStatusCountsCooldownUntil = 0;
   res.json({ ok: true });
-});
-
-async function ensureHwLeadSubstatusProperty() {
-  if (!getCredential('access_token')) return;
-  try {
-    await axios.get(
-      `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
-      { headers: getHubSpotHeaders() }
-    );
-    return; // already exists
-  } catch (e) {
-    if (e.response?.status !== 404) {
-      logger.warn({ err: e.response?.data?.message || e.message }, '  hw_lead_substatus probe failed:');
-      return;
-    }
-  }
-  try {
-    await axios.post(
-      `${HS}/crm/v3/properties/contacts`,
-      {
-        name:        'hw_lead_substatus',
-        label:       'HW Lead Sub-Status',
-        groupName:   'contactinformation',
-        type:        'enumeration',
-        fieldType:   'radio',
-        description: 'Sub-status within the current Lead Status (Measure Once CRM). Options are namespaced as STATUS_KEY__SUBSTATUS_KEY.',
-        options: [{ value: '__placeholder__', label: '—', displayOrder: 0, hidden: true }],
-      },
-      { headers: getHubSpotHeaders() }
-    );
-    logger.info('  Created HubSpot property: hw_lead_substatus');
-  } catch (e) {
-    logger.warn({ err: e.response?.data?.message || e.message }, '  Could not create hw_lead_substatus:');
-  }
-}
-
-// Push the full lead_substatuses table to HubSpot as hw_lead_substatus options.
-// Option value: "{STATUS_KEY}__{SUBSTATUS_KEY}" for normal rows (uniquely
-//   scoped to the lead status); just "{SUBSTATUS_KEY}" for __NULL__ sentinel
-//   rows (avoids ugly "__NULL____{SUBSTATUS_KEY}" values).
-// Option label: "{Lead Status label} → {Sub-status label}" for normal rows so
-//   the dropdown reads naturally in HubSpot and labels stay globally unique
-//   even when the same sub-status name appears under multiple lead statuses.
-//   For __NULL__ sentinel rows the label is just the sub-status label (no
-//   "null →" prefix).
-// Called after every create / update / delete, and at server startup.
-async function syncLeadSubstatusesToHubSpot() {
-  if (!getCredential('access_token')) return;
-  const { rows } = await pool.query(`
-    SELECT s.status_key, s.substatus_key, s.label AS sub_label, s.sort_order AS sub_order,
-           c.label AS ls_label, c.sort_order AS ls_order
-    FROM lead_substatuses s
-    LEFT JOIN lead_status_config c ON c.key = s.status_key
-    ORDER BY COALESCE(c.sort_order, 9999) ASC, s.status_key ASC,
-             s.sort_order ASC, s.substatus_key ASC
-  `);
-  const options = rows.map((r, i) => ({
-    // Internal name: keep "{STATUS_KEY}__{SUBSTATUS_KEY}" for normal rows so
-    // the value remains uniquely scoped to its lead status. The null sentinel
-    // (__NULL__) would otherwise produce ugly "__NULL____{SUBSTATUS_KEY}"
-    // values — drop the prefix for that row and emit just the substatus_key.
-    value:        r.status_key === '__NULL__'
-                    ? r.substatus_key
-                    : `${r.status_key}__${r.substatus_key}`,
-    // Label: prefix with "{Lead Status label} → " for normal rows so labels
-    // are globally unique in HubSpot even when the same sub-status name
-    // appears under multiple lead statuses. Use just the sub-status label for
-    // __NULL__ sentinel rows (no lead status to prefix with).
-    label:        r.status_key === '__NULL__' || !r.ls_label
-                    ? r.sub_label
-                    : `${r.ls_label} \u2192 ${r.sub_label}`,
-    displayOrder: i,
-    hidden:       false,
-  }));
-  // HubSpot requires at least one option on the property; keep a hidden
-  // placeholder when the table is empty so the property stays valid.
-  if (!options.length) {
-    options.push({ value: '__placeholder__', label: '—', displayOrder: 0, hidden: true });
-  }
-  await axios.patch(
-    `${HS}/crm/v3/properties/contacts/hw_lead_substatus`,
-    { options },
-    { headers: getHubSpotHeaders() }
-  );
-}
-
-const _SUBSTATUS_KEY_RE = /^[A-Z0-9_]{1,64}$/;
-
-function _validateSubstatusBody(body, { partial = false } = {}) {
-  const out = {};
-  if (body.status_key !== undefined || !partial) {
-    const k = String(body.status_key || '').trim().toUpperCase();
-    if (!_SUBSTATUS_KEY_RE.test(k)) return { error: 'status_key must be 1–64 uppercase letters, digits, or underscores.' };
-    out.status_key = k;
-  }
-  if (body.substatus_key !== undefined || !partial) {
-    const k = String(body.substatus_key || '').trim().toUpperCase();
-    if (!_SUBSTATUS_KEY_RE.test(k)) return { error: 'substatus_key must be 1–64 uppercase letters, digits, or underscores.' };
-    out.substatus_key = k;
-  }
-  if (body.label !== undefined || !partial) {
-    const v = String(body.label || '').trim();
-    if (!v) return { error: 'label cannot be empty.' };
-    if (v.length > 128) return { error: 'label must be 128 characters or fewer.' };
-    out.label = v;
-  }
-  if (body.action_label !== undefined) {
-    const v = String(body.action_label || '').trim();
-    if (v.length > 128) return { error: 'action_label must be 128 characters or fewer.' };
-    out.action_label = v;
-  }
-  if (body.sort_order !== undefined) {
-    const n = parseInt(body.sort_order, 10);
-    if (Number.isNaN(n)) return { error: 'sort_order must be an integer.' };
-    out.sort_order = n;
-  }
-  if (body.default_handler_type !== undefined) {
-    const v = String(body.default_handler_type || '').trim().toLowerCase();
-    if (v.length > 64) return { error: 'default_handler_type must be 64 characters or fewer.' };
-    if (v && !/^[a-z0-9_]+$/.test(v)) return { error: 'default_handler_type must contain only lowercase letters, digits, and underscores.' };
-    out.default_handler_type = v;
-  }
-  return { value: out };
-}
-
-// Authenticated read — used by the Sales/Survey card render to look up the
-// action label for a contact's hw_lead_substatus value.
-app.get('/api/lead-substatuses', isAuthenticated, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, status_key, substatus_key, label, action_label, sort_order, default_handler_type
-       FROM lead_substatuses
-       ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
-    );
-    res.set('Cache-Control', 'no-store');
-    res.json(rows);
-  } catch (e) {
-    logger.error({ err: e.message }, 'GET /api/lead-substatuses error:');
-    res.status(500).json({ error: 'Could not load lead sub-statuses.' });
-  }
-});
-
-app.get('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at
-       FROM lead_substatuses
-       ORDER BY status_key ASC, sort_order ASC, substatus_key ASC`
-    );
-    res.json(rows);
-  } catch (e) {
-    logger.error({ err: e.message }, 'GET /api/admin/lead-substatuses error:');
-    res.status(500).json({ error: 'Could not load lead sub-statuses.' });
-  }
-});
-
-app.post('/api/admin/lead-substatuses', isAuthenticated, requireAdmin, async (req, res) => {
-  const { error, value } = _validateSubstatusBody(req.body || {});
-  if (error) return res.status(400).json({ error });
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order, default_handler_type)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at`,
-      [value.status_key, value.substatus_key, value.label, value.action_label || '', value.sort_order ?? 0, value.default_handler_type || '']
-    );
-    let hubspotSyncWarning;
-    try {
-      await syncLeadSubstatusesToHubSpot();
-    } catch (se) {
-      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after create:');
-    }
-    res.status(201).json(hubspotSyncWarning ? { ...rows[0], hubspotSyncWarning } : rows[0]);
-  } catch (e) {
-    if (e.code === '23505') {
-      return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
-    }
-    logger.error({ err: e.message }, 'POST /api/admin/lead-substatuses error:');
-    res.status(500).json({ error: 'Could not create sub-status.' });
-  }
-});
-
-app.patch('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
-  const { error, value } = _validateSubstatusBody(req.body || {}, { partial: true });
-  if (error) return res.status(400).json({ error });
-  if (!Object.keys(value).length) return res.status(400).json({ error: 'No fields to update.' });
-
-  const sets = [];
-  const params = [];
-  for (const [col, v] of Object.entries(value)) {
-    params.push(v);
-    sets.push(`${col} = $${params.length}`);
-  }
-  sets.push(`updated_at = NOW()`);
-  params.push(id);
-  try {
-    const { rows } = await pool.query(
-      `UPDATE lead_substatuses SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, status_key, substatus_key, label, action_label, sort_order, default_handler_type, updated_at`,
-      params
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
-    let hubspotSyncWarning;
-    try {
-      await syncLeadSubstatusesToHubSpot();
-    } catch (se) {
-      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after update:');
-    }
-    // If default_handler_type was updated, run auto-binding immediately so the
-    // new binding takes effect without a server restart.
-    let newBindingsCreated;
-    if ('default_handler_type' in value) {
-      try {
-        newBindingsCreated = await ensureSubstatusHandlerBindings();
-      } catch (be) {
-        logger.warn({ err: be.message }, '  ensureSubstatusHandlerBindings failed after default_handler_type update:');
-      }
-    }
-    const sseMsg = `data: ${JSON.stringify({ type: 'lead_substatuses_changed' })}\n\n`;
-    for (const client of _hsWebhookSseClients) {
-      try { client.write(sseMsg); } catch { _hsWebhookSseClients.delete(client); }
-    }
-    const responseBody = { ...rows[0] };
-    if (hubspotSyncWarning) responseBody.hubspotSyncWarning = hubspotSyncWarning;
-    if (typeof newBindingsCreated === 'number') responseBody.newBindingsCreated = newBindingsCreated;
-    res.json(responseBody);
-  } catch (e) {
-    if (e.code === '23505') {
-      return res.status(409).json({ error: 'A sub-status with that key already exists for this lead status.' });
-    }
-    logger.error({ err: e.message }, 'PATCH /api/admin/lead-substatuses error:');
-    res.status(500).json({ error: 'Could not update sub-status.' });
-  }
-});
-
-app.delete('/api/admin/lead-substatuses/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
-  try {
-    const { rows } = await pool.query(
-      `DELETE FROM lead_substatuses WHERE id = $1 RETURNING id, substatus_key`,
-      [id]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Sub-status not found.' });
-    const deletedSubstatusKey = rows[0].substatus_key;
-    let hubspotSyncWarning;
-    try {
-      await syncLeadSubstatusesToHubSpot();
-    } catch (se) {
-      hubspotSyncWarning = se.response?.data?.message || se.message || 'HubSpot sync failed.';
-      logger.warn({ err: hubspotSyncWarning }, '  hw_lead_substatus sync failed after delete:');
-    }
-    res.json(hubspotSyncWarning ? { ok: true, hubspotSyncWarning } : { ok: true });
-    clearOrphanedSubstatusesForDeletedSubstatus(deletedSubstatusKey).catch(e => logger.warn({ err: e.message }, 'Orphaned substatus clear (substatus delete) failed:'));
-  } catch (e) {
-    logger.error({ err: e.message }, 'DELETE /api/admin/lead-substatuses error:');
-    res.status(500).json({ error: 'Could not delete sub-status.' });
-  }
-});
-
-app.post('/api/admin/lead-substatuses/sync-hubspot', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    await syncLeadSubstatusesToHubSpot();
-    res.json({ ok: true });
-  } catch (e) {
-    const msg = e.response?.data?.message || e.message || 'HubSpot sync failed.';
-    logger.warn({ err: msg }, '  hw_lead_substatus manual re-sync failed:');
-    res.status(502).json({ error: msg });
-  }
 });
 
 // ── Card action handlers ─────────────────────────────────────────────────────
@@ -6198,22 +5583,16 @@ function _validateHandlerConfig(type, configRaw) {
 }
 
 function _validateHandlerBinding(b) {
-  const hasSubstatus = b.substatus_id !== undefined && b.substatus_id !== null && b.substatus_id !== '';
   const stage  = b.stage_key  ? String(b.stage_key).trim().toLowerCase()  : '';
   const status = b.status_key !== undefined && b.status_key !== null
     ? String(b.status_key).trim().toLowerCase()
     : '';
-  if (hasSubstatus) {
-    const id = parseInt(b.substatus_id, 10);
-    if (!Number.isInteger(id) || id <= 0) return { error: 'substatus_id must be a positive integer.' };
-    return { value: { substatus_id: id, stage_key: null, status_key: null } };
-  }
-  if (!stage) return { error: 'Each binding requires a stage_key or substatus_id.' };
+  if (!stage) return { error: 'Each binding requires a stage_key.' };
   if (stage === '__global__') {
     if (status.length > 0) {
       return { error: 'The __global__ stage only supports an empty status_key.' };
     }
-    return { value: { stage_key: stage, status_key: '', substatus_id: null } };
+    return { value: { stage_key: stage, status_key: '' } };
   }
   if (!STAGE_ACTION_STAGE_KEYS.has(stage)) {
     return { error: 'stage_key must be a valid pipeline stage key.' };
@@ -6221,7 +5600,7 @@ function _validateHandlerBinding(b) {
   if (status.length > 64 || !/^[a-z0-9_]*$/.test(status)) {
     return { error: 'status_key may only contain lowercase letters, digits, and underscores.' };
   }
-  return { value: { stage_key: stage, status_key: status, substatus_id: null } };
+  return { value: { stage_key: stage, status_key: status } };
 }
 
 
@@ -6230,26 +5609,14 @@ async function checkDuplicateHandlerBindings() {
     SELECT stage_key, status_key, COUNT(*) AS cnt,
            array_agg(DISTINCT handler_id ORDER BY handler_id) AS handler_ids
     FROM card_action_handler_bindings
-    WHERE substatus_id IS NULL
     GROUP BY stage_key, status_key
     HAVING COUNT(*) > 1
   `);
-  const substatusDups = await pool.query(`
-    SELECT substatus_id, COUNT(*) AS cnt,
-           array_agg(DISTINCT handler_id ORDER BY handler_id) AS handler_ids
-    FROM card_action_handler_bindings
-    WHERE substatus_id IS NOT NULL
-    GROUP BY substatus_id
-    HAVING COUNT(*) > 1
-  `);
-  const total = labelDups.rows.length + substatusDups.rows.length;
+  const total = labelDups.rows.length;
   if (total === 0) return;
   logger.warn(`[WARN] card_action_handler_bindings: ${total} duplicate slot(s) detected.`);
   for (const r of labelDups.rows) {
     logger.warn(`  [DUPLICATE] label slot stage_key=${r.stage_key} status_key=${r.status_key} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
-  }
-  for (const r of substatusDups.rows) {
-    logger.warn(`  [DUPLICATE] substatus slot substatus_id=${r.substatus_id} bound to handlers: ${r.handler_ids.join(', ')} (${r.cnt} entries)`);
   }
   logger.warn('  Use GET /api/admin/card-action-handlers/conflicts (admin) or the conflict resolver in admin.html to clean these up.');
 }
@@ -6262,7 +5629,7 @@ async function _loadHandlerWithBindings(id) {
   );
   if (!h.rows.length) return null;
   const b = await pool.query(
-    `SELECT id, stage_key, status_key, substatus_id
+    `SELECT id, stage_key, status_key
      FROM card_action_handler_bindings WHERE handler_id = $1
      ORDER BY id ASC`,
     [id]
@@ -6304,9 +5671,9 @@ async function _replaceHandlerBindings(client, handlerId, bindings) {
 
   for (const value of validated) {
     await client.query(
-      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key, substatus_id)
-       VALUES ($1, $2, $3, $4)`,
-      [handlerId, value.stage_key, value.status_key, value.substatus_id]
+      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key)
+       VALUES ($1, $2, $3)`,
+      [handlerId, value.stage_key, value.status_key]
     );
   }
 }
@@ -6319,7 +5686,7 @@ app.get('/api/card-action-handlers', isAuthenticated, async (req, res) => {
       `SELECT id, name, type, config FROM card_action_handlers ORDER BY id ASC`
     );
     const b = await pool.query(
-      `SELECT handler_id, stage_key, status_key, substatus_id
+      `SELECT handler_id, stage_key, status_key
        FROM card_action_handler_bindings`
     );
     const byId = {};
@@ -6664,27 +6031,27 @@ app.post('/api/card-actions/arrange-visit/outcome',
 
     const OUTCOME_MAP = {
       booked: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SURVEY_SCHEDULED__SRSC_AGREED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DESIGN_SCHEDULED__DSSC_AGREED' },
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED' },
       },
       email_sent: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED', hw_lead_substatus: 'SURVEY_SCHEDULED__SRSC_SUGGESTED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED', hw_lead_substatus: 'DESIGN_SCHEDULED__DSSC_SUGGESTED' },
+        survey: { hs_lead_status: 'SURVEY_SCHEDULED' },
+        design: { hs_lead_status: 'DESIGN_SCHEDULED' },
       },
       not_proceeding: {
-        survey: { hs_lead_status: 'NOT_SUITABLE', hw_lead_substatus: '' },
-        design: { hs_lead_status: 'NOT_SUITABLE', hw_lead_substatus: '' },
+        survey: { hs_lead_status: 'NOT_SUITABLE' },
+        design: { hs_lead_status: 'NOT_SUITABLE' },
       },
     };
 
     const outcomeEntry = OUTCOME_MAP[outcome];
     if (!outcomeEntry) return res.status(400).json({ error: 'outcome must be one of: booked, email_sent, not_proceeding.' });
-    const { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus } = outcomeEntry[visitType] || outcomeEntry['design'];
+    const { hs_lead_status: newLeadStatus } = outcomeEntry[visitType] || outcomeEntry['design'];
 
     try {
       await assertLeadStatusKey(newLeadStatus);
-      await patchContactProperties(contactId, { hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
-      res.json({ ok: true, hs_lead_status: newLeadStatus, hw_lead_substatus: newSubStatus });
+      await patchContactProperties(contactId, { hs_lead_status: newLeadStatus });
+      res.json({ ok: true, hs_lead_status: newLeadStatus });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
         return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
@@ -7354,10 +6721,25 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }
     catch (e) { logger.error({ err: e }, '  hw_test_user property setup failed'); }
-    try { await ensureHwLeadSubstatusProperty(); }
-    catch (e) { logger.error({ err: e }, '  hw_lead_substatus property setup failed'); }
-    try { await syncLeadSubstatusesToHubSpot(); }
-    catch (e) { logger.warn({ err: e }, '  hw_lead_substatus sync skipped'); }
+    // One-time HubSpot property deletion: remove hw_lead_substatus from HubSpot contacts.
+    // This runs fire-and-forget so it never blocks startup.
+    (async () => {
+      const token = process.env.HUBSPOT_ACCESS_TOKEN || '';
+      if (!token) return;
+      try {
+        await axios.delete(
+          `https://api.hubapi.com/crm/v3/properties/contacts/hw_lead_substatus`,
+          { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        );
+        logger.info('  [startup] hw_lead_substatus HubSpot property deleted (or already absent).');
+      } catch (e) {
+        if (e.response?.status === 404) {
+          logger.info('  [startup] hw_lead_substatus property not found in HubSpot — already removed.');
+        } else {
+          logger.warn({ err: e.response?.data?.message || e.message }, '  [startup] hw_lead_substatus HubSpot property deletion failed (non-fatal):');
+        }
+      }
+    })();
     try { await checkDuplicateHandlerBindings(); }
     catch (e) { logger.error({ err: e }, '  Card action handler duplicate-binding check failed'); }
     try { await ensureResendLogTable(); }
@@ -7366,11 +6748,6 @@ async function cleanupStaleHubSpotCredentialRows() {
     logNullFormLinkCount().catch(e => logger.warn({ err: e }, '  null form_link count error'));
     try { await ensurePhotoReviewOutcomesTable(); }
     catch (e) { logger.error({ err: e }, '  Photo review outcomes backfill failed'); }
-    backfillMisspelledAwphSubstatus().catch(e => logger.warn({ err: e }, '  AWPH substatus backfill error'));
-    try { await ensureDefaultReviewHandlerBinding(); }
-    catch (e) { logger.error({ err: e }, '  Default review handler binding setup failed'); }
-    try { await ensureSubstatusHandlerBindings(); }
-    catch (e) { logger.error({ err: e }, '  Substatus handler auto-binding failed'); }
     try { await ensurePageFilterConfigTable(); }
     catch (e) { logger.error({ err: e }, '  Page filter config seed failed'); }
     try { await ensureEmailTemplatesTable(); }

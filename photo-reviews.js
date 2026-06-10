@@ -78,84 +78,10 @@ function escapeHtml(str) {
 
 // ── DB schema ─────────────────────────────────────────────────────────────────
 async function ensurePhotoReviewOutcomesTable() {
-  // Schema created by migrations; this boot step runs the one-time data repair below.
-
-  // One-time migration: rename the misspelled substatus_key 'AWPH_RECIEVED' to the
-  // canonical 'AWPH_RECEIVED'.  The row was originally seeded with the typo by an
-  // earlier version of customer-info.js.  customer-info.js already writes the
-  // correct spelling to HubSpot (AWAITING_PHOTOS__AWPH_RECEIVED), so only the
-  // local DB row needs updating.
-  //
-  // Conflict-safe: if BOTH rows exist (misspelled legacy + canonical inserted
-  // by a later customer-info.js boot), re-point any card_action_handler_binding
-  // from the typo row to the canonical row, then delete the typo row.
-  // The FK has ON DELETE CASCADE, so the typo binding is removed automatically
-  // after the re-point.  Idempotent — no-ops once the typo row is gone.
-  {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      const typoR = await client.query(
-        `SELECT id FROM lead_substatuses
-         WHERE status_key = 'AWAITING_PHOTOS' AND substatus_key = 'AWPH_RECIEVED'
-         FOR UPDATE`
-      );
-
-      if (typoR.rows.length) {
-        const typoId = typoR.rows[0].id;
-
-        const canonR = await client.query(
-          `SELECT id FROM lead_substatuses
-           WHERE status_key = 'AWAITING_PHOTOS' AND substatus_key = 'AWPH_RECEIVED'
-           FOR UPDATE`
-        );
-
-        if (canonR.rows.length) {
-          // Both rows exist — migrate binding then delete typo row.
-          const canonId = canonR.rows[0].id;
-
-          // Move the binding only if the canonical slot is not already bound
-          // (cahb_substatus_uniq prevents two bindings on the same substatus).
-          const canonBound = await client.query(
-            `SELECT id FROM card_action_handler_bindings WHERE substatus_id = $1 LIMIT 1`,
-            [canonId]
-          );
-          if (!canonBound.rows.length) {
-            await client.query(
-              `UPDATE card_action_handler_bindings SET substatus_id = $1 WHERE substatus_id = $2`,
-              [canonId, typoId]
-            );
-          }
-          // Delete typo row (ON DELETE CASCADE removes any remaining binding).
-          await client.query(`DELETE FROM lead_substatuses WHERE id = $1`, [typoId]);
-          logger.info('[photo-reviews] Migration: removed duplicate AWPH_RECIEVED row; canonical AWPH_RECEIVED retained.');
-        } else {
-          // Only typo row exists — rename in place (no conflict possible).
-          await client.query(
-            `UPDATE lead_substatuses SET substatus_key = 'AWPH_RECEIVED' WHERE id = $1`,
-            [typoId]
-          );
-          logger.info('[photo-reviews] Migration: renamed AWPH_RECIEVED → AWPH_RECEIVED.');
-        }
-      }
-
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
+  // Schema created by migrations; no data repairs needed.
 }
 
 // ── HubSpot helpers ───────────────────────────────────────────────────────────
-async function clearHubSpotSubstatus(contactId) {
-  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hw_lead_substatus: '' } }, { headers: getHubSpotHeaders() });
-}
-
 async function ensureLeadStatusExists(key, label) {
   await pool.query(
     `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
@@ -423,7 +349,6 @@ router.post('/api/card-actions/review-customer-photos',
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
       try {
         await _patchContactProperties(cid, { hs_lead_status: hsStatus });
-        await clearHubSpotSubstatus(cid);
       } catch (err) {
         logger.error({ err: err.message }, '[photo-reviews] HubSpot update failed (non-fatal):');
       }
@@ -432,239 +357,6 @@ router.post('/api/card-actions/review-customer-photos',
     return res.json({ ok: true });
   }
 );
-
-// ── Default handler + binding bootstrap ──────────────────────────────────────
-// Run after ensureCardActionHandlersTables() and ensureCustomerInfoSubmissionsTable()
-// have both completed (they create the tables this function references).
-async function ensureDefaultReviewHandlerBinding() {
-  // Step 1: resolve the AWPH_RECEIVED substatus.
-  // The misspelled 'AWPH_RECIEVED' row is renamed to 'AWPH_RECEIVED' by the
-  // one-time migration in ensurePhotoReviewOutcomesTable(), so only the
-  // canonical spelling is needed here.
-  const sub = await pool.query(
-    `SELECT id FROM lead_substatuses
-     WHERE status_key   = 'AWAITING_PHOTOS'
-       AND substatus_key = 'AWPH_RECEIVED'
-     LIMIT 1`
-  );
-  if (!sub.rows.length) {
-    // Substatus not yet created (no submission has arrived yet) — defer until it exists.
-    return;
-  }
-  const substatusId = sub.rows[0].id;
-
-  // Step 2: skip if ANY handler is already bound to this substatus slot
-  //         (cahb_substatus_uniq enforces one binding per substatus — respect admin choices)
-  const binding = await pool.query(
-    `SELECT id FROM card_action_handler_bindings WHERE substatus_id = $1 LIMIT 1`,
-    [substatusId]
-  );
-  if (binding.rows.length) return;
-
-  // Step 3: ensure at least one review_customer_photos handler exists
-  let handlerId;
-  const existing = await pool.query(
-    `SELECT id FROM card_action_handlers WHERE type = 'review_customer_photos' ORDER BY id LIMIT 1`
-  );
-  if (existing.rows.length) {
-    handlerId = existing.rows[0].id;
-  } else {
-    const ins = await pool.query(
-      `INSERT INTO card_action_handlers (name, type, config)
-       VALUES ('Review customer photos', 'review_customer_photos', '{}')
-       RETURNING id`,
-    );
-    handlerId = ins.rows[0].id;
-  }
-
-  // Step 4: create the binding (ON CONFLICT DO NOTHING guards against any race)
-  await pool.query(
-    `INSERT INTO card_action_handler_bindings (handler_id, substatus_id)
-     VALUES ($1, $2)
-     ON CONFLICT DO NOTHING`,
-    [handlerId, substatusId]
-  );
-  logger.info('[photo-reviews] Default review_customer_photos handler bound to AWPH_RECEIVED substatus.');
-}
-
-// ── Substatus → handler-type mapping ─────────────────────────────────────────
-// Maps known substatus_key values to the handler type (and optional config)
-// that should be auto-bound on startup when the DB row has no default_handler_type set.
-//
-// Entries here cover well-known substatus keys whose intended handler type is
-// unambiguous from their label or role in the workflow.  Existing bindings are
-// never overwritten — admin choices always win.
-//
-// AWPH_RECEIVED / AWPH_RECIEVED  — the canonical and legacy-misspelled photo-
-//   received substatus; both map to review_customer_photos.  AWPH_RECIEVED is
-//   renamed to AWPH_RECEIVED by ensurePhotoReviewOutcomesTable(), but the entry
-//   is kept here as a safety net for databases that haven't yet migrated.
-// DSSC_AGREED    — "Design Date Agreed" → add_design_visit_to_calendar
-// DSSC_CONFIRMED — "Design Date Confirmed" → start_design_visit (full wizard)
-// SRSC_AGREED    — "Survey Date Agreed" → schedule_visit (visitType: survey)
-// SRSC_CONFIRMED — "Survey Visit Confirmed" → schedule_visit (visitType: survey)
-// NEWC_CALL      — "Phone Call" new-contact substatus → summarise_phone_call
-//
-const SUBSTATUS_HANDLER_MAP = {
-  // ── Photo review ──────────────────────────────────────────────────────────
-  AWPH_RECEIVED:  { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
-  AWPH_RECIEVED:  { type: 'review_customer_photos', name: 'Review customer photos', config: {} },
-
-  // ── Design visit ──────────────────────────────────────────────────────────
-  DSSC_AGREED:    { type: 'add_design_visit_to_calendar', name: 'Add design visit to calendar', config: {} },
-  DSSC_CONFIRMED: { type: 'start_design_visit',           name: 'Start design visit',           config: {} },
-
-  // ── Survey scheduling ─────────────────────────────────────────────────────
-  SRSC_AGREED:    { type: 'schedule_visit', name: 'Schedule visit', config: { visitType: 'survey' } },
-  SRSC_CONFIRMED: { type: 'schedule_visit', name: 'Schedule visit', config: { visitType: 'survey' } },
-
-  // ── New contact ───────────────────────────────────────────────────────────
-  NEWC_CALL:      { type: 'summarise_phone_call', name: 'Summarise phone call', config: {} },
-};
-
-// Human-readable names for handler types used when auto-creating handlers
-// from the admin-configured default_handler_type column.
-const HANDLER_TYPE_NAMES = {
-  add_design_visit_to_calendar: 'Add design visit to calendar',
-  schedule_visit:               'Schedule visit',
-  summarise_phone_call:         'Summarise phone call',
-  show_message:                 'Show message',
-  start_design_visit:           'Start design visit',
-  schedule_delivery_window:     'Schedule delivery window',
-  schedule_installation_slot:   'Schedule installation slot',
-  upload_photos_and_info:       'Upload photos and info',
-  review_customer_photos:       'Review customer photos',
-  contact_customer:             'Contact customer',
-};
-
-// Fallback used when neither default_handler_type nor SUBSTATUS_HANDLER_MAP has an entry.
-const FALLBACK_HANDLER = { type: 'show_message', name: 'Show message', config: {} };
-
-// ── Auto-bind handlers for all labelled substatuses ───────────────────────────
-// Queries every lead_substatuses row that has a non-empty action_label and
-// ensures a card_action_handler_bindings row exists for it. Existing bindings
-// are never overwritten (admin overrides are always respected). Idempotent.
-//
-// Run after ensureCardActionHandlersTables() and seed data are in place.
-
-// Produce a stable cache key that incorporates both the handler type and its
-// config so that two mappings with the same type but different configs (e.g.
-// schedule_visit with visitType:'survey' vs visitType:'remedial') are kept
-// separate and never share a handler.
-function _handlerCacheKey(type, config) {
-  const sorted = Object.keys(config).sort().reduce((acc, k) => { acc[k] = config[k]; return acc; }, {});
-  return `${type}|${JSON.stringify(sorted)}`;
-}
-
-// Find an existing card_action_handlers row that matches both the type and the
-// required config properties, or create a new one if none exists.
-//
-// For config-sensitive types:
-//   • schedule_visit — must match config.visitType exactly
-//   • show_message   — must have no non-empty message or title (so it behaves
-//                      as an inert placeholder until an admin configures it)
-// For all other types, any existing handler of that type is reused.
-async function _findOrCreateHandler(type, name, config) {
-  let existing;
-
-  if (type === 'schedule_visit' && config.visitType) {
-    existing = await pool.query(
-      `SELECT id FROM card_action_handlers
-       WHERE type = 'schedule_visit' AND config->>'visitType' = $1
-       ORDER BY id LIMIT 1`,
-      [String(config.visitType)]
-    );
-  } else if (type === 'show_message') {
-    // For the fallback show_message placeholder, only reuse handlers that have
-    // not been configured with a message or title yet — so that clicking the
-    // button does nothing until an admin explicitly sets content.
-    existing = await pool.query(
-      `SELECT id FROM card_action_handlers
-       WHERE type = 'show_message'
-         AND (config->>'message' IS NULL OR config->>'message' = '')
-         AND (config->>'title'   IS NULL OR config->>'title'   = '')
-       ORDER BY id LIMIT 1`
-    );
-  } else {
-    // Config-agnostic types — any existing handler of this type is fine.
-    existing = await pool.query(
-      `SELECT id FROM card_action_handlers WHERE type = $1 ORDER BY id LIMIT 1`,
-      [type]
-    );
-  }
-
-  if (existing.rows.length) {
-    return existing.rows[0].id;
-  }
-
-  const ins = await pool.query(
-    `INSERT INTO card_action_handlers (name, type, config)
-     VALUES ($1, $2, $3)
-     RETURNING id`,
-    [name, type, JSON.stringify(config)]
-  );
-  return ins.rows[0].id;
-}
-
-async function ensureSubstatusHandlerBindings() {
-  // Fetch every substatus that has an action label defined.
-  const substatuses = await pool.query(
-    `SELECT id, status_key, substatus_key, action_label, default_handler_type
-     FROM lead_substatuses
-     WHERE action_label IS NOT NULL AND action_label != ''
-     ORDER BY id`
-  );
-  if (!substatuses.rows.length) return;
-
-  // Pre-fetch all existing bindings in one query to avoid N+1 lookups.
-  const bound = await pool.query(
-    `SELECT substatus_id FROM card_action_handler_bindings WHERE substatus_id IS NOT NULL`
-  );
-  const boundIds = new Set(bound.rows.map(r => r.substatus_id));
-
-  // Cache by (type + config fingerprint) so config-sensitive mappings each get
-  // their own handler id without redundant DB round-trips.
-  const handlerIdCache = {};
-
-  let seeded = 0;
-  for (const row of substatuses.rows) {
-    // Skip if a binding already exists for this substatus — respect admin choices.
-    if (boundIds.has(row.id)) continue;
-
-    // Resolve handler: prefer admin-configured default_handler_type, then fall
-    // back to SUBSTATUS_HANDLER_MAP (well-known substatus keys),
-    // then fall back to the show_message placeholder.
-    let mapping;
-    if (row.default_handler_type) {
-      const t = row.default_handler_type;
-      mapping = { type: t, name: HANDLER_TYPE_NAMES[t] || t, config: {} };
-    } else {
-      const mapKey = String(row.substatus_key).toUpperCase();
-      mapping = SUBSTATUS_HANDLER_MAP[mapKey] || FALLBACK_HANDLER;
-    }
-    const { type, name, config } = mapping;
-
-    const cacheKey = _handlerCacheKey(type, config);
-    if (!handlerIdCache[cacheKey]) {
-      handlerIdCache[cacheKey] = await _findOrCreateHandler(type, name, config);
-    }
-    const handlerId = handlerIdCache[cacheKey];
-
-    await pool.query(
-      `INSERT INTO card_action_handler_bindings (handler_id, substatus_id)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [handlerId, row.id]
-    );
-    seeded++;
-    logger.info(`[card-action-seeds] Bound ${type} handler to substatus ${row.status_key}/${row.substatus_key} ("${row.action_label}")`);
-  }
-
-  if (seeded > 0) {
-    logger.info(`[card-action-seeds] Auto-bound ${seeded} substatus handler(s).`);
-  }
-  return seeded;
-}
 
 // ── Seed contact_customer handler + stage-based bindings ─────────────────────
 // Ensures a contact_customer handler row exists and two stage-based bindings:
@@ -696,8 +388,8 @@ async function ensureContactCustomerHandlerBindings() {
   ];
   for (const b of bindings) {
     await pool.query(
-      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key, substatus_id)
-       VALUES ($1, $2, $3, NULL)
+      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key)
+       VALUES ($1, $2, $3)
        ON CONFLICT DO NOTHING`,
       [handlerId, b.stage_key, b.status_key]
     );
@@ -723,8 +415,6 @@ async function ensureContactCustomerHandlerBindings() {
 module.exports = {
   router,
   ensurePhotoReviewOutcomesTable,
-  ensureDefaultReviewHandlerBinding,
-  ensureSubstatusHandlerBindings,
   ensureContactCustomerHandlerBindings,
   setPatchContactProperties,
 };

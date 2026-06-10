@@ -12,7 +12,6 @@ export type PaginatedContact = {
     email?: string;
     phone?: string;
     hs_lead_status?: string;
-    hw_lead_substatus?: string;
     customer_number?: string;
     createdate?: string;
     /** JSON-encoded workflow rooms; used for offline stage filtering. */
@@ -30,7 +29,6 @@ type ContactsResponse = {
 export type UsePaginatedContactsParams = {
   initialPage: number;
   leadStatus: string;
-  substatus: string;
   stage: string;
   sortBy: string;
   search: string;
@@ -186,7 +184,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize } = params;
+  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -198,10 +196,9 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize });
+  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
-    prevFiltersRef.current.substatus !== substatus ||
     prevFiltersRef.current.stage !== stage ||
     prevFiltersRef.current.sortBy !== sortBy ||
     prevFiltersRef.current.search !== search ||
@@ -212,7 +209,7 @@ export function usePaginatedContacts(
     prevFiltersRef.current.pageSize !== pageSize;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, substatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize };
+    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the

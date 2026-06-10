@@ -6,9 +6,7 @@
 
 export declare function resolveActionLabel(
   stageActionLabelMap: Record<string, string | null>,
-  substatusActionLabelMap: Record<string, string>,
   stageKey: string,
   leadStatusKey: string | undefined,
   substageId: string | undefined,
-  hwSubstatusValue: string | undefined,
 ): string;

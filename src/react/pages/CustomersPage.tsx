@@ -64,13 +64,6 @@ type LeadStatus = {
   sort_order?: number;
 };
 
-type LeadSubstatus = {
-  status_key: string;
-  substatus_key: string;
-  label: string;
-  sort_order?: number;
-};
-
 type Contact = {
   id: string;
   properties?: {
@@ -79,7 +72,6 @@ type Contact = {
     email?: string;
     phone?: string;
     hs_lead_status?: string;
-    hw_lead_substatus?: string;
     customer_number?: string;
     createdate?: string;
     /** JSON-encoded workflow rooms; used to derive stage pills offline. */
@@ -180,7 +172,6 @@ function readUrlState() {
   return {
     page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
     leadStatus: p.get('leadStatus') || '',
-    substatus: p.get('substatus') || '',
     sort: p.get('sort') || 'newest',
     q: p.get('q') || '',
     stage: p.get('stage') || '',
@@ -191,7 +182,6 @@ function readUrlState() {
 function writeUrlState(s: {
   page: number;
   leadStatus: string;
-  substatus: string;
   sort: string;
   q: string;
   stage: string;
@@ -200,7 +190,6 @@ function writeUrlState(s: {
   const qs = new URLSearchParams();
   if (s.page > 1) qs.set('page', String(s.page));
   if (s.leadStatus) qs.set('leadStatus', s.leadStatus);
-  if (s.substatus && s.leadStatus) qs.set('substatus', s.substatus);
   if (s.sort && s.sort !== 'newest') qs.set('sort', s.sort);
   if (s.q) qs.set('q', s.q);
   if (s.stage) qs.set('stage', s.stage);
@@ -290,24 +279,16 @@ function useIsViewer(): boolean {
  */
 type Store = {
   statuses: LeadStatus[];
-  substatuses: LeadSubstatus[];
   counts: Record<string, number>;
-  substatusCounts: Record<string, number>;
   nullLabel: string;
   loaded: boolean;
-  subsLoaded: boolean;
-  subsVersion: number;
 };
 
 const store: Store = {
   statuses: [],
-  substatuses: [],
   counts: {},
-  substatusCounts: {},
   nullLabel: 'No status',
   loaded: false,
-  subsLoaded: false,
-  subsVersion: 0,
 };
 
 const subscribers = new Set<() => void>();
@@ -338,84 +319,6 @@ async function loadLeadStatusCounts(stage?: string): Promise<void> {
   if (counts && typeof counts === 'object') store.counts = counts;
 }
 
-async function loadSubstatusCounts(leadStatus: string, stage: string): Promise<void> {
-  if (!leadStatus || leadStatus === '__no_status__') {
-    store.substatusCounts = {};
-    notify();
-    return;
-  }
-  try {
-    const qs = new URLSearchParams({ leadStatus });
-    if (stage) qs.set('stage', stage);
-    const counts = await apiGet<Record<string, number>>(`/api/contacts-substatus-counts?${qs}`);
-    if (counts && typeof counts === 'object') store.substatusCounts = counts;
-  } catch (e) {
-    console.warn('loadSubstatusCounts failed:', (e as Error).message);
-  }
-  notify();
-}
-
-async function loadLeadSubstatuses(): Promise<void> {
-  try {
-    const rows = await apiGet<LeadSubstatus[]>('/api/lead-substatuses');
-    if (Array.isArray(rows)) {
-      store.substatuses = rows;
-      store.subsVersion += 1;
-    }
-  } catch (e) {
-    console.warn('loadLeadSubstatuses failed:', (e as Error).message);
-  } finally {
-    store.subsLoaded = true;
-    notify();
-  }
-}
-
-/**
- * Trigger a React re-render of the CustomersPage island so the
- * `<select id="lead-status-filter">` element (rendered by React from
- * store.statuses) reflects the latest store state.
- *
- * Previously this function wrote to sel.innerHTML directly, but that
- * detached React's fiber nodes from the DOM.  A subsequent React render
- * would then call removeChild() on the now-detached nodes, throwing a
- * DOMException caught by IslandErrorBoundary — which unmounted the island
- * and made the select disappear (intermittent failure in section J of the
- * lead-status-sync test suite).  Delegating entirely to React eliminates
- * the desync.
- */
-function populateLeadStatusFilter(): void {
-  notify();
-}
-
-function escapeHtml(s: string): string {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
-  );
-}
-
-// Expose to window so the privileges/lead-status-sync test harness can
-// `page.evaluate(() => loadLeadStatuses())` etc.
-declare global {
-  interface Window {
-    loadLeadStatuses?: () => Promise<void>;
-    populateLeadStatusFilter?: () => void;
-    loadLeadStatusCounts?: (stage?: string) => Promise<void>;
-    loadLeadSubstatuses?: () => Promise<void>;
-  }
-}
-
-window.loadLeadStatuses = loadLeadStatuses;
-window.populateLeadStatusFilter = populateLeadStatusFilter;
-window.loadLeadStatusCounts = loadLeadStatusCounts;
-window.loadLeadSubstatuses = loadLeadSubstatuses;
-
-/**
- * Effect that wires the existing BroadcastChannel + visibilitychange
- * sync paths preserved from the old `workflow-core.js` (lines 340–362,
- * 432–440). Each handler refetches statuses + counts and re-runs the
- * native-select populator so the lead-status-sync test continues to
- * pass.
- */
 function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObject<string>) {
   React.useEffect(() => {
     const refresh = () => {
@@ -431,9 +334,8 @@ function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObjec
       // from the updated store state.  populateLeadStatusFilter() now delegates
       // entirely to notify() — no innerHTML write — so there is no risk of
       // detaching React fiber nodes and triggering a reconciliation error.
-      Promise.all([loadLeadStatuses(), loadLeadStatusCounts(stage).catch(() => {}), loadLeadSubstatuses()])
+      Promise.all([loadLeadStatuses(), loadLeadStatusCounts(stage).catch(() => {})])
         .then(() => {
-          populateLeadStatusFilter();
           onChange();
         })
         .catch(() => {});
@@ -446,18 +348,14 @@ function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObjec
     document.addEventListener('visibilitychange', onVisibility);
 
     let bc: BroadcastChannel | null = null;
-    let subBc: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
       bc = new BroadcastChannel('lead_statuses_changed');
       bc.addEventListener('message', refresh);
-      subBc = new BroadcastChannel('lead_substatuses_changed');
-      subBc.addEventListener('message', refresh);
     }
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       if (bc) bc.close();
-      if (subBc) subBc.close();
     };
   }, [onChange]);
 }
@@ -601,7 +499,6 @@ function CustomerCardSkeleton() {
 function CustomerCard({
   contact,
   statusMap,
-  substatusMap,
   rooms,
   workflow,
   invoices,
@@ -616,7 +513,6 @@ function CustomerCard({
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
-  substatusMap: Map<string, string>;
   rooms: Room[];
   workflow: WorkflowDef | null;
   invoices: QBInvoice[];
@@ -625,13 +521,11 @@ function CustomerCard({
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
   resolveActionLabel: (
     stageKey: string,
     leadStatusKey: string | undefined,
     substageId: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => string;
   draftVisitId?: number | string | null;
   /**
@@ -658,12 +552,6 @@ function CustomerCard({
   const customerNum = contact.properties?.customer_number || '';
   const rawLs = contact.properties?.hs_lead_status || '';
   const lsLabel = rawLs ? statusMap.get(rawLs)?.label || rawLs : '';
-  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
-  const substatusLabel =
-    rawLs && hwSubstatusValue
-      ? substatusMap.get(`${rawLs}__${hwSubstatusValue}`.toUpperCase()) || ''
-      : '';
-
   const effectiveRooms: Room[] = rooms.length
     ? rooms
     : [{ room: 'Main', stageKey: 'sales', roomStatus: 'active' }];
@@ -683,7 +571,7 @@ function CustomerCard({
   const primaryStageKey = primaryRoom?.stageKey || 'sales';
   const leadStatusKey = contact.properties?.hs_lead_status;
 
-  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
+  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey);
 
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
@@ -694,7 +582,7 @@ function CustomerCard({
   const hasDraft = !!draftVisitId && isDesignHandler;
   const actionLabel = cahName
     || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined, hwSubstatusValue);
+    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
 
   const stageColors = STAGE_COLORS[primaryStageKey];
   const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
@@ -768,7 +656,6 @@ function CustomerCard({
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
-            {substatusLabel ? <Chip label={substatusLabel} size="small" variant="outlined" /> : null}
             <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}>
               {effectiveRooms.map((r, idx) => {
                 const sk = r.stageKey || 'sales';
@@ -906,7 +793,6 @@ export function CustomersPage(): React.ReactElement {
   usePageTitle('Customers · Measure Once');
   const initial = React.useMemo(() => readUrlState(), []);
   const [leadStatus, setLeadStatus] = React.useState<string>(initial.leadStatus);
-  const [substatus, setSubstatus] = React.useState<string>(initial.substatus);
   const [sortBy, setSortBy] = React.useState<string>(initial.sort);
   const [searchInput, setSearchInput] = React.useState<string>(initial.q);
   const [search, setSearch] = React.useState<string>(initial.q);
@@ -1001,7 +887,6 @@ export function CustomersPage(): React.ReactElement {
       const t = setTimeout(async () => {
         try {
           await loadLeadStatusCounts(stageFilterRef.current || undefined);
-          populateLeadStatusFilter();
         } catch (e) {
           if (retryCount < MAX_COUNTS_RETRIES) {
             scheduleCountsAttempt(retryCount + 1, COUNTS_RETRY_DELAY_MS);
@@ -1034,7 +919,7 @@ export function CustomersPage(): React.ReactElement {
     page,
     setPage,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, substatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize },
+    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize },
     { onFetchSuccess: scheduleCounts },
   );
 
@@ -1129,7 +1014,7 @@ export function CustomersPage(): React.ReactElement {
   }, []);
 
   const refreshDropdown = React.useCallback(() => {
-    populateLeadStatusFilter();
+    forceRender();
   }, []);
 
   useLeadStatusSync(refreshDropdown, stageFilterRef);
@@ -1167,15 +1052,14 @@ export function CustomersPage(): React.ReactElement {
     writeUrlState({
       page,
       leadStatus,
-      substatus,
       sort: sortBy,
       q: search,
       stage: stageFilter,
       archived: showArchived,
     });
-  }, [page, leadStatus, substatus, sortBy, search, stageFilter, showArchived]);
+  }, [page, leadStatus, sortBy, search, stageFilter, showArchived]);
 
-  // Load lead statuses + counts + substatuses on mount, then re-populate
+  // Load lead statuses + counts on mount, then re-populate
   // the native select once the DOM element has been mounted.
   React.useEffect(() => {
     let cancelled = false;
@@ -1183,10 +1067,8 @@ export function CustomersPage(): React.ReactElement {
       await Promise.all([
         loadLeadStatuses(),
         loadLeadStatusCounts(initial.stage || undefined).catch(() => {}),
-        loadLeadSubstatuses(),
       ]);
       if (cancelled) return;
-      populateLeadStatusFilter();
       forceRender();
     })();
     return () => {
@@ -1206,9 +1088,6 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     if (prevStageRef.current === stageFilter) return;
     prevStageRef.current = stageFilter;
-    // Reset substatus counts immediately so stale chips don't flash.
-    store.substatusCounts = {};
-    notify();
     // Show skeleton while stage-scoped counts are loading. "All stages" always
     // uses cached global counts so it never needs a loading indicator.
     if (stageFilter) {
@@ -1216,7 +1095,7 @@ export function CustomersPage(): React.ReactElement {
       setCountsLoading(true);
       loadLeadStatusCounts(stageFilter)
         .then(() => {
-          populateLeadStatusFilter();
+          notify();
           notify();
         })
         .catch(() => {})
@@ -1226,27 +1105,13 @@ export function CustomersPage(): React.ReactElement {
     } else {
       loadLeadStatusCounts(undefined)
         .then(() => {
-          populateLeadStatusFilter();
+          notify();
           notify();
         })
         .catch(() => {});
     }
   }, [stageFilter]);
 
-  // When stage+leadStatus are both active, fetch substatus counts scoped to
-  // the stage so only substatuses with contacts in that stage are shown.
-  React.useEffect(() => {
-    if (!stageFilter || !leadStatus || leadStatus === '__no_status__') {
-      store.substatusCounts = {};
-      notify();
-      return;
-    }
-    let cancelled = false;
-    loadSubstatusCounts(leadStatus, stageFilter).then(() => {
-      if (!cancelled) notify();
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [stageFilter, leadStatus]);
 
   // Load workflow definition (for the stage tab bar + per-card stage labels)
   // and the per-contact rooms cache (for the client-side stage + archived
@@ -1439,20 +1304,9 @@ export function CustomersPage(): React.ReactElement {
     [roomsByContact, showArchived],
   );
 
-  // Client-side sub-status filter on top of the server-fetched page.
-  // Stage and archived filtering are now server-side; resolveRooms handles
-  // room-pill display only.
   const visibleContacts = React.useMemo(() => {
-    const out: Array<{ contact: Contact; rooms: Room[] }> = [];
-    for (const c of contacts) {
-      if (substatus) {
-        const v = String(c.properties?.hw_lead_substatus || '').toUpperCase();
-        if (v !== substatus.toUpperCase()) continue;
-      }
-      out.push({ contact: c, rooms: resolveRooms(c) });
-    }
-    return out;
-  }, [contacts, substatus, resolveRooms]);
+    return contacts.map((c) => ({ contact: c, rooms: resolveRooms(c) }));
+  }, [contacts, resolveRooms]);
 
   // Per-contact offline-sync status (Pending sync / Sync failed badges).
   const contactSyncMap = useOfflineContactEntries();
@@ -1462,29 +1316,6 @@ export function CustomersPage(): React.ReactElement {
     for (const s of store.statuses) m.set(s.key, s);
     return m;
   }, []);
-
-  const substatusMap = React.useMemo(() => {
-    const m = new Map<string, string>();
-    for (const s of store.substatuses) {
-      const key = `${s.status_key}__${s.substatus_key}`.toUpperCase();
-      m.set(key, s.label);
-    }
-    return m;
-    // Recomputes on every substatus load/rename, just like availableSubstatuses.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.subsLoaded, store.subsVersion]);
-
-  const availableSubstatuses = React.useMemo<LeadSubstatus[]>(() => {
-    if (!leadStatus || leadStatus === '__no_status__') return [];
-    return store.substatuses
-      .filter((r) => String(r.status_key).toUpperCase() === leadStatus.toUpperCase())
-      .slice()
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    // store.subsLoaded gates the initial load; store.subsVersion increments on
-    // every successful re-fetch (e.g. after a BC rename or visibilitychange),
-    // so the memo recomputes and shows updated labels without a page reload.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leadStatus, store.subsLoaded, store.subsVersion]);
 
   // Build the stage tab list: All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
@@ -1502,7 +1333,6 @@ export function CustomersPage(): React.ReactElement {
 
   const onTabChange = (key: string) => {
     setPage(1);
-    setSubstatus('');
     if (key === '__all__') {
       setStageFilter('');
     } else {
@@ -1584,8 +1414,7 @@ export function CustomersPage(): React.ReactElement {
               onChange={(e) => {
                 const v = (e.target as HTMLSelectElement).value;
                 setLeadStatus(v);
-                setSubstatus('');
-                setPage(1);
+                            setPage(1);
               }}
               slotProps={{ input: { id: 'lead-status-filter', name: 'lead-status-filter' } }}
             >
@@ -1657,8 +1486,7 @@ export function CustomersPage(): React.ReactElement {
                   const excluded = store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key);
                   if (leadStatus && excluded.includes(leadStatus)) {
                     setLeadStatus('');
-                    setSubstatus('');
-                    setPage(1);
+                                    setPage(1);
                   }
                 }
               }}
@@ -1702,7 +1530,6 @@ export function CustomersPage(): React.ReactElement {
                 <CustomerCard
                   contact={contact}
                   statusMap={statusMap}
-                  substatusMap={substatusMap}
                   rooms={rooms}
                   workflow={workflow}
                   invoices={matchInvoicesForContact(contact, qbInvoices)}

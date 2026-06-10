@@ -22,21 +22,12 @@ export interface LeadStatusOption {
   stage?: string | null;
 }
 
-export interface LeadSubstatus {
-  id: number;
-  status_key: string;
-  substatus_key: string;
-  label: string;
-  action_label?: string;
-}
-
 // ── Context shape ──────────────────────────────────────────────────────────────
 
 export interface WorkflowDataContextValue {
   contactStageCache: Record<string, Room[]>;
   leadStatuses: LeadStatusOption[];
   nullLsLabel: string;
-  leadSubstatuses: LeadSubstatus[];
   workflow: WorkflowDef | null;
   roomAssignmentsStale: boolean;
   openLeadsStale: boolean;
@@ -50,7 +41,6 @@ const WorkflowDataContext = createContext<WorkflowDataContextValue>({
   contactStageCache: {},
   leadStatuses: [],
   nullLsLabel: 'No status',
-  leadSubstatuses: [],
   workflow: null,
   roomAssignmentsStale: false,
   openLeadsStale: false,
@@ -70,7 +60,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   const [contactStageCache, setContactStageCache] = useState<Record<string, Room[]>>({});
   const [leadStatuses, setLeadStatuses] = useState<LeadStatusOption[]>([]);
   const [nullLsLabel, setNullLsLabel] = useState('No status');
-  const [leadSubstatuses, setLeadSubstatuses] = useState<LeadSubstatus[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowDef | null>(null);
   const [roomAssignmentsStale, setRoomAssignmentsStale] = useState(false);
   const [openLeadsStale, setOpenLeadsStale] = useState(false);
@@ -82,9 +71,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   const pendingRoomStaleRef = useRef<boolean | null>(null);
   // Tracks whether the user dismissed the room-stale banner this session.
   const roomStaleDismissedRef = useRef(false);
-  // Stable ref so SSE / vis effects can call fetchLeadSubstatuses without
-  // adding it to their deps arrays (it is always the same useCallback identity).
-  const fetchLeadSubstatusesRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // ── Data fetchers ────────────────────────────────────────────────────────
 
@@ -156,28 +142,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  const fetchLeadSubstatuses = useCallback(async (): Promise<void> => {
-    try {
-      const r = await fetch(`/api/lead-substatuses?_t=${Date.now()}`);
-      if (!r.ok) return;
-      const rows = await r.json() as LeadSubstatus[];
-      if (!Array.isArray(rows)) return;
-      setLeadSubstatuses(rows);
-      // Keep window.LEAD_SUBSTATUSES in sync for vanilla-JS interop
-      (window as unknown as Record<string, unknown>).LEAD_SUBSTATUSES = rows;
-      // Notify CustomerDetailPage (and any other local listener) synchronously
-      // so it can update its own leadSubs state without relying on React context
-      // propagation timing across a Suspense boundary.
-      window.dispatchEvent(new CustomEvent('mo:lead-substatuses-updated', { detail: rows }));
-    } catch (e) {
-      console.warn('[WorkflowDataContext] leadSubstatuses fetch error:', (e as Error).message);
-    }
-  }, []);
-
-  // Keep the ref current so SSE / vis effects can call it without adding it
-  // to their deps arrays (it is stable — same function identity every render).
-  fetchLeadSubstatusesRef.current = fetchLeadSubstatuses;
-
   const fetchWorkflow = useCallback(async (): Promise<void> => {
     try {
       const r = await fetch('/api/workflow');
@@ -208,7 +172,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
           fetchWorkflow(),
           fetchContactStageCache(),
           fetchLeadStatuses(),
-          fetchLeadSubstatuses(),
         ]);
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -249,31 +212,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     return () => { bc.removeEventListener('message', onMsg); bc.close(); };
   }, [fetchLeadStatuses]);
 
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const bc = new BroadcastChannel('lead_substatuses_changed');
-    const onMsg = () => { void fetchLeadSubstatuses(); };
-    bc.addEventListener('message', onMsg);
-    return () => { bc.removeEventListener('message', onMsg); bc.close(); };
-  }, [fetchLeadSubstatuses]);
-
   // ── Visibility change — apply deferred stale updates ─────────────────────
-  //
-  // `window.postMessage` is spec-guaranteed to deliver asynchronously (new
-  // task), even when called from within a Puppeteer `evaluate()` call.  The
-  // companion listener calls fetchLeadSubstatuses() from that new task —
-  // i.e. when Puppeteer's CDP session is idle — so Fetch.requestPaused is
-  // delivered and continued without any ordering issues.
-
-  const WDC_VIS_MSG = '__wdc_vis_refresh_subs__';
-
-  useEffect(() => {
-    const onMsg = (e: MessageEvent) => {
-      if (e.data === WDC_VIS_MSG) void fetchLeadSubstatusesRef.current();
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-  }, []);
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -289,11 +228,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         pendingOpenLeadsStaleRef.current = null;
         setOpenLeadsStale(v);
       }
-      // Use window.postMessage as an async trampoline.  The spec mandates
-      // that postMessage delivery always fires in a new task, so the
-      // companion 'message' listener above calls fetchLeadSubstatuses()
-      // from outside the current synchronous event-handler frame.
-      window.postMessage(WDC_VIS_MSG, '*');
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -320,9 +254,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
               bc.postMessage({ ts: Date.now(), src: payload.type === 'lead_statuses_changed' ? 'admin_mutation' : 'hs_webhook' });
               bc.close();
             } catch { /* ignore */ }
-          }
-          if (payload.type === 'lead_substatuses_changed') {
-            void fetchLeadSubstatusesRef.current();
           }
           if (payload.type === 'customer_info_submitted') {
             try {
@@ -354,19 +285,15 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   }, []);
 
   // ── Expose fetch functions as window globals ──────────────────────────────
-  // window.loadLeadStatuses / loadLeadSubstatuses are used by test harness
-  // bootstrapFilter() and any remaining vanilla-JS pickers.
-  // Must run BEFORE the lazy page chunk loads so the functions are available
-  // immediately after the React island mounts (preSuspenseWrap pattern).
+  // window.loadLeadStatuses is used by test harness bootstrapFilter() and any
+  // remaining vanilla-JS pickers.
   useEffect(() => {
     const g = window as unknown as Record<string, unknown>;
-    g.loadLeadStatuses    = fetchLeadStatuses;
-    g.loadLeadSubstatuses = fetchLeadSubstatuses;
+    g.loadLeadStatuses = fetchLeadStatuses;
     return () => {
-      if (g.loadLeadStatuses    === fetchLeadStatuses)    delete g.loadLeadStatuses;
-      if (g.loadLeadSubstatuses === fetchLeadSubstatuses) delete g.loadLeadSubstatuses;
+      if (g.loadLeadStatuses === fetchLeadStatuses) delete g.loadLeadStatuses;
     };
-  }, [fetchLeadStatuses, fetchLeadSubstatuses]);
+  }, [fetchLeadStatuses]);
 
   // ── Test hooks (window.__setTestPendingOpenLeadsStale / RoomStale) ─────────
   // Integration tests drive the pending refs directly without a network round-
@@ -446,7 +373,6 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     contactStageCache,
     leadStatuses,
     nullLsLabel,
-    leadSubstatuses,
     workflow,
     roomAssignmentsStale,
     openLeadsStale,

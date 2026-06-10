@@ -15,7 +15,7 @@ import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
-  Contact, Room, HubSpotTask, LeadStatus, LeadSubstatus,
+  Contact, Room, HubSpotTask, LeadStatus,
   DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
@@ -88,7 +88,7 @@ export function CustomerDetailPage() {
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
-  const { leadSubstatuses: leadSubs } = useWorkflowData();
+
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [nullLsLabel,  setNullLsLabel]  = useState('No status');
   const [lsLoaded,     setLsLoaded]     = useState(false);
@@ -523,20 +523,14 @@ export function CustomerDetailPage() {
       const id = String(cId);
       if (id !== contactId) return;
       const c = contactRef.current;
-      const prevStatus    = c?.properties?.hs_lead_status    || '';
-      const prevSubstatus = c?.properties?.hw_lead_substatus || '';
-      const subBelongsToPrev = prevStatus
-        ? prevSubstatus.toUpperCase().startsWith(`${prevStatus.toUpperCase()}__`)
-        : false;
-      const clearSub = subBelongsToPrev;
-      if (prevStatus === String(newStatus) && !clearSub) return;
+      const prevStatus = c?.properties?.hs_lead_status || '';
+      if (prevStatus === String(newStatus)) return;
 
       const updated: Contact = {
         ...(c as Contact),
         properties: {
           ...(c?.properties || {}),
-          hs_lead_status:    String(newStatus),
-          ...(clearSub ? { hw_lead_substatus: '' } : {}),
+          hs_lead_status: String(newStatus),
         },
       };
       setContact(updated);
@@ -544,62 +538,12 @@ export function CustomerDetailPage() {
       const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
       if (st) st.selectedContact = updated;
 
-      const body: Record<string, string> = { hs_lead_status: String(newStatus) };
-      if (clearSub) body.hw_lead_substatus = '';
-      // Offline-aware: when offline / on a network error this is queued and
-      // replayed on reconnect. Optimistic UI above already reflects the change.
-      // A genuine LEAD_STATUS_REMOVED rejection rolls back the optimistic update
-      // and shows a toast so the user knows to contact an admin.
       void sendOrQueue({
         area: 'customer',
         label: `Lead status → ${String(newStatus)}`,
         method: 'PATCH',
         url: `/api/contacts/${encodeURIComponent(id)}`,
-        body,
-        dedupeKey: `contact:${id}:lead-status`,
-      }).then(res => {
-        if (!res.queued && !res.ok) {
-          const d = res.data as { code?: string } | undefined;
-          if (d?.code === 'LEAD_STATUS_REMOVED') {
-            setContact(c as Contact);
-            contactRef.current = c as Contact;
-            const st2 = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
-            if (st2) st2.selectedContact = c;
-            const w = window as unknown as Record<string, unknown>;
-            if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
-          }
-        }
-      }).catch(() => { /* noop — optimistic UI already applied */ });
-    };
-
-    g._quickSetLeadStatusWithSub = async (cId: unknown, statusKey: unknown, substatusKey: unknown) => {
-      const id = String(cId);
-      if (id !== contactId) return;
-      const c = contactRef.current;
-      const newHw         = `${String(statusKey).toUpperCase()}__${String(substatusKey).toUpperCase()}`;
-      const prevStatus    = c?.properties?.hs_lead_status    || '';
-      const prevSubstatus = c?.properties?.hw_lead_substatus || '';
-      if (prevStatus === String(statusKey) && prevSubstatus === newHw) return;
-
-      const updated: Contact = {
-        ...(c as Contact),
-        properties: {
-          ...(c?.properties || {}),
-          hs_lead_status:    String(statusKey),
-          hw_lead_substatus: newHw,
-        },
-      };
-      setContact(updated);
-      contactRef.current = updated;
-      const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
-      if (st) st.selectedContact = updated;
-
-      void sendOrQueue({
-        area: 'customer',
-        label: `Lead status → ${String(statusKey)} / ${String(substatusKey)}`,
-        method: 'PATCH',
-        url: `/api/contacts/${encodeURIComponent(id)}`,
-        body: { hs_lead_status: String(statusKey), hw_lead_substatus: newHw },
+        body: { hs_lead_status: String(newStatus) },
         dedupeKey: `contact:${id}:lead-status`,
       }).then(res => {
         if (!res.queued && !res.ok) {
@@ -618,7 +562,6 @@ export function CustomerDetailPage() {
 
     return () => {
       delete g.quickSetLeadStatus;
-      delete g._quickSetLeadStatusWithSub;
     };
   }, [contactId, setContact]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -650,42 +593,6 @@ export function CustomerDetailPage() {
       throw err;
     }
   }, [contactId, notifyApiError]);
-
-  // ── Substatus change ───────────────────────────────────────────────────────
-
-  const handleSubstatusChange = useCallback(async (statusValue: string, substatusKey: string, checked: boolean) => {
-    if (!contact) return;
-    const newValue  = checked ? `${String(statusValue).toUpperCase()}__${substatusKey}` : '';
-    const newProps  = { ...contact.properties, hw_lead_substatus: newValue };
-    const updated   = { ...contact, properties: newProps };
-    setContact(updated);
-    const g  = window as unknown as Record<string, unknown>;
-    const st = g.state as Record<string, unknown> | undefined;
-    if (st) st.selectedContact = updated;
-    const res = await sendOrQueue({
-      area: 'customer',
-      label: 'Lead substatus',
-      method: 'PATCH',
-      url: `/api/contacts/${contactId}`,
-      body: {
-        hw_lead_substatus: newValue,
-        ...(checked ? { hs_lead_status: statusValue } : {}),
-      },
-      dedupeKey: `contact:${contactId}:lead-status`,
-    });
-    // Roll back optimistic UI only on a genuine server rejection; a queued write
-    // will replay later and should keep the optimistic value.
-    if (!res.queued && !res.ok) {
-      const d = res.data as { error?: string; code?: string } | undefined;
-      if (d?.code === 'LEAD_STATUS_REMOVED') {
-        const w = window as unknown as Record<string, unknown>;
-        if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
-      } else {
-        notifyApiError('hubspot', new Error(d?.error || 'Failed to update'));
-      }
-      setContact(contact);
-    }
-  }, [contact, contactId, notifyApiError]);
 
   // ── Room select ────────────────────────────────────────────────────────────
 
@@ -751,7 +658,6 @@ export function CustomerDetailPage() {
         <CustomerDetailHeader
           contact={contact}
           leadStatuses={leadStatuses}
-          leadSubstatuses={leadSubs}
           nullLeadStatusLabel={nullLsLabel}
           onEditContact={() => setContactEditOpen(true)}
           onOpenWhatsApp={() => setWaModalOpen(true)}
@@ -849,11 +755,9 @@ export function CustomerDetailPage() {
         <LeadStatusRail
           contact={contact}
           leadStatuses={leadStatuses}
-          leadSubstatuses={leadSubs}
           loaded={lsLoaded}
           focusedLeadStatus={focusedLs}
           onFocusChange={setFocusedLs}
-          onSubstatusChange={handleSubstatusChange}
         />
       </div>
 

@@ -3,7 +3,6 @@ import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { resolveActionLabel as resolveActionLabelPure } from '../utils/resolveActionLabel.mjs';
 
 export interface CardActionHandlerBinding {
-  substatus_id?: number;
   stage_key?: string;
   status_key?: string;
 }
@@ -18,14 +17,6 @@ export interface CardActionHandlerData {
   bindings?: CardActionHandlerBinding[];
 }
 
-interface LeadSubstatus {
-  id: number;
-  status_key: string;
-  substatus_key: string;
-  label?: string;
-  action_label?: string;
-}
-
 interface StageActionLabel {
   stage_key: string;
   status_key: string;
@@ -36,38 +27,32 @@ type HandlerIndex = Record<string, CardActionHandlerData>;
 
 function buildIndexes(rows: CardActionHandlerData[]): {
   byLabel: HandlerIndex;
-  bySubstatus: Record<number, CardActionHandlerData>;
   byId: Record<number, CardActionHandlerData>;
 } {
   const byLabel: HandlerIndex = {};
-  const bySubstatus: Record<number, CardActionHandlerData> = {};
   const byId: Record<number, CardActionHandlerData> = {};
   for (const h of rows || []) {
     byId[h.id] = h;
     for (const b of h.bindings || []) {
-      if (b.substatus_id) {
-        bySubstatus[b.substatus_id] = h;
-      } else if (b.stage_key) {
+      if (b.stage_key) {
         const sk = String(b.stage_key || '').toLowerCase();
         const lk = String(b.status_key || '').toLowerCase();
         byLabel[`${sk}|${lk}`] = h;
       }
     }
   }
-  return { byLabel, bySubstatus, byId };
+  return { byLabel, byId };
 }
 
 export interface UseCardActionHandlersResult {
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
   resolveActionLabel: (
     stageKey: string,
     leadStatusKey: string | undefined,
     substageId: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => string;
   loading: boolean;
   error: string | null;
@@ -78,11 +63,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
   const [error, setError] = useState<string | null>(null);
 
   const byLabelRef = useRef<HandlerIndex>({});
-  const bySubstatusRef = useRef<Record<number, CardActionHandlerData>>({});
   const byIdRef = useRef<Record<number, CardActionHandlerData>>({});
-  const substatusesRef = useRef<LeadSubstatus[]>([]);
-  // `${STATUS_KEY}|${SUBSTATUS_KEY}` → action_label (uppercase keys)
-  const substatusActionLabelMapRef = useRef<Record<string, string>>({});
   // `${stage_key}|${status_key}` → label (lowercase keys).
   // null means the row EXISTS in the DB with an empty label (admin explicitly
   // cleared it). undefined (key absent) means no row exists → fall back to the
@@ -91,27 +72,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
 
   const [, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
-
-  const fetchSubstatuses = useCallback(async () => {
-    try {
-      const res = await fetch('/api/lead-substatuses');
-      if (!res.ok) {
-        console.warn('[useCardActionHandlers] substatuses fetch failed:', res.status);
-        return;
-      }
-      const substatuses: LeadSubstatus[] = await res.json();
-      substatusesRef.current = Array.isArray(substatuses) ? substatuses : [];
-      const actionMap: Record<string, string> = {};
-      for (const r of substatusesRef.current) {
-        if (!r.action_label) continue;
-        const k = `${String(r.status_key).toUpperCase()}|${String(r.substatus_key).toUpperCase()}`;
-        actionMap[k] = r.action_label;
-      }
-      substatusActionLabelMapRef.current = actionMap;
-    } catch (e) {
-      console.warn('[useCardActionHandlers] substatuses fetch error:', (e as Error).message);
-    }
-  }, []);
 
   const fetchStageActionLabels = useCallback(async () => {
     try {
@@ -143,16 +103,14 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     try {
       const [handlersRes] = await Promise.all([
         fetch('/api/card-action-handlers'),
-        fetchSubstatuses(),
         fetchStageActionLabels(),
       ]);
 
       if (!handlersRes.ok) throw new Error(`handlers ${handlersRes.status}`);
 
       const handlers: CardActionHandlerData[] = await handlersRes.json();
-      const { byLabel, bySubstatus, byId } = buildIndexes(handlers);
+      const { byLabel, byId } = buildIndexes(handlers);
       byLabelRef.current = byLabel;
-      bySubstatusRef.current = bySubstatus;
       byIdRef.current = byId;
 
       setError(null);
@@ -163,7 +121,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       setError((e as Error).message);
       setLoading(false);
     }
-  }, [bump, fetchSubstatuses, fetchStageActionLabels]);
+  }, [bump, fetchStageActionLabels]);
 
   useEffect(() => {
     fetchAll();
@@ -191,53 +149,24 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     };
   }, [fetchStageActionLabels, bump]);
 
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const ch = new BroadcastChannel('lead_substatuses_changed');
-    const onMsg = () => fetchSubstatuses().then(bump);
-    ch.addEventListener('message', onMsg);
-    return () => {
-      ch.removeEventListener('message', onMsg);
-      ch.close();
-    };
-  }, [fetchSubstatuses, bump]);
-
   const cardActionHandlerFor = useCallback(
     (
       stageKey: string,
       leadStatusKey: string | undefined,
-      hwSubstatusValue: string | undefined,
     ): CardActionHandlerData | null => {
-      if (hwSubstatusValue) {
-        const v = String(hwSubstatusValue).toUpperCase();
-        const sk = String(leadStatusKey || '').toUpperCase();
-        const prefix = `${sk}__`;
-        if (v.startsWith(prefix)) {
-          const subKey = v.slice(prefix.length);
-          const row = substatusesRef.current.find(
-            (r) =>
-              String(r.status_key).toUpperCase() === sk &&
-              String(r.substatus_key).toUpperCase() === subKey,
-          );
-          if (row && bySubstatusRef.current[row.id]) {
-            return bySubstatusRef.current[row.id];
-          }
-        }
-      }
       const sKey = String(stageKey || '').toLowerCase();
       const lsKey = String(leadStatusKey || '').toLowerCase();
       return byLabelRef.current[`${sKey}|${lsKey}`] || null;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [byLabelRef, bySubstatusRef, substatusesRef],
+    [byLabelRef],
   );
 
   // Resolve the action-strip label for a card without calling any window globals.
-  // Priority mirrors workflow-core.js:
-  //   1. Sub-status action label (if contact has hw_lead_substatus matching the LS)
-  //   2. Per-LS stage action label (if contact has a lead status)
-  //   3. Per-substageId stage action label (legacy fallback, no LS)
-  //   4. Per-stage "no lead status" row (stage|'')
+  // Priority:
+  //   1. Per-LS stage action label (if contact has a lead status)
+  //   2. Per-substageId stage action label (legacy fallback, no LS)
+  //   3. Per-stage "no lead status" row (stage|'')
   //
   // The pure resolver logic lives in src/react/utils/resolveActionLabel.mjs and
   // is shared with the unit-test suite so tests exercise the same code path.
@@ -246,24 +175,21 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       stageKey: string,
       leadStatusKey: string | undefined,
       substageId: string | undefined,
-      hwSubstatusValue: string | undefined,
     ): string =>
       resolveActionLabelPure(
         stageActionLabelMapRef.current,
-        substatusActionLabelMapRef.current,
         stageKey,
         leadStatusKey,
         substageId,
-        hwSubstatusValue,
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [substatusActionLabelMapRef, stageActionLabelMapRef],
+    [stageActionLabelMapRef],
   );
 
   // Window shims: expose React-managed handler data and dispatch as window globals
   // so test probes and any remaining vanilla-JS call-sites can reach them.
   //
-  // window.cardActionHandlerFor — label/substatus lookup used by test probes.
+  // window.cardActionHandlerFor — label lookup used by test probes.
   //
   // window.cardActionHandlerById — id-keyed lookup used by the click-delegation
   // handler (registered below) so it can retrieve the full config (e.g.
@@ -328,7 +254,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       const cardActionHandlerAttrs = (
         stageKey: string,
         leadStatusKey: string,
-        hwSubstatusValue: string | null,
         ctx: { contactId?: string; contactName?: string; contactEmail?: string },
       ) => {
         const h =
@@ -336,7 +261,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
             ? (w.cardActionHandlerFor as typeof cardActionHandlerFor)(
                 stageKey,
                 leadStatusKey,
-                hwSubstatusValue ?? undefined,
               )
             : null;
         if (!h) return '';
@@ -368,7 +292,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
           id?: string;
           properties?: {
             hs_lead_status?: string;
-            hw_lead_substatus?: string;
             firstname?: string;
             lastname?: string;
             email?: string;
@@ -380,7 +303,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
         const stageKey2 = (entry && entry.stageKey) || 'sales';
         const props = contact.properties || {};
         const leadStatusKey2 = props.hs_lead_status || '';
-        const hwSubstatusValue2 = props.hw_lead_substatus || '';
         const firstName = props.firstname || '';
         const lastName = props.lastname || '';
         const name =
@@ -393,7 +315,6 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
         const attrsStr = cardActionHandlerAttrs(
           stageKey2,
           leadStatusKey2,
-          hwSubstatusValue2,
           ctx2,
         );
         const cahMatch = attrsStr.match(/data-card-action-name="([^"]+)"/);

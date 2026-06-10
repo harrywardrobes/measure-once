@@ -17,10 +17,10 @@ const meta: Meta = {
           'Dialog shown when a lead-status slot or sub-status has more than one handler ' +
           'bound to it. Lists the conflicting handlers and lets an admin remove all but one ' +
           'to resolve the conflict. The dialog auto-closes when only one handler remains. ' +
-          'Stories use a mock `onRemove` prop so no real API calls are made.',
-      },
-    },
-  },
+          'Stories use a mock `onRemove` prop so no real API calls are made.'
+      }
+    }
+  }
 };
 export default meta;
 
@@ -34,7 +34,7 @@ const STATUSES = [
     shorthand: 'QS',
     sort_order: 2,
     excluded_from_sales: false,
-    is_null_row: false,
+    is_null_row: false
   },
   {
     key: 'survey_booked',
@@ -43,8 +43,8 @@ const STATUSES = [
     shorthand: 'SB',
     sort_order: 3,
     excluded_from_sales: false,
-    is_null_row: false,
-  },
+    is_null_row: false
+  }
 ];
 
 const SUBSTATUSES = [
@@ -54,8 +54,8 @@ const SUBSTATUSES = [
     substatus_key: 'awaiting_approval',
     label: 'Awaiting approval',
     action_label: 'Mark awaiting approval',
-    sort_order: 1,
-  },
+    sort_order: 1
+  }
 ];
 
 const INITIAL_TWO_HANDLERS = [
@@ -64,15 +64,15 @@ const INITIAL_TWO_HANDLERS = [
     name: 'Send quote message',
     type: 'show_message',
     config: { title: 'Quote sent', message: 'Remember to attach the PDF.' },
-    bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }],
+    bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
   },
   {
     id: 2,
     name: 'Schedule survey visit',
     type: 'schedule_visit',
     config: { visitType: 'survey' },
-    bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }],
-  },
+    bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
+  }
 ];
 
 const INITIAL_THREE_HANDLERS_SUB = [
@@ -81,22 +81,22 @@ const INITIAL_THREE_HANDLERS_SUB = [
     name: 'Start design visit (A)',
     type: 'start_design_visit',
     config: { inProgressLeadStatus: 'in_progress', submittedLeadStatus: 'dv_submitted' },
-    bindings: [{ substatus_id: 10 }],
+    bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 4,
     name: 'Show next-step message',
     type: 'show_message',
     config: { title: '', message: 'Upload the design brief before continuing.' },
-    bindings: [{ substatus_id: 10 }],
+    bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 5,
     name: 'Schedule follow-up visit',
     type: 'schedule_visit',
     config: { visitType: 'remedial' },
-    bindings: [{ substatus_id: 10 }],
-  },
+    bindings: [{ stage_key: 'sales', status_key: '' }]
+  }
 ];
 
 function TwoConflictsDemo() {
@@ -126,10 +126,8 @@ function TwoConflictsDemo() {
         <ConflictResolverModal
           stageKey="sales"
           statusKey="quote_sent"
-          substatusId={null}
           handlers={handlers}
           statuses={STATUSES}
-          substatuses={SUBSTATUSES}
           onClose={() => setOpen(false)}
           onRemove={handleRemove}
         />
@@ -165,10 +163,8 @@ function ThreeConflictsSubstatusDemo() {
         <ConflictResolverModal
           stageKey={null}
           statusKey={null}
-          substatusId={10}
           handlers={handlers}
           statuses={STATUSES}
-          substatuses={SUBSTATUSES}
           onClose={() => setOpen(false)}
           onRemove={handleRemove}
         />
@@ -195,10 +191,8 @@ function RemoveErrorDemo() {
         <ConflictResolverModal
           stageKey="sales"
           statusKey="quote_sent"
-          substatusId={null}
           handlers={INITIAL_TWO_HANDLERS}
           statuses={STATUSES}
-          substatuses={SUBSTATUSES}
           onClose={() => setOpen(false)}
           onRemove={handleRemove}
         />
@@ -217,9 +211,9 @@ export const TwoConflictingHandlers: Story = {
           'Two handlers are both bound to the **Quote sent** lead-status slot. ' +
           'Clicking "Remove" on one handler removes it from the list via the mock `onRemove`. ' +
           'When only one handler remains the dialog closes automatically. ' +
-          'Use "Reopen dialog" to reset the demo back to two handlers.',
-      },
-    },
+          'Use "Reopen dialog" to reset the demo back to two handlers.'
+      }
+    }
   },
   play: async () => {
     const body = within(document.body);
@@ -237,7 +231,7 @@ export const TwoConflictingHandlers: Story = {
       () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
       { timeout: 3000 },
     );
-  },
+  }
 };
 
 export const ThreeConflictingHandlersSubstatus: Story = {
@@ -249,9 +243,9 @@ export const ThreeConflictingHandlersSubstatus: Story = {
         story:
           'Three handlers are all bound to the **Awaiting approval** sub-status. ' +
           'The slot description is resolved from the `substatuses` prop by matching `id`. ' +
-          'Remove two handlers one-at-a-time; the dialog closes when only one remains.',
-      },
-    },
+          'Remove two handlers one-at-a-time; the dialog closes when only one remains.'
+      }
+    }
   },
   play: async () => {
     const body = within(document.body);
@@ -276,7 +270,7 @@ export const ThreeConflictingHandlersSubstatus: Story = {
       () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
       { timeout: 3000 },
     );
-  },
+  }
 };
 
 export const RemoveError: Story = {
@@ -288,9 +282,9 @@ export const RemoveError: Story = {
         story:
           'Simulates a server error during removal: the mock `onRemove` always throws. ' +
           'Clicking "Remove" shows the inline error message and re-enables both buttons, ' +
-          'allowing the admin to retry.',
-      },
-    },
+          'allowing the admin to retry.'
+      }
+    }
   },
   play: async () => {
     const body = within(document.body);
@@ -305,7 +299,7 @@ export const RemoveError: Story = {
       const btns = within(dialog).getAllByRole('button', { name: 'Remove' });
       btns.forEach(btn => expect(btn).not.toBeDisabled());
     }, { timeout: 3000 });
-  },
+  }
 };
 
 function RemoveInteractionDemo() {
@@ -332,7 +326,7 @@ function RemoveInteractionDemo() {
         return Promise.resolve(
           new Response(JSON.stringify({ ok: true }), {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' }
           }),
         );
       }
@@ -354,10 +348,8 @@ function RemoveInteractionDemo() {
         <ConflictResolverModal
           stageKey="sales"
           statusKey="quote_sent"
-          substatusId={null}
           handlers={INITIAL_TWO_HANDLERS}
           statuses={STATUSES}
-          substatuses={SUBSTATUSES}
           onClose={() => setOpen(false)}
         />
       )}
@@ -377,9 +369,9 @@ export const RemoveInteraction: Story = {
           'normal `fetch`-based helper. A story-level `window.fetch` override intercepts ' +
           'that request and returns a 200 OK with no real server involved. ' +
           'After the mock DELETE resolves the dialog auto-closes — the same behaviour ' +
-          'the admin sees in production when only one handler remains.',
-      },
-    },
+          'the admin sees in production when only one handler remains.'
+      }
+    }
   },
   play: async () => {
     const body = within(document.body);
@@ -394,5 +386,5 @@ export const RemoveInteraction: Story = {
       () => expect(body.queryByRole('dialog')).not.toBeInTheDocument(),
       { timeout: 3000 },
     );
-  },
+  }
 };

@@ -476,13 +476,11 @@ function ProjectCard({
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => CardActionHandlerData | null;
   resolveActionLabel: (
     stageKey: string,
     leadStatusKey: string | undefined,
     substageId: string | undefined,
-    hwSubstatusValue: string | undefined,
   ) => string;
   draftVisitId?: number | string | null;
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
@@ -501,10 +499,9 @@ function ProjectCard({
   // Pick the primary stage from the first room (rooms sorted by stage desc).
   const primaryStageKey = rooms[0]?.stageKey || '';
   const leadStatusKey = contact.properties?.hs_lead_status;
-  const hwSubstatusValue = contact.properties?.hw_lead_substatus;
 
   // Only show a strip when a matching handler is actually configured.
-  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey, hwSubstatusValue);
+  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey);
 
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
@@ -517,7 +514,7 @@ function ProjectCard({
   const hasDraft = !!draftVisitId && isDesignHandler;
   const actionLabel = cahName
     || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined, hwSubstatusValue);
+    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
 
   const stageColors = STAGE_COLORS[primaryStageKey];
   const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
@@ -642,7 +639,7 @@ function ProjectCard({
               Unknown status
             </Box>
           )}
-          <PhotosReceivedBadge leadStatus={leadStatusKey} hwSubstatus={hwSubstatusValue} />
+          <PhotosReceivedBadge leadStatus={leadStatusKey} />
         </Box>
       </Box>
 

@@ -2,11 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
-  MenuItem, Select, Tooltip,
+  Tooltip,
 } from '@mui/material';
 import { useToast } from '../../contexts/ToastContext';
 import { STATUS_COLORS } from '../../theme';
-import { GET, POST, PATCH, PUT, DELETE } from '../../utils/api';
+import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
@@ -19,17 +19,6 @@ function lsStageToKey(stage: string): string {
   return stage.toLowerCase().replace(/_/g, '');
 }
 
-// Ordered list of handler types available in the "Default handler type" selector.
-// Shown when an admin wants to pre-configure which handler a new substatus binding
-// uses at startup, without needing a code change.
-const SELECTABLE_HANDLER_TYPES: Array<{ value: string; label: string }> = [
-  { value: '',                             label: 'Show message (default)' },
-  { value: 'add_design_visit_to_calendar', label: 'Add design visit to calendar' },
-  { value: 'contact_customer',             label: 'Contact customer (call / email / WhatsApp)' },
-  { value: 'review_customer_photos',       label: 'Review customer photos' },
-  { value: 'start_design_visit',           label: 'Start design visit wizard' },
-  { value: 'upload_photos_and_info',       label: 'Upload photos & info' },
-];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,42 +26,26 @@ interface LeadStatus {
   key: string; label: string; stage: string | null; shorthand: string;
   sort_order: number; excluded_from_sales: boolean; is_null_row: boolean;
 }
-interface Substatus {
-  id: number; status_key: string; substatus_key: string;
-  label: string; action_label: string; sort_order: number;
-  default_handler_type?: string;
-  hubspotSyncWarning?: string;
-  newBindingsCreated?: number;
-}
 interface CALabel  { stage_key: string; status_key: string; label: string; }
-interface Binding  { stage_key?: string; status_key?: string; substatus_id?: number | null; }
+interface Binding  { stage_key?: string; status_key?: string; }
 interface Handler  { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
 
 interface StatusModel {
   key: string; label: string; shorthand: string;
   defaultLabel: string; defaultStatusKey: string; isNullRow: boolean;
-  substatuses: Substatus[];
 }
 interface StageModel { key: string; label: string; statuses: StatusModel[]; }
 interface BuildResult { globalNull: StatusModel; stages: StageModel[]; }
-interface NewSubRow  { id: number; lsKey: string; prefix: string; }
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const W = window as unknown as Record<string, unknown>;
 
 function buildModel(
-  labels: CALabel[], statuses: LeadStatus[], substatuses: Substatus[],
+  labels: CALabel[], statuses: LeadStatus[],
   stages: Array<{ key: string; label: string }>,
 ): BuildResult {
   const labelByKey: Record<string, string> = {};
   for (const r of labels) labelByKey[`${r.stage_key}|${r.status_key}`] = r.label;
-
-  const subsByLsUpper: Record<string, Substatus[]> = {};
-  for (const s of substatuses) {
-    const k = String(s.status_key).toUpperCase();
-    (subsByLsUpper[k] = subsByLsUpper[k] || []).push(s);
-  }
 
   const stageMap = new Map<string, StageModel>();
   for (const cs of stages) {
@@ -91,8 +64,6 @@ function buildModel(
       key: lsKey, label: s.label, shorthand: s.shorthand || '',
       defaultLabel: labelByKey[`${sk}|${defKey}`] || '',
       defaultStatusKey: defKey, isNullRow: false,
-      substatuses: (subsByLsUpper[lsKey.toUpperCase()] || [])
-        .slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
     });
   }
 
@@ -105,7 +76,6 @@ function buildModel(
     key: '__NULL__', label: 'No lead status', shorthand: '',
     defaultLabel: globalNullLabel,
     defaultStatusKey: '', isNullRow: true,
-    substatuses: [],
   };
 
   return { globalNull, stages: Array.from(stageMap.values()) };
@@ -115,31 +85,27 @@ function handlersForSlot(
   handlers: Handler[],
   stageKey: string,
   statusKey: string,
-  substatusId?: number | null,
 ): Handler[] {
-  return handlers.filter(h => h.bindings?.some(b => {
-    if (substatusId != null) return Number(b.substatus_id) === substatusId;
-    if (b.substatus_id != null) return false;
-    return (b.stage_key || '').toLowerCase()  === (stageKey  || '').toLowerCase()
-        && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase();
-  }));
+  return handlers.filter(h => h.bindings?.some(b =>
+    (b.stage_key  || '').toLowerCase() === (stageKey  || '').toLowerCase()
+    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase(),
+  ));
 }
 
 // ── HandlerBadges ─────────────────────────────────────────────────────────────
 
 function HandlerBadges({
-  stageKey, statusKey, substatusId, handlers,
+  stageKey, statusKey, handlers,
 }: {
-  stageKey: string; statusKey: string; substatusId?: number | null; handlers: Handler[];
+  stageKey: string; statusKey: string; handlers: Handler[];
 }) {
-  const matched = handlersForSlot(handlers, stageKey, statusKey, substatusId);
+  const matched = handlersForSlot(handlers, stageKey, statusKey);
   if (!matched.length) return null;
 
   const openFix = () => {
     if (typeof W.openConflictResolver !== 'function') return;
     const fn = W.openConflictResolver as (a: string | null, b: string | null, c: number | null) => void;
-    if (substatusId != null) fn(null, null, substatusId);
-    else fn(stageKey, statusKey, null);
+    fn(stageKey, statusKey, null);
   };
 
   const summaries = matched
@@ -199,25 +165,16 @@ export function CardActionsPage() {
   const showToast = useToast();
   const [labels,         setLabels]         = useState<CALabel[]>([]);
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
-  const [substatuses,    setSubstatuses]    = useState<Substatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
   const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
   const [collapsed,      setCollapsed]      = useState<Set<string>>(new Set());
   const didInitCollapse = useRef(false);
 
-  const [newSubRows,    setNewSubRows]    = useState<NewSubRow[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [reloadKey,     setReloadKey]     = useState(0);
   const [resolvedSlots, setResolvedSlots] = useState<Set<string>>(new Set());
 
-  const substatusesRef = useRef<Substatus[]>([]);
   const statusesRef    = useRef<LeadStatus[]>([]);
-  const [syncWarning, setSyncWarning] = useState<string | null>(null);
-
-  // Tracks admin edits to the "Default handler type" selector, keyed by substatus id.
-  // Reset on every fetchAll so stale edits don't linger after a reload.
-  const [handlerTypeEdits, setHandlerTypeEdits] = useState<Map<number, string>>(new Map());
-
   type ClearSlot = { stageKey: string; statusKey: string; label: string; boundHandlers: Handler[] };
   const [clearConfirm, setClearConfirm] = useState<{
     slots: ClearSlot[];
@@ -228,27 +185,16 @@ export function CardActionsPage() {
     return new Promise(resolve => setClearConfirm({ slots, resolve }));
   }, []);
 
-  type DeleteSubSlot = { substatusId: number; label: string; boundHandlers: Handler[] };
-  const [deleteSubConfirm, setDeleteSubConfirm] = useState<{
-    slot: DeleteSubSlot;
-    resolve: (confirmed: boolean) => void;
-  } | null>(null);
-
-  const confirmDeleteSub = useCallback((slot: DeleteSubSlot): Promise<boolean> => {
-    return new Promise(resolve => setDeleteSubConfirm({ slot, resolve }));
-  }, []);
-
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {
     try {
-      const [wfl, lbl, sta, sub, hdl] = await Promise.all([
+      const [wfl, lbl, sta, hdl] = await Promise.all([
         GET('/api/workflow'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
-        GET('/api/admin/lead-substatuses'),
         GET('/api/admin/card-action-handlers'),
-      ]) as [WorkflowDef | null, CALabel[], LeadStatus[], Substatus[], Handler[]];
+      ]) as [WorkflowDef | null, CALabel[], LeadStatus[], Handler[]];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
       const stages = Object.entries(rawStages).map(([key, data]) => ({
@@ -262,12 +208,8 @@ export function CardActionsPage() {
       }
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
-      setSubstatuses(safeArr(sub));
       setHandlers(safeArr(hdl));
-      substatusesRef.current = safeArr(sub);
-      statusesRef.current    = safeArr(sta);
-      setNewSubRows([]);
-      setHandlerTypeEdits(new Map());
+      statusesRef.current = safeArr(sta);
       setReloadKey(k => k + 1);
     } catch { /* ignore */ } finally {
       setLoading(false);
@@ -304,9 +246,8 @@ export function CardActionsPage() {
   // ── Window exposures ───────────────────────────────────────────────────────
 
   const saveAllCardActionLabels = useCallback(async () => {
-    let saved = 0, failed = 0, newBindings = 0;
+    let saved = 0, failed = 0;
     const failures: string[] = [];
-    let hubSyncFailed = false;
 
     // Before saving, check if any default-label inputs are being cleared while
     // they still have a handler bound. Warn the admin and let them cancel.
@@ -361,186 +302,28 @@ export function CardActionsPage() {
       }
     }
 
-    // Sub-status rows
-    for (const row of Array.from(
-      document.querySelectorAll<HTMLElement>('#card-actions-table-wrap .ca-sub-row')
-    )) {
-      const isNew    = !!row.dataset.subNew;
-      const idStr    = row.dataset.subId;
-      const lsKey    = row.dataset.subLs;
-      const keyInput   = row.querySelector<HTMLInputElement>('.ca-sub-key');
-      const labelInput = row.querySelector<HTMLInputElement>('.ca-sub-label');
-      const actInput   = row.querySelector<HTMLInputElement>('.ca-sub-action');
-      if (!keyInput || !labelInput || !actInput) continue;
-      const keyPrefix = keyInput.dataset.keyPrefix || '';
-      const keySuffix = keyInput.value.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-      const subKey    = (keyPrefix + keySuffix).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-      const label     = labelInput.value.trim();
-      const action    = actInput.value.trim();
-
-      if (isNew) {
-        if (keyPrefix && !keySuffix) { if (label || action) { failed++; failures.push(`new sub-status (${lsKey}): type a suffix after ${keyPrefix}`); } continue; }
-        if (!subKey || !label) { if (subKey || label || action) { failed++; failures.push(`new sub-status (${lsKey}): key and display label are required.`); } continue; }
-        try {
-          const created = await POST<Substatus>('/api/admin/lead-substatuses',
-            { status_key: lsKey, substatus_key: subKey, label, action_label: action, sort_order: 0 });
-          if (created.hubspotSyncWarning) hubSyncFailed = true;
-          row.removeAttribute('data-sub-new');
-          row.dataset.subId      = String(created.id);
-          row.dataset.origKey    = created.substatus_key;
-          row.dataset.origLabel  = created.label;
-          row.dataset.origAction = created.action_label || '';
-          keyInput.value = keyPrefix && created.substatus_key.startsWith(keyPrefix)
-            ? created.substatus_key.slice(keyPrefix.length) : created.substatus_key;
-          saved++;
-        } catch (e) {
-          failed++; failures.push(`new sub-status (${lsKey}/${subKey}): ${(e as Error).message}`);
-        }
-      } else {
-        const origKey         = row.dataset.origKey         || '';
-        const origLabel       = row.dataset.origLabel       || '';
-        const origAction      = row.dataset.origAction      || '';
-        const origHandlerType = row.dataset.origHandlerType || '';
-        const subId           = Number(idStr);
-        const newHandlerType  = handlerTypeEdits.has(subId) ? (handlerTypeEdits.get(subId) ?? '') : origHandlerType;
-        const patch: Record<string, unknown> = {};
-        if (subKey          !== origKey)         patch.substatus_key       = subKey;
-        if (label           !== origLabel)       patch.label               = label;
-        if (action          !== origAction)      patch.action_label        = action;
-        if (newHandlerType  !== origHandlerType) patch.default_handler_type = newHandlerType;
-        if (!Object.keys(patch).length) continue;
-        if (patch.label === '') { failed++; failures.push(`sub-status #${idStr}: label cannot be empty.`); continue; }
-        try {
-          const updated = await PATCH<Substatus>(`/api/admin/lead-substatuses/${idStr}`, patch);
-          if (updated.hubspotSyncWarning) hubSyncFailed = true;
-          if (updated.newBindingsCreated) newBindings += updated.newBindingsCreated;
-          row.dataset.origKey         = updated.substatus_key;
-          row.dataset.origLabel       = updated.label;
-          row.dataset.origAction      = updated.action_label || '';
-          row.dataset.origHandlerType = updated.default_handler_type || '';
-          keyInput.value = keyPrefix && updated.substatus_key.startsWith(keyPrefix)
-            ? updated.substatus_key.slice(keyPrefix.length) : updated.substatus_key;
-          saved++;
-        } catch (e) {
-          failed++; failures.push(`sub-status #${idStr}: ${(e as Error).message}`);
-        }
-      }
-    }
-
-    // Persist sort order
-    const groups = new Map<string, number[]>();
-    for (const row of Array.from(
-      document.querySelectorAll<HTMLElement>('#card-actions-table-wrap .ca-sub-row')
-    )) {
-      const ls = row.dataset.subLs;
-      const id = row.dataset.subId ? Number(row.dataset.subId) : null;
-      if (!ls || !id) continue;
-      if (!groups.has(ls)) groups.set(ls, []);
-      groups.get(ls)!.push(id);
-    }
-    for (const [, ids] of groups) {
-      for (let i = 0; i < ids.length; i++) {
-        const sub = substatusesRef.current.find(s => Number(s.id) === ids[i]);
-        if ((sub?.sort_order ?? -1) === i) continue;
-        try {
-          const reordered = await PATCH<Substatus>(`/api/admin/lead-substatuses/${ids[i]}`, { sort_order: i });
-          if (reordered.hubspotSyncWarning) hubSyncFailed = true;
-          if (sub) sub.sort_order = i;
-          saved++;
-        } catch (e) {
-          failed++; failures.push(`reorder sub-status #${ids[i]}: ${(e as Error).message}`);
-        }
-      }
-    }
 
     if (saved === 0 && failed === 0) { showToast('No changes to save.'); return; }
     if (failed) showToast(`Saved ${saved}, failed ${failed}.`, true);
     else {
-      const bindingNote = newBindings > 0 ? ` ${newBindings} handler binding${newBindings !== 1 ? 's' : ''} created.` : '';
-      showToast(`${saved} change${saved !== 1 ? 's' : ''} saved.${bindingNote}`);
+        showToast(`${saved} change${saved !== 1 ? 's' : ''} saved.`);
     }
-    if (hubSyncFailed) setSyncWarning('Sub-status saved locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
-
     try { new BroadcastChannel('stage_action_labels_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
-    try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
     fetchAll();
-  }, [fetchAll, showToast, handlers, confirmClear, handlerTypeEdits]);
-
-  const addCardActionSubstatus = useCallback((lsKey: string) => {
-    const ls = statusesRef.current.find(s => s.key === lsKey);
-    const sh = ls?.shorthand ? String(ls.shorthand).toUpperCase() : '';
-    const prefix = sh ? `${sh}_` : '';
-    setNewSubRows(prev => [...prev, { id: Date.now(), lsKey, prefix }]);
-    const stageKey = lsStageToKey(ls?.stage || '');
-    if (stageKey) setCollapsed(prev => { const n = new Set(prev); n.delete(stageKey); return n; });
-  }, []);
-
-  const deleteCardActionSubstatus = useCallback(async (id: number) => {
-    const sub = substatusesRef.current.find(s => Number(s.id) === id);
-    if (!sub) return;
-    const bound = handlersForSlot(handlers, '', '', id);
-    if (bound.length) {
-      const confirmed = await confirmDeleteSub({ substatusId: id, label: sub.label, boundHandlers: bound });
-      setDeleteSubConfirm(null);
-      if (!confirmed) return;
-    }
-    try {
-      const result = await DELETE<{ ok: boolean; hubspotSyncWarning?: string }>(
-        `/api/admin/lead-substatuses/${id}`,
-      );
-      if (result.hubspotSyncWarning) {
-        setSyncWarning('Sub-status deleted locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
-      }
-      try { new BroadcastChannel('lead_substatuses_changed').postMessage({ ts: Date.now() }); } catch { /* ignore */ }
-      fetchAll();
-    } catch (e) {
-      showToast(`Failed to delete sub-status: ${(e as Error).message}`, true);
-    }
-  }, [handlers, confirmDeleteSub, fetchAll, showToast]);
-
-  const moveCardActionSubstatus = useCallback(async (id: number, direction: 'up' | 'down') => {
-    const me = substatusesRef.current.find(s => Number(s.id) === id);
-    if (!me) return;
-    const siblings = substatusesRef.current
-      .filter(s => String(s.status_key).toUpperCase() === String(me.status_key).toUpperCase())
-      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    const idx     = siblings.findIndex(s => Number(s.id) === id);
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= siblings.length) return;
-    const a = siblings[idx], b = siblings[swapIdx];
-    if ((a.sort_order || 0) === (b.sort_order || 0)) siblings.forEach((s, i) => { s.sort_order = i; });
-    const aOrder = a.sort_order, bOrder = b.sort_order;
-    try {
-      const [ra, rb] = await Promise.all([
-        PATCH<Substatus>(`/api/admin/lead-substatuses/${a.id}`, { sort_order: bOrder }),
-        PATCH<Substatus>(`/api/admin/lead-substatuses/${b.id}`, { sort_order: aOrder }),
-      ]);
-      if (ra.hubspotSyncWarning || rb.hubspotSyncWarning) {
-        setSyncWarning('Sub-status saved locally, but the HubSpot property sync failed. Use the Re-sync button in the Settings tab to retry.');
-      }
-      a.sort_order = bOrder; b.sort_order = aOrder;
-      fetchAll();
-    } catch (e) { showToast(`Failed to reorder: ${(e as Error).message}`, true); }
-  }, [fetchAll, showToast]);
+  }, [fetchAll, showToast, handlers, confirmClear]);
 
   useEffect(() => {
-    W.loadCardActionsAdmin        = fetchAll;
-    W.saveAllCardActionLabels     = saveAllCardActionLabels;
-    W.addCardActionSubstatus      = addCardActionSubstatus;
-    W.moveCardActionSubstatus     = (id: number, dir: 'up' | 'down') => moveCardActionSubstatus(id, dir);
-    W.deleteCardActionSubstatus   = (id: number) => deleteCardActionSubstatus(id);
+    W.loadCardActionsAdmin    = fetchAll;
+    W.saveAllCardActionLabels = saveAllCardActionLabels;
     return () => {
       delete W.loadCardActionsAdmin;
       delete W.saveAllCardActionLabels;
-      delete W.addCardActionSubstatus;
-      delete W.moveCardActionSubstatus;
-      delete W.deleteCardActionSubstatus;
     };
-  }, [fetchAll, saveAllCardActionLabels, addCardActionSubstatus, moveCardActionSubstatus, deleteCardActionSubstatus]);
+  }, [fetchAll, saveAllCardActionLabels]);
 
   useEffect(() => {
-    W.flashResolvedSlot = (stageKey: string, statusKey: string, substatusId: number | null) => {
-      const k = substatusId != null ? `sub:${substatusId}` : `ls:${stageKey}:${statusKey}`;
+    W.flashResolvedSlot = (stageKey: string, statusKey: string) => {
+      const k = `ls:${stageKey}:${statusKey}`;
       setResolvedSlots(prev => new Set([...prev, k]));
       setTimeout(() => setResolvedSlots(prev => { const n = new Set(prev); n.delete(k); return n; }), 1900);
     };
@@ -549,7 +332,7 @@ export function CardActionsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const { globalNull, stages } = buildModel(labels, statuses, substatuses, workflowStages);
+  const { globalNull, stages } = buildModel(labels, statuses, workflowStages);
 
   const toggleStage = (key: string) => setCollapsed(prev => {
     const n = new Set(prev);
@@ -559,15 +342,6 @@ export function CardActionsPage() {
 
   return (
     <Stack spacing={2}>
-      {syncWarning && (
-        <Alert
-          severity="warning"
-          onClose={() => setSyncWarning(null)}
-          sx={{ mb: 0 }}
-        >
-          {syncWarning}
-        </Alert>
-      )}
       <Card variant="outlined">
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
@@ -644,7 +418,6 @@ export function CardActionsPage() {
                     {stage.statuses.length === 0 ? (
                       <div className="adm-ca-empty"><em>No lead statuses configured for this stage yet.</em></div>
                     ) : stage.statuses.map(ls => {
-                      const stageNewRows = newSubRows.filter(r => r.lsKey === ls.key);
                       return (
                         <div key={`${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key}>
                           <div className="adm-ca-block-head">
@@ -676,117 +449,6 @@ export function CardActionsPage() {
                             )}
                           </div>
 
-                          <div className="adm-ca-sub-list" data-sub-list={ls.key}>
-                            {ls.substatuses.map((sub, i) => {
-                              const sh     = ls.shorthand ? String(ls.shorthand).toUpperCase() : '';
-                              const prefix = (sh && sub.substatus_key.toUpperCase().startsWith(`${sh}_`)) ? `${sh}_` : '';
-                              const suffix = prefix ? sub.substatus_key.slice(prefix.length) : sub.substatus_key;
-                              const isFirst = i === 0;
-                              const isLast  = i === ls.substatuses.length - 1 && stageNewRows.length === 0;
-                              const hasBinding = handlersForSlot(handlers, stage.key, ls.defaultStatusKey, sub.id).length > 0;
-                              return (
-                                <div key={sub.id} className="ca-sub-row adm-ca-sub-row"
-                                  data-sub-id={sub.id} data-sub-ls={ls.key}
-                                  data-orig-key={sub.substatus_key} data-orig-label={sub.label}
-                                  data-orig-action={sub.action_label || ''}
-                                  data-orig-handler-type={sub.default_handler_type || ''}>
-                                  <div className="adm-ca-sub-arrows">
-                                    <button type="button" className={`btn btn-ghost adm-ca-sub-arrow${isFirst ? ' adm-ca-sub-arrow--dim' : ''}`}
-                                      title="Move up" disabled={isFirst}
-                                      onClick={() => moveCardActionSubstatus(sub.id, 'up')}>▲</button>
-                                    <button type="button" className={`btn btn-ghost adm-ca-sub-arrow${isLast ? ' adm-ca-sub-arrow--dim' : ''}`}
-                                      title="Move down" disabled={isLast}
-                                      onClick={() => moveCardActionSubstatus(sub.id, 'down')}>▼</button>
-                                  </div>
-                                  <div className="adm-ca-sub-key-wrap">
-                                    {prefix && (
-                                      <span className="ca-sub-key-prefix adm-ca-sub-key-prefix"
-                                        title="Lead-status shorthand (not editable)">{prefix}</span>
-                                    )}
-                                    <input type="text"
-                                      className={`field ca-sub-key adm-ca-sub-key${prefix ? ' adm-ca-sub-key--has-prefix' : ''}`}
-                                      maxLength={64} data-key-prefix={prefix} defaultValue={suffix}
-                                      placeholder={prefix ? 'SUFFIX' : 'KEY'} />
-                                  </div>
-                                  <input type="text" className="field ca-sub-label adm-ca-sub-input"
-                                    maxLength={128} defaultValue={sub.label} placeholder="Display label" />
-                                  <input type="text" className="field ca-sub-action adm-ca-sub-input"
-                                    maxLength={128} defaultValue={sub.action_label || ''} placeholder="Action label" />
-                                  <Tooltip
-                                    title={hasBinding ? 'Binding already set — this selector applies on restart only if the binding is removed' : 'Default handler type — used when auto-binding this sub-status on startup'}
-                                    placement="top"
-                                    arrow
-                                  >
-                                    <Box sx={{ opacity: hasBinding ? 0.5 : 1 }} data-testid="handler-type-select-root">
-                                    <Select
-                                      size="small"
-                                      displayEmpty
-                                      value={handlerTypeEdits.has(sub.id) ? (handlerTypeEdits.get(sub.id) ?? '') : (sub.default_handler_type || '')}
-                                      onChange={e => setHandlerTypeEdits(prev => {
-                                        const next = new Map(prev);
-                                        next.set(sub.id, e.target.value);
-                                        return next;
-                                      })}
-                                      sx={{
-                                        fontSize: '.8rem', minWidth: 160, flexShrink: 0,
-                                        '.MuiSelect-select': { py: '3px', px: '8px' },
-                                      }}
-                                    >
-                                      {SELECTABLE_HANDLER_TYPES.map(opt => (
-                                        <MenuItem key={opt.value} value={opt.value} sx={{ fontSize: '.8rem' }}>
-                                          {opt.label}
-                                        </MenuItem>
-                                      ))}
-                                    </Select>
-                                    </Box>
-                                  </Tooltip>
-                                  <HandlerBadges stageKey={stage.key} statusKey={ls.defaultStatusKey}
-                                    substatusId={sub.id} handlers={handlers} />
-                                  {resolvedSlots.has(`sub:${sub.id}`) && (
-                                    <span className="ca-resolved-pill" style={{
-                                      display: 'inline-flex', alignItems: 'center',
-                                      padding: '1px 8px', marginLeft: 6,
-                                      background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
-                                      borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
-                                      lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
-                                    }}>✓ Resolved</span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost adm-ca-sub-delete"
-                                    title="Delete this sub-status"
-                                    onClick={() => deleteCardActionSubstatus(sub.id)}
-                                    style={{ marginLeft: 'auto', color: STATUS_COLORS.error.text, opacity: 0.7, flexShrink: 0 }}
-                                  >✕</button>
-                                </div>
-                              );
-                            })}
-                            {stageNewRows.map(nr => (
-                              <div key={nr.id} className="ca-sub-row adm-ca-sub-row adm-ca-sub-row--new"
-                                data-sub-new="1" data-sub-ls={nr.lsKey}
-                                data-orig-key="" data-orig-label="" data-orig-action="">
-                                <div className="adm-ca-sub-key-wrap">
-                                  {nr.prefix && (
-                                    <span className="ca-sub-key-prefix adm-ca-sub-key-prefix"
-                                      title="Lead-status shorthand (not editable)">{nr.prefix}</span>
-                                  )}
-                                  <input type="text"
-                                    className={`field ca-sub-key adm-ca-sub-key${nr.prefix ? ' adm-ca-sub-key--has-prefix' : ''}`}
-                                    maxLength={64} data-key-prefix={nr.prefix}
-                                    placeholder={nr.prefix ? 'SUFFIX' : 'KEY'} autoFocus />
-                                </div>
-                                <input type="text" className="field ca-sub-label adm-ca-sub-input" maxLength={128} placeholder="Display label" />
-                                <input type="text" className="field ca-sub-action adm-ca-sub-input" maxLength={128} placeholder="Action label" />
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="adm-ca-add-sub">
-                            <button type="button" className="btn btn-ghost"
-                              onClick={() => addCardActionSubstatus(ls.key)}>
-                              + Add sub-status
-                            </button>
-                          </div>
                         </div>
                       );
                     })}
@@ -844,46 +506,6 @@ export function CardActionsPage() {
         </Dialog>
       )}
 
-      {deleteSubConfirm && (
-        <Dialog
-          open
-          onClose={() => { deleteSubConfirm.resolve(false); setDeleteSubConfirm(null); }}
-          maxWidth="sm"
-          fullWidth
-          data-testid="substatus-delete-dialog"
-        >
-          <DialogTitle>Handler still bound to this sub-status</DialogTitle>
-          <DialogContent>
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              The sub-status you're deleting has a handler bound to it.
-              {' '}If you proceed, the handler will still exist but won't be triggered by any card — it will show as an unlabelled binding in the Action handlers tab.
-            </Alert>
-            <List dense disablePadding>
-              <ListItem disableGutters>
-                <ListItemText
-                  primary={`"${deleteSubConfirm.slot.label}"`}
-                  secondary={`Bound handler${deleteSubConfirm.slot.boundHandlers.length > 1 ? 's' : ''}: ${deleteSubConfirm.slot.boundHandlers.map(h => h.name || h.type).join(', ')}`}
-                />
-              </ListItem>
-            </List>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-              To avoid orphaning the handler, cancel and remove its binding first in the <strong>Action handlers</strong> tab.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => { deleteSubConfirm.resolve(false); setDeleteSubConfirm(null); }}>
-              Cancel
-            </Button>
-            <Button
-              color="error"
-              variant="contained"
-              onClick={() => { deleteSubConfirm.resolve(true); setDeleteSubConfirm(null); }}
-            >
-              Delete anyway
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
     </Stack>
   );
 }

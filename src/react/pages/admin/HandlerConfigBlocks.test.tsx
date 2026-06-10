@@ -6,7 +6,7 @@ import {
   ShowMessageConfig,
   StartDesignVisitConfig,
   DeliveryWindowConfig,
-  InstallationSlotConfig,
+  InstallationSlotConfig
 } from './HandlerConfigBlocks';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -170,10 +170,7 @@ describe('ShowMessageConfig', () => {
 describe('StartDesignVisitConfig', () => {
   const LEAD_STATUSES = [
     { key: 'ls_a', label: 'Status A' },
-    { key: 'ls_b', label: 'Status B' },
-  ];
-  const SUBSTATUSES = [
-    { key: 'sub_x', label: 'Sub X', statusKey: 'ls_a' },
+    { key: 'ls_b', label: 'Status B' }
   ];
 
   it('renders with default props (90 min, no status pre-selected)', () => {
@@ -193,7 +190,6 @@ describe('StartDesignVisitConfig', () => {
         intermediateLeadStatus="ls_a"
         submittedLeadStatus="sub_x"
         leadStatuses={LEAD_STATUSES}
-        substatuses={SUBSTATUSES}
       />,
     );
     expect(getDurationInput(container).value).toBe('120');
@@ -201,7 +197,7 @@ describe('StartDesignVisitConfig', () => {
     // Initial status selections should be visible in the comboboxes
     const combos = screen.getAllByRole('combobox');
     expect(combos[0]).toHaveTextContent('Status A');
-    expect(combos[1]).toHaveTextContent(/Sub X/);
+    expect(combos[1]).toHaveTextContent('sub_x');
   });
 
   it('calls onChange with correct shape when duration changes', () => {
@@ -250,7 +246,7 @@ describe('StartDesignVisitConfig', () => {
 
   it('renders lead status options in the intermediate status select when opened', () => {
     render(
-      <StartDesignVisitConfig leadStatuses={LEAD_STATUSES} substatuses={SUBSTATUSES} />,
+      <StartDesignVisitConfig leadStatuses={LEAD_STATUSES} />,
     );
     // Open the first combobox (intermediate status)
     const [intermediateCombo] = screen.getAllByRole('combobox');
@@ -260,15 +256,16 @@ describe('StartDesignVisitConfig', () => {
     expect(within(listbox).getByText('Status B')).toBeInTheDocument();
   });
 
-  it('renders sub-status options in the submitted status select when opened', () => {
+  it('renders lead status options in the submitted status select when opened', () => {
     render(
-      <StartDesignVisitConfig leadStatuses={LEAD_STATUSES} substatuses={SUBSTATUSES} />,
+      <StartDesignVisitConfig leadStatuses={LEAD_STATUSES} />,
     );
     // Open the second combobox (submitted status)
     const combos = screen.getAllByRole('combobox');
     fireEvent.mouseDown(combos[1]);
     const listbox = screen.getByRole('listbox');
-    expect(within(listbox).getByText(/Sub X/)).toBeInTheDocument();
+    expect(within(listbox).getByText('Status A')).toBeInTheDocument();
+    expect(within(listbox).getByText('Status B')).toBeInTheDocument();
   });
 
   it('calls onChange with empty string duration when field cleared', () => {
