@@ -1060,6 +1060,8 @@ export function ActionHandlersPage() {
   const [substatuses,           setSubstatuses]           = useState<Substatus[]>([]);
   const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
   const [conflicts,             setConflicts]             = useState<ConflictData>({ total: 0, conflicts: [] });
+  const [orphanedCount,         setOrphanedCount]         = useState(0);
+  const [orphanedDismissed,     setOrphanedDismissed]     = useState(false);
   const [dismissed,             setDismissed]             = useState('');
   const [loading,               setLoading]               = useState(true);
   const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
@@ -1072,13 +1074,14 @@ export function ActionHandlersPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [hdl, lbl, sub, sta, cfl] = await Promise.all([
+      const [hdl, lbl, sub, sta, cfl, orp] = await Promise.all([
         GET('/api/admin/card-action-handlers'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-substatuses'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers/conflicts'),
-      ]) as [Handler[], CALabel[], Substatus[], LeadStatus[], ConflictData];
+        GET('/api/admin/card-action-handlers/orphaned'),
+      ]) as [Handler[], CALabel[], Substatus[], LeadStatus[], ConflictData, { count: number }];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const h  = safeArr<Handler>(hdl);
@@ -1088,12 +1091,14 @@ export function ActionHandlersPage() {
       const cf: ConflictData = cfl && typeof cfl === 'object'
         ? { total: Number((cfl as ConflictData).total) || 0, conflicts: safeArr<ConflictItem>((cfl as ConflictData).conflicts) }
         : { total: 0, conflicts: [] };
+      const orphCount = (orp && typeof orp === 'object') ? (Number((orp as { count: number }).count) || 0) : 0;
 
       setHandlers(h);
       setLabels(lb);
       setSubstatuses(sb);
       setStatuses(st);
       setConflicts(cf);
+      setOrphanedCount(orphCount);
 
       _handlersRef.current    = h;
       _labelsRef.current      = lb;
@@ -1178,6 +1183,31 @@ export function ActionHandlersPage() {
               cards.
             </Typography>
           </Box>
+
+          {/* Orphaned bindings banner */}
+          {orphanedCount > 0 && !orphanedDismissed && (
+            <Alert
+              data-testid="orphaned-bindings-banner"
+              severity="warning"
+              onClose={() => setOrphanedDismissed(true)}
+              sx={{ mb: 2 }}
+            >
+              <strong>{orphanedCount} legacy orphaned handler {orphanedCount === 1 ? 'binding' : 'bindings'} detected.</strong>{' '}
+              The database contains {orphanedCount === 1 ? 'a row' : 'rows'} in{' '}
+              <code>card_action_handler_bindings</code> with{' '}
+              <code>stage_key = &apos;sales&apos;</code> and a blank <code>status_key</code>.
+              These are legacy rows that should no longer exist. Run{' '}
+              <code>npm run db:migrate</code> to apply the latest migrations — see the{' '}
+              <a
+                href="https://salsita.github.io/node-pg-migrate/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                migration docs
+              </a>
+              {' '}for guidance, or remove the rows manually from the database.
+            </Alert>
+          )}
 
           {/* Conflict banner */}
           <div

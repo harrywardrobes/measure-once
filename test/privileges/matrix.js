@@ -228,6 +228,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/dv-handles/0/image',                    level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/card-action-handlers',                 level: 'admin' },
   { method: 'GET',    path: '/api/admin/card-action-handlers/conflicts',       level: 'admin' },
+  { method: 'GET',    path: '/api/admin/card-action-handlers/orphaned',        level: 'admin' },
   // Dev-only admin endpoints (return 404 when NODE_ENV=production). The
   // requireAdmin gate runs first, so non-admin actors still get 403; admins
   // hit the handler. seed-contacts-cache with an empty body 400s.

@@ -6356,6 +6356,21 @@ app.get('/api/admin/card-action-handlers/conflicts', isAuthenticated, requireAdm
   }
 });
 
+app.get('/api/admin/card-action-handlers/orphaned', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT COUNT(*) AS cnt
+      FROM card_action_handler_bindings
+      WHERE stage_key = 'sales' AND (status_key IS NULL OR status_key = '')
+    `);
+    const count = parseInt(result.rows[0]?.cnt ?? '0', 10);
+    res.json({ count });
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/card-action-handlers/orphaned error:');
+    res.status(500).json({ error: 'Could not check orphaned handler bindings.' });
+  }
+});
+
 app.post('/api/admin/card-action-handlers', isAuthenticated, requireAdmin, async (req, res) => {
   // `name` is optional and now derives from the bound row's action label
   // on the client. Empty/missing is accepted; a non-empty value is still
