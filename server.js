@@ -6645,16 +6645,30 @@ app.post('/api/card-actions/contact-customer',
       const whatsapp     = String(props.hs_whatsapp_phone_number || '');
       const leadStatus   = props.hs_lead_status || null;
 
-      const { rows } = await pool.query(
-        `SELECT cat.call_attempted, cat.email_sent, cat.whatsapp_sent,
-                cat.attempted_at,
-                COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
-         FROM contact_attempt_tracking cat
-         LEFT JOIN users u ON u.id = cat.attempted_by
-         WHERE cat.hubspot_contact_id = $1`,
-        [contactId]
-      );
-      const attempts = rows[0] || { call_attempted: false, email_sent: false, whatsapp_sent: false };
+      const [trackingResult, historyResult] = await Promise.all([
+        pool.query(
+          `SELECT cat.call_attempted, cat.email_sent, cat.whatsapp_sent,
+                  cat.attempted_at,
+                  COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+           FROM contact_attempt_tracking cat
+           LEFT JOIN users u ON u.id = cat.attempted_by
+           WHERE cat.hubspot_contact_id = $1`,
+          [contactId]
+        ),
+        pool.query(
+          `SELECT
+             COUNT(*)::int                                                                    AS total_sessions,
+             COALESCE(SUM(call_attempted::int + email_sent::int + whatsapp_sent::int), 0)::int AS total_attempts,
+             BOOL_OR(call_attempted)  AS ever_called,
+             BOOL_OR(email_sent)      AS ever_emailed,
+             BOOL_OR(whatsapp_sent)   AS ever_whatsapped
+           FROM contact_attempt_history_log
+           WHERE hubspot_contact_id = $1`,
+          [contactId]
+        ),
+      ]);
+      const attempts = trackingResult.rows[0] || { call_attempted: false, email_sent: false, whatsapp_sent: false };
+      const hist     = historyResult.rows[0]  || { total_sessions: 0, total_attempts: 0, ever_called: false, ever_emailed: false, ever_whatsapped: false };
 
       const { rows: logRows } = await pool.query(
         `SELECT cal.method, cal.attempted_at,
@@ -6673,16 +6687,21 @@ app.post('/api/card-actions/contact-customer',
         mobile,
         whatsapp,
         leadStatus,
-        callAttempted:  attempts.call_attempted,
-        emailSent:      attempts.email_sent,
-        whatsappSent:   attempts.whatsapp_sent,
-        lastAttemptAt:  attempts.attempted_at || null,
-        lastAttemptBy:  attempts.attempted_by_name || null,
+        callAttempted:        attempts.call_attempted,
+        emailSent:            attempts.email_sent,
+        whatsappSent:         attempts.whatsapp_sent,
+        lastAttemptAt:        attempts.attempted_at || null,
+        lastAttemptBy:        attempts.attempted_by_name || null,
         attemptLog: logRows.map(r => ({
           method:      r.method,
           attemptedAt: r.attempted_at,
           attemptedBy: r.attempted_by_name || null,
         })),
+        historySessionCount:  hist.total_sessions,
+        historyTotalAttempts: hist.total_attempts,
+        historyEverCalled:    hist.ever_called    || false,
+        historyEverEmailed:   hist.ever_emailed   || false,
+        historyEverWhatsapped: hist.ever_whatsapped || false,
       });
     } catch (e) {
       const status = e.response?.status;
@@ -6815,6 +6834,27 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
     try {
       await assertLeadStatusKey(key);
       await patchContactProperties(contactId, { hs_lead_status: key });
+
+      if (key === 'NO_RESPONSE') {
+        const catRow = await pool.query(
+          'SELECT call_attempted, email_sent, whatsapp_sent FROM contact_attempt_tracking WHERE hubspot_contact_id = $1',
+          [contactId]
+        );
+        const a = catRow.rows[0] || {};
+        await pool.query(
+          `INSERT INTO contact_attempt_history_log
+             (hubspot_contact_id, attempted_by, call_attempted, email_sent, whatsapp_sent)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            contactId,
+            req.user?.id || null,
+            !!a.call_attempted,
+            !!a.email_sent,
+            !!a.whatsapp_sent,
+          ]
+        );
+      }
+
       clearContactCache();
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();

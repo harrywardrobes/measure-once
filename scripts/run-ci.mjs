@@ -80,6 +80,7 @@ const STEPS = [
   'test:customer-info-live-badge:ci',
   'test:superseded-tooltip:ci',
   'test:masked-email-backfill:ci',
+  'test:contact-attempt-history:ci',
   'test:photo-storage-errors:ci',
   'test:photo-approval-notification:ci',
   'test:photo-reviews:ci',

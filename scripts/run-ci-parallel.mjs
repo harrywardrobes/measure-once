@@ -104,6 +104,7 @@ const DB_SUITES = [
   'test:customer-info-stale-rail:ci',
   'test:superseded-tooltip:ci',
   'test:masked-email-backfill:ci',
+  'test:contact-attempt-history:ci',
   'test:photo-storage-errors:ci',
   'test:lead-status-sync-customer-detail:ci',
   'test:lead-status-sync-customer-detail-viewer:ci',

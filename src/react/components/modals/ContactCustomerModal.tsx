@@ -50,6 +50,11 @@ interface ContactData {
   lastAttemptAt: string | null;
   lastAttemptBy: string | null;
   attemptLog: AttemptLogEntry[];
+  historySessionCount: number;
+  historyTotalAttempts: number;
+  historyEverCalled: boolean;
+  historyEverEmailed: boolean;
+  historyEverWhatsapped: boolean;
 }
 
 const METHOD_LABEL: Record<AttemptLogEntry['method'], string> = {
@@ -91,6 +96,12 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
   const [lastAttemptBy, setLastAttemptBy] = useState<string | null>(null);
 
+  const [historySessionCount,   setHistorySessionCount]   = useState(0);
+  const [historyTotalAttempts,  setHistoryTotalAttempts]  = useState(0);
+  const [historyEverCalled,     setHistoryEverCalled]     = useState(false);
+  const [historyEverEmailed,    setHistoryEverEmailed]    = useState(false);
+  const [historyEverWhatsapped, setHistoryEverWhatsapped] = useState(false);
+
   const [callInFlight,     setCallInFlight]     = useState(false);
   const [emailInFlight,    setEmailInFlight]     = useState(false);
   const [whatsappInFlight, setWhatsappInFlight] = useState(false);
@@ -119,6 +130,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         setLastAttemptAt(d.lastAttemptAt);
         setLastAttemptBy(d.lastAttemptBy);
         setAttemptLog(d.attemptLog || []);
+        setHistorySessionCount(d.historySessionCount   ?? 0);
+        setHistoryTotalAttempts(d.historyTotalAttempts ?? 0);
+        setHistoryEverCalled(d.historyEverCalled       ?? false);
+        setHistoryEverEmailed(d.historyEverEmailed     ?? false);
+        setHistoryEverWhatsapped(d.historyEverWhatsapped ?? false);
         setPhase('contact');
       })
       .catch((e: Error) => {
@@ -472,36 +488,35 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         </>
       )}
 
-      {phase === 'no_response_confirm' && (
-        <>
-          <DialogTitle>Mark as No Response?</DialogTitle>
-          <DialogContent>
-            <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-              <Typography variant="body2">
-                This will advance the lead status to <strong>No Response</strong>.
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Contact methods tried:
-              </Typography>
-              {(callAttempted || emailSent || whatsappSent) ? (
-                <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap' }}>
-                  <Typography variant="body2">
-                    Called {callAttempted ? '✓' : '✗'}
+      {phase === 'no_response_confirm' && (() => {
+        const currentMethodCount = [callAttempted, emailSent, whatsappSent].filter(Boolean).length;
+        const totalSessions  = historySessionCount + 1;
+        const totalAttempts  = historyTotalAttempts + currentMethodCount;
+        const everCalled     = historyEverCalled     || callAttempted;
+        const everEmailed    = historyEverEmailed    || emailSent;
+        const everWhatsapped = historyEverWhatsapped || whatsappSent;
+        const anyEver        = everCalled || everEmailed || everWhatsapped;
+        return (
+          <>
+            <DialogTitle>Mark as No Response?</DialogTitle>
+            <DialogContent>
+              <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+                <Typography variant="body2">
+                  This will advance the lead status to <strong>No Response</strong>.
+                </Typography>
+                {anyEver ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {totalAttempts} attempt{totalAttempts === 1 ? '' : 's'} recorded across{' '}
+                    {totalSessions} session{totalSessions === 1 ? '' : 's'} —{' '}
+                    Called {everCalled ? '✓' : '✗'} · Emailed {everEmailed ? '✓' : '✗'} · WhatsApp {everWhatsapped ? '✓' : '✗'}
                   </Typography>
-                  <Typography variant="body2">
-                    Emailed {emailSent ? '✓' : '✗'}
-                  </Typography>
-                  <Typography variant="body2">
-                    WhatsApp {whatsappSent ? '✓' : '✗'}
-                  </Typography>
-                </Stack>
-              ) : (
-                <Alert severity="warning" sx={{ py: 0 }}>
-                  No contact methods have been recorded. You can cancel and tick the boxes before continuing.
-                </Alert>
-              )}
-            </Stack>
-          </DialogContent>
+                ) : (
+                  <Alert severity="warning" sx={{ py: 0 }}>
+                    No contact methods have been recorded. You can cancel and tick the boxes before continuing.
+                  </Alert>
+                )}
+              </Stack>
+            </DialogContent>
           <DialogActions>
             <Button onClick={() => setPhase('contact')}>Cancel</Button>
             <Button
@@ -514,7 +529,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             </Button>
           </DialogActions>
         </>
-      )}
+        );
+      })()}
 
       {phase === 'advancing' && (
         <>
