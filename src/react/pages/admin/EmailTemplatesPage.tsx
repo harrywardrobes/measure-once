@@ -42,6 +42,9 @@ import {
   type TokenHighlightFieldHandle,
 } from '../../components/TokenHighlightField';
 
+/** Body text colour for the iframe email preview. Not a React style prop — lives inside a raw HTML string. */
+const IFRAME_BODY_COLOR = '#111';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface EmailTemplate {
@@ -213,7 +216,7 @@ function PreviewPanel({ templateKey, fields }: PreviewPanelProps) {
               <iframe
                 title="Email HTML preview"
                 sandbox="allow-same-origin"
-                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:#111;padding:16px;margin:0;}</style></head><body>${preview.html}</body></html>`} /* hex-color-ok: CSS inside HTML string for iframe srcDoc; not a React style prop */
+                srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:${IFRAME_BODY_COLOR};padding:16px;margin:0;}</style></head><body>${preview.html}</body></html>`}
                 style={{ width: '100%', minHeight: 240, border: 'none', display: 'block' }}
                 onLoad={(e) => {
                   const iframe = e.currentTarget;

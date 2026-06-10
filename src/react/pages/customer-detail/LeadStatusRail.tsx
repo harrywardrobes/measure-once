@@ -7,6 +7,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { LeadStatus, Contact, STAGE_COLOURS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 
+/** White stroke used on the inline check SVG inside completed-stage badges. */
+const SVG_ICON_STROKE = '#fff';
+
 interface Props {
   contact: Contact | null;
   leadStatuses: LeadStatus[];
@@ -150,8 +153,7 @@ export function LeadStatusRail({
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: '0.75rem', fontWeight: 700, lineHeight: 1,
                 }}>
-                  <svg width="11" height="9" fill="none" stroke="#fff" viewBox="0 0 12 10" aria-hidden="true" // hex-color-ok: svg stroke attr, no JSX block comment available in SVG element
-                  >
+                  <svg width="11" height="9" fill="none" stroke={SVG_ICON_STROKE} viewBox="0 0 12 10" aria-hidden="true">
                     <polyline points="1,5 4.5,8.5 11,1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </Box>
