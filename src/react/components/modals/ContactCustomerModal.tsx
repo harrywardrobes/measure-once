@@ -111,6 +111,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [historyEverEmailed,    setHistoryEverEmailed]    = useState(false);
   const [historyEverWhatsapped, setHistoryEverWhatsapped] = useState(false);
   const [historyAttemptLog,     setHistoryAttemptLog]     = useState<HistorySessionEntry[]>([]);
+  const [showHiddenSessions,    setShowHiddenSessions]    = useState(false);
 
   const [callInFlight,     setCallInFlight]     = useState(false);
   const [emailInFlight,    setEmailInFlight]     = useState(false);
@@ -537,13 +538,78 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                 </Box>
                               )}
                               {hiddenCount > 0 && (
-                                <Typography
-                                  variant="caption"
-                                  color="text.disabled"
-                                  sx={{ display: 'block', fontStyle: 'italic', mb: 0.75, pl: 1 }}
-                                >
-                                  {hiddenCount} {hiddenCount === 1 ? 'session' : 'sessions'} with no methods recorded hidden
-                                </Typography>
+                                <>
+                                  <Typography
+                                    component="button"
+                                    variant="caption"
+                                    onClick={() => setShowHiddenSessions(v => !v)}
+                                    sx={{
+                                      display: 'block',
+                                      fontStyle: 'italic',
+                                      mb: showHiddenSessions ? 0.25 : 0.75,
+                                      pl: 1,
+                                      background: 'none',
+                                      border: 'none',
+                                      padding: 0,
+                                      cursor: 'pointer',
+                                      color: 'text.secondary',
+                                      textAlign: 'left',
+                                      textDecoration: 'underline',
+                                      textDecorationStyle: 'dotted',
+                                      '&:hover': { color: 'text.primary' },
+                                    }}
+                                  >
+                                    {hiddenCount} {hiddenCount === 1 ? 'session' : 'sessions'} with no methods recorded{' '}
+                                    {showHiddenSessions ? '▲ hide' : '▼ show'}
+                                  </Typography>
+                                  {showHiddenSessions && (
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: 0.5,
+                                        mb: 0.75,
+                                        pl: 1,
+                                        borderLeft: '2px solid',
+                                        borderColor: 'divider',
+                                      }}
+                                    >
+                                      {historyAttemptLog
+                                        .filter(e => !e.callAttempted && !e.emailSent && !e.whatsappSent)
+                                        .map((entry, i) => (
+                                          <Box
+                                            key={i}
+                                            sx={{
+                                              display: 'flex',
+                                              alignItems: 'baseline',
+                                              gap: 0.75,
+                                              px: 1,
+                                              py: 0.375,
+                                              borderRadius: 1,
+                                              bgcolor: 'grey.50',
+                                              opacity: 0.75,
+                                            }}
+                                          >
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                fontStyle: 'italic',
+                                                color: 'text.disabled',
+                                                minWidth: 56,
+                                              }}
+                                            >
+                                              No contact logged
+                                            </Typography>
+                                            <Typography variant="caption" color="text.disabled" sx={{ flex: 1 }}>
+                                              {relativeTime(entry.attemptedAt)}
+                                              {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                                            </Typography>
+                                          </Box>
+                                        ))
+                                      }
+                                    </Box>
+                                  )}
+                                </>
                               )}
                             </>
                           );
