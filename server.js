@@ -2673,26 +2673,40 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
            FROM contact_attempt_log
            WHERE hubspot_contact_id = ANY($1)
            ORDER BY hubspot_contact_id, attempted_at DESC
+         ),
+         log_method_counts AS (
+           SELECT hubspot_contact_id,
+                  jsonb_object_agg(method, cnt) AS method_counts
+           FROM (
+             SELECT hubspot_contact_id, method, COUNT(*) AS cnt
+             FROM contact_attempt_log
+             WHERE hubspot_contact_id = ANY($1)
+             GROUP BY hubspot_contact_id, method
+           ) mc
+           GROUP BY hubspot_contact_id
          )
          SELECT cat.hubspot_contact_id,
                 cat.attempted_at,
                 COALESCE(lc.total_attempts, 0) AS total_attempts,
                 ll.method                       AS last_method,
+                lmc.method_counts,
                 COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
          FROM contact_attempt_tracking cat
          LEFT JOIN users u ON u.id = cat.attempted_by
-         LEFT JOIN log_counts  lc ON lc.hubspot_contact_id = cat.hubspot_contact_id
-         LEFT JOIN log_latest  ll ON ll.hubspot_contact_id = cat.hubspot_contact_id
+         LEFT JOIN log_counts       lc  ON lc.hubspot_contact_id  = cat.hubspot_contact_id
+         LEFT JOIN log_latest       ll  ON ll.hubspot_contact_id  = cat.hubspot_contact_id
+         LEFT JOIN log_method_counts lmc ON lmc.hubspot_contact_id = cat.hubspot_contact_id
          WHERE cat.hubspot_contact_id = ANY($1)
            AND cat.attempted_at IS NOT NULL`,
         [ids]
       );
       for (const row of attemptRows) {
         lastAttempt[row.hubspot_contact_id] = {
-          at:     row.attempted_at,
-          by:     row.attempted_by_name || null,
-          count:  Number(row.total_attempts),
-          method: row.last_method || null,
+          at:           row.attempted_at,
+          by:           row.attempted_by_name || null,
+          count:        Number(row.total_attempts),
+          method:       row.last_method || null,
+          methodCounts: row.method_counts || null,
         };
       }
     } catch (e) {
