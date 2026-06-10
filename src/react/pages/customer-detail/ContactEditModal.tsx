@@ -12,7 +12,7 @@ import { Contact } from './types';
 import { updateRecentCustomer } from '../../utils/formatters';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
-import { LEAD_STATUS_CHANNEL } from '../../utils/broadcastLeadStatus';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -176,21 +176,12 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
       };
       updateRecentCustomer(updated);
       // Notify other tabs so they can patch the contact name without a full reload.
-      try {
-        if (typeof BroadcastChannel !== 'undefined') {
-          const ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
-          ch.postMessage({
-            contactId: contact.id,
-            props: {
-              firstname: values.firstname,
-              lastname:  values.lastname,
-              email:     values.email,
-              zip:       values.zip,
-            },
-          });
-          ch.close();
-        }
-      } catch { /* BroadcastChannel not available */ }
+      broadcastLeadStatusChange(contact.id, {
+        firstname: values.firstname,
+        lastname:  values.lastname,
+        email:     values.email,
+        zip:       values.zip,
+      });
       onSaved(updated);
       onClose();
     } catch (e) {

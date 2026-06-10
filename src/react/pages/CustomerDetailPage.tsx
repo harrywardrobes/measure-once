@@ -27,7 +27,7 @@ import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
-import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
+import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -435,19 +435,12 @@ export function CustomerDetailPage() {
   // ── Patch contact properties when renamed in another tab ───────────────────
 
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    let ch: BroadcastChannel | null = null;
-    try {
-      ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
-      ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<Contact['properties']> }>) => {
-        const { contactId: changedId, props } = e.data ?? {};
-        if (!changedId || !props || changedId !== contactId) return;
-        setContact((prev) =>
-          prev ? { ...prev, properties: { ...prev.properties, ...props } } : prev,
-        );
-      };
-    } catch { /* BroadcastChannel unavailable */ }
-    return () => { try { ch?.close(); } catch { /* noop */ } };
+    return subscribeLeadStatusChange((changedId, props) => {
+      if (changedId !== contactId) return;
+      setContact((prev) =>
+        prev ? { ...prev, properties: { ...prev.properties, ...props } } : prev,
+      );
+    });
   }, [contactId]);
 
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
