@@ -1,0 +1,117 @@
+Now I have the full picture. Writing the complete prompt now.
+
+---
+
+## Replit Prompt
+
+Fix two bugs and apply a consistent unsaved-changes guard across all modals in this React/MUI app.
+
+---
+
+### Context
+
+The app is a React + TypeScript + MUI project. Most modals are `MUI Dialog` components. The relevant files are:
+
+- `src/react/pages/admin/EmailTemplatesPage.tsx` — the primary file for Tasks 1 and 2
+- `src/react/components/TokenHighlightField.tsx` — custom token-highlighting textarea used inside the email template editor
+- `src/react/pages/customer-detail/ContactEditModal.tsx`
+- `src/react/components/ChangePasswordDialog.tsx`
+- `src/react/components/NavCustomiseDialog.tsx`
+- `src/react/components/modals/VisitCalendarModal.tsx`
+- `src/react/components/modals/ArrangeVisitModal.tsx`
+- `src/react/components/modals/DeliveryWindowModal.tsx`
+- `src/react/components/modals/DesignVisitCalendarModal.tsx`
+- `src/react/components/modals/GenericVisitEditModal.tsx`
+- `src/react/components/modals/InstallationSlotModal.tsx`
+- `src/react/components/modals/PhoneSummaryModal.tsx`
+- `src/react/components/modals/ReviewCustomerPhotosDrawer.tsx`
+
+---
+
+### Task 1 — Fix invisible text in TokenHighlightField multiline fields
+
+**File**: `src/react/components/TokenHighlightField.tsx`
+
+**What's happening**: `TokenHighlightField` is a two-layer component — a visible "backdrop" div that renders highlighted `{{token}}` spans, and a transparent `<textarea>` on top for cursor/caret interaction. Both layers share a `sharedLayer` style object (around line 493) that includes `overflow: 'hidden'`. When the textarea auto-grows (the `useLayoutEffect` sets `ta.style.height = ta.scrollHeight + 'px'`), the backdrop's `overflow: hidden` clips its visible text at the original container height, while the textarea's own text is `color: transparent` — making the content look white/invisible in the newly expanded area.
+
+**Fix**: Remove `overflow: 'hidden'` from `sharedLayer` so it no longer applies to both layers indiscriminately. Instead:
+- Apply `overflow: 'hidden'` only to the **single-line input** (where `multiline === false`), as a horizontal scroll clip
+- The **multiline textarea** and its matching backdrop should use `overflow: 'visible'` (or simply omit the property) so the backdrop renders at full expanded height
+- The outer wrapper `Box` (the one with the border) already clips visually, so removing overflow from the inner layers won't cause the field to break out of its container
+
+---
+
+### Task 2 — Warn before discarding unsaved edits in the email template modal
+
+**File**: `src/react/pages/admin/EmailTemplatesPage.tsx`
+
+**What's happening**: The `EditTemplateDialog` component has `<Dialog open onClose={handleCancel} ...>`. `handleCancel` (line ~360) immediately calls `clearDraft()` and `onClose()` — so clicking the backdrop or pressing Escape silently discards all unsaved edits with no warning.
+
+**Fix**:
+
+1. Add a `hasUnsavedChanges` boolean derived by comparing the current `fields` state to `template.subject`, `template.body_text`, `template.body_html`, and `template.footer_text`.
+
+2. Add a `confirmDiscardOpen` boolean state (default `false`).
+
+3. Replace the Dialog's `onClose` prop and the existing **Cancel** button's handler with a single `handleRequestClose` function that:
+   - If `hasUnsavedChanges` is `true` → sets `confirmDiscardOpen = true` and returns
+   - Otherwise → calls the original `handleCancel` logic directly
+
+4. Add a small confirmation `Dialog` (matching the style of the existing `confirmUnknownOpen` dialog already present at line ~560). It should say: *"You have unsaved changes — are you sure you want to discard them?"* with:
+   - **Keep editing** button → sets `confirmDiscardOpen = false`
+   - **Discard changes** button → calls the original `handleCancel` (clears draft and closes)
+
+5. The **Save** button flow is unchanged — it already clears the draft and closes correctly.
+
+---
+
+### Task 3 — Apply the same unsaved-changes guard to all other form modals
+
+Apply the same pattern — detect whether the user has made changes and prompt before discarding — consistently across every other modal in the app that has editable form fields. For each modal listed below, the guard must intercept both the Dialog backdrop click (`onClose`) and any explicit **Cancel**/**Close** button.
+
+Use a `hasUnsavedChanges` check appropriate to each modal's data model (compare current field state to the original loaded/prop values, or check whether any field is non-empty for create-only forms).
+
+The modals that need the guard added are:
+
+#### `src/react/pages/customer-detail/ContactEditModal.tsx`
+- Has 9 text fields (name, email, phones, address). Already persists a draft to localStorage, but currently closes without warning when Cancel or backdrop is clicked. Add the prompt.
+
+#### `src/react/components/modals/VisitCalendarModal.tsx`
+- Has title, start time, duration, location, notes fields. No draft persistence. Prompt if any field has been changed from its initial value.
+
+#### `src/react/components/modals/DeliveryWindowModal.tsx`
+- Has title, window start/end, location, notes, and a Google Calendar checkbox. No draft persistence. Prompt if any field has been changed.
+
+#### `src/react/components/modals/DesignVisitCalendarModal.tsx`
+- Has title, start time, duration, location, notes. Already persists a draft to localStorage but closes without a warning on backdrop click. Already has a separate `handleDismiss` (preserves draft) and `handleCancel` (clears draft) — add the prompt so `handleDismiss` triggers it.
+
+#### `src/react/components/modals/GenericVisitEditModal.tsx`
+- Has title, start/end date-time range, location, notes, and a Google Calendar checkbox. No draft persistence. Prompt if any field has been changed.
+
+#### `src/react/components/modals/InstallationSlotModal.tsx`
+- Has title, start time, duration, location, notes, and a Google Calendar checkbox. No draft persistence. Prompt if any field has been changed.
+
+#### `src/react/components/modals/ArrangeVisitModal.tsx`
+- A multi-step modal (call → booked → email). Already persists to sessionStorage. Prompt if the user has progressed past the initial step or has made any edits.
+
+#### `src/react/components/modals/PhoneSummaryModal.tsx`
+- Has a single multiline notes field. Prompt if the field is non-empty when the user tries to close.
+
+#### `src/react/components/modals/ReviewCustomerPhotosDrawer.tsx`
+- A multi-step drawer (not-suitable email / rough estimate email). Has email subject and body fields. Prompt if the user has entered content in any field.
+
+---
+
+### Modals that do NOT need the guard
+
+- `src/react/components/ChangePasswordDialog.tsx` — fields are intentionally cleared on close; no meaningful data to lose
+- `src/react/components/NavCustomiseDialog.tsx` — selections are reset from props on every open; no persistent state to lose
+- `src/react/components/modals/UploadPhotosModal.tsx` — read-only, no editable fields
+
+---
+
+### Implementation notes
+
+- The confirmation dialog should be simple and consistent across all modals: two buttons, **Keep editing** and **Discard changes**.
+- Do not introduce a shared context or provider for this — keep the logic local to each modal as a `confirmDiscardOpen` state + `handleRequestClose` function. The pattern is simple enough to duplicate cleanly.
+- Do not add the guard for fields that are functionally read-only or that always start blank and are intentionally discardable (e.g., a search field).
