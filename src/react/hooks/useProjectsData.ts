@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LEAD_STATUS_CHANNEL } from '../utils/broadcastLeadStatus';
+import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 
 export interface ProjectContact {
   id: string;
@@ -235,23 +235,15 @@ export function useProjectsData(): ProjectsData {
 
   // ── Patch contact properties when renamed in another tab ───────────────────
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    let ch: BroadcastChannel | null = null;
-    try {
-      ch = new BroadcastChannel(LEAD_STATUS_CHANNEL);
-      ch.onmessage = (e: MessageEvent<{ contactId?: string; props?: Partial<ProjectContact['properties']> }>) => {
-        const { contactId, props } = e.data ?? {};
-        if (!contactId || !props) return;
-        setContacts((prev) =>
-          prev.map((c) =>
-            c.id === contactId
-              ? { ...c, properties: { ...c.properties, ...props } }
-              : c,
-          ),
-        );
-      };
-    } catch { /* BroadcastChannel not available */ }
-    return () => { ch?.close(); };
+    return subscribeLeadStatusChange((contactId, props) => {
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contactId
+            ? { ...c, properties: { ...c.properties, ...props } }
+            : c,
+        ),
+      );
+    });
   }, []);
 
   // ── Re-fetch when a customer submits their info (photos received badge) ─────
