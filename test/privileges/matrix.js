@@ -240,6 +240,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/card-action-handlers',                 level: 'admin', body: { name: '__noop__', type: 'summarise_phone_call' } },
   { method: 'PATCH',  path: '/api/admin/card-action-handlers/0',               level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/card-action-handlers/0',               level: 'admin' },
+  { method: 'DELETE', path: '/api/admin/card-action-handlers/0/binding',       level: 'admin', body: { stage_key: 'survey', status_key: '' } },
   // Admin-only read endpoints elsewhere in server.js. These rows exist so the
   // matrix records a member→403 (and viewer→403) cell for each — closing the
   // PRIV-00-style gap that surfaced on /api/admin/card-action-handlers.

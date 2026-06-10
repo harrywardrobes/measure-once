@@ -801,7 +801,10 @@ export function ConflictResolverModal({
       if (onRemove) {
         await onRemove(id);
       } else {
-        await DELETE(`/api/admin/card-action-handlers/${id}`);
+        const bindingSpec = slot.substatus_id != null
+          ? { substatus_id: slot.substatus_id }
+          : { stage_key: slot.stage_key, status_key: slot.status_key };
+        await DELETE(`/api/admin/card-action-handlers/${id}/binding`, bindingSpec);
         await _reloadAndBroadcast();
         showToast('Handler removed.');
         const remaining = _handlersForSlot(slot);
@@ -887,10 +890,13 @@ export function ConflictResolverModal({
   );
 }
 
-async function _deleteHandler(id: number): Promise<void> {
+async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>): Promise<void> {
   if (!confirm('Remove this action from the label?')) return;
+  const bindingSpec = slot.substatus_id != null
+    ? { substatus_id: slot.substatus_id }
+    : { stage_key: slot.stage_key, status_key: slot.status_key };
   try {
-    await DELETE(`/api/admin/card-action-handlers/${id}`);
+    await DELETE(`/api/admin/card-action-handlers/${id}/binding`, bindingSpec);
     await _reloadAndBroadcast();
     showToast('Action removed.');
   } catch (e) {
@@ -1342,7 +1348,7 @@ export function ActionHandlersPage() {
                                         Change
                                       </button>
                                       <button className="btn btn-ghost adm-btn-remove"
-                                        onClick={() => _deleteHandler(handler.id)}>
+                                        onClick={() => _deleteHandler(handler.id, slot)}>
                                         Remove
                                       </button>
                                     </>

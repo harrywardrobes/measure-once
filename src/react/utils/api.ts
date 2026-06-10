@@ -65,8 +65,8 @@ export function PATCH<T = unknown>(path: string, body?: unknown): Promise<T> {
   return apiFetch<T>('PATCH', path, body);
 }
 
-export function DELETE<T = unknown>(path: string): Promise<T> {
-  return apiFetch<T>('DELETE', path);
+export function DELETE<T = unknown>(path: string, body?: unknown): Promise<T> {
+  return apiFetch<T>('DELETE', path, body);
 }
 
 export function PUT<T = unknown>(path: string, body?: unknown): Promise<T> {

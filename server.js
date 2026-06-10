@@ -6521,6 +6521,63 @@ app.delete('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin,
   }
 });
 
+app.delete('/api/admin/card-action-handlers/:id/binding', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+
+  const { error, value } = _validateHandlerBinding(req.body || {});
+  if (error) return res.status(400).json({ error });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let delBinding;
+    if (value.substatus_id != null) {
+      delBinding = await client.query(
+        `DELETE FROM card_action_handler_bindings
+         WHERE handler_id = $1 AND substatus_id = $2
+         RETURNING id`,
+        [id, value.substatus_id]
+      );
+    } else {
+      delBinding = await client.query(
+        `DELETE FROM card_action_handler_bindings
+         WHERE handler_id = $1
+           AND substatus_id IS NULL
+           AND LOWER(COALESCE(stage_key, ''))  = $2
+           AND LOWER(COALESCE(status_key, '')) = $3
+         RETURNING id`,
+        [id, value.stage_key || '', value.status_key || '']
+      );
+    }
+
+    if (!delBinding.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Binding not found.' });
+    }
+
+    const remaining = await client.query(
+      `SELECT id FROM card_action_handler_bindings WHERE handler_id = $1 LIMIT 1`,
+      [id]
+    );
+    let handlerDeleted = false;
+    if (!remaining.rows.length) {
+      await client.query(`DELETE FROM card_action_handlers WHERE id = $1`, [id]);
+      handlerDeleted = true;
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, handlerDeleted });
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err: e.message }, 'DELETE /api/admin/card-action-handlers/:id/binding error:');
+    res.status(500).json({ error: 'Could not remove binding.' });
+  } finally {
+    client.release();
+  }
+});
+
 // Execute: summarise_phone_call → posts a HubSpot note against the contact.
 app.post('/api/card-actions/phone-call-summary',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
