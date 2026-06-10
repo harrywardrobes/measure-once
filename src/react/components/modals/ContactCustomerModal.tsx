@@ -8,6 +8,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -30,6 +31,12 @@ type Phase =
   | 'advancing'
   | 'done';
 
+interface AttemptLogEntry {
+  method: 'call' | 'email' | 'whatsapp';
+  attemptedAt: string;
+  attemptedBy: string | null;
+}
+
 interface ContactData {
   contactName: string;
   contactEmail: string;
@@ -42,7 +49,14 @@ interface ContactData {
   whatsappSent: boolean;
   lastAttemptAt: string | null;
   lastAttemptBy: string | null;
+  attemptLog: AttemptLogEntry[];
 }
+
+const METHOD_LABEL: Record<AttemptLogEntry['method'], string> = {
+  call:     'Called',
+  email:    'Emailed',
+  whatsapp: 'WhatsApp',
+};
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -72,6 +86,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [emailSent, setEmailSent]         = useState(false);
   const [whatsappSent, setWhatsappSent]   = useState(false);
 
+  const [attemptLog, setAttemptLog] = useState<AttemptLogEntry[]>([]);
+
   const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
   const [lastAttemptBy, setLastAttemptBy] = useState<string | null>(null);
 
@@ -95,25 +111,14 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
 
     POST('/api/card-actions/contact-customer', { contactId })
       .then((data: unknown) => {
-        const d = data as {
-          contactName: string;
-          contactEmail: string;
-          phone: string;
-          mobile: string;
-          whatsapp: string;
-          leadStatus: string | null;
-          callAttempted: boolean;
-          emailSent: boolean;
-          whatsappSent: boolean;
-          lastAttemptAt: string | null;
-          lastAttemptBy: string | null;
-        };
+        const d = data as ContactData;
         setContactData(d);
         setCallAttempted(d.callAttempted);
         setEmailSent(d.emailSent);
         setWhatsappSent(d.whatsappSent);
         setLastAttemptAt(d.lastAttemptAt);
         setLastAttemptBy(d.lastAttemptBy);
+        setAttemptLog(d.attemptLog || []);
         setPhase('contact');
       })
       .catch((e: Error) => {
@@ -144,10 +149,19 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       const result = await PATCH(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/attempts`,
         { [field]: newValue },
-      ) as { call_attempted: boolean; email_sent: boolean; whatsapp_sent: boolean; attempted_at?: string | null };
+      ) as {
+        call_attempted: boolean;
+        email_sent: boolean;
+        whatsapp_sent: boolean;
+        attempted_at?: string | null;
+        attemptLog?: AttemptLogEntry[];
+      };
       setCallAttempted(result.call_attempted);
       setEmailSent(result.email_sent);
       setWhatsappSent(result.whatsapp_sent);
+      if (result.attemptLog) {
+        setAttemptLog(result.attemptLog);
+      }
       if (newValue && result.attempted_at) {
         setLastAttemptAt(result.attempted_at);
         const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
@@ -367,7 +381,48 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 </Stack>
               </Box>
 
-              {lastAttemptAt && (
+              {attemptLog.length > 0 && (
+                <Box>
+                  <Divider sx={{ mb: 1 }} />
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Contact history
+                  </Typography>
+                  <Box
+                    sx={{
+                      maxHeight: 140,
+                      overflowY: 'auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 0.5,
+                    }}
+                  >
+                    {attemptLog.map((entry, i) => (
+                      <Box
+                        key={i}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: 0.75,
+                          px: 1,
+                          py: 0.5,
+                          borderRadius: 1,
+                          bgcolor: 'grey.50',
+                        }}
+                      >
+                        <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
+                          {METHOD_LABEL[entry.method]}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                          {relativeTime(entry.attemptedAt)}
+                          {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {attemptLog.length === 0 && lastAttemptAt && (
                 <Box
                   sx={{
                     px: 1.5,
