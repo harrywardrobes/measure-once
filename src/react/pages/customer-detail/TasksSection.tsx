@@ -6,6 +6,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
+import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
@@ -55,6 +56,10 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editSubject, setEditSubject]           = useState('');
   const [editSubjectSaving, setEditSubjectSaving] = useState(false);
+
+  const [editingStageId, setEditingStageId]   = useState<string | null>(null);
+  const [editStageKey, setEditStageKey]       = useState('');
+  const [editStageSaving, setEditStageSaving] = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
     const aDone = a.properties?.hs_task_status === 'COMPLETED';
@@ -172,6 +177,38 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       setEditSubjectSaving(false);
     }
   }, [contactId, editSubject, tasks, onTasksChange, notifyApiError]);
+
+  const startEditStage = useCallback((task: HubSpotTask) => {
+    const body = task.properties?.hs_task_body || '';
+    const sk = body.startsWith('TASK_STAGE:') ? body.slice('TASK_STAGE:'.length).trim() : '';
+    setEditStageKey(sk);
+    setEditingStageId(task.id);
+  }, []);
+
+  const saveStage = useCallback(async (taskId: string) => {
+    setEditStageSaving(true);
+    const newBody = editStageKey ? `TASK_STAGE:${editStageKey}` : '';
+    const optimistic = tasks.map(t =>
+      t.id === taskId
+        ? { ...t, properties: { ...t.properties, hs_task_body: newBody } }
+        : t,
+    );
+    onTasksChange(optimistic);
+    try {
+      const r = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId, hs_task_body: newBody }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      setEditingStageId(null);
+    } catch (e) {
+      notifyApiError('hubspot', e);
+      onTasksChange(tasks);
+    } finally {
+      setEditStageSaving(false);
+    }
+  }, [contactId, editStageKey, tasks, onTasksChange, notifyApiError]);
 
   const startEditDue = useCallback((task: HubSpotTask) => {
     const dueTsMs = task.properties?.hs_timestamp ? parseInt(task.properties.hs_timestamp, 10) : null;
@@ -423,21 +460,91 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
 
                   {(slabel || dueLabel || (!isDone && !isViewer)) && (
                     <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
-                      {slabel && colour && (
-                        <Chip
-                          label={slabel}
-                          size="small"
-                          sx={{
-                            fontSize: '0.67rem',
-                            fontWeight: 700,
-                            height: 'auto',
-                            borderRadius: 'var(--radius-pill)',
-                            background: colour.light,
-                            color: colour.text,
-                            letterSpacing: '0.02em',
-                            '& .MuiChip-label': { px: '7px', py: '2px' },
-                          }}
-                        />
+                      {!isDone && !isViewer && editingStageId === task.id ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <select
+                            value={editStageKey}
+                            onChange={e => setEditStageKey(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') saveStage(task.id);
+                              if (e.key === 'Escape') setEditingStageId(null);
+                            }}
+                            autoFocus
+                            style={{
+                              fontSize: 12,
+                              borderRadius: 6,
+                              border: '1px solid var(--stone-deep)',
+                              padding: '2px 6px',
+                              fontFamily: 'inherit',
+                              background: 'var(--paper)',
+                              color: 'var(--ink-1)',
+                            }}
+                          >
+                            <option value="">No stage</option>
+                            {stageOptions}
+                          </select>
+                          <Box
+                            component="button"
+                            onClick={() => saveStage(task.id)}
+                            disabled={editStageSaving}
+                            title="Save stage"
+                            sx={{
+                              background: 'none', border: 'none', cursor: editStageSaving ? 'default' : 'pointer',
+                              color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
+                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                            }}
+                          >
+                            <CheckIcon sx={{ fontSize: '0.875rem' }} />
+                          </Box>
+                          <Box
+                            component="button"
+                            onClick={() => setEditingStageId(null)}
+                            title="Cancel"
+                            sx={{
+                              background: 'none', border: 'none', cursor: 'pointer',
+                              color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                              '&:hover': { color: 'error.main' },
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {slabel && colour && (
+                            <Chip
+                              label={slabel}
+                              size="small"
+                              sx={{
+                                fontSize: '0.67rem',
+                                fontWeight: 700,
+                                height: 'auto',
+                                borderRadius: 'var(--radius-pill)',
+                                background: colour.light,
+                                color: colour.text,
+                                letterSpacing: '0.02em',
+                                '& .MuiChip-label': { px: '7px', py: '2px' },
+                              }}
+                            />
+                          )}
+                          {!isDone && !isViewer && (
+                            <Box
+                              component="button"
+                              onClick={() => startEditStage(task)}
+                              title={slabel ? 'Edit stage' : 'Set stage'}
+                              sx={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                                opacity: 0.6,
+                                '&:hover': { color: 'var(--orchid)', opacity: 1 },
+                              }}
+                            >
+                              <LabelOutlinedIcon sx={{ fontSize: '0.8rem' }} />
+                            </Box>
+                          )}
+                        </Box>
                       )}
                       {!isDone && !isViewer && editingTaskId === task.id ? (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
