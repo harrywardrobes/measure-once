@@ -1009,7 +1009,7 @@ export function WorkflowPage() {
       const slotsToFlash = new Set<string>();
       for (const h of matched) {
         for (const b of h.bindings ?? []) {
-          if (b.stage_key && b.status_key && b.substatus_id == null) {
+          if (b.stage_key && b.status_key) {
             stagesToOpen.add(b.stage_key.toLowerCase());
             slotsToFlash.add(`${b.stage_key.toLowerCase()}|${b.status_key.toLowerCase()}`);
           }
