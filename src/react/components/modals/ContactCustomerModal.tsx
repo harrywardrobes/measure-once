@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import { POST, PATCH } from '../../utils/api';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Props {
   contactId: string;
@@ -39,9 +40,29 @@ interface ContactData {
   callAttempted: boolean;
   emailSent: boolean;
   whatsappSent: boolean;
+  lastAttemptAt: string | null;
+  lastAttemptBy: string | null;
+}
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return 'just now';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(diff / 86400000);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 8) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? '' : 's'} ago`;
 }
 
 export function ContactCustomerModal({ contactId, contactName, contactEmail, onClose }: Props) {
+  const { user: currentUser } = useAuth();
+
   const [phase, setPhase] = useState<Phase>('loading');
   const [contactData, setContactData] = useState<ContactData | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -50,6 +71,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [callAttempted, setCallAttempted] = useState(false);
   const [emailSent, setEmailSent]         = useState(false);
   const [whatsappSent, setWhatsappSent]   = useState(false);
+
+  const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
+  const [lastAttemptBy, setLastAttemptBy] = useState<string | null>(null);
 
   const [callInFlight,     setCallInFlight]     = useState(false);
   const [emailInFlight,    setEmailInFlight]     = useState(false);
@@ -81,11 +105,15 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
           callAttempted: boolean;
           emailSent: boolean;
           whatsappSent: boolean;
+          lastAttemptAt: string | null;
+          lastAttemptBy: string | null;
         };
         setContactData(d);
         setCallAttempted(d.callAttempted);
         setEmailSent(d.emailSent);
         setWhatsappSent(d.whatsappSent);
+        setLastAttemptAt(d.lastAttemptAt);
+        setLastAttemptBy(d.lastAttemptBy);
         setPhase('contact');
       })
       .catch((e: Error) => {
@@ -116,10 +144,15 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       const result = await PATCH(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/attempts`,
         { [field]: newValue },
-      ) as { call_attempted: boolean; email_sent: boolean; whatsapp_sent: boolean };
+      ) as { call_attempted: boolean; email_sent: boolean; whatsapp_sent: boolean; attempted_at?: string | null };
       setCallAttempted(result.call_attempted);
       setEmailSent(result.email_sent);
       setWhatsappSent(result.whatsapp_sent);
+      if (newValue && result.attempted_at) {
+        setLastAttemptAt(result.attempted_at);
+        const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
+        setLastAttemptBy(fullName || null);
+      }
     } catch (e) {
       setValue(currentValue);
       setError((e as Error).message || 'Could not save change.');
@@ -333,6 +366,24 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                   </Box>
                 </Stack>
               </Box>
+
+              {lastAttemptAt && (
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 1,
+                    bgcolor: 'grey.50',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Last contacted {relativeTime(lastAttemptAt)}
+                    {lastAttemptBy ? ` · ${lastAttemptBy}` : ''}
+                  </Typography>
+                </Box>
+              )}
 
               {advanceError && (
                 <Alert severity="error">{advanceError}</Alert>

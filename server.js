@@ -2650,8 +2650,32 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
     const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
     const ids = Array.from(new Set(rawIds.map(v => String(v)).filter(v => /^\d+$/.test(v)))).slice(0, 100);
     const urgency = {};
-    for (const id of ids) urgency[id] = null;
-    if (!ids.length) return res.json({ urgency });
+    const lastAttempt = {};
+    for (const id of ids) { urgency[id] = null; lastAttempt[id] = null; }
+    if (!ids.length) return res.json({ urgency, lastAttempt });
+
+    // Best-effort local DB query for contact attempt history (runs before HubSpot
+    // calls so it is always included even if HubSpot returns early).
+    try {
+      const { rows: attemptRows } = await pool.query(
+        `SELECT cat.hubspot_contact_id,
+                cat.attempted_at,
+                COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+         FROM contact_attempt_tracking cat
+         LEFT JOIN users u ON u.id = cat.attempted_by
+         WHERE cat.hubspot_contact_id = ANY($1)
+         AND cat.attempted_at IS NOT NULL`,
+        [ids]
+      );
+      for (const row of attemptRows) {
+        lastAttempt[row.hubspot_contact_id] = {
+          at: row.attempted_at,
+          by: row.attempted_by_name || null,
+        };
+      }
+    } catch (e) {
+      logger.error({ err: e.message }, 'POST /api/contacts/urgency lastAttempt query error:');
+    }
 
     // Batch read contact→task associations.
     let assocResults = [];
@@ -2664,7 +2688,7 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
       assocResults = assocR.data?.results || [];
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/urgency assoc batch error:');
-      return res.json({ urgency });
+      return res.json({ urgency, lastAttempt });
     }
 
     const taskIdsByContact = new Map();
@@ -2677,7 +2701,7 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
       taskIdsByContact.set(fromId, taskIds);
       for (const t of taskIds) allTaskIds.add(t);
     }
-    if (!allTaskIds.size) return res.json({ urgency });
+    if (!allTaskIds.size) return res.json({ urgency, lastAttempt });
 
     // Batch read task properties (HubSpot batch/read accepts up to 100 inputs).
     const tasksById = new Map();
@@ -2727,9 +2751,9 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
       }
       urgency[contactId] = u;
     }
-    res.json({ urgency });
+    res.json({ urgency, lastAttempt });
   } catch (_e) {
-    res.json({ urgency: {} });
+    res.json({ urgency: {}, lastAttempt: {} });
   }
 });
 
@@ -6615,9 +6639,12 @@ app.post('/api/card-actions/contact-customer',
       const leadStatus   = props.hs_lead_status || null;
 
       const { rows } = await pool.query(
-        `SELECT call_attempted, email_sent, whatsapp_sent
-         FROM contact_attempt_tracking
-         WHERE hubspot_contact_id = $1`,
+        `SELECT cat.call_attempted, cat.email_sent, cat.whatsapp_sent,
+                cat.attempted_at,
+                COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+         FROM contact_attempt_tracking cat
+         LEFT JOIN users u ON u.id = cat.attempted_by
+         WHERE cat.hubspot_contact_id = $1`,
         [contactId]
       );
       const attempts = rows[0] || { call_attempted: false, email_sent: false, whatsapp_sent: false };
@@ -6632,6 +6659,8 @@ app.post('/api/card-actions/contact-customer',
         callAttempted:  attempts.call_attempted,
         emailSent:      attempts.email_sent,
         whatsappSent:   attempts.whatsapp_sent,
+        lastAttemptAt:  attempts.attempted_at || null,
+        lastAttemptBy:  attempts.attempted_by_name || null,
       });
     } catch (e) {
       const status = e.response?.status;
@@ -6665,17 +6694,32 @@ app.patch('/api/card-actions/contact-customer/:contactId/attempts',
       return res.status(400).json({ error: 'At least one of call_attempted, email_sent, whatsapp_sent is required.' });
     }
 
-    const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`).join(', ');
-    const values     = [contactId, ...Object.values(updates)];
+    const updateKeys = Object.keys(updates);
+    const updateVals = Object.values(updates);
+    const isSettingAnyTrue = updateVals.some(v => v === true);
+    const userId = req.user?.id;
+
+    let insertCols = updateKeys.join(', ');
+    let insertPlaceholders = updateKeys.map((_, i) => `$${i + 2}`).join(', ');
+    let setClauses = updateKeys.map((k, i) => `${k} = $${i + 2}`).join(', ');
+    const queryValues = [contactId, ...updateVals];
+
+    if (isSettingAnyTrue && userId) {
+      const pIdx = queryValues.length + 1;
+      insertCols += ', attempted_at, attempted_by';
+      insertPlaceholders += `, NOW(), $${pIdx}`;
+      setClauses += `, attempted_at = NOW(), attempted_by = $${pIdx}`;
+      queryValues.push(userId);
+    }
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO contact_attempt_tracking (hubspot_contact_id, ${Object.keys(updates).join(', ')}, updated_at)
-         VALUES ($1, ${Object.keys(updates).map((_, i) => `$${i + 2}`).join(', ')}, NOW())
+        `INSERT INTO contact_attempt_tracking (hubspot_contact_id, ${insertCols}, updated_at)
+         VALUES ($1, ${insertPlaceholders}, NOW())
          ON CONFLICT (hubspot_contact_id) DO UPDATE
          SET ${setClauses}, updated_at = NOW()
-         RETURNING call_attempted, email_sent, whatsapp_sent, updated_at`,
-        values
+         RETURNING call_attempted, email_sent, whatsapp_sent, attempted_at, updated_at`,
+        queryValues
       );
       res.json(rows[0]);
     } catch (e) {

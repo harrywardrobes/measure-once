@@ -137,12 +137,14 @@ export function CardActionModalsHost() {
         <ArrangeVisitModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
       {modal.type === 'contact_customer' && (
-        <ContactCustomerModal
-          contactId={modal.contactId}
-          contactName={modal.contactName}
-          contactEmail={modal.contactEmail}
-          onClose={close}
-        />
+        <React.Suspense fallback={null}>
+          <ContactCustomerModal
+            contactId={modal.contactId}
+            contactName={modal.contactName}
+            contactEmail={modal.contactEmail}
+            onClose={close}
+          />
+        </React.Suspense>
       )}
     </>
   );

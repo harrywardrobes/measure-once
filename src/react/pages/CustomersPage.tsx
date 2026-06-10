@@ -485,6 +485,22 @@ function StagePill({ stageKey, label, archived }: { stageKey: string; label: str
   );
 }
 
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return 'just now';
+  const mins = Math.floor(diff / 60000);
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(diff / 86400000);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 8) return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? '' : 's'} ago`;
+}
+
 function UrgencyDot({ urgency }: { urgency: Urgency }) {
   if (!urgency) return null;
   const bg = urgency === 'red' ? '#dc2626' : '#f59e0b';
@@ -653,6 +669,12 @@ function CustomerCard({
    * Retry / Discard affordance when {@link syncStatus} is `failed`.
    */
   syncFailedIds?: number[];
+  /**
+   * Most-recent contact attempt timestamp and author name, sourced from the
+   * local `contact_attempt_tracking` table. Shown as a lightweight history
+   * row beneath the action strip.
+   */
+  lastAttempt?: { at: string; by: string | null } | null;
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
@@ -834,6 +856,23 @@ function CustomerCard({
       {/* Failed-sync recovery strip — rendered outside the CardActionArea (no
           nested interactive elements inside the navigation anchor) when this
           contact has a queued status/archive edit that exhausted its retries. */}
+      {lastAttempt?.at && (
+        <Box
+          sx={{
+            px: 2,
+            py: '6px',
+            bgcolor: 'grey.50',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            Contacted {relativeTime(lastAttempt.at)}
+            {lastAttempt.by ? ` · ${lastAttempt.by}` : ''}
+          </Typography>
+        </Box>
+      )}
+
       {syncStatus === 'failed' && <ContactSyncRecovery failedIds={failedIds} />}
     </Card>
   );
@@ -858,6 +897,7 @@ export function CustomersPage(): React.ReactElement {
   const { invoices: qbInvoices, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
+  const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null } | null>>({});
 
   // Invoice drawer state
   const [invDrawerOpen, setInvDrawerOpen]     = React.useState(false);
@@ -1229,6 +1269,7 @@ export function CustomersPage(): React.ReactElement {
     if (!ids.length) return;
     (async () => {
       let urgencyById: Record<string, Urgency> = {};
+      let lastAttemptById: Record<string, { at: string; by: string | null } | null> = {};
       try {
         const res = await fetch('/api/contacts/urgency', {
           method: 'POST',
@@ -1237,8 +1278,12 @@ export function CustomersPage(): React.ReactElement {
           body: JSON.stringify({ ids }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+          const data = (await res.json()) as {
+            urgency?: Record<string, Urgency>;
+            lastAttempt?: Record<string, { at: string; by: string | null } | null>;
+          };
           urgencyById = data.urgency || {};
+          lastAttemptById = data.lastAttempt || {};
         }
       } catch {
         /* fall through with empty map; ids will be marked null below */
@@ -1253,6 +1298,13 @@ export function CustomersPage(): React.ReactElement {
           const u = id in urgencyById ? urgencyById[id] : null;
           next[id] = u;
           if (legacyCache) legacyCache[id] = u;
+        }
+        return next;
+      });
+      setLastAttemptMap((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          next[id] = id in lastAttemptById ? lastAttemptById[id] : null;
         }
         return next;
       });
@@ -1602,6 +1654,7 @@ export function CustomersPage(): React.ReactElement {
                   draftVisitId={draftVisitIds[contact.id] ?? null}
                   syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
                   syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
+                  lastAttempt={lastAttemptMap[contact.id] ?? null}
                 />
               </Grid>
             ))}
