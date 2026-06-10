@@ -477,60 +477,77 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                             </Box>
                           </Typography>
                         </Box>
-                        {historyAttemptLog.length > 0 && (
-                          <Box
-                            sx={{
-                              maxHeight: 120,
-                              overflowY: 'auto',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: 0.5,
-                              mb: 0.75,
-                              pl: 1,
-                              borderLeft: '2px solid',
-                              borderColor: 'divider',
-                            }}
-                          >
-                            {historyAttemptLog.map((entry, i) => {
-                              const sessionMethods = [
-                                entry.callAttempted  && METHOD_LABEL['call'],
-                                entry.emailSent      && METHOD_LABEL['email'],
-                                entry.whatsappSent   && METHOD_LABEL['whatsapp'],
-                              ].filter(Boolean).join(', ');
-                              return (
+                        {historyAttemptLog.length > 0 && (() => {
+                          const visibleEntries = historyAttemptLog.filter(
+                            e => e.callAttempted || e.emailSent || e.whatsappSent,
+                          );
+                          const hiddenCount = historyAttemptLog.length - visibleEntries.length;
+                          return (
+                            <>
+                              {visibleEntries.length > 0 && (
                                 <Box
-                                  key={i}
                                   sx={{
+                                    maxHeight: 120,
+                                    overflowY: 'auto',
                                     display: 'flex',
-                                    alignItems: 'baseline',
-                                    gap: 0.75,
-                                    px: 1,
-                                    py: 0.375,
-                                    borderRadius: 1,
-                                    bgcolor: 'grey.50',
-                                    opacity: 0.85,
+                                    flexDirection: 'column',
+                                    gap: 0.5,
+                                    mb: hiddenCount > 0 ? 0.25 : 0.75,
+                                    pl: 1,
+                                    borderLeft: '2px solid',
+                                    borderColor: 'divider',
                                   }}
                                 >
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      fontWeight: sessionMethods ? 600 : 400,
-                                      fontStyle: sessionMethods ? 'normal' : 'italic',
-                                      color: sessionMethods ? 'text.primary' : 'text.disabled',
-                                      minWidth: 56,
-                                    }}
-                                  >
-                                    {sessionMethods || 'No contact logged'}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                                    {relativeTime(entry.attemptedAt)}
-                                    {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
-                                  </Typography>
+                                  {visibleEntries.map((entry, i) => {
+                                    const sessionMethods = [
+                                      entry.callAttempted  && METHOD_LABEL['call'],
+                                      entry.emailSent      && METHOD_LABEL['email'],
+                                      entry.whatsappSent   && METHOD_LABEL['whatsapp'],
+                                    ].filter(Boolean).join(', ');
+                                    return (
+                                      <Box
+                                        key={i}
+                                        sx={{
+                                          display: 'flex',
+                                          alignItems: 'baseline',
+                                          gap: 0.75,
+                                          px: 1,
+                                          py: 0.375,
+                                          borderRadius: 1,
+                                          bgcolor: 'grey.50',
+                                          opacity: 0.85,
+                                        }}
+                                      >
+                                        <Typography
+                                          variant="caption"
+                                          sx={{
+                                            fontWeight: 600,
+                                            minWidth: 56,
+                                          }}
+                                        >
+                                          {sessionMethods}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                                          {relativeTime(entry.attemptedAt)}
+                                          {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                                        </Typography>
+                                      </Box>
+                                    );
+                                  })}
                                 </Box>
-                              );
-                            })}
-                          </Box>
-                        )}
+                              )}
+                              {hiddenCount > 0 && (
+                                <Typography
+                                  variant="caption"
+                                  color="text.disabled"
+                                  sx={{ display: 'block', fontStyle: 'italic', mb: 0.75, pl: 1 }}
+                                >
+                                  {hiddenCount} {hiddenCount === 1 ? 'session' : 'sessions'} with no methods recorded hidden
+                                </Typography>
+                              )}
+                            </>
+                          );
+                        })()}
                       </>
                     );
                   })()}
