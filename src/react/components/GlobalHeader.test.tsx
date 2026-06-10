@@ -27,6 +27,14 @@ describe('ServiceStatusBadge colour guards', () => {
     const icon = getByTestId('service-status-icon');
     expect(window.getComputedStyle(icon).color).toBe('rgb(134, 239, 172)');
   });
+
+  it('checking status icon colour is rgba(255,255,255,0.5) — neutral', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="checking" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).color).toBe('rgba(255, 255, 255, 0.5)');
+  });
 });
 
 describe('ServiceStatusBadge badge dot colour guards', () => {
