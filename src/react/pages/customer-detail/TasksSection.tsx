@@ -7,6 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
+import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 
 interface Workflow {
   stages?: Record<string, { label: string }>;
@@ -87,6 +88,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       t.id === taskId ? { ...t, properties: { ...t.properties, hs_task_status: newStatus } } : t,
     );
     onTasksChange(updatedTasks);
+    let succeeded = false;
     try {
       const r = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -94,10 +96,12 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
         body: JSON.stringify({ hs_task_status: newStatus, contactId }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
+      succeeded = true;
     } catch (e) {
       notifyApiError('hubspot', e);
       onTasksChange(tasks);
     }
+    if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   const deleteTask = useCallback(async (taskId: string) => {
@@ -107,6 +111,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     const next = [...tasks];
     next.splice(idx, 1);
     onTasksChange(next);
+    let succeeded = false;
     try {
       const r = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE',
@@ -114,6 +119,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
         body: JSON.stringify({ contactId }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
+      succeeded = true;
     } catch (e) {
       notifyApiError('hubspot', e);
       if (removed) {
@@ -122,6 +128,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
         onTasksChange(restore);
       }
     }
+    if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   return (
