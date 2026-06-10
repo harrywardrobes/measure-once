@@ -19,6 +19,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { DEFAULT_WORKFLOW, WorkflowDef } from '../../lib/workflowConfig';
+import { STAGE_COLORS } from '../../theme';
 
 // ── Stage option constants ──────────────────────────────────────────────────
 
@@ -48,6 +49,26 @@ const WORKFLOW_KEY_TO_LS_STAGE: Record<string, string> = {
   installation: 'INSTALLATION',
   aftercare:    'AFTERCARE',
 };
+
+/** Maps lead_status_config.stage → STAGE_COLORS key (for row tints). */
+const LS_STAGE_TO_COLORS_KEY: Record<string, string> = {
+  SALES:            'sales',
+  DESIGN_VISIT:     'designvisit',
+  SURVEY:           'survey',
+  ORDER:            'order',
+  WORKSHOP:         'workshop',
+  PACKING:          'packing',
+  DELIVERY:         'delivery',
+  INSTALLATION:     'installation',
+  AFTERCARE:        'aftercare',
+  CUSTOMER_SERVICE: 'customerservice',
+};
+
+/** Display order for stage groups (matches STAGE_OPTIONS order). */
+const STAGE_DISPLAY_ORDER = [
+  'SALES', 'DESIGN_VISIT', 'SURVEY', 'ORDER', 'WORKSHOP',
+  'PACKING', 'DELIVERY', 'INSTALLATION', 'AFTERCARE', 'CUSTOMER_SERVICE',
+];
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -157,10 +178,11 @@ function NullStatusRow({ status, subCount, handlerCount }: { status: LeadStatus;
 
 // ── StatusRow ──────────────────────────────────────────────────────────────
 
-function StatusRow({ status, index, total, onMove, onDelete, isRequired, featureLabel, source, subCount, handlerCount }: {
+function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired, featureLabel, source, subCount, handlerCount }: {
   status: LeadStatus;
   index: number;
   total: number;
+  bgColor: string;
   onMove: (key: string, dir: 'up' | 'down') => void;
   onDelete: (key: string) => void;
   isRequired: boolean;
@@ -170,7 +192,7 @@ function StatusRow({ status, index, total, onMove, onDelete, isRequired, feature
   handlerCount: number;
 }) {
   return (
-    <tr style={{ background: index % 2 ? 'var(--neutral-50)' : 'white' }} data-ls-key={status.key}>
+    <tr style={{ background: bgColor }} data-ls-key={status.key}>
       <td style={{ ...TD, textAlign: 'center', whiteSpace: 'nowrap' }}>
         <button className="btn btn-ghost" title="Move up" disabled={index === 0}
           onClick={() => onMove(status.key, 'up')} style={{ fontSize: '.75rem', padding: '0 4px' }}>↑</button>
@@ -444,21 +466,27 @@ export function StagesPage() {
 
   // ── Move status ──
 
-  const moveStatus = useCallback(async (key: string, dir: 'up' | 'down') => {
-    const arr = statusesRef.current;
-    const idx = arr.findIndex(s => s.key === key);
+  const moveStatus = useCallback(async (key: string, dir: 'up' | 'down', peers?: LeadStatus[]) => {
+    if (!peers) {
+      const target = statusesRef.current.find(s => s.key === key);
+      const sameStage = statusesRef.current.filter(s => !s.is_null_row && s.stage === (target?.stage ?? null));
+      peers = [...sameStage].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+    const idx = peers.findIndex(s => s.key === key);
     if (idx < 0) return;
     const si = dir === 'up' ? idx - 1 : idx + 1;
-    if (si < 0 || si >= arr.length) return;
-    const a = arr[idx], b = arr[si];
+    if (si < 0 || si >= peers.length) return;
+    const a = peers[idx], b = peers[si];
     try {
       await Promise.all([
         PATCH(`/api/admin/lead-statuses/${encodeURIComponent(a.key)}`, { sort_order: b.sort_order }),
         PATCH(`/api/admin/lead-statuses/${encodeURIComponent(b.key)}`, { sort_order: a.sort_order }),
       ]);
-      const next = [...arr];
-      next[idx] = { ...b, sort_order: a.sort_order };
-      next[si]  = { ...a, sort_order: b.sort_order };
+      const next = [...statusesRef.current];
+      const ai = next.findIndex(s => s.key === a.key);
+      const bi = next.findIndex(s => s.key === b.key);
+      if (ai !== -1) next[ai] = { ...next[ai], sort_order: b.sort_order };
+      if (bi !== -1) next[bi] = { ...next[bi], sort_order: a.sort_order };
       setStatuses(next); statusesRef.current = next;
       setReloadKey(k => k + 1);
       notifyLsChanged();
@@ -567,6 +595,22 @@ export function StagesPage() {
 
   const real    = statuses.filter(s => !s.is_null_row);
   const nullRow = statuses.find(s => s.is_null_row);
+
+  // Sort real statuses by stage display order, then sort_order within each stage.
+  const sortedReal = [...real].sort((a, b) => {
+    const ai = STAGE_DISPLAY_ORDER.indexOf(a.stage || '');
+    const bi = STAGE_DISPLAY_ORDER.indexOf(b.stage || '');
+    const stageDiff = (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    return stageDiff !== 0 ? stageDiff : (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+
+  // Group into consecutive stage buckets for rendering.
+  const stageGroups: { stage: string | null; items: LeadStatus[] }[] = [];
+  for (const s of sortedReal) {
+    const last = stageGroups[stageGroups.length - 1];
+    if (!last || last.stage !== s.stage) stageGroups.push({ stage: s.stage, items: [s] });
+    else last.items.push(s);
+  }
 
   const stageKeys = Object.keys(workflow?.stages ?? DEFAULT_WORKFLOW.stages!);
   const statusCountByLsStage = new Map<string, number>();
@@ -728,21 +772,46 @@ export function StagesPage() {
                         handlerCount={handlerCountByLsKey.get(nullRow.key.toUpperCase()) ?? 0}
                       />
                     )}
-                    {real.map((s, i) => (
-                      <StatusRow
-                        key={`${s.key}-${reloadKey}`}
-                        status={s}
-                        index={i}
-                        total={real.length}
-                        onMove={moveStatus}
-                        onDelete={deleteStatus}
-                        isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)}
-                        featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel}
-                        source={healthData?.required?.find(r => r.key === s.key)?.source}
-                        subCount={subCountByLsKey.get(s.key.toUpperCase()) ?? 0}
-                        handlerCount={handlerCountByLsKey.get(s.key.toUpperCase()) ?? 0}
-                      />
-                    ))}
+                    {stageGroups.map(({ stage, items }) => {
+                      const ck = stage ? (LS_STAGE_TO_COLORS_KEY[stage] ?? '') : '';
+                      const colors = ck ? STAGE_COLORS[ck] : null;
+                      const stageLabel = STAGE_OPTIONS.find(o => o.value === stage)?.label ?? (stage || 'No stage assigned');
+                      const rowBg = colors ? colors.light : '#f9fafb';
+                      return (
+                        <React.Fragment key={stage ?? '__none__'}>
+                          <tr>
+                            <td colSpan={9} style={{
+                              padding: '3px 8px',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              letterSpacing: '0.06em',
+                              textTransform: 'uppercase',
+                              background: colors ? colors.bg : 'var(--neutral-300)',
+                              color: 'white',
+                              borderTop: '2px solid transparent',
+                            }}>
+                              {stageLabel}
+                            </td>
+                          </tr>
+                          {items.map((s, i) => (
+                            <StatusRow
+                              key={`${s.key}-${reloadKey}`}
+                              status={s}
+                              index={i}
+                              total={items.length}
+                              bgColor={rowBg}
+                              onMove={(key, dir) => moveStatus(key, dir, items)}
+                              onDelete={deleteStatus}
+                              isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)}
+                              featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel}
+                              source={healthData?.required?.find(r => r.key === s.key)?.source}
+                              subCount={subCountByLsKey.get(s.key.toUpperCase()) ?? 0}
+                              handlerCount={handlerCountByLsKey.get(s.key.toUpperCase()) ?? 0}
+                            />
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </Box>
