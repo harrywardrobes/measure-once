@@ -1,0 +1,137 @@
+The Workflow admin page has three problems:
+
+Hardcoded to 3 of 9 stages. A constant CARD_ACTION_STAGES at the top of the file lists only Sales, Design Visit, and Survey. The app has 9 stages (Sales, Design Visit, Survey, Order, Workshop, Packing, Delivery, Installation, Aftercare) defined in workflow.json and served at GET /api/workflow. The other 6 are invisible in this view.
+Goes stale. Data is fetched once on mount. Changes made in sibling admin tabs (Card Actions, Stages, Action Handlers) are not reflected until a full page reload.
+Duplicates HANDLER_TYPE_LABELS. The file defines its own local copy of this object, which already lives in src/react/utils/handlerMeta.ts and is the canonical version.
+Fix 1 — Dynamic stage list from the API
+Delete the two constants at the top of the file:
+
+// DELETE BOTH OF THESE:
+const CARD_ACTION_STAGES = [ ... ]   // hardcoded 3 stages
+const STAGE_FOR_LS = ...             // derived from above
+Add these imports:
+
+import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
+And add HANDLER_TYPE_LABELS to the existing handlerMeta import line (removing the now-deleted local copy).
+
+Add a workflowStages state variable to WorkflowPage:
+
+const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
+In fetchAll, add GET<WorkflowDef | null>('/api/workflow') to the parallel fetch alongside the existing 5 calls, then derive the stages:
+
+const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
+setWorkflowStages(
+  Object.entries(rawStages).map(([key, data]) => ({
+    key,
+    label: (data as WorkflowStage).label ?? key,
+  }))
+);
+Add this helper function (mirrors the server-side _normToCardStageKey rule):
+
+function lsStageToKey(stage: string): string {
+  return stage.toLowerCase().replace(/_/g, '');
+}
+Update StageAccordion — add stageKey: string as a direct prop (remove the internal lookup that used the deleted constant). Replace the status filter inside it with:
+
+const stageStatuses = statuses
+  .filter(s => lsStageToKey(s.stage || '') === stageKey)
+  .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+Update the render loop — replace the hardcoded CARD_ACTION_STAGES.map(...) with:
+
+{workflowStages.map(stage => (
+  <StageAccordion
+    key={stage.key}
+    stageKey={stage.key}
+    stageLabel={stage.label}
+    statuses={statuses}         // pass all, filter inside
+    substatuses={substatuses}
+    labels={labels}
+    handlers={handlers}
+    emailTemplates={emailTemplates}
+  />
+))}
+Fix 2 — Refresh button + last-updated indicator
+Add useRef to the React import. Add these state variables to WorkflowPage:
+
+const [refreshing,    setRefreshing]    = useState(false);
+const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+const isFirstLoad = useRef(true);
+Add import RefreshIcon from '@mui/icons-material/Refresh';
+
+Update fetchAll to accept a showRefreshing flag:
+
+const fetchAll = useCallback(async (showRefreshing = false) => {
+  if (isFirstLoad.current) {
+    setLoading(true);           // full-screen spinner on first load only
+  } else if (showRefreshing) {
+    setRefreshing(true);        // button spinner on manual refresh
+  }
+  // ... fetch logic unchanged ...
+  setLastRefreshed(new Date()); // inside try, after successful fetch
+  // finally:
+  setLoading(false);
+  setRefreshing(false);
+  isFirstLoad.current = false;
+}, []);
+In the JSX, replace <Typography variant="h6">Workflow</Typography> with:
+
+<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+  <Typography variant="h6">Workflow</Typography>
+  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+    {lastRefreshed && !loading && (
+      <Typography variant="caption" color="text.secondary">
+        Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+      </Typography>
+    )}
+    <Button
+      size="small"
+      variant="outlined"
+      startIcon={refreshing ? <CircularProgress size={14} color="inherit" /> : <RefreshIcon sx={{ fontSize: 16 }} />}
+      onClick={() => fetchAll(true)}
+      disabled={loading || refreshing}
+    >
+      Refresh
+    </Button>
+  </Box>
+</Box>
+Fix 3 — Auto-refresh when the tab is activated
+Add a useEffect that watches the legacy tab button for the active class being added:
+
+useEffect(() => {
+  const btn = document.querySelector<HTMLElement>('.tabs .tab-btn[data-tab="workflow"]');
+  if (!btn) return;
+  const mo = new MutationObserver(() => {
+    if (btn.classList.contains('active')) fetchAll();
+  });
+  mo.observe(btn, { attributes: true, attributeFilter: ['class'] });
+  return () => mo.disconnect();
+}, [fetchAll]);
+Fix 4 — Auto-refresh when sibling tabs mutate data
+Add a useEffect that listens to the events the other admin pages already dispatch (same pattern as CardActionsPage.tsx):
+
+useEffect(() => {
+  const onLsChanged = () => fetchAll();
+  const onAhChanged = () => fetchAll();
+  window.addEventListener('lead_statuses_changed', onLsChanged);
+  window.addEventListener('card_action_handlers_changed', onAhChanged);
+  let bc1: BroadcastChannel | undefined;
+  let bc2: BroadcastChannel | undefined;
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      bc1 = new BroadcastChannel('lead_statuses_changed');
+      bc1.onmessage = () => fetchAll();
+      bc2 = new BroadcastChannel('card_action_handlers_changed');
+      bc2.onmessage = () => fetchAll();
+    } catch { /* ignore */ }
+  }
+  return () => {
+    window.removeEventListener('lead_statuses_changed', onLsChanged);
+    window.removeEventListener('card_action_handlers_changed', onAhChanged);
+    try { bc1?.close(); bc2?.close(); } catch { /* ignore */ }
+  };
+}, [fetchAll]);
+Constraints
+Do not add polling. Re-fetch on tab activation and on events only.
+Do not make the page editable — it remains read-only.
+TypeScript strict, no any. The SlotRow component in the file is unused — leave it untouched.
+Do not change the existing 5-endpoint fetch structure — just add the 6th (/api/workflow) alongside them.
