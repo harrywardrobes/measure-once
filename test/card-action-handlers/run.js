@@ -4810,7 +4810,6 @@ async function writeReport(runId, findings) {
     '  regular approved member is blocked (403) from mutating admin routes:',
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
-    '  (PRIV-03 — member DELETE whole-handler — removed; endpoint retired.)',
     '- **(NEG) Negative-path validation probes** — 30 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
