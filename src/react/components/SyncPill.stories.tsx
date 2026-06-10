@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import { useState } from 'react';
 import SyncPill from './SyncPill';
 import type { QueueCounts, QueueEntry } from '../lib/offlineQueue';
+import { BRAND_COLORS } from '../theme';
 
 const now = Date.now();
 
@@ -97,7 +98,7 @@ function InteractiveFailed({ open }: { open?: boolean }) {
   const remove = (id: number) => setFailures((fs) => fs.filter((f) => f.id !== id));
   const clearAll = () => setFailures([]);
   return (
-    <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+    <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
       <SyncPill
         counts={{ total: failures.length, pending: 0, syncing: 0, failed: failures.length }}
         failures={failures}
@@ -124,7 +125,7 @@ export const FailedDialog: Story = {
 export const Pending: Story = {
   name: 'Pending',
   render: () => (
-    <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+    <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
       <SyncPill counts={PENDING_COUNTS} failures={[]} />
     </Box>
   ),
@@ -133,7 +134,7 @@ export const Pending: Story = {
 export const Syncing: Story = {
   name: 'Syncing',
   render: () => (
-    <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+    <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
       <SyncPill counts={SYNCING_COUNTS} failures={[]} />
     </Box>
   ),
@@ -147,7 +148,7 @@ export const VariedReasons: Story = {
       const remove = (id: number) => setFailures((fs) => fs.filter((f) => f.id !== id));
       const clearAll = () => setFailures([]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <SyncPill
             counts={{ total: failures.length, pending: 0, syncing: 0, failed: failures.length }}
             failures={failures}
@@ -171,7 +172,7 @@ export const SingleFailure: Story = {
       const [failures, setFailures] = useState<QueueEntry[]>([SAMPLE_FAILURES[0]]);
       const remove = (id: number) => setFailures((fs) => fs.filter((f) => f.id !== id));
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <SyncPill
             counts={{ total: failures.length, pending: 0, syncing: 0, failed: failures.length }}
             failures={failures}

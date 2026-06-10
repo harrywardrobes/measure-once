@@ -200,7 +200,7 @@ export function OfflinePill() {
           height: 28,
           px: 1,
           borderRadius: '8px',
-          color: '#fcd34d',
+          color: '#fcd34d', // hex-color-ok: offline-warning amber; validated by getComputedStyle in GlobalHeader.test.tsx
           bgcolor: 'rgba(245,158,11,0.16)',
           border: '1px solid rgba(252,211,77,0.4)',
           fontSize: 11,

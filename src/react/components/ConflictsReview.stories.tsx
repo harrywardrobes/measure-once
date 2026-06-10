@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import { useState } from 'react';
 import ConflictsReview from './ConflictsReview';
 import type { ConflictEntry } from '../lib/offlineQueue';
+import { BRAND_COLORS } from '../theme';
 
 const now = Date.now();
 
@@ -105,7 +106,7 @@ type Story = StoryObj<typeof ConflictsReview>;
 function Interactive({ open }: { open?: boolean }) {
   const [conflicts, setConflicts] = useState<ConflictEntry[]>(SAMPLE);
   return (
-    <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+    <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
       <ConflictsReview
         conflicts={conflicts}
         defaultOpen={open}
@@ -140,7 +141,7 @@ export const ReconflictOnRestore: Story = {
     function Reconflict() {
       const [conflicts] = useState<ConflictEntry[]>([SAMPLE[0]]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -163,7 +164,7 @@ export const SingleConflict: Story = {
     function One() {
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([SAMPLE[0]]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -224,7 +225,7 @@ export const BulkFieldShortcuts: Story = {
     function Bulk() {
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([multiFieldConflict]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -255,7 +256,7 @@ export const BulkRoomShortcuts: Story = {
     function Bulk() {
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([SAMPLE[0]]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -332,7 +333,7 @@ export const ServerAddedRoom: Story = {
       };
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([serverAddedConflict]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -380,7 +381,7 @@ export const LeadStatusRemoved: Story = {
         },
       ]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -430,7 +431,7 @@ export const ArrangeVisitLeadStatusRemoved: Story = {
         },
       ]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen
@@ -487,7 +488,7 @@ export const RemovedRoom: Story = {
       };
       const [conflicts, setConflicts] = useState<ConflictEntry[]>([removedRoomConflict]);
       return (
-        <Box sx={{ p: 4, bgcolor: '#200842', borderRadius: 2 }}>
+        <Box sx={{ p: 4, bgcolor: BRAND_COLORS.plum, borderRadius: 2 }}>
           <ConflictsReview
             conflicts={conflicts}
             defaultOpen

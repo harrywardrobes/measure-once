@@ -1217,7 +1217,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
             height: 28,
             px: 1,
             borderRadius: '8px',
-            color: '#fdba74',
+            color: '#fdba74', // hex-color-ok: conflict-warning orange; no STATUS_COLORS token maps to this amber shade
             bgcolor: 'rgba(249,115,22,0.16)',
             border: '1px solid rgba(253,186,116,0.4)',
             fontSize: 11,
@@ -1263,7 +1263,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
                 bgcolor: 'rgba(249,115,22,0.12)',
               }}
             >
-              <Typography variant="body2" sx={{ color: '#fdba74', fontWeight: 600 }}>
+              <Typography variant="body2" sx={{ color: '#fdba74', fontWeight: 600 }}> {/* hex-color-ok: conflict-warning orange; matches pill colour above */}
                 The server copy changed again before your restore could be applied. Nothing was
                 overwritten — please review the refreshed conflict below.
               </Typography>

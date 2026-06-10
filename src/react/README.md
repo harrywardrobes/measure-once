@@ -127,6 +127,50 @@ For repeated styles, reach for `styled()` from `@mui/material/styles`.
 Avoid hand-rolled `#hex` values inside React components — let the theme
 provide them so a later theme refresh propagates automatically.
 
+## No hardcoded hex colours in components
+
+A CI check (`npm run test:component-hex-colors`) scans every non-story,
+non-test `.ts`/`.tsx` file under `src/react/` and fails if it finds a
+raw hex colour literal (e.g. `#f59e0b`) on the same line as a
+style-related property name (`color`, `bgcolor`, `background`,
+`backgroundColor`, `borderColor`, `fill`, `stroke`, …).
+
+**Do this instead:**
+
+| Need | Use |
+|------|-----|
+| Brand palette colour | `PALETTE` / `STAGE_COLORS` / `STATUS_COLORS` from `theme.ts`, e.g. `color: PALETTE.orchid` |
+| MUI semantic colour | MUI token string, e.g. `color: 'text.secondary'`, `bgcolor: 'background.paper'` |
+| CSS custom property | `var(--plum)`, `var(--brand-accent)`, etc. |
+| Tailwind-origin value | Import the constant from `theme.ts` rather than repeating the literal |
+
+**When a hardcoded hex is genuinely necessary** (third-party brand colour,
+inline SVG `fill` attribute, CSS variable fallback, status colour validated
+by a `getComputedStyle` test), add a trailing suppression comment on the
+hex-value line:
+
+```tsx
+// same-line form (most common):
+color: '#fdba74', // hex-color-ok: conflict-warning orange; no STATUS_COLORS token covers this shade
+
+// block-comment form (required when // is not valid JSX attribute syntax):
+<span style={{ color: 'var(--neutral-500, #737373)' }}> {/* hex-color-ok: fallback for CSS custom property */}
+```
+
+The suppression comment must include a brief reason after the colon.
+It silences the check for that line only — keep reasons specific so they
+serve as a reviewer checklist.
+
+**Reviewer checklist for new hex values:**
+1. Can the colour come from a `theme.ts` export (`PALETTE`, `STAGE_COLORS`,
+   `STATUS_COLORS`, `VISIT_TYPE_COLORS`, `BRAND_COLORS`)?
+2. Can an MUI token string (`'primary.main'`, `'error.light'`, etc.) or
+   a CSS custom property (`var(--plum)`) serve instead?
+3. If neither applies, is the value tested by a `getComputedStyle` assertion
+   in a paired `*.test.tsx` file, so drift will be caught immediately?
+4. If all three answers are "no", add a `// hex-color-ok: <reason>` comment
+   **and** consider adding the colour to `theme.ts` for future reuse.
+
 ## Privilege gating
 
 React components gate on `privilege_level` from the user object via the

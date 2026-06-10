@@ -76,6 +76,8 @@ const SRC_DIR = join(ROOT, 'src', 'react');
 /**
  * Recursively collect every *.ts / *.tsx file under a directory, excluding:
  *   - *.stories.* (covered by check-story-hex-colors.mjs)
+ *   - *.test.ts / *.test.tsx (test files legitimately name expected hex values
+ *     in `it()` description strings and are not production component code)
  *   - *.d.ts (generated type declarations)
  *   - theme.ts (canonical token source — defines the brand hex literals)
  * @param {string} dir
@@ -92,6 +94,7 @@ function findComponentFiles(dir) {
       if (
         (n.endsWith('.ts') || n.endsWith('.tsx')) &&
         !n.includes('.stories.') &&
+        !n.includes('.test.') &&
         !n.endsWith('.d.ts') &&
         n !== 'theme.ts'
       ) {

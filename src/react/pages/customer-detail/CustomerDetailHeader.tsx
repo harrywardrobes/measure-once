@@ -161,7 +161,7 @@ export function CustomerDetailHeader({
                         style={{
                           fontSize: '0.65rem', fontWeight: 600, lineHeight: 1,
                           padding: '2px 5px', borderRadius: 4,
-                          background: '#e8f5e9', color: '#2e7d32',
+                          background: '#e8f5e9', color: '#2e7d32', // hex-color-ok: WhatsApp badge green; brand-adjacent colour not in STATUS_COLORS
                           letterSpacing: '0.02em', flexShrink: 0,
                         }}
                       >

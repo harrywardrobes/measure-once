@@ -184,7 +184,7 @@ function HandlerBadges({
         )}
       </span>
       {summaries.length > 0 && (
-        <span style={{ fontSize: '.68rem', color: 'var(--neutral-500, #737373)', fontStyle: 'italic', lineHeight: 1.4 }}>
+        <span style={{ fontSize: '.68rem', color: 'var(--neutral-500)', fontStyle: 'italic', lineHeight: 1.4 }}>
           {summaries.map(s => s.steps).join(' · ')}
         </span>
       )}

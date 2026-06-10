@@ -243,7 +243,7 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
               <button
                 className="btn btn-ghost"
                 disabled
-                style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--neutral-300, #d1d5db)', pointerEvents: 'none' }}
+                style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--neutral-300)', pointerEvents: 'none' }}
               >✕</button>
             </span>
           </Tooltip>
@@ -252,7 +252,7 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
             className="btn btn-ghost"
             title={`Delete ${status.key}`}
             onClick={() => onDelete(status.key)}
-            style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--error-600, #dc2626)' }}
+            style={{ fontSize: '.75rem', padding: '0 6px', color: 'var(--error-600)' }}
           >✕</button>
         )}
       </td>
