@@ -617,6 +617,10 @@ async function main() {
   //   NEG-26  POST with stage_key='__global__' and non-empty status_key → 400
   //   NEG-27  PATCH with stage_key='__global__' and status_key='' → 200 (accepted)
   //   NEG-28  PATCH with stage_key='__global__' and non-empty status_key → 400
+  //
+  // Label PUT __global__ binding probes:
+  //   NEG-29  PUT /api/admin/stage-action-labels with stage_key='__global__' and status_key='' → 200 (accepted)
+  //   NEG-30  PUT /api/admin/stage-action-labels with stage_key='__global__' and non-empty status_key → 400
 
   console.log('\n  [NEG] Negative-path validation probes');
 
@@ -1105,6 +1109,38 @@ async function main() {
         false,
       );
     }
+  }
+
+  // NEG-29: PUT /api/admin/stage-action-labels with stage_key='__global__' and
+  // status_key='' — must be accepted (200).  Mirrors the handler-binding
+  // happy-path guard (NEG-25/NEG-27) for the label PUT endpoint.
+  {
+    const r = await adminClient.put('/api/admin/stage-action-labels', {
+      stage_key: '__global__',
+      status_key: '',
+      label: 'neg29-test-label',
+    });
+    const ok = r.status === 200 && r.json?.stage_key === '__global__';
+    record(
+      'NEG-29: PUT label with __global__ stage_key and empty status_key accepted',
+      'status=200 with stage_key=__global__',
+      `status=${r.status} stage_key=${JSON.stringify(r.json?.stage_key)}`,
+      ok,
+      ok ? '' : JSON.stringify(r.json),
+    );
+  }
+
+  // NEG-30: PUT /api/admin/stage-action-labels with stage_key='__global__' and
+  // a non-empty status_key — must be rejected with 400.  Confirms the label
+  // PUT endpoint mirrors the guard in _validateHandlerBinding, mirroring
+  // NEG-26/NEG-28 for POST/PATCH.
+  {
+    const r = await adminClient.put('/api/admin/stage-action-labels', {
+      stage_key: '__global__',
+      status_key: 'some_status',
+      label: 'neg30-test-label',
+    });
+    assertBadRequest('NEG-30: PUT label with __global__ stage_key and non-empty status_key rejected', r, '__global__');
   }
 
   // ── (PRIV) Member-privilege probes ────────────────────────────────────────
@@ -4791,7 +4827,7 @@ async function writeReport(runId, findings) {
     '  - PRIV-01: member POST `/api/admin/card-action-handlers` → 403.',
     '  - PRIV-02: member PATCH `/api/admin/card-action-handlers/:id` → 403.',
     '  - PRIV-03: member DELETE `/api/admin/card-action-handlers/:id` → 403.',
-    '- **(NEG) Negative-path validation probes** — 28 pure-REST probes that',
+    '- **(NEG) Negative-path validation probes** — 30 pure-REST probes that',
     '  POST or PATCH `/api/admin/card-action-handlers` with each known-bad',
     '  payload and assert the server returns 400 with a descriptive error:',
     '  - NEG-01/02/03: `defaultDurationMin` below 5, above 1440, non-numeric.',
@@ -4818,6 +4854,8 @@ async function writeReport(runId, findings) {
     '  - NEG-26: POST with `stage_key=__global__` and non-empty `status_key` → 400.',
     '  - NEG-27: PATCH with `stage_key=__global__` and empty `status_key` → 200 (accepted).',
     '  - NEG-28: PATCH with `stage_key=__global__` and non-empty `status_key` → 400.',
+    '  - NEG-29: PUT `stage-action-labels` with `stage_key=__global__` and empty `status_key` → 200 (accepted).',
+    '  - NEG-30: PUT `stage-action-labels` with `stage_key=__global__` and non-empty `status_key` → 400.',
     '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
     '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',
