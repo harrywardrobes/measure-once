@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
 
 import {
   Alert,
@@ -42,6 +42,20 @@ import {
   type MalformedReasonText,
   type TokenHighlightFieldHandle,
 } from '../../components/TokenHighlightField';
+
+function navigateToWorkflow(handlerType: string) {
+  try { localStorage.setItem(ADMIN_DEEP_LINK_KEY, handlerType); } catch { /* ignore */ }
+  const W = window as unknown as Record<string, unknown>;
+  if (typeof W.adminSwitchToTab === 'function') {
+    (W.adminSwitchToTab as (id: string) => void)('workflow');
+  } else {
+    try {
+      localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+      localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'workflow');
+    } catch { /* ignore */ }
+    location.href = '/admin';
+  }
+}
 
 /** Body text colour for the iframe email preview. Not a React style prop — lives inside a raw HTML string. */
 const IFRAME_BODY_COLOR = '#111';
@@ -728,18 +742,22 @@ export default function EmailTemplatesPage() {
                       {usedByHandlers.length > 0 && (
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
                           {usedByHandlers.map(h => (
-                            <Chip
-                              key={h.type}
-                              label={h.label}
-                              size="small"
-                              sx={{
-                                fontSize: '0.7rem',
-                                height: 20,
-                                bgcolor: 'rgba(124,58,237,0.08)',
-                                color: 'rgb(109,40,217)',
-                                '.MuiChip-label': { px: 0.75 },
-                              }}
-                            />
+                            <Tooltip key={h.type} title="View in Workflow tab" arrow>
+                              <Chip
+                                label={h.label}
+                                size="small"
+                                clickable
+                                onClick={() => navigateToWorkflow(h.type)}
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  height: 20,
+                                  bgcolor: 'rgba(124,58,237,0.08)',
+                                  color: 'rgb(109,40,217)',
+                                  '&:hover': { bgcolor: 'rgba(124,58,237,0.15)' },
+                                  '.MuiChip-label': { px: 0.75 },
+                                }}
+                              />
+                            </Tooltip>
                           ))}
                         </Box>
                       )}

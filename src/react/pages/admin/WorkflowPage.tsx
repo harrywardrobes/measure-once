@@ -580,7 +580,7 @@ function StatusRow({
           </Box>
           {hasHandler ? (
             statusHandlers.map(h => (
-              <Box key={h.id} sx={{ mb: 0.4 }}>
+              <Box key={h.id} sx={{ mb: 0.4 }} data-handler-type={h.type}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
                   <Chip
                     icon={<BoltIcon sx={{ fontSize: 12 }} />}
@@ -722,6 +722,7 @@ function StageAccordionNew({
   searchText,
   flashedSlots,
   accordionRef,
+  forcedOpen,
 }: {
   stageKey: string;
   stageLabel: string;
@@ -732,7 +733,13 @@ function StageAccordionNew({
   searchText: string;
   flashedSlots: Set<string>;
   accordionRef?: React.RefObject<HTMLDivElement>;
+  forcedOpen?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (forcedOpen) setExpanded(true);
+  }, [forcedOpen]);
+
   const labelMap = useMemo(() => buildStageActionLabelMap(labels), [labels]);
 
   const stageStatuses = useMemo(() => {
@@ -771,7 +778,8 @@ function StageAccordionNew({
   return (
     <Box ref={accordionRef} id={`stage-accordion-${stageKey}`}>
       <Accordion
-        defaultExpanded={false}
+        expanded={expanded}
+        onChange={(_, isExpanded) => setExpanded(isExpanded)}
         disableGutters
         variant="outlined"
         sx={{
@@ -851,8 +859,9 @@ export function WorkflowPage() {
   const [refreshing,     setRefreshing]     = useState(false);
   const [lastRefreshed,  setLastRefreshed]  = useState<Date | null>(null);
   const [error,          setError]          = useState<string | null>(null);
-  const [searchText,     setSearchText]     = useState('');
-  const [flashedSlots,   setFlashedSlots]   = useState<Set<string>>(new Set());
+  const [searchText,       setSearchText]       = useState('');
+  const [flashedSlots,     setFlashedSlots]     = useState<Set<string>>(new Set());
+  const [forcedOpenStages, setForcedOpenStages] = useState<Set<string>>(new Set());
 
   const isFirstLoad          = useRef(true);
   const prevSnapshotRef      = useRef<Record<string, number>>({});
@@ -985,6 +994,43 @@ export function WorkflowPage() {
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
     };
   }, []);
+
+  // ── Deep-link: open stage accordion + scroll/flash the matching handler ─────
+  useEffect(() => {
+    if (loading) return;
+    try {
+      const raw = localStorage.getItem(ADMIN_DEEP_LINK_KEY);
+      if (!raw) return;
+      const matched = handlers.filter(h => h.type === raw && isNonDefaultHandler(h));
+      if (matched.length === 0) return;
+      localStorage.removeItem(ADMIN_DEEP_LINK_KEY);
+
+      const stagesToOpen = new Set<string>();
+      const slotsToFlash = new Set<string>();
+      for (const h of matched) {
+        for (const b of h.bindings ?? []) {
+          if (b.stage_key && b.status_key && b.substatus_id == null) {
+            stagesToOpen.add(b.stage_key.toLowerCase());
+            slotsToFlash.add(`${b.stage_key.toLowerCase()}|${b.status_key.toLowerCase()}`);
+          }
+        }
+      }
+      if (stagesToOpen.size === 0) return;
+      setForcedOpenStages(stagesToOpen);
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      setFlashedSlots(slotsToFlash);
+      setTimeout(() => {
+        try {
+          const el = document.querySelector<HTMLElement>(`[data-handler-type="${CSS.escape(raw)}"]`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch { /* ignore */ }
+      }, 350);
+      flashTimerRef.current = setTimeout(() => {
+        setFlashedSlots(new Set());
+        setForcedOpenStages(new Set());
+      }, 2200);
+    } catch { /* ignore */ }
+  }, [loading, handlers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formattedTime = lastRefreshed
     ? lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -1122,6 +1168,7 @@ export function WorkflowPage() {
                     searchText={searchText}
                     flashedSlots={flashedSlots}
                     accordionRef={getAccordionRef(stage.key)}
+                    forcedOpen={forcedOpenStages.has(stage.key.toLowerCase())}
                   />
                 ))}
               </Stack>
