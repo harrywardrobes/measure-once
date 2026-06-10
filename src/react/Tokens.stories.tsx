@@ -5,7 +5,7 @@ import Chip from '@mui/material/Chip';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
-import { BRAND_COLORS, STAGE_COLORS, RADIUS, TRADE_TYPE_COLORS } from './theme';
+import { BRAND_COLORS, STAGE_COLORS, RADIUS, TRADE_TYPE_COLORS, CALENDAR_EVENT_COLORS } from './theme';
 
 const meta: Meta = {
   title: 'Foundations/Tokens',
@@ -202,6 +202,34 @@ export const TradeTypeColours: Story = {
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block', fontSize: 10 }}>
                 {`TRADE_TYPE_COLORS['${name}']`}
+              </Typography>
+            </Box>
+          </Paper>
+        ))}
+      </SwatchGrid>
+    </Section>
+  ),
+};
+
+export const CalendarEventColours: Story = {
+  name: 'Calendar Event Colours',
+  render: () => (
+    <Section title="Calendar Event Colours">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        One colour per calendar event type, sourced from <code>CALENDAR_EVENT_COLORS</code> in{' '}
+        <code>theme.ts</code>. Used on calendar event chips throughout the app.
+      </Typography>
+      <SwatchGrid>
+        {Object.entries(CALENDAR_EVENT_COLORS).map(([key, { label, color }]) => (
+          <Paper key={key} variant="outlined" sx={{ overflow: 'hidden' }}>
+            <Box sx={{ height: 64, bgcolor: color, borderBottom: '1px solid', borderColor: 'divider' }} />
+            <Box sx={{ p: 1.25 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{label}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block' }}>
+                {color.toUpperCase()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.disabled', fontFamily: (theme) => theme.typography.monoFontFamily, display: 'block', fontSize: 10 }}>
+                {`CALENDAR_EVENT_COLORS['${key}'].color`}
               </Typography>
             </Box>
           </Paper>
