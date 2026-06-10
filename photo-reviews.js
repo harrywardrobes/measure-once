@@ -151,11 +151,6 @@ async function ensurePhotoReviewOutcomesTable() {
 }
 
 // ── HubSpot helpers ───────────────────────────────────────────────────────────
-async function updateHubSpotLeadStatus(contactId, status) {
-  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: getHubSpotHeaders() });
-}
-
 async function clearHubSpotSubstatus(contactId) {
   const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
   await axios.patch(url, { properties: { hw_lead_substatus: '' } }, { headers: getHubSpotHeaders() });

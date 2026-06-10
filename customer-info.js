@@ -322,11 +322,6 @@ async function fetchContactFromHubSpot(contactId) {
   return r.data;
 }
 
-async function updateHubSpotLeadStatus(contactId, status) {
-  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hs_lead_status: status } }, { headers: getHubSpotHeaders() });
-}
-
 async function ensureSubstatusExists(substatusKey, label, parentStatusKey) {
   // Check if sub-status exists in the local DB — schema: status_key + substatus_key are the unique pair
   const exists = await pool.query(
