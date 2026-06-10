@@ -1038,31 +1038,72 @@ export function ProjectsPage() {
     return () => { cancelled = true; };
   }, [contacts]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Shared helper: re-fetch urgency for a given list of contact IDs and merge
+  // into the map.  Pass null/undefined to re-fetch all contacts already present
+  // in urgencyMap (used by visibilitychange and the urgency_changed channel).
+  const refetchUrgencyForIds = useCallback(async (ids: string[] | null) => {
+    const targetIds = ids ?? Object.keys(urgencyMap);
+    if (!targetIds.length) return;
+    try {
+      const res = await fetch('/api/contacts/urgency', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: targetIds }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+      const urgencyById = data.urgency || {};
+      setUrgencyMap((prev) => {
+        const next = { ...prev };
+        for (const id of targetIds) {
+          next[id] = id in urgencyById ? urgencyById[id] : null;
+        }
+        return next;
+      });
+    } catch {
+      /* best-effort — stale data is fine on failure */
+    }
+  }, [urgencyMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // After the Contact Customer modal closes, re-fetch urgency for just that
   // contact so the board card's dot updates without a full reload.
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
     const bc = new BroadcastChannel('contact_attempt_logged');
-    bc.onmessage = async (evt: MessageEvent<{ contactId?: string }>) => {
+    bc.onmessage = (evt: MessageEvent<{ contactId?: string }>) => {
       const contactId = evt.data?.contactId;
-      if (!contactId) return;
-      try {
-        const res = await fetch('/api/contacts/urgency', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: [contactId] }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { urgency?: Record<string, Urgency> };
-        const urgencyById = data.urgency || {};
-        setUrgencyMap((prev) => ({ ...prev, [contactId]: urgencyById[contactId] ?? null }));
-      } catch {
-        /* best-effort — stale data is fine on failure */
-      }
+      if (contactId) refetchUrgencyForIds([contactId]);
     };
     return () => bc.close();
-  }, []);
+  }, [refetchUrgencyForIds]);
+
+  // Re-fetch urgency for all visible contacts when:
+  //   (a) the tab regains focus (covers task completions done in another tab), or
+  //   (b) a cross-tab `urgency_changed` message fires (explicit broadcast from
+  //       any flow that modifies HubSpot tasks without going through the Contact
+  //       Customer modal — e.g. CustomerDetailPage task actions).
+  //       Payload may include { contactId } to target a single contact.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refetchUrgencyForIds(null);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel('urgency_changed');
+      bc.onmessage = (evt: MessageEvent<{ contactId?: string }>) => {
+        const contactId = evt.data?.contactId;
+        refetchUrgencyForIds(contactId ? [contactId] : null);
+      };
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      bc?.close();
+    };
+  }, [refetchUrgencyForIds]);
 
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
 
