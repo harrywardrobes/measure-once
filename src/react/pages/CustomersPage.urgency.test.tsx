@@ -84,7 +84,6 @@ function UrgencyRefreshHarness({
 
   React.useEffect(() => {
     return subscribeContactAttemptLogged(async ({ contactId }) => {
-      if (!contactId) return;
       try {
         const res = await fetch('/api/contacts/urgency', {
           method: 'POST',

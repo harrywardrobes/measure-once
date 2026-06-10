@@ -37,7 +37,11 @@ export function subscribeContactAttemptLogged(
   let ch: BroadcastChannel | null = null;
   try {
     ch = new BroadcastChannel(CONTACT_ATTEMPT_CHANNEL);
-    ch.onmessage = (evt: MessageEvent<ContactAttemptMessage>) => handler(evt.data);
+    ch.onmessage = (evt: MessageEvent<ContactAttemptMessage>) => {
+      const msg = evt.data;
+      if (!msg || typeof msg.contactId !== 'string' || msg.contactId === '') return;
+      handler(msg);
+    };
   } catch { /* BroadcastChannel unavailable */ }
   return () => { try { ch?.close(); } catch { /* noop */ } };
 }

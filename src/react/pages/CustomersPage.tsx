@@ -1195,7 +1195,6 @@ export function CustomersPage(): React.ReactElement {
   // row without a full page reload.
   React.useEffect(() => {
     return subscribeContactAttemptLogged(async ({ contactId }) => {
-      if (!contactId) return;
       try {
         const res = await fetch('/api/contacts/urgency', {
           method: 'POST',
