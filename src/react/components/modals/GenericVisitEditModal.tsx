@@ -17,8 +17,10 @@ import type { DateRange } from '@mui/x-date-pickers-pro/models';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { PATCH, POST, isGoogleAuthError } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -93,8 +95,6 @@ export function GenericVisitEditModal(props: Props) {
   );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
-
   const hasUnsavedChanges = (() => {
     const [rs, re] = range;
     return (
@@ -112,14 +112,8 @@ export function GenericVisitEditModal(props: Props) {
     props.onClose();
   }
 
-  function handleRequestClose() {
-    if (submitting) return;
-    if (hasUnsavedChanges) {
-      setConfirmDiscardOpen(true);
-    } else {
-      handleClose();
-    }
-  }
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, setConfirmOpen: setConfirmDiscardOpen } =
+    useDiscardGuard(hasUnsavedChanges, handleClose, submitting);
 
   async function handleSubmit() {
     setError('');
@@ -329,16 +323,11 @@ export function GenericVisitEditModal(props: Props) {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={confirmDiscardOpen} onClose={() => setConfirmDiscardOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Discard changes?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">You have unsaved changes — are you sure you want to discard them?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDiscardOpen(false)}>Keep editing</Button>
-          <Button color="error" onClick={handleClose}>Discard changes</Button>
-        </DialogActions>
-      </Dialog>
+      <DiscardConfirmDialog
+        open={confirmDiscardOpen}
+        onKeepEditing={() => setConfirmDiscardOpen(false)}
+        onDiscard={handleClose}
+      />
     </LocalizationProvider>
   );
 }
