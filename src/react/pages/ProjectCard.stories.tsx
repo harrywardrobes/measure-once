@@ -4,6 +4,8 @@ import { Box, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CircularProgress from '@mui/material/CircularProgress';
 import { BRAND_COLORS, STAGE_COLORS, STATUS_COLORS } from '../theme';
+import { UrgencyDot } from '../components/UrgencyDot';
+import type { Urgency } from '../components/UrgencyDot';
 
 const meta: Meta = {
   title: 'Features/Pages/ProjectCard',
@@ -41,6 +43,7 @@ interface DemoCardProps {
   photosReceived?: boolean;
   /** When true, the strip is label-only (no handler) — non-interactive, no chevron. */
   labelOnly?: boolean;
+  urgency?: Urgency;
 }
 
 function DemoProjectCard({
@@ -54,6 +57,7 @@ function DemoProjectCard({
   continuingDesign = false,
   photosReceived = false,
   labelOnly = false,
+  urgency = null,
 }: DemoCardProps) {
   const stageColors = STAGE_COLORS[actionStageKey || rooms[0]?.stageKey || ''];
   const actionTint = stageColors?.light || STATUS_COLORS.neutral.bg;
@@ -73,7 +77,8 @@ function DemoProjectCard({
     >
       {/* Card header */}
       <Box sx={{ p: '12px 14px 10px', borderBottom: `1px solid ${BRAND_COLORS.stone}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <UrgencyDot urgency={urgency} />
           <Typography
             sx={{
               fontSize: '0.975rem',
@@ -416,6 +421,74 @@ export const PhotosReceived: Story = {
         photosReceived
         actionLabel="Book Survey"
         actionStageKey="sales"
+      />
+    </Box>
+  ),
+};
+
+export const UrgencyDotRed: Story = {
+  name: 'Urgency dot — red (task due within 1 working day)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A red urgency dot appears before the contact name when the contact has a HubSpot task due within 1 working day. Populated from `/api/contacts/urgency`.',
+      },
+    },
+  },
+  render: () => (
+    <DemoProjectCard
+      name="Rachel Green"
+      contactId="91111"
+      rooms={[{ roomLabel: 'Kitchen', stageKey: 'sales' }]}
+      urgency="red"
+    />
+  ),
+};
+
+export const UrgencyDotOrange: Story = {
+  name: 'Urgency dot — orange (task due within 2 working days)',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'An orange urgency dot appears before the contact name when the contact has a HubSpot task due within 2 working days.',
+      },
+    },
+  },
+  render: () => (
+    <DemoProjectCard
+      name="Ross Geller"
+      contactId="92222"
+      rooms={[{ roomLabel: 'Living Room', stageKey: 'designvisit' }]}
+      urgency="orange"
+      actionLabel="Book Design Visit"
+      actionStageKey="designvisit"
+    />
+  ),
+};
+
+export const UrgencyDotAllVariants: Story = {
+  name: 'Urgency dots — all variants side by side',
+  render: () => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <DemoProjectCard
+        name="No urgency (null)"
+        contactId="90001"
+        rooms={[{ roomLabel: 'Kitchen', stageKey: 'order' }]}
+        urgency={null}
+      />
+      <DemoProjectCard
+        name="Orange — due in 2 days"
+        contactId="90002"
+        rooms={[{ roomLabel: 'Kitchen', stageKey: 'sales' }]}
+        urgency="orange"
+      />
+      <DemoProjectCard
+        name="Red — due today or tomorrow"
+        contactId="90003"
+        rooms={[{ roomLabel: 'Kitchen', stageKey: 'sales' }]}
+        urgency="red"
       />
     </Box>
   ),

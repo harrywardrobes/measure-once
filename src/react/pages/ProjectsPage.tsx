@@ -54,6 +54,8 @@ import type {
   ProjectWorkflowDef,
 } from '../hooks/useProjectsData';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { UrgencyDot } from '../components/UrgencyDot';
+import type { Urgency } from '../components/UrgencyDot';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -455,6 +457,7 @@ function ProjectCard({
   canEdit,
   workflow,
   qb,
+  urgency,
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
@@ -470,6 +473,7 @@ function ProjectCard({
   canEdit: boolean;
   workflow: ProjectWorkflowDef | undefined;
   qb?: QBState;
+  urgency: Urgency;
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
@@ -567,6 +571,7 @@ function ProjectCard({
       {/* Card header */}
       <Box sx={{ p: '12px 14px 10px', borderBottom: `1px solid ${BRAND_COLORS.stone}` }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+          <UrgencyDot urgency={urgency} />
           <Typography
             sx={{
               fontSize: '0.975rem',
@@ -998,6 +1003,42 @@ export function ProjectsPage() {
   const qb = useQBInvoices();
   useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Urgency map ───────────────────────────────────────────────────────────
+  const [urgencyMap, setUrgencyMap] = useState<Record<string, Urgency>>({});
+
+  useEffect(() => {
+    if (!contacts.length) return;
+    let cancelled = false;
+    const ids = contacts.map((c) => c.id).filter((id) => !(id in urgencyMap));
+    if (!ids.length) return;
+    (async () => {
+      let urgencyById: Record<string, Urgency> = {};
+      try {
+        const res = await fetch('/api/contacts/urgency', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+          urgencyById = data.urgency || {};
+        }
+      } catch {
+        /* fall through; ids marked null below */
+      }
+      if (cancelled) return;
+      setUrgencyMap((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          next[id] = id in urgencyById ? urgencyById[id] : null;
+        }
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [contacts]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
 
   // ── Apply prefs once they have loaded ──────────────────────────────────────
@@ -1249,6 +1290,7 @@ export function ProjectsPage() {
                     canEdit={canAssign}
                     workflow={workflow}
                     qb={qb}
+                    urgency={urgencyMap[contact.id] ?? null}
                     cardActionHandlerFor={cardActionHandlerFor}
                     resolveActionLabel={resolveActionLabel}
                     draftVisitId={draftVisitIds[contact.id] ?? null}
@@ -1277,6 +1319,7 @@ export function ProjectsPage() {
             canEdit={canAssign}
             workflow={workflow}
             qb={qb}
+            urgency={urgencyMap[contact.id] ?? null}
             cardActionHandlerFor={cardActionHandlerFor}
             resolveActionLabel={resolveActionLabel}
             draftVisitId={draftVisitIds[contact.id] ?? null}
