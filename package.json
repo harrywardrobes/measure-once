@@ -5,9 +5,9 @@
   "main": "server.js",
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome",
-    "db:migrate": "node-pg-migrate up",
-    "db:migrate:down": "node-pg-migrate down",
-    "db:migrate:redo": "node-pg-migrate redo",
+    "db:migrate": "node scripts/run-db-migrate.js up",
+    "db:migrate:down": "node scripts/run-db-migrate.js down 1",
+    "db:migrate:redo": "node scripts/run-db-migrate.js down 1 && node scripts/run-db-migrate.js up",
     "db:migrate:create": "node-pg-migrate create --",
     "prestart": "node scripts/start-prebuild.mjs",
     "start": "node server.js",
