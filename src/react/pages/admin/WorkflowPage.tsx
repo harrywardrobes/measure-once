@@ -50,12 +50,8 @@ interface LeadStatus {
   key: string; label: string; stage: string | null; shorthand: string;
   sort_order: number; excluded_from_sales: boolean; is_null_row: boolean;
 }
-interface Substatus {
-  id: number; status_key: string; substatus_key: string;
-  label: string; action_label: string; sort_order: number;
-}
 interface CALabel { stage_key: string; status_key: string; label: string; }
-interface Binding { stage_key?: string; status_key?: string; substatus_id?: number | null; }
+interface Binding { stage_key?: string; status_key?: string; }
 interface Handler {
   id: number; name: string; type: string;
   config: Record<string, unknown>; bindings: Binding[];
@@ -132,12 +128,10 @@ function handlersForSlot(
   handlers: Handler[],
   stageKey: string,
   statusKey: string,
-  substatusId?: number,
 ): Handler[] {
   return handlers.filter(h => h.bindings?.some(b =>
     (b.stage_key || '').toLowerCase()  === (stageKey  || '').toLowerCase()
-    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase()
-    && (substatusId == null ? b.substatus_id == null : b.substatus_id === substatusId),
+    && (b.status_key || '').toLowerCase() === (statusKey || '').toLowerCase(),
   ));
 }
 
@@ -176,7 +170,6 @@ function buildBindingSnapshot(handlers: Handler[]): Record<string, number> {
   const snap: Record<string, number> = {};
   for (const h of handlers) {
     for (const b of h.bindings ?? []) {
-      if (b.substatus_id != null) continue;
       if (!b.stage_key || !b.status_key) continue;
       const key = `${b.stage_key.toLowerCase()}|${b.status_key.toLowerCase()}`;
       snap[key] = h.id;
@@ -461,155 +454,6 @@ function ModalDetailCard({
   );
 }
 
-// ── SubstatusRow ──────────────────────────────────────────────────────────────
-
-function SubstatusRow({
-  sub,
-  stageKey,
-  lsKey,
-  handlers,
-  emailTemplates,
-  labelMap,
-}: {
-  sub: Substatus;
-  stageKey: string;
-  lsKey: string;
-  handlers: Handler[];
-  emailTemplates: EmailTemplate[];
-  labelMap: Record<string, string | null>;
-}) {
-  const subHandlers      = handlersForSlot(handlers, stageKey, lsKey, sub.id);
-  const nonDefaultSubs   = subHandlers.filter(isNonDefaultHandler);
-  const hasNonDefault    = nonDefaultSubs.length > 0;
-  const resolvedLabel    = hasNonDefault
-    ? (sub.action_label || resolveActionLabel(labelMap, stageKey, lsKey, undefined))
-    : '';
-
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '160px 1fr 160px' },
-        gap: 1,
-        py: 0.75,
-        px: 1.5,
-        borderTop: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'background.default',
-      }}
-    >
-      {/* Sub-status identity */}
-      <Box>
-        <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.75rem', color: 'text.secondary' }}>
-          {sub.label}
-        </Typography>
-        {sub.substatus_key && (
-          <Box
-            component="code"
-            sx={{
-              display: 'block',
-              fontFamily: 'monospace',
-              fontSize: '0.6rem',
-              color: 'text.disabled',
-              mt: 0.15,
-            }}
-          >
-            {sub.substatus_key}
-          </Box>
-        )}
-      </Box>
-
-      {/* Action button preview */}
-      <Box>
-        {hasNonDefault ? (
-          <>
-            <Box sx={{ mb: 0.5 }}>
-              <ActionButtonPreview label={resolvedLabel} stageKey={stageKey} hasHandler />
-            </Box>
-            {nonDefaultSubs.map(h => (
-              <Box key={h.id} sx={{ mb: 0.5 }}>
-                <Chip
-                  icon={<BoltIcon sx={{ fontSize: 11 }} />}
-                  label={handlerDisplayName(h)}
-                  size="small"
-                  clickable
-                  onClick={() => navigateToTab('actionhandlers', h.id)}
-                  sx={{
-                    height: 18,
-                    fontSize: '0.65rem',
-                    fontWeight: 600,
-                    bgcolor: 'rgba(124,58,237,0.1)',
-                    color: 'rgb(109,40,217)',
-                    '&:hover': { bgcolor: 'rgba(124,58,237,0.2)' },
-                    '.MuiChip-icon': { color: 'rgb(109,40,217) !important', fontSize: '10px !important' },
-                    '.MuiChip-label': { px: 0.5 },
-                    mr: 0.5,
-                  }}
-                />
-                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem' }}>
-                  {h.type}
-                </Typography>
-              </Box>
-            ))}
-            {nonDefaultSubs.map(h => (
-              <ModalDetailCard key={h.id} handler={h} emailTemplates={emailTemplates} />
-            ))}
-          </>
-        ) : (
-          <Chip
-            label="Inherits parent"
-            size="small"
-            variant="outlined"
-            sx={{
-              height: 18,
-              fontSize: '0.62rem',
-              color: 'text.disabled',
-              borderColor: 'divider',
-              '.MuiChip-label': { px: 0.5 },
-            }}
-          />
-        )}
-      </Box>
-
-      {/* Abbreviated modal step */}
-      <Box>
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, mb: 0.4 }}>
-          Modal step
-        </Typography>
-        {hasNonDefault ? (
-          nonDefaultSubs.map(h => {
-            const meta = HANDLER_COMPONENT_META[h.type];
-            return (
-              <Box key={h.id} sx={{ mb: 0.4 }}>
-                <Box
-                  component="code"
-                  sx={{
-                    fontFamily: 'monospace',
-                    fontSize: '0.6rem',
-                    color: 'text.secondary',
-                    bgcolor: 'rgba(0,0,0,0.05)',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    borderRadius: 0.5,
-                    px: 0.5,
-                    py: 0.1,
-                    display: 'inline-block',
-                  }}
-                >
-                  {meta?.component ?? h.type}
-                </Box>
-              </Box>
-            );
-          })
-        ) : (
-          <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: '0.65rem' }}>
-            Inherits parent modal
-          </Typography>
-        )}
-      </Box>
-    </Box>
-  );
-}
 
 // ── StatusRow ─────────────────────────────────────────────────────────────────
 
@@ -617,7 +461,6 @@ function StatusRow({
   ls,
   stageKey,
   handlers,
-  substatuses,
   emailTemplates,
   labelMap,
   isFlashing,
@@ -625,21 +468,15 @@ function StatusRow({
   ls: LeadStatus;
   stageKey: string;
   handlers: Handler[];
-  substatuses: Substatus[];
   emailTemplates: EmailTemplate[];
   labelMap: Record<string, string | null>;
   isFlashing: boolean;
 }) {
-  const [subOpen, setSubOpen] = useState(false);
   const lsKey          = String(ls.key || '').toLowerCase();
   const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
   const hasNonDefault  = statusHandlers.some(isNonDefaultHandler);
   const hasHandler     = hasNonDefault;
   const resolvedLabel  = resolveActionLabel(labelMap, stageKey, lsKey, undefined);
-
-  const subs = substatuses
-    .filter(s => String(s.status_key).toUpperCase() === ls.key.toUpperCase())
-    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   const colors = STAGE_COLORS[stageKey];
 
@@ -796,45 +633,6 @@ function StatusRow({
         </Box>
       )}
 
-      {/* Substatus expansion */}
-      {subs.length > 0 && (
-        <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
-          <Button
-            size="small"
-            variant="text"
-            onClick={() => setSubOpen(o => !o)}
-            endIcon={subOpen ? <ExpandLess sx={{ fontSize: 14 }} /> : <ExpandMoreRounded sx={{ fontSize: 14 }} />}
-            sx={{
-              fontSize: '0.68rem',
-              color: 'text.secondary',
-              fontWeight: 600,
-              textTransform: 'none',
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 0,
-              width: '100%',
-              justifyContent: 'flex-start',
-              bgcolor: 'rgba(0,0,0,0.02)',
-              '&:hover': { bgcolor: 'rgba(0,0,0,0.05)' },
-            }}
-          >
-            {subs.length} sub-status{subs.length === 1 ? '' : 'es'}
-          </Button>
-          <Collapse in={subOpen}>
-            {subs.map(sub => (
-              <SubstatusRow
-                key={sub.id}
-                sub={sub}
-                stageKey={stageKey}
-                lsKey={lsKey}
-                handlers={handlers}
-                emailTemplates={emailTemplates}
-                labelMap={labelMap}
-              />
-            ))}
-          </Collapse>
-        </Box>
-      )}
     </Box>
   );
 }
@@ -918,7 +716,6 @@ function StageAccordionNew({
   stageKey,
   stageLabel,
   statuses,
-  substatuses,
   labels,
   handlers,
   emailTemplates,
@@ -929,7 +726,6 @@ function StageAccordionNew({
   stageKey: string;
   stageLabel: string;
   statuses: LeadStatus[];
-  substatuses: Substatus[];
   labels: CALabel[];
   handlers: Handler[];
   emailTemplates: EmailTemplate[];
@@ -1027,7 +823,6 @@ function StageAccordionNew({
                     ls={ls}
                     stageKey={stageKey}
                     handlers={handlers}
-                    substatuses={substatuses}
                     emailTemplates={emailTemplates}
                     labelMap={labelMap}
                     isFlashing={flashedSlots.has(slotKey)}
@@ -1049,7 +844,6 @@ export function WorkflowPage() {
 
   const [labels,         setLabels]         = useState<CALabel[]>([]);
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
-  const [substatuses,    setSubstatuses]    = useState<Substatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
@@ -1080,10 +874,9 @@ export function WorkflowPage() {
     }
     setError(null);
     try {
-      const [lbl, sta, sub, hdl, tpl, wf] = await Promise.all([
+      const [lbl, sta, hdl, tpl, wf] = await Promise.all([
         GET<CALabel[]>('/api/admin/stage-action-labels'),
         GET<LeadStatus[]>('/api/admin/lead-statuses'),
-        GET<Substatus[]>('/api/admin/lead-substatuses'),
         GET<Handler[]>('/api/admin/card-action-handlers'),
         GET<EmailTemplate[]>('/api/admin/email-templates'),
         GET<WorkflowDef | null>('/api/workflow'),
@@ -1116,7 +909,6 @@ export function WorkflowPage() {
 
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
-      setSubstatuses(safeArr(sub));
       setHandlers(newHandlers);
       setEmailTemplates(safeArr(tpl));
 
@@ -1324,7 +1116,6 @@ export function WorkflowPage() {
                     stageKey={stage.key}
                     stageLabel={stage.label}
                     statuses={statuses}
-                    substatuses={substatuses}
                     labels={labels}
                     handlers={handlers}
                     emailTemplates={emailTemplates}
