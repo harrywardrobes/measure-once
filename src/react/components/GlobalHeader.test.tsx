@@ -35,6 +35,22 @@ describe('ServiceStatusBadge colour guards', () => {
     const icon = getByTestId('service-status-icon');
     expect(window.getComputedStyle(icon).color).toBe('rgba(255, 255, 255, 0.5)');
   });
+
+  it('checking status icon border width is exactly 1px', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="checking" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderTopWidth).toBe('1px');
+  });
+
+  it('checking status icon border radius is exactly 8px', () => {
+    const { getByTestId } = render(
+      <ServiceStatusBadge service="hubspot" status="checking" />,
+    );
+    const icon = getByTestId('service-status-icon');
+    expect(window.getComputedStyle(icon).borderRadius).toBe('8px');
+  });
 });
 
 describe('ServiceStatusBadge badge dot colour guards', () => {
