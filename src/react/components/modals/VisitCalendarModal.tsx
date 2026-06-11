@@ -20,7 +20,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface Props {
@@ -193,7 +193,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose, demo }: Props)
         <DemoDialogTitle demo={demo}>{dialogTitle}</DemoDialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
+            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
             <TextField
               id="cah-dv-title"
               label="Title"

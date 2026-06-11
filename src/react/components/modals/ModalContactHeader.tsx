@@ -42,8 +42,7 @@ function PhoneLine({ label, number }: { label: string; number: string }) {
  * shown with a location pin. Renders skeleton placeholders while loading
  * and a warning when no contact methods are present. Always ends with a Divider.
  *
- * This is a drop-in superset of ContactInfoHeader — use this in new modals
- * and refactored modals that need an address line.
+ * Use this in all modals that show a contact header block.
  */
 export function ModalContactHeader({ name, phone, mobile, whatsapp, email, address, loading }: Props) {
   if (loading) {
