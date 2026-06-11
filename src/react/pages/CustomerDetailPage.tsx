@@ -658,6 +658,7 @@ export function CustomerDetailPage() {
           lastAttempt={lastAttempt}
           depositInvoiceId={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_id ?? null}
           depositInvoiceDocNum={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_doc_num ?? null}
+          depositInvoiceLoading={Boolean(designVisits.find(v => v.deposit_invoice_id)) && !qb.loaded}
           depositPaymentState={(() => {
             const dvWithInv = designVisits.find(v => v.deposit_invoice_id);
             if (!dvWithInv || !qb.loaded) return null;

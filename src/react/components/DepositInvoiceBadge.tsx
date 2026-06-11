@@ -1,5 +1,6 @@
 import React from 'react';
 import Box from '@mui/material/Box';
+import Skeleton from '@mui/material/Skeleton';
 import { STATUS_COLORS } from '../theme';
 
 export type DepositPaymentState = 'paid' | 'partial' | 'unpaid' | null;
@@ -8,11 +9,16 @@ export function DepositInvoiceBadge({
   depositInvoiceId,
   depositInvoiceDocNum,
   paymentState,
+  loading,
 }: {
   depositInvoiceId: string;
   depositInvoiceDocNum: string | null;
   paymentState?: DepositPaymentState;
+  loading?: boolean;
 }) {
+  if (loading) {
+    return <Skeleton variant="rounded" width={110} height={20} />;
+  }
   const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();

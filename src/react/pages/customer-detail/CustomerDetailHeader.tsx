@@ -20,6 +20,7 @@ interface Props {
   depositInvoiceId?: string | null;
   depositInvoiceDocNum?: string | null;
   depositPaymentState?: DepositPaymentState;
+  depositInvoiceLoading?: boolean;
 }
 
 export function CustomerDetailHeader({
@@ -34,6 +35,7 @@ export function CustomerDetailHeader({
   depositInvoiceId,
   depositInvoiceDocNum,
   depositPaymentState,
+  depositInvoiceLoading,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -180,6 +182,7 @@ export function CustomerDetailHeader({
                 depositInvoiceId={depositInvoiceId}
                 depositInvoiceDocNum={depositInvoiceDocNum ?? null}
                 paymentState={depositPaymentState}
+                loading={depositInvoiceLoading}
               />
             )}
             {activityCounter && (
