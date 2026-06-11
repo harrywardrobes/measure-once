@@ -20,7 +20,7 @@ const {
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
-const { router: visitsRouter } = require('./visits');
+// visits.js retired — visits table dropped, all visit creation now via Google Calendar
 const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
@@ -410,11 +410,10 @@ app.use(quickbooksRoutes);
 // global /api auth gate.  requireOnboardingComplete already calls next() when
 // req.user is absent, so public/token-gated routes inside these routers are
 // unaffected.
-app.use('/api/visits', requireOnboardingComplete);
 app.use('/api/design-visits', requireOnboardingComplete);
 app.use('/api/customer-info', requireOnboardingComplete);
 app.use('/api/photo-reviews', requireOnboardingComplete);
-app.use(visitsRouter);
+
 app.use(designVisitsRouter);
 app.use(customerInfoRouter);
 app.use(photoReviewsRouter);

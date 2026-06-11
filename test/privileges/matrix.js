@@ -72,7 +72,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/card-action-handlers',      level: 'auth' },
   { method: 'GET',    path: '/api/workflow-stages',           level: 'auth' },
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
-  { method: 'GET',    path: '/api/visits/0',                  level: 'auth' },
+
   { method: 'GET',    path: '/api/contacts-lead-status-counts', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/contacts-substatus-counts?leadStatus=OPEN_DEAL', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/lead-statuses',              level: 'auth' },
@@ -134,7 +134,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'PATCH',  path: '/api/card-actions/contact-customer/0/attempts',                level: 'member', body: { call_attempted: true } },
   { method: 'POST',   path: '/api/card-actions/contact-customer/0/advance-status',          level: 'member', body: { target: 'attempted_to_contact' }, needsHubspot: true },
-  { method: 'PATCH',  path: '/api/visits/0',                  level: 'member',  body: {} },
+
   // Design-visit member-level surface (design-visits.js).
   { method: 'GET',    path: '/api/design-visits',              level: 'member' },
   { method: 'GET',    path: '/api/design-visits/in-progress',  level: 'member' },

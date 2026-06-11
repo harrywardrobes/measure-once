@@ -86,13 +86,6 @@ const whatsappSendLimiter = createUserRateLimiter({
   message: 'WhatsApp send limit reached. Please wait before sending more messages.',
 });
 
-const visitsReadLimiter = createUserRateLimiter({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  prefix: 'visits_read',
-  message: 'Too many visit requests. Please slow down and try again shortly.',
-});
-
 module.exports = {
   createUserRateLimiter,
   getUserRateLimitKey,
@@ -105,5 +98,4 @@ module.exports = {
   tradesCreateLimiter,
   prefsWriteLimiter,
   whatsappSendLimiter,
-  visitsReadLimiter,
 };
