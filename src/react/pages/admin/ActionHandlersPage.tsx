@@ -25,6 +25,7 @@ import {
 import EmailIcon from '@mui/icons-material/Email';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES } from '../../utils/handlerMeta';
+import type { HandlerType } from '../../components/CardActionModalsHost';
 
 import {
   DeliveryWindowConfig,
@@ -867,7 +868,7 @@ async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>
 
 function HandlerBoundTo({ h }: { h: Handler }) {
   const summary = HANDLER_MODAL_SUMMARY[h.type];
-  const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type] ?? [];
+  const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type as HandlerType] ?? [];
   const templateItems = templateKeys
     .map(k => _emailTemplatesRef.current.find(t => t.key === k))
     .filter((t): t is EmailTemplate => t !== undefined);
