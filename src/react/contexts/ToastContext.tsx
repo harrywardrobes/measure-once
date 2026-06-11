@@ -107,13 +107,19 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const w = window as unknown as {
-      toast?: (m: string, e?: boolean) => void;
-      showToast?: (m: string, e?: boolean) => void;
+      toast?: (m: string, e?: boolean | ToastSeverity) => void;
+      showToast?: (m: string, e?: boolean | ToastSeverity) => void;
       __toastProvider?: boolean;
     };
     if (!w.__toastProvider) {
       w.__toastProvider = true;
-      w.toast = (m: string, e?: boolean) => showToastRef.current(m, !!e);
+      w.toast = (m: string, e?: boolean | ToastSeverity) => {
+        if (typeof e === 'string') {
+          showToastRef.current(m, false, { severity: e });
+        } else {
+          showToastRef.current(m, !!e);
+        }
+      };
     }
   }, []);
 
