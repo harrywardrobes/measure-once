@@ -820,38 +820,32 @@ function CustomerCard({
               cursor: 'default',
             }}
           >
-            {lastAttempt.count > 0
-              ? (() => {
-                  const { line1, line2 } = formatActivityRow(lastAttempt, relativeTime(lastAttempt.at));
-                  return (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', wordBreak: 'break-word' }}>
-                      <Typography variant="caption" color="text.secondary" component="span">
-                        {line1}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        component="span"
-                        sx={{ '@media (max-width: 359px)': { display: 'none' } }}
-                      >
-                        &nbsp;·&nbsp;
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        component="span"
-                        sx={{ '@media (max-width: 359px)': { flexBasis: '100%' } }}
-                      >
-                        {line2}
-                      </Typography>
-                    </Box>
-                  );
-                })()
-              : (
-                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                  {`Contacted ${relativeTime(lastAttempt.at)}${lastAttempt.by ? ` · ${lastAttempt.by}` : ''}`}
-                </Typography>
-              )}
+            {(() => {
+                const { line1, line2 } = formatActivityRow(lastAttempt, relativeTime(lastAttempt.at));
+                return (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', wordBreak: 'break-word' }}>
+                    <Typography variant="caption" color="text.secondary" component="span">
+                      {line1}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="span"
+                      sx={{ '@media (max-width: 359px)': { display: 'none' } }}
+                    >
+                      &nbsp;·&nbsp;
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="span"
+                      sx={{ '@media (max-width: 359px)': { flexBasis: '100%' } }}
+                    >
+                      {line2}
+                    </Typography>
+                  </Box>
+                );
+              })()}
           </Box>
         </Tooltip>
       )}
