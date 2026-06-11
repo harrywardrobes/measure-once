@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
+import { cacheRecord, readRecord } from '../lib/offlineDb';
 
 export interface ProjectContact {
   id: string;
@@ -251,6 +252,16 @@ export function useProjectsData(): ProjectsData {
           return patched;
         }),
       );
+      // Persist the patch to the offline cache so the IndexedDB copy is also
+      // up to date if the device goes offline.  Fire-and-forget — a failure
+      // here must never affect the UI.
+      void (async () => {
+        const existing = await readRecord<ProjectContact>('customers', contactId);
+        const merged: ProjectContact = existing
+          ? { ...existing, properties: { ...existing.properties, ...props } }
+          : { id: contactId, properties: props };
+        await cacheRecord('customers', contactId, merged);
+      })();
     });
   }, []);
 
@@ -334,6 +345,15 @@ export function useProjectsData(): ProjectsData {
             : c,
         ),
       );
+      // Persist to the offline cache so a subsequent network drop reflects the
+      // latest values.  Fire-and-forget — failures must never affect the UI.
+      void (async () => {
+        const existing = await readRecord<ProjectContact>('customers', contactId);
+        const merged: ProjectContact = existing
+          ? { ...existing, properties: { ...existing.properties, ...props } }
+          : { id: contactId, properties: props };
+        await cacheRecord('customers', contactId, merged);
+      })();
     },
     [],
   );
