@@ -18,6 +18,7 @@ import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DEMO_SUBMISSION, DEMO_TOOLTIP } from './demoData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -356,6 +357,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
         {/* Body */}
         <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2.5 }}>
+          <ModalContactHeader
+            name={submission?.contactName ?? ctx.contactName}
+            email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
+            loading={step === 'loading'}
+          />
 
           {/* Loading / fetch error */}
           {step === 'loading' && (

@@ -44,7 +44,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 const VISIT_TYPES = [
@@ -329,7 +329,7 @@ export function ScheduleVisitModal({
         <DemoDialogTitle demo={demo}>{modalTitle}</DemoDialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
+            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
 
             {!lockedVisitType && (
               <FormControl size="small" fullWidth>

@@ -13,7 +13,7 @@ import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface FollowUpProps {
@@ -133,7 +133,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose, demo }: Props) 
         </DemoDialogTitle>
         <DialogContent>
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
+            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
             <TextField
               id="cah-pc-summary"
               label="What did you discuss?"

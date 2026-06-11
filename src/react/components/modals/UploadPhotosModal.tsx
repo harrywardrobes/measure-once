@@ -18,7 +18,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useToast } from '../../contexts/ToastContext';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface Props {
@@ -478,7 +478,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       <DemoDialogTitle demo={demo} data-testid="upload-photos-dialog-title">{title}</DemoDialogTitle>
       <DialogContent>
         {phase !== 'sent' && (
-          <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
+          <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
         )}
         {renderContent()}
       </DialogContent>

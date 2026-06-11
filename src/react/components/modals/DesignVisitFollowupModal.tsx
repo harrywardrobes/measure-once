@@ -36,6 +36,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { ModalContactHeader } from './ModalContactHeader';
 import { ScheduleVisitModal } from './ScheduleVisitModal';
 
 type Step = 'loading' | 'hub' | 'schedule' | 'resend' | 'outcome_in_progress' | 'done';
@@ -275,15 +276,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
         <Stack spacing={2}>
           {loadError && <Alert severity="error">{loadError}</Alert>}
           {outcomeError && <Alert severity="error">{outcomeError}</Alert>}
-          {contactInfo && (
-            <Stack spacing={0.5}>
-              <Typography variant="body2"><strong>Name:</strong> {contactInfo.contactName || '—'}</Typography>
-              <Typography variant="body2"><strong>Email:</strong> {contactInfo.contactEmail || '—'}</Typography>
-              {(contactInfo.phone || contactInfo.mobile) && (
-                <Typography variant="body2"><strong>Phone:</strong> {contactInfo.phone || contactInfo.mobile}</Typography>
-              )}
-            </Stack>
-          )}
+          <ModalContactHeader
+            name={contactInfo?.contactName}
+            email={contactInfo?.contactEmail}
+            phone={contactInfo?.phone}
+            mobile={contactInfo?.mobile}
+          />
           <Typography variant="body2" color="text.secondary">
             What happened when you followed up?
           </Typography>

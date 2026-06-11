@@ -26,6 +26,7 @@ import {
   DEMO_STEP1,
   DEMO_ROOMS,
 } from './modals/demoData';
+import { ModalContactHeader } from './modals/ModalContactHeader';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
@@ -608,6 +609,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
       {/* Body */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: '20px 24px' }}>
+        <ModalContactHeader
+          name={contactName}
+          email={contactEmail}
+          loading={catalogueLoading}
+        />
         {showDraftNotice && (
           <Alert
             severity="info"

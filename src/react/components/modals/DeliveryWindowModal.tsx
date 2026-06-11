@@ -21,7 +21,7 @@ import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface CreateProps {
@@ -307,7 +307,7 @@ export function DeliveryWindowModal(props: Props) {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             {isCardAction && (
-              <ContactInfoHeader name={contactName} email={contactEmail} />
+              <ModalContactHeader name={contactName} email={contactEmail} />
             )}
             {isLegacyAppointment && (
               <Alert severity="warning">
