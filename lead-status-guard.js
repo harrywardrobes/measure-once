@@ -2,7 +2,7 @@
 const { Pool } = require('pg');
 const logger = require('./logger');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+let pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 let _cache = null;
 let _cacheAt = 0;
@@ -78,4 +78,26 @@ async function assertLeadStatusKey(key) {
   }
 }
 
-module.exports = { assertLeadStatusKey, invalidateLeadStatusCache };
+/**
+ * Test-only hook — replaces the internal pg pool with an arbitrary object.
+ * This allows tests to inject a broken pool after warming the cache in order
+ * to exercise the stale-cache fallback path (probe C).
+ * Never call this in production code.
+ */
+function _setPool(p) {
+  pool = p;
+}
+
+/**
+ * Test-only hook — ages the cache timestamp to zero so the next call to
+ * _loadKeys() will attempt a DB re-fetch even though _cache is still
+ * populated.  Combined with _setPool(brokenPool) this lets tests exercise
+ * the stale-cache fallback branch of assertLeadStatusKey without waiting
+ * for the 60-second TTL.
+ * Never call this in production code.
+ */
+function _forceStaleForTest() {
+  _cacheAt = 0;
+}
+
+module.exports = { assertLeadStatusKey, invalidateLeadStatusCache, _setPool, _forceStaleForTest };
