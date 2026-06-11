@@ -108,9 +108,6 @@ export function CustomerDetailPage() {
   const [dvLoading,    setDvLoading]    = useState(false);
   const [dvError,      setDvError]      = useState<string | null>(null);
 
-  // deprecated: upcomingVisits/pastVisits/visitsLoading removed — VisitsSections now
-  // fetches calendar events from GET /api/events?contactId=... internally.
-
   const [emails,          setEmails]          = useState<GoogleEmail[]>([]);
   const [emailsLoading,   setEmailsLoading]   = useState(false);
   const [emailsError,     setEmailsError]     = useState<string | null>(null);
@@ -211,11 +208,6 @@ export function CustomerDetailPage() {
     }
   }, [contactId]);
 
-  // deprecated: fetchVisits removed — calendar events are fetched by VisitsSections
-  // using GET /api/events?contactId=... internally.
-  // Kept as a no-op so the conflict-resolved event handler below compiles unchanged.
-  const fetchVisits = useCallback(async () => { /* no-op */ }, []);
-
   const fetchGoogleEmails = useCallback(async (email: string) => {
     if (!email) return;
     setEmailsLoading(true);
@@ -296,7 +288,6 @@ export function CustomerDetailPage() {
 
       apiFetch<{ stages?: Record<string, { label: string }> }>('/api/workflow').then(setWorkflow).catch(() => {});
       fetchDesignVisits();
-      fetchVisits();
       if (c.properties.email) fetchGoogleEmails(c.properties.email);
       fetchWhatsApp();
     } catch (e: unknown) {
@@ -307,7 +298,7 @@ export function CustomerDetailPage() {
       setLoading(false);
     }
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLeadStatuses,
-      fetchVisits, fetchWhatsApp, notifyApiError]);
+      fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat + workflow-core.js interop) ────────────
 
@@ -468,12 +459,12 @@ export function CustomerDetailPage() {
         void fetchContact().then((c) => { if (c) setContact(c); }).catch(() => { /* best-effort */ });
       } else if (detail.area === 'visit') {
         void fetchDesignVisits();
-        void fetchVisits();
+        window.dispatchEvent(new CustomEvent('mo:refresh-visits'));
       }
     };
     window.addEventListener(CONFLICT_RESOLVED_EVENT, handler);
     return () => window.removeEventListener(CONFLICT_RESOLVED_EVENT, handler);
-  }, [contactId, fetchContact, fetchDesignVisits, fetchVisits]);
+  }, [contactId, fetchContact, fetchDesignVisits]);
 
   // ── Lead-status quick-set window bridge ─────────────────────────────────────
   // window.quickSetLeadStatus / window._quickSetLeadStatusWithSub are called by

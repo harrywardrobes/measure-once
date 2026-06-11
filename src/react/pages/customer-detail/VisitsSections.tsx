@@ -241,6 +241,12 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
 
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
 
+  useEffect(() => {
+    const handler = () => { void fetchEvents(); };
+    window.addEventListener('mo:refresh-visits', handler);
+    return () => window.removeEventListener('mo:refresh-visits', handler);
+  }, [fetchEvents]);
+
   return (
     <div id="upcoming-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
@@ -337,6 +343,12 @@ export function PastVisitsSection({ contactId }: Pick<VisitsSectionProps, 'conta
   }, [contactId]);
 
   useEffect(() => { void fetchEvents(); }, [fetchEvents]);
+
+  useEffect(() => {
+    const handler = () => { void fetchEvents(); };
+    window.addEventListener('mo:refresh-visits', handler);
+    return () => window.removeEventListener('mo:refresh-visits', handler);
+  }, [fetchEvents]);
 
   const recent = visits.slice(0, 3);
   const rest   = visits.slice(3);
