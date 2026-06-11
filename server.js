@@ -4914,23 +4914,33 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       const featurePart = hardcoded.featureLabel ? ` Required by: ${hardcoded.featureLabel}.` : '';
       return res.status(409).json({ error: `"${key}" is a pipeline-critical status and cannot be deleted.${featurePart}` });
     }
-    await pool.query(
-      `DELETE FROM card_action_handler_bindings
-        WHERE status_key = LOWER($1) AND status_key <> ''`,
-      [key]
-    );
-    await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
-    await pool.query(`
-      UPDATE lead_status_config lsc
-      SET sort_order = sub.new_order
-      FROM (
-        SELECT key,
-               ROW_NUMBER() OVER (ORDER BY sort_order ASC, key ASC) - 1 AS new_order
-        FROM lead_status_config
-        WHERE is_null_row IS NOT TRUE
-      ) sub
-      WHERE lsc.key = sub.key
-    `);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `DELETE FROM card_action_handler_bindings
+          WHERE status_key = LOWER($1) AND status_key <> ''`,
+        [key]
+      );
+      await client.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+      await client.query(`
+        UPDATE lead_status_config lsc
+        SET sort_order = sub.new_order
+        FROM (
+          SELECT key,
+                 ROW_NUMBER() OVER (ORDER BY sort_order ASC, key ASC) - 1 AS new_order
+          FROM lead_status_config
+          WHERE is_null_row IS NOT TRUE
+        ) sub
+        WHERE lsc.key = sub.key
+      `);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
     invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
