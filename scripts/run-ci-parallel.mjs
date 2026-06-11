@@ -72,6 +72,7 @@ const STATIC_SUITES = [
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:handler-meta',
+  'test:golden-schema',
   'test:conflicts-review-logic',
   'test:lead-status-keys',
   'test:status-key-fields',

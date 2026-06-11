@@ -50,6 +50,7 @@ const STEPS = [
   'test:var-hex-fallbacks',
   'test:no-config-handler-types',
   'test:handler-meta',
+  'test:golden-schema',
   'test:lead-status-keys',
   'test:status-key-fields',
   'test:mui-select-click',

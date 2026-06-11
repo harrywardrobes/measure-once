@@ -149,6 +149,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:workflow-js-no-dups',          'static-lint — binary duplicate function guard'],
   ['test:nav-key-sync',                 'static-lint — binary nav-key allow-list sync check'],
   ['test:no-config-handler-types',      'static-lint — binary contradiction check'],
+  ['test:golden-schema',               'schema-diff — golden-vs-dev DB comparison; pass/fail is the result itself'],
   ['test:status-key-fields',            'static-lint — binary cross-check of handler config props'],
   ['test:bottom-nav-lint',              'static-lint — binary Icon/IconOutlined completeness check'],
   ['test:retired-tokens',               'static-lint — binary retired CSS token scan'],
