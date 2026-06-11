@@ -9,6 +9,9 @@
  *      declared in `variables` or `variableDescriptions` — catching the reverse
  *      case where a placeholder is added to the body text but the variables
  *      list is never updated.
+ *   4. Every entry in `variables` must appear as {{varName}} somewhere in the
+ *      combined subject / body_text / body_html — catching dead/stale metadata
+ *      where a variable is declared but never actually used in the template.
  *
  * This prevents a new template from being added without tooltip guidance for
  * admins who edit it via the email templates admin panel, and ensures no
@@ -197,7 +200,7 @@ for (const { key, text } of sections) {
     }
   }
 
-  // Check 2 (new): every {{placeholder}} used in the template body / subject
+  // Check 2 (existing): every {{placeholder}} used in the template body / subject
   // must be declared in `variables` or `variableDescriptions`.  Catches the
   // reverse case — a placeholder added to body_text/body_html/subject but
   // never registered in the variables list, which would leave it unfilled.
@@ -208,6 +211,20 @@ for (const { key, text } of sections) {
         template: key,
         type: 'undeclared_placeholder',
         message: `Template "${key}": \`{{${p}}}\` is used in the template body/subject but is not declared in \`variables\` or \`variableDescriptions\`.`,
+      });
+    }
+  }
+
+  // Check 3 (new): every entry in `variables` must appear as {{varName}}
+  // somewhere in subject / body_text / body_html.  Catches dead/stale metadata
+  // — a variable listed in `variables` (with a description) but never actually
+  // referenced in the template body, which misleads admins in the editor.
+  for (const v of variables) {
+    if (!bodyPlaceholders.has(v)) {
+      violations.push({
+        template: key,
+        type: 'unused_variable',
+        message: `Template "${key}": variable \`${v}\` is declared in \`variables\` but \`{{${v}}}\` never appears in subject, body_text, or body_html.`,
       });
     }
   }
@@ -222,7 +239,8 @@ console.log(
 if (violations.length === 0) {
   console.log(
     `✓ All ${sections.length} template(s) have complete variableDescriptions.\n` +
-    '  Every variable listed in `variables` has a matching description entry.'
+    '  Every variable listed in `variables` has a matching description entry\n' +
+    '  and is referenced as a {{placeholder}} in the template body/subject.'
   );
   process.exit(0);
 }
@@ -233,7 +251,8 @@ for (const v of violations) {
 }
 
 const hasUndeclared = violations.some(v => v.type === 'undeclared_placeholder');
-const hasMissing    = violations.some(v => v.type !== 'undeclared_placeholder');
+const hasMissing    = violations.some(v => v.type === 'missing_description' || v.type === 'missing_variableDescriptions');
+const hasUnused     = violations.some(v => v.type === 'unused_variable');
 
 if (hasMissing) {
   console.error(
@@ -254,6 +273,19 @@ if (hasUndeclared) {
     '    variableDescriptions: {\n' +
     "      existingVar: 'Description of the existing variable.',\n" +
     "      myNewVar:    'What this new variable contains and when it is present.',\n" +
+    '    },'
+  );
+}
+if (hasUnused) {
+  console.error(
+    '\nFix (unused variable): either add {{varName}} to the template subject,\n' +
+    '  body_text, or body_html in email-templates.js, or remove the variable\n' +
+    '  from the `variables` array and its `variableDescriptions` entry if it is\n' +
+    '  no longer needed.  Example of a stale variable to remove:\n\n' +
+    "    variables: ['activeVar'],          // remove 'staleVar'\n" +
+    '    variableDescriptions: {\n' +
+    "      activeVar: 'Still used in the template body.',\n" +
+    "      // remove staleVar entry\n" +
     '    },'
   );
 }

@@ -254,12 +254,10 @@ const TEMPLATE_DEFS = {
   arrange_visit_no_answer: {
     label: 'Arrange visit — no answer',
     description: 'Sent to a customer when we call to book a visit but get no answer, asking for their availability.',
-    variables: ['firstName', 'visitLabel', 'proposedDate', 'proposedTime', 'proposedDateLine'],
+    variables: ['firstName', 'visitLabel', 'proposedDateLine'],
     variableDescriptions: {
       firstName:        "Customer's first name. Empty if no first name is recorded.",
       visitLabel:       "Type of visit, e.g. 'design visit' or 'survey'.",
-      proposedDate:     "Proposed date as a readable string, e.g. 'Friday 13 June 2026'. Empty if no date was selected.",
-      proposedTime:     "Proposed time as a readable string, e.g. '10:00 AM'. Empty if no time was selected.",
       proposedDateLine: "If a date and time were proposed, renders as a sentence like 'We were thinking Friday 13 June at 10:00 AM — let us know if that works for you.\\n\\n' (includes trailing newlines). Empty if no proposed date/time was selected. Include this in your body so proposed times reach the customer.",
     },
     subject: 'Booking your {{visitLabel}} — getting in touch',
@@ -325,14 +323,12 @@ const TEMPLATE_DEFS = {
   visit_invite: {
     label: 'Visit Invite',
     description: 'Sent to a customer to invite them to propose a time for a design visit.',
-    variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDate', 'proposedTime', 'proposedDateLine'],
+    variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDateLine'],
     variableDescriptions: {
       firstName:        "Customer's first name.",
       visitLabel:       "Type of visit, e.g. 'design visit' or 'survey'.",
       visitDuration:    'Expected duration of the visit in minutes.',
       location:         "Location phrase prepended with a space, e.g. ' at 14 Oak Street'. Empty if no address is set.",
-      proposedDate:     "Proposed date as a readable string, e.g. 'Friday 13 June 2026'. Empty if no date was selected.",
-      proposedTime:     "Proposed time as a readable string, e.g. '10:00 AM'. Empty if no time was selected.",
       proposedDateLine: "If a date and time were proposed, renders as a sentence like 'We were thinking Friday 13 June at 10:00 AM — let us know if that works for you.\\n\\n' (includes trailing newlines). Empty if no proposed date/time was selected. Include this in your body so proposed times reach the customer.",
     },
     subject: 'Your {{visitLabel}} — getting in touch',
