@@ -123,6 +123,7 @@ const STEPS = [
   'test:open-deal:ci',
   'test:invoice-admin-controls:ci',
   'test:invoice-bc-sync:ci',
+  'test:deposit-invoice-followup:ci',
   'test:bottom-nav:ci',
   'test:bottom-nav-default:ci',
   'test:nav-active-tab:ci',
