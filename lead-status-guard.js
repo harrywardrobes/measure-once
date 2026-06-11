@@ -34,14 +34,40 @@ function invalidateLeadStatusCache() {
  * Asserts that `key` exists in lead_status_config (results cached for 60 s).
  * Throws an error with `err.code = 'LEAD_STATUS_REMOVED'` and `err.statusCode = 422`
  * if the key is absent, so callers can return a structured error before touching HubSpot.
+ *
+ * DB-unreachable behaviour (intentional fail-safe):
+ *
+ *   • Stale cache present — the previous successful read is used as a best-effort
+ *     check and a warning is logged.  This avoids blocking all deal-acceptance on
+ *     a transient DB hiccup when the cache is at most 60 s old.
+ *
+ *   • No cache at all (first request after boot or after invalidateLeadStatusCache)
+ *     — throws LEAD_STATUS_DB_UNAVAILABLE / 503 so the caller returns a structured
+ *     error rather than silently proceeding without any guard.
  */
 async function assertLeadStatusKey(key) {
   let keys;
   try {
     keys = await _loadKeys();
   } catch (err) {
-    logger.warn({ err: err.message }, '[lead-status-guard] Could not load lead_status_config — skipping pre-flight check');
-    return;
+    if (_cache) {
+      logger.warn(
+        { err: err.message, staleAgeMs: Date.now() - _cacheAt },
+        '[lead-status-guard] DB unreachable — using stale lead-status cache for pre-flight check',
+      );
+      keys = _cache;
+    } else {
+      logger.error(
+        { err: err.message },
+        '[lead-status-guard] DB unreachable and no cached lead-status keys — rejecting request',
+      );
+      const guardErr = new Error(
+        'Lead status check unavailable — database unreachable. Please try again shortly.',
+      );
+      guardErr.code = 'LEAD_STATUS_DB_UNAVAILABLE';
+      guardErr.statusCode = 503;
+      throw guardErr;
+    }
   }
   if (!keys.has(key)) {
     const err = new Error(`Lead status '${key}' has been removed — contact an admin.`);

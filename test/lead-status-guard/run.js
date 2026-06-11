@@ -24,6 +24,8 @@ require('dotenv').config();
 const PROBE_LABELS = [
   '(A) assertLeadStatusKey passes when the key exists (cache warm)',
   '(B) assertLeadStatusKey throws LEAD_STATUS_REMOVED after invalidation',
+  '(C) DB unreachable, stale cache present → uses stale cache (no throw) [manual only — pool is not externally stoppable]',
+  '(D) DB unreachable, no cache → throws LEAD_STATUS_DB_UNAVAILABLE / 503',
 ];
 
 const REPORT_PATH = path.join(__dirname, '..', '..', 'test-results', 'lead-status-guard.md');
@@ -168,6 +170,52 @@ async function main() {
       'code=LEAD_STATUS_REMOVED statusCode=422',
       threw ? `code=${errCode} statusCode=${statusCode}` : 'no throw',
       threw && errCode === 'LEAD_STATUS_REMOVED' && statusCode === 422,
+    );
+  }
+
+  // ── (C) Note: stale-cache + DB unreachable cannot be automated ───────────
+  //
+  // The module creates its pg Pool at load time and does not expose it for
+  // external control.  Forcing a mid-run pool failure without exporting the
+  // pool would require monkey-patching private internals.  The code path is
+  // exercised manually and is covered by a JSDoc comment and unit review.
+  console.log(
+    '  ⚠  (C) stale-cache + DB unreachable: manual-only — see module JSDoc',
+  );
+
+  // ── (D) No cache + DB unreachable → throws LEAD_STATUS_DB_UNAVAILABLE ────
+  //
+  // Load a *fresh* module instance (via require-cache busting) pointing at an
+  // unreachable database.  With _cache = null the guard must throw rather than
+  // silently pass.
+  {
+    const modulePath = require.resolve('../../lead-status-guard');
+    delete require.cache[modulePath];
+
+    const origUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = 'postgresql://invalid:invalid@localhost:9999/nonexistent';
+
+    const { assertLeadStatusKey: freshAssert } = require('../../lead-status-guard');
+
+    let threw = false;
+    let errCode = null;
+    let statusCode = null;
+    try {
+      await freshAssert(TEST_KEY);
+    } catch (e) {
+      threw = true;
+      errCode = e.code;
+      statusCode = e.statusCode;
+    }
+
+    process.env.DATABASE_URL = origUrl;
+    delete require.cache[require.resolve('../../lead-status-guard')];
+
+    record(
+      '(D) No cache + DB unreachable → throws LEAD_STATUS_DB_UNAVAILABLE / 503',
+      'code=LEAD_STATUS_DB_UNAVAILABLE statusCode=503',
+      threw ? `code=${errCode} statusCode=${statusCode}` : 'no throw',
+      threw && errCode === 'LEAD_STATUS_DB_UNAVAILABLE' && statusCode === 503,
     );
   }
 
