@@ -248,6 +248,35 @@ export const ResendStepPaid: Story = {
   ],
 };
 
+export const ResendStepPaidOverride: Story = {
+  name: 'Re-send invoice step — paid, "Send anyway" override acknowledged',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Staff clicked "Send anyway" after seeing the paid-invoice warning. The alert message updates to confirm the acknowledgement and the Re-send Invoice button becomes enabled.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        setDraftStep('resend');
+        const origFetch = window.fetch;
+        window.fetch = mockFetch({ payments: paymentsPaid });
+        return <Story cleanup={() => { window.fetch = origFetch; clearDraft(); }} />;
+      }
+      return <Story />;
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const sendAnywayBtn = await canvas.findByRole('button', { name: /send anyway/i });
+    await userEvent.click(sendAnywayBtn);
+  },
+};
+
 export const ReminderStepPaid: Story = {
   name: 'Send payment reminder step — invoice already paid',
   decorators: [
@@ -261,6 +290,35 @@ export const ReminderStepPaid: Story = {
       return <Story />;
     },
   ],
+};
+
+export const ReminderStepPaidOverride: Story = {
+  name: 'Send payment reminder step — paid, "Send anyway" override acknowledged',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Staff clicked "Send anyway" after seeing the paid-invoice warning. The alert message updates to confirm the acknowledgement and the Send Reminder button becomes enabled.',
+      },
+    },
+  },
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        setDraftStep('reminder');
+        const origFetch = window.fetch;
+        window.fetch = mockFetch({ payments: paymentsPaid });
+        return <Story cleanup={() => { window.fetch = origFetch; clearDraft(); }} />;
+      }
+      return <Story />;
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const sendAnywayBtn = await canvas.findByRole('button', { name: /send anyway/i });
+    await userEvent.click(sendAnywayBtn);
+  },
 };
 
 export const NotProceedingConfirm: Story = {

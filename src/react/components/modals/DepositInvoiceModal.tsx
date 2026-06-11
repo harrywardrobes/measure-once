@@ -144,6 +144,9 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   // This avoids a second QB fetch — the banner fetches once and surfaces the result.
   const [isPaid, setIsPaid] = useState<boolean | null>(null);
 
+  // Staff can explicitly acknowledge the paid warning and send anyway.
+  const [sendAnywayOverride, setSendAnywayOverride] = useState(false);
+
   const hasMounted = useRef(false);
 
   useEffect(() => {
@@ -163,6 +166,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   function navigateTo(s: Step) {
     setStep(s);
     saveDraftMerge({ step: s });
+    if (s !== 'resend' && s !== 'reminder') setSendAnywayOverride(false);
   }
 
   function handleClose() {
@@ -539,8 +543,19 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
       <Stack spacing={2}>
         {renderContactHeader()}
         {isPaid && (
-          <Alert severity="warning">
-            This invoice appears to have been paid — double-check before sending.
+          <Alert
+            severity="warning"
+            action={
+              !sendAnywayOverride ? (
+                <Button color="inherit" size="small" onClick={() => setSendAnywayOverride(true)}>
+                  Send anyway
+                </Button>
+              ) : undefined
+            }
+          >
+            {sendAnywayOverride
+              ? 'Paid-invoice warning acknowledged — you can now re-send.'
+              : 'This invoice appears to have been paid — double-check before sending.'}
           </Alert>
         )}
         {resendError && (
@@ -568,8 +583,19 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
       <Stack spacing={2}>
         {renderContactHeader()}
         {isPaid && (
-          <Alert severity="warning">
-            This invoice appears to have been paid — double-check before sending.
+          <Alert
+            severity="warning"
+            action={
+              !sendAnywayOverride ? (
+                <Button color="inherit" size="small" onClick={() => setSendAnywayOverride(true)}>
+                  Send anyway
+                </Button>
+              ) : undefined
+            }
+          >
+            {sendAnywayOverride
+              ? 'Paid-invoice warning acknowledged — you can now send the reminder.'
+              : 'This invoice appears to have been paid — double-check before sending.'}
           </Alert>
         )}
         {reminderError && reminderError !== 'GOOGLE_AUTH' && (
@@ -754,7 +780,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
-            disabled={submitting || !loaderData?.invoiceId || !!isPaid}
+            disabled={submitting || !loaderData?.invoiceId || (!!isPaid && !sendAnywayOverride)}
             onClick={handleResend}
           >
             Re-send Invoice
@@ -770,7 +796,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
-            disabled={submitting || reminderLoading || !reminderBody.trim() || !!isPaid}
+            disabled={submitting || reminderLoading || !reminderBody.trim() || (!!isPaid && !sendAnywayOverride)}
             onClick={handleSendReminder}
           >
             Send Reminder
