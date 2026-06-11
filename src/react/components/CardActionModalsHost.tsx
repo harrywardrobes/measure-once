@@ -16,6 +16,9 @@ const ReviewCustomerPhotosDrawer = React.lazy(() =>
 const DesignVisitFollowupModal = React.lazy(() =>
   import('./modals/DesignVisitFollowupModal').then(m => ({ default: m.DesignVisitFollowupModal }))
 );
+const OpenDealActionModal = React.lazy(() =>
+  import('./modals/OpenDealActionModal').then(m => ({ default: m.OpenDealActionModal }))
+);
 import { broadcastDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { broadcastContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
@@ -36,7 +39,8 @@ type ModalState =
   | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string }
-  | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext };
+  | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext }
+  | { type: 'open_deal';                     handler: CardActionHandlerData; ctx: CardActionContext };
 
 export type HandlerType = Exclude<ModalState['type'], 'none'>;
 
@@ -85,6 +89,9 @@ export function CardActionModalsHost() {
           break;
         case 'design_visit_followup':
           setModal({ type: 'design_visit_followup', handler, ctx });
+          break;
+        case 'open_deal':
+          setModal({ type: 'open_deal', handler, ctx });
           break;
         default:
           console.warn('[CardActionModalsHost] Unknown handler type:', handler.type);
@@ -171,6 +178,11 @@ export function CardActionModalsHost() {
       {modal.type === 'design_visit_followup' && (
         <React.Suspense fallback={null}>
           <DesignVisitFollowupModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        </React.Suspense>
+      )}
+      {modal.type === 'open_deal' && (
+        <React.Suspense fallback={null}>
+          <OpenDealActionModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
         </React.Suspense>
       )}
     </>

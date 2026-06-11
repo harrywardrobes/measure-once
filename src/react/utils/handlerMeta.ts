@@ -92,6 +92,10 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
     steps: '2+ steps — hub (Confirmed / Resend invite / Not proceeding) → schedule or email step',
     hubspot: 'Sets lead status to DESIGN_SCHEDULED (confirmed), DESIGN_INVITED (resend), or NOT_SUITABLE (not proceeding)',
   },
+  open_deal: {
+    steps: '3 paths — amendments hub / accept deal wizard (3 steps) / decline flow (2 steps)',
+    hubspot: 'Stays OPEN_DEAL on amendments; → DEPOSIT_INVOICE on accept; → DECLINED_DEAL on decline',
+  },
 };
 
 export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
@@ -107,6 +111,7 @@ export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
   arrange_visit:                'Arrange visit',
   contact_customer:             'Contact customer (call / email / WhatsApp)',
   design_visit_followup:        'Design visit follow-up',
+  open_deal:                    'Open deal (amend / accept / decline)',
 };
 
 /** Runtime narrowing guard — use instead of `as HandlerType` in onChange handlers. */
@@ -127,6 +132,7 @@ export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   schedule_delivery_window:     [],
   schedule_installation_slot:   [],
   design_visit_followup:        ['visit_invite', 'visit_confirmation'],
+  open_deal:                    ['open_deal_deposit_invoice_sent', 'open_deal_declined_thank_you'],
 };
 
 export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {
@@ -177,5 +183,9 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
   design_visit_followup: {
     component: 'DesignVisitFollowupModal',
     filePath:  'src/react/components/modals/DesignVisitFollowupModal.tsx',
+  },
+  open_deal: {
+    component: 'OpenDealActionModal',
+    filePath:  'src/react/components/modals/OpenDealActionModal.tsx',
   },
 };

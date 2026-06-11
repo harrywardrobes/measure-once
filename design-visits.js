@@ -534,6 +534,23 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
           // If we are replacing an old estimate, append the old id to the
           // audit history so finance can see the orphaned record.
           if (priorId && priorId !== est.Id) {
+            // Non-fatal: mark the superseded estimate as Rejected in QuickBooks
+            try {
+              const _priorResp = await axios.get(
+                `${getQuickBooksBaseUrl()}/v3/company/${qbt.realm_id}/estimate/${encodeURIComponent(priorId)}`,
+                qbHeaders
+              );
+              const _priorEst = _priorResp.data?.Estimate;
+              if (_priorEst?.SyncToken != null) {
+                await axios.post(
+                  `${getQuickBooksBaseUrl()}/v3/company/${qbt.realm_id}/estimate`,
+                  { sparse: true, Id: priorId, SyncToken: _priorEst.SyncToken, TxnStatus: 'Rejected' },
+                  qbHeaders
+                );
+              }
+            } catch (_rejErr) {
+              logger.warn(`[design-visits] Could not mark superseded estimate ${priorId} as Rejected in QB: ${_rejErr.message}`);
+            }
             await pool.query(
               `UPDATE design_visits
                   SET qb_estimate_id      = $1,

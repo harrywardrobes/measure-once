@@ -24,7 +24,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
 
@@ -115,7 +115,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(demo ? DEMO_CONTACT_INFO : null);
   // True while the background contact-info fetch is in flight (e.g. during a
   // draft restore where the step jumps past 'loading' but contactInfo is null).
-  // Lets ContactInfoHeader show skeletons instead of a false "no details" warning.
+  // Lets ModalContactHeader show skeletons instead of a false "no details" warning.
   const [contactLoading, setContactLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -438,7 +438,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             <DemoDialogTitle demo={demo}>Call {displayName}</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                <ContactInfoHeader
+                <ModalContactHeader
                   name={displayName}
                   phone={landline}
                   mobile={mobile}
@@ -515,7 +515,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             <DemoDialogTitle demo={demo}>Book {label} for {displayName}</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                <ContactInfoHeader
+                <ModalContactHeader
                   name={displayName}
                   phone={landline}
                   mobile={mobile}
@@ -571,7 +571,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             <DemoDialogTitle demo={demo}>Ask {displayName} for availability</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                <ContactInfoHeader
+                <ModalContactHeader
                   name={displayName}
                   phone={landline}
                   mobile={mobile}

@@ -16,6 +16,7 @@ const {
   tradesCreateLimiter,
   prefsWriteLimiter,
   whatsappSendLimiter,
+  quickbooksReadWriteLimiter,
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
@@ -80,6 +81,8 @@ setCustomerInfoSseClients(_hsWebhookSseClients);
 setDvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setCiPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setPrPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+quickbooksRoutes.setPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+quickbooksRoutes.setAssertLeadStatusKey((key) => assertLeadStatusKey(key));
 
 app.post('/api/hubspot/webhook',
   express.raw({ type: '*/*', limit: '2mb' }),
@@ -5463,6 +5466,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
     }
     return { value: out };
   },
+  // No required config keys — contact info and QB estimates are fetched at open time.
+  open_deal(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -6287,6 +6294,82 @@ app.post('/api/card-actions/design-visit-followup/outcome',
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/design-visit-followup/outcome error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── open_deal: load contact info + QB estimates ──────────────────────────────
+app.post('/api/card-actions/open-deal',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,hs_lead_status' }, timeout: 15000 }
+      );
+      const props = r.data?.properties || {};
+      const firstName  = String(props.firstname || '');
+      const lastName   = String(props.lastname  || '');
+      const contactName  = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactEmail = String(props.email || '');
+      const contactPhone = String(props.phone || '');
+      const contactMobile = String(props.mobilephone || '');
+      const addressParts  = [props.address, props.city, props.zip].filter(Boolean);
+      const contactAddress = addressParts.join(', ');
+
+      // Read deposit percent from qb_settings
+      let depositPercent = 10;
+      try {
+        const sr = await pool.query('SELECT deposit_percent FROM qb_settings LIMIT 1');
+        if (sr.rows[0]) depositPercent = Number(sr.rows[0].deposit_percent ?? 10);
+      } catch {}
+
+      // Try to fetch QB estimates for this contact (graceful if QB not connected)
+      let qbConnected = false;
+      let estimates = [];
+      try {
+        const estData = await quickbooksRoutes.fetchFromQuickBooks('/query', {
+          query: `SELECT * FROM Estimate WHERE CustomerRef = '${contactId}' MAXRESULTS 100`,
+        });
+        qbConnected = true;
+        estimates = (estData.QueryResponse?.Estimate || []).map(e => ({
+          id:           e.Id,
+          docNumber:    e.DocNumber || null,
+          txnDate:      e.TxnDate  || null,
+          totalAmt:     parseFloat(e.TotalAmt || 0),
+          txnStatus:    e.TxnStatus || 'Pending',
+          billEmail:    e.BillEmail?.Address || null,
+          customerRef:  e.CustomerRef?.value || null,
+        }));
+      } catch (qbErr) {
+        if (!String(qbErr.message).includes('not connected')) {
+          logger.warn({ err: qbErr.message }, '[open-deal] QB estimates fetch failed:');
+        }
+      }
+
+      res.json({
+        contactName,
+        contactEmail,
+        contactPhone,
+        contactMobile,
+        contactAddress,
+        depositPercent,
+        qbConnected,
+        estimates,
+      });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/open-deal error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }

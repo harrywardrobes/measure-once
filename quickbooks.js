@@ -3,8 +3,10 @@ const express = require('express');
 const axios   = require('axios');
 const crypto  = require('crypto');
 const { Pool } = require('pg');
-const { isAuthenticated, requireAdmin, requirePrivilege, isAdminEmail } = require('./auth');
+const nodemailer = require('nodemailer');
+const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
+const { getEmailTemplate, renderEmail } = require('./email-templates');
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.
@@ -201,6 +203,50 @@ async function sendQbTransactionEmail(txnType, txnId, { sendTo } = {}) {
     }
   );
   return r.data;
+}
+
+// ── Wired helpers (injected by server.js on startup) ──────────────────────────
+let _patchContactProperties = async (_contactId, _props) => {
+  logger.warn('[quickbooks] patchContactProperties called before server wiring — skipping HubSpot update');
+};
+let _assertLeadStatusKey = async (_key) => {
+  logger.warn('[quickbooks] assertLeadStatusKey called before server wiring — skipping');
+};
+function setPatchContactProperties(fn) { _patchContactProperties = fn; }
+function setAssertLeadStatusKey(fn)    { _assertLeadStatusKey    = fn; }
+
+// ── Mail transport helpers (same pattern as design-visits.js) ─────────────────
+function _buildFromHeader() {
+  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!raw) return raw;
+  if (/</.test(raw)) return raw;
+  return `Measure Once <${raw}>`;
+}
+function _buildReplyTo() {
+  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+}
+function _createMailTransport() {
+  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
+    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
+    return {
+      sendMail(opts) {
+        return new Promise((resolve, reject) => {
+          try {
+            const fs = require('fs');
+            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
+            resolve({ messageId: `override-${Date.now()}` });
+          } catch (e) { reject(e); }
+        });
+      },
+    };
+  }
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
 }
 
 // ── OAuth: start ───────────────────────────────────────────────────────────────
@@ -496,5 +542,353 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, q
   }
 });
 
+// ── open_deal: accept deal ────────────────────────────────────────────────────
+router.post('/api/quickbooks/contacts/:contactId/accept-deal',
+  isAuthenticated, requireManagerOrAdmin, quickbooksReadWriteLimiter,
+  async (req, res) => {
+    const contactId = String(req.params.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const estimateId = String(req.body?.estimateId || '').trim();
+    if (!/^\d+$/.test(estimateId)) {
+      return res.status(400).json({ error: 'estimateId is required and must be a numeric QB ID.' });
+    }
+    const otherEstimateIdsToDecline = (req.body?.otherEstimateIdsToDecline || [])
+      .map(id => String(id).trim()).filter(id => /^\d+$/.test(id));
+    const contactEmail = String(req.body?.contactEmail || '').trim() || null;
+    const contactName  = String(req.body?.contactName  || '').trim() || '';
+    const userId = req.user?.claims?.sub || req.user?.id;
+
+    const steps = {
+      estimateAccepted:       false,
+      invoiceCreated:         false,
+      invoiceSent:            false,
+      appEmailSent:           false,
+      otherEstimatesDeclined: false,
+      invoiceStoredOnVisit:   false,
+      statusUpdated:          false,
+    };
+
+    try {
+      const t = await getValidTokens();
+      if (!t) return res.status(503).json({ error: 'QuickBooks is not connected.', steps });
+
+      const qbBase   = getQuickBooksBaseUrl();
+      const authHdr  = { Authorization: `Bearer ${t.access_token}` };
+      const jsonHdr  = { ...authHdr, 'Content-Type': 'application/json', Accept: 'application/json' };
+      const qbParams = { minorversion: 65 };
+
+      // Read deposit percent fresh from qb_settings
+      let depositPercent = 10;
+      try {
+        const sr = await pool.query('SELECT deposit_percent FROM qb_settings LIMIT 1');
+        if (sr.rows[0]) depositPercent = Number(sr.rows[0].deposit_percent ?? 10);
+      } catch {}
+
+      // 1. Fetch the selected estimate
+      const estResp = await axios.get(
+        `${qbBase}/v3/company/${t.realm_id}/estimate/${encodeURIComponent(estimateId)}`,
+        { headers: { ...authHdr, Accept: 'application/json' }, params: qbParams, timeout: 12000 }
+      );
+      const estimate = estResp.data?.Estimate;
+      if (!estimate) return res.status(404).json({ error: 'Estimate not found in QuickBooks.', steps });
+
+      // Ownership check: estimate must belong to this contact (BOLA guard)
+      const estimateOwner = String(estimate.CustomerRef?.value || '');
+      if (estimateOwner !== contactId) {
+        logger.warn(`[accept-deal] Estimate ${estimateId} belongs to CustomerRef ${estimateOwner}, not contact ${contactId} — rejecting`);
+        return res.status(409).json({
+          error: `Estimate ${estimateId} does not belong to contact ${contactId}. Request rejected.`,
+          steps,
+        });
+      }
+
+      const estimateTotal  = parseFloat(estimate.TotalAmt || 0);
+      const depositAmt     = Math.round(estimateTotal * (depositPercent / 100) * 100) / 100;
+      const estimateDocNum = estimate.DocNumber || estimateId;
+
+      // 2. Mark estimate as Accepted
+      await axios.post(
+        `${qbBase}/v3/company/${t.realm_id}/estimate`,
+        { sparse: true, Id: estimateId, SyncToken: estimate.SyncToken, TxnStatus: 'Accepted' },
+        { headers: jsonHdr, params: qbParams, timeout: 12000 }
+      );
+      steps.estimateAccepted = true;
+
+      // 3. Create deposit invoice (single line linked to the estimate via LinkedTxn)
+      const invoiceBody = {
+        TxnDate:     new Date().toISOString().slice(0, 10),
+        CustomerRef: { value: contactId },
+        ...(contactEmail ? { BillEmail: { Address: contactEmail } } : {}),
+        Line: [{
+          DetailType: 'SalesItemLineDetail',
+          Amount:     depositAmt,
+          Description: `Deposit — ${depositPercent}% of Estimate #${estimateDocNum}`,
+          SalesItemLineDetail: {
+            ItemRef:   { value: '1', name: 'Services' },
+            Qty:       1,
+            UnitPrice: depositAmt,
+          },
+        }],
+        LinkedTxn: [{ TxnId: estimateId, TxnType: 'Estimate' }],
+      };
+      const invResp = await axios.post(
+        `${qbBase}/v3/company/${t.realm_id}/invoice`,
+        invoiceBody,
+        { headers: jsonHdr, params: qbParams, timeout: 15000 }
+      );
+      const invoice = invResp.data?.Invoice;
+      if (!invoice?.Id) {
+        return res.status(502).json({
+          error: 'Invoice was created but no ID was returned from QuickBooks.', steps,
+        });
+      }
+      const invoiceId     = invoice.Id;
+      const invoiceDocNum = invoice.DocNumber || null;
+      steps.invoiceCreated = true;
+
+      // 4. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
+      let allowed;
+      try {
+        allowed = await checkSendRateLimit(userId);
+      } catch (e) {
+        logger.error({ err: e.message }, '[accept-deal] send rate-limit check failed:');
+        return res.status(500).json({ error: 'Could not verify send rate limit.', steps, invoiceId, invoiceDocNum });
+      }
+      if (!allowed) {
+        return res.status(429).json({
+          error: 'Too many invoice sends. Please wait before trying again.', steps, invoiceId, invoiceDocNum,
+        });
+      }
+      try {
+        await sendQbTransactionEmail('invoice', invoiceId, { sendTo: contactEmail || undefined });
+        steps.invoiceSent = true;
+      } catch (e) {
+        const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
+        logger.error({ err: qbMsg }, '[accept-deal] QB invoice send failed:');
+        return res.status(502).json({
+          error: `Invoice created but could not be sent: ${qbMsg}`, steps, invoiceId, invoiceDocNum,
+        });
+      }
+
+      // 5. Follow-up app email — fatal: if template/send fails, status does NOT advance
+      try {
+        const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
+        const firstName = contactName.split(' ')[0] || 'there';
+        const rendered  = renderEmail(template, { textVars: { firstName, depositPercent: String(depositPercent) } });
+        const transport = _createMailTransport();
+        if (transport && contactEmail) {
+          const replyTo = _buildReplyTo();
+          await transport.sendMail({
+            from:    _buildFromHeader(),
+            ...(replyTo ? { replyTo } : {}),
+            to:      contactEmail,
+            subject: rendered.subject,
+            text:    rendered.text,
+            html:    rendered.html || rendered.text,
+          });
+        }
+        // Mark as sent whether SMTP was configured or not — "not applicable" is not a failure
+        steps.appEmailSent = true;
+      } catch (e) {
+        logger.error({ err: e.message }, '[accept-deal] follow-up app email failed — halting before status update:');
+        return res.status(502).json({
+          error: `Invoice sent but follow-up email could not be prepared or sent: ${e.message}`,
+          steps, invoiceId, invoiceDocNum,
+        });
+      }
+
+      // 6. Mark other estimates as Rejected (non-fatal)
+      for (const otherId of otherEstimateIdsToDecline) {
+        try {
+          const oResp = await axios.get(
+            `${qbBase}/v3/company/${t.realm_id}/estimate/${encodeURIComponent(otherId)}`,
+            { headers: { ...authHdr, Accept: 'application/json' }, params: qbParams, timeout: 8000 }
+          );
+          const other = oResp.data?.Estimate;
+          // Ownership check: only reject estimates that belong to this contact
+          const otherOwner = String(other?.CustomerRef?.value || '');
+          if (otherOwner !== contactId) {
+            logger.warn(`[accept-deal] Estimate ${otherId} belongs to CustomerRef ${otherOwner}, not contact ${contactId} — skipping`);
+            continue;
+          }
+          if (other?.SyncToken != null) {
+            await axios.post(
+              `${qbBase}/v3/company/${t.realm_id}/estimate`,
+              { sparse: true, Id: otherId, SyncToken: other.SyncToken, TxnStatus: 'Rejected' },
+              { headers: jsonHdr, params: qbParams, timeout: 8000 }
+            );
+          }
+        } catch (e) {
+          logger.warn({ err: e.message }, `[accept-deal] Could not mark estimate ${otherId} Rejected (non-fatal):`);
+        }
+      }
+      steps.otherEstimatesDeclined = true;
+
+      // 7. Store deposit invoice ID on the most recent design visit for this contact (non-fatal)
+      try {
+        await pool.query(
+          `UPDATE design_visits
+              SET deposit_invoice_id      = $1,
+                  deposit_invoice_doc_num = $2,
+                  updated_at              = NOW()
+            WHERE id = (
+              SELECT id FROM design_visits
+               WHERE contact_id = $3
+               ORDER BY created_at DESC
+               LIMIT 1
+            )`,
+          [invoiceId, invoiceDocNum, contactId]
+        );
+        steps.invoiceStoredOnVisit = true;
+      } catch (e) {
+        logger.warn({ err: e.message }, '[accept-deal] Could not store invoice on design_visit (non-fatal):');
+      }
+
+      // 8. Update lead status to DEPOSIT_INVOICE
+      try {
+        await _assertLeadStatusKey('DEPOSIT_INVOICE');
+        await _patchContactProperties(contactId, { hs_lead_status: 'DEPOSIT_INVOICE' });
+        steps.statusUpdated = true;
+      } catch (e) {
+        if (e.code === 'LEAD_STATUS_REMOVED') {
+          return res.status(422).json({
+            error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey,
+            steps, invoiceId, invoiceDocNum,
+          });
+        }
+        logger.error({ err: e.message }, '[accept-deal] lead status update failed:');
+        return res.status(502).json({
+          error: `Invoice sent but lead status could not be updated: ${e.message}`,
+          steps, invoiceId, invoiceDocNum,
+        });
+      }
+
+      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE' });
+    } catch (e) {
+      const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
+      logger.error({ err: qbMsg }, 'POST /api/quickbooks/contacts/:contactId/accept-deal error:');
+      res.status(503).json({ error: qbMsg, steps });
+    }
+  }
+);
+
+// ── open_deal: decline deal ───────────────────────────────────────────────────
+router.post('/api/quickbooks/contacts/:contactId/decline-deal',
+  isAuthenticated, requireManagerOrAdmin, quickbooksReadWriteLimiter,
+  async (req, res) => {
+    const contactId = String(req.params.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const estimateIds  = (req.body?.estimateIds || [])
+      .map(id => String(id).trim()).filter(id => /^\d+$/.test(id));
+    const sendThankYou = req.body?.sendThankYou === true;
+    const contactEmail = String(req.body?.contactEmail || '').trim() || null;
+    const contactName  = String(req.body?.contactName  || '').trim() || '';
+
+    const steps = {
+      estimatesDeclined: false,
+      thankYouSent:      false,
+      statusUpdated:     false,
+    };
+
+    try {
+      // 1. Mark estimates as Rejected in QB (non-fatal; QB might not be connected)
+      if (estimateIds.length > 0) {
+        try {
+          const t = await getValidTokens();
+          if (t) {
+            const qbBase   = getQuickBooksBaseUrl();
+            const authHdr  = { Authorization: `Bearer ${t.access_token}` };
+            const jsonHdr  = { ...authHdr, 'Content-Type': 'application/json', Accept: 'application/json' };
+            const qbParams = { minorversion: 65 };
+            for (const estId of estimateIds) {
+              try {
+                const oResp = await axios.get(
+                  `${qbBase}/v3/company/${t.realm_id}/estimate/${encodeURIComponent(estId)}`,
+                  { headers: { ...authHdr, Accept: 'application/json' }, params: qbParams, timeout: 8000 }
+                );
+                const est = oResp.data?.Estimate;
+                // Ownership check: only reject estimates that belong to this contact
+                const estOwner = String(est?.CustomerRef?.value || '');
+                if (estOwner !== contactId) {
+                  logger.warn(`[decline-deal] Estimate ${estId} belongs to CustomerRef ${estOwner}, not contact ${contactId} — skipping`);
+                  continue;
+                }
+                if (est?.SyncToken != null) {
+                  await axios.post(
+                    `${qbBase}/v3/company/${t.realm_id}/estimate`,
+                    { sparse: true, Id: estId, SyncToken: est.SyncToken, TxnStatus: 'Rejected' },
+                    { headers: jsonHdr, params: qbParams, timeout: 8000 }
+                  );
+                }
+              } catch (e) {
+                logger.warn({ err: e.message }, `[decline-deal] Could not mark estimate ${estId} Rejected (non-fatal):`);
+              }
+            }
+          }
+        } catch (e) {
+          logger.warn({ err: e.message }, '[decline-deal] QB reject estimates failed (non-fatal):');
+        }
+      }
+      steps.estimatesDeclined = true;
+
+      // 2. Optional thank-you email
+      if (sendThankYou && contactEmail) {
+        try {
+          const template = await getEmailTemplate('open_deal_declined_thank_you');
+          const firstName = contactName.split(' ')[0] || 'there';
+          const rendered  = renderEmail(template, { textVars: { firstName } });
+          const transport = _createMailTransport();
+          if (transport) {
+            const replyTo = _buildReplyTo();
+            await transport.sendMail({
+              from:    _buildFromHeader(),
+              ...(replyTo ? { replyTo } : {}),
+              to:      contactEmail,
+              subject: rendered.subject,
+              text:    rendered.text,
+              html:    rendered.html || rendered.text,
+            });
+            steps.thankYouSent = true;
+          }
+        } catch (e) {
+          logger.warn({ err: e.message }, '[decline-deal] thank-you email failed (non-fatal):');
+        }
+      } else {
+        steps.thankYouSent = !sendThankYou;
+      }
+
+      // 3. Update lead status to DECLINED_DEAL
+      try {
+        await _assertLeadStatusKey('DECLINED_DEAL');
+        await _patchContactProperties(contactId, { hs_lead_status: 'DECLINED_DEAL' });
+        steps.statusUpdated = true;
+      } catch (e) {
+        if (e.code === 'LEAD_STATUS_REMOVED') {
+          return res.status(422).json({
+            error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey, steps,
+          });
+        }
+        logger.error({ err: e.message }, '[decline-deal] lead status update failed:');
+        return res.status(502).json({
+          error: `Estimates declined but lead status could not be updated: ${e.message}`, steps,
+        });
+      }
+
+      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL' });
+    } catch (e) {
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/quickbooks/contacts/:contactId/decline-deal error:');
+      res.status(503).json({ error: e.message, steps });
+    }
+  }
+);
+
 module.exports = router;
-module.exports.sendQbTransactionEmail = sendQbTransactionEmail;
+module.exports.sendQbTransactionEmail    = sendQbTransactionEmail;
+module.exports.getValidTokens            = getValidTokens;
+module.exports.getQuickBooksBaseUrl      = getQuickBooksBaseUrl;
+module.exports.fetchFromQuickBooks       = fetchFromQuickBooks;
+module.exports.checkSendRateLimit        = checkSendRateLimit;
+module.exports.setPatchContactProperties = setPatchContactProperties;
+module.exports.setAssertLeadStatusKey    = setAssertLeadStatusKey;

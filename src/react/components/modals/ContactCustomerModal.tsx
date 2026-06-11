@@ -16,7 +16,7 @@ import { POST, PATCH } from '../../utils/api';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ContactInfoHeader } from './ContactInfoHeader';
+import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
 
@@ -334,7 +334,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 <Alert severity="warning">{loadError}</Alert>
               )}
               {!loadError && (
-                <ContactInfoHeader
+                <ModalContactHeader
                   name={displayName}
                   phone={phone}
                   mobile={mobile}
@@ -743,7 +743,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             <DialogContent>
               <Stack spacing={1.5} sx={{ mt: 0.5 }}>
                 {!loadError && (
-                  <ContactInfoHeader
+                  <ModalContactHeader
                     name={displayName}
                     phone={phone}
                     mobile={mobile}

@@ -81,3 +81,6 @@ export const SCHEDULE_VISIT_DRAFT_PREFIX = 'mo-schedule-visit-draft-';
 
 /** Design-visit follow-up modal drafts: `${DVF_DRAFT_PREFIX}${contactId}` */
 export const DVF_DRAFT_PREFIX = 'dvf-draft-';
+
+/** Open-deal action modal drafts: `${OPEN_DEAL_DRAFT_PREFIX}${contactId}` */
+export const OPEN_DEAL_DRAFT_PREFIX = 'mo-open-deal-draft-';
