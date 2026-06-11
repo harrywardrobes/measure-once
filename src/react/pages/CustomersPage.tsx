@@ -314,9 +314,23 @@ async function loadLeadStatusCounts(stage?: string): Promise<void> {
   if (counts && typeof counts === 'object') store.counts = counts;
 }
 
-function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObject<string>) {
+function useLeadStatusSync(
+  onChange: () => void,
+  stageRef: React.MutableRefObject<string>,
+  onContactsRefresh?: () => void,
+) {
+  // Track the src of the most-recently received BroadcastChannel message so
+  // the visibilitychange handler can decide whether to also bump the contacts
+  // list when the user tabs back in after a webhook-originated change.
+  const lastBcSrcRef = React.useRef<string | null>(null);
+
+  // Stable ref so the effect closure always calls the latest callback without
+  // needing to be re-registered whenever the parent re-renders.
+  const onContactsRefreshRef = React.useRef(onContactsRefresh);
+  onContactsRefreshRef.current = onContactsRefresh;
+
   React.useEffect(() => {
-    const refresh = () => {
+    const refresh = (src?: string) => {
       // Skip BC/visibilitychange-triggered refreshes until the initial mount
       // effect has completed its first fetch.  If store.loaded is still false,
       // the dropdown has not yet received its initial data and calling
@@ -332,20 +346,34 @@ function useLeadStatusSync(onChange: () => void, stageRef: React.MutableRefObjec
       Promise.all([loadLeadStatuses(), loadLeadStatusCounts(stage).catch(() => {})])
         .then(() => {
           onChange();
+          // Only refetch the full contacts list when the change originated from
+          // a real HubSpot webhook — admin renames (src==='admin_mutation') only
+          // change label definitions, not contact records.
+          if (src === 'hs_webhook') {
+            onContactsRefreshRef.current?.();
+          }
         })
         .catch(() => {});
     };
 
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      refresh();
+      // Consume the last BC src so subsequent tab-back events don't re-fire
+      // the contacts refetch for the same webhook (one catch-up per event).
+      const src = lastBcSrcRef.current ?? undefined;
+      lastBcSrcRef.current = null;
+      refresh(src);
     };
     document.addEventListener('visibilitychange', onVisibility);
 
     let bc: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== 'undefined') {
       bc = new BroadcastChannel('lead_statuses_changed');
-      bc.addEventListener('message', refresh);
+      bc.addEventListener('message', (e: MessageEvent) => {
+        const src: string | undefined = (e.data as { src?: string })?.src;
+        lastBcSrcRef.current = src ?? null;
+        refresh(src);
+      });
     }
 
     return () => {
@@ -1124,7 +1152,7 @@ export function CustomersPage(): React.ReactElement {
     forceRender();
   }, []);
 
-  useLeadStatusSync(refreshDropdown, stageFilterRef);
+  useLeadStatusSync(refreshDropdown, stageFilterRef, () => setRefreshNonce((n) => n + 1));
 
   // Scroll to the top of the page when the user navigates to a new page.
   // Skip on the initial mount to avoid disrupting the scroll-position restore.
