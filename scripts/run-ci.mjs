@@ -118,6 +118,7 @@ const STEPS = [
   'test:change-password:ci',
   'test:set-password:ci',
   'test:login:ci',
+  'test:open-deal:ci',
   'test:invoice-admin-controls:ci',
   'test:invoice-bc-sync:ci',
   'test:bottom-nav:ci',
