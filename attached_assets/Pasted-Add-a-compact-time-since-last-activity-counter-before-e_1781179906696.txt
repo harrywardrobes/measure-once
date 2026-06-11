@@ -1,0 +1,45 @@
+Add a compact "time since last activity" counter before every card action label.
+
+CONTEXT
+The Customers page (src/react/pages/CustomersPage.tsx) and Projects board
+(src/react/pages/ProjectsPage.tsx) each render an "action strip" at the bottom of
+every card — a tinted bar showing an action label like "Book Design Visit" with a
+chevron. I want a small time counter shown before that label on every card, e.g.
+"30min · Book Design Visit", indicating how long ago the customer was last
+actioned/contacted/modified.
+
+DATA SOURCES (take whichever is most recent)
+1. The internal contact-attempt log: POST /api/contacts/urgency already returns a
+   lastAttempt map ({ [contactId]: { at, by, count, method } }) from the
+   contact_attempt_tracking table. CustomersPage already stores this in
+   lastAttemptMap; ProjectsPage calls the same endpoint for urgency but discards
+   lastAttempt — capture it there too and pass each card its timestamp.
+2. HubSpot's "Last contacted" contact property (notes_last_contacted). Add it to
+   the properties arrays in server.js for both contact list fetches:
+   ALL_CONTACTS_PROPERTIES (serves /api/contacts-all → Customers page) and the
+   /api/project-contacts HubSpot search body (serves the Projects board). Add the
+   field to the matching TypeScript contact property types
+   (CustomersPage Contact, usePaginatedContacts PaginatedContact,
+   useProjectsData ProjectContact).
+
+FORMATTER
+Add to src/react/utils/formatters.ts:
+- compactRelativeTime(iso, now?): "now" under 1 minute or for future times; then
+  "30min" (<60 min), "8hr" (<24 h), "4d" (<14 days), "3w" (14–55 days, days/7),
+  "2mo" (56+ days, days/30). Return null for missing/unparseable input. Accept
+  both ISO 8601 strings and millisecond-epoch strings (HubSpot sometimes returns
+  epoch ms).
+- latestTimestamp(...values): returns whichever input timestamp is most recent,
+  ignoring null/unparseable values; null if none parse.
+Add vitest unit tests for both.
+
+RENDERING
+In both cards' action strips, inside the existing label Typography
+(fontSize 0.78rem, fontWeight 600), prepend when a timestamp exists and the
+label is non-empty:
+  <Box component="span" sx={{ fontWeight: 500, opacity: 0.7, mr: 0.5 }}>
+    {counter} ·
+  </Box>
+Same text colour as the label (it inherits). Hide the counter entirely when no
+timestamp is available, and don't show it while the strip says "Opening…".
+Don't change the existing "Contacted X ago" history row below the strip.
