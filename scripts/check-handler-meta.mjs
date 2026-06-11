@@ -4,18 +4,18 @@
  *
  * Static lint: every handler type declared in the ModalState union in
  * `src/react/components/CardActionModalsHost.tsx` must have a matching
- * entry in each of the four maps in `src/react/utils/handlerMeta.ts`:
+ * entry in each lookup table exported from `src/react/utils/handlerMeta.ts`
+ * that is typed as `Record<HandlerType, …>`.
  *
- *   • HANDLER_COMPONENT_META
- *   • HANDLER_MODAL_SUMMARY
- *   • HANDLER_TYPE_LABELS
- *   • HANDLER_EMAIL_TEMPLATES
+ * ── Tables that are checked ────────────────────────────────────────────────
  *
- * The check fails with a clear error listing any handler types that are
- * present in the host but absent from any map, so that a developer
- * adding a new modal cannot accidentally omit entries.
+ * Rather than maintaining a hard-coded list of export names, the script
+ * dynamically discovers every `export const` declaration in `handlerMeta.ts`
+ * whose type annotation is `Record<HandlerType, …>`.  This means a developer
+ * who adds a fifth (or sixth, …) lookup table of the same shape will
+ * automatically have it covered — no script update required.
  *
- * ── How handler types are detected ───────────────────────────────────────
+ * ── How handler types are detected ────────────────────────────────────────
  *
  * The ModalState union in CardActionModalsHost.tsx contains members of the
  * form:
@@ -25,7 +25,7 @@
  * This script scans for those `type: '<name>'` patterns.  The sentinel
  * variant `{ type: 'none' }` is excluded because it is not a real handler.
  *
- * ── How map keys are detected ────────────────────────────────────────────
+ * ── How map keys are detected ─────────────────────────────────────────────
  *
  * The script reads each named export as raw text and collects the
  * object-literal keys from the block that follows the `= {` opening brace,
@@ -63,6 +63,35 @@ const hostTypes = new Set();
 for (const m of hostSrc.matchAll(HOST_TYPE_RE)) {
   const t = m[1];
   if (t !== 'none') hostTypes.add(t);
+}
+
+// ── Discover all Record<HandlerType, …> exports in handlerMeta.ts ──────────
+//
+// Match lines like:
+//   export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {
+//   export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
+//
+// This means any new table added with the same type annotation is
+// automatically included in the checks below without editing this script.
+
+const RECORD_EXPORT_RE =
+  /^export\s+const\s+(\w+)\s*:\s*Record\s*<\s*HandlerType\s*,/gm;
+
+const metaSrc = readFileSync(META_FILE, 'utf8');
+
+const discoveredExports = [];
+for (const m of metaSrc.matchAll(RECORD_EXPORT_RE)) {
+  discoveredExports.push(m[1]);
+}
+
+if (discoveredExports.length === 0) {
+  console.error(
+    'check-handler-meta: no Record<HandlerType, …> exports found in\n' +
+    '  src/react/utils/handlerMeta.ts\n\n' +
+    '  Expected at least one export of the form:\n' +
+    '    export const MY_TABLE: Record<HandlerType, …> = { … }\n'
+  );
+  process.exit(1);
 }
 
 // ── Generic map-key extractor ──────────────────────────────────────────────
@@ -104,26 +133,18 @@ function extractMapKeys(src, exportName) {
   return keys;
 }
 
-const metaSrc = readFileSync(META_FILE, 'utf8');
+// ── Cross-reference each dynamically-discovered map ────────────────────────
 
-const componentMetaKeys  = extractMapKeys(metaSrc, 'HANDLER_COMPONENT_META');
-const modalSummaryKeys   = extractMapKeys(metaSrc, 'HANDLER_MODAL_SUMMARY');
-const typeLabelKeys      = extractMapKeys(metaSrc, 'HANDLER_TYPE_LABELS');
-const emailTemplateKeys  = extractMapKeys(metaSrc, 'HANDLER_EMAIL_TEMPLATES');
-
-// ── Cross-reference each map ───────────────────────────────────────────────
-
-const checks = [
-  { mapName: 'HANDLER_COMPONENT_META',  keys: componentMetaKeys },
-  { mapName: 'HANDLER_MODAL_SUMMARY',   keys: modalSummaryKeys  },
-  { mapName: 'HANDLER_TYPE_LABELS',     keys: typeLabelKeys     },
-  { mapName: 'HANDLER_EMAIL_TEMPLATES', keys: emailTemplateKeys },
-];
+const checks = discoveredExports.map(mapName => ({
+  mapName,
+  keys: extractMapKeys(metaSrc, mapName),
+}));
 
 // ── Report ─────────────────────────────────────────────────────────────────
 
 console.log(
-  `check-handler-meta: found ${hostTypes.size} handler type(s) in ModalState\n`
+  `check-handler-meta: found ${hostTypes.size} handler type(s) in ModalState\n` +
+  `  (checking ${checks.length} Record<HandlerType, …> table(s) from handlerMeta.ts)\n`
 );
 
 let anyFailed = false;
@@ -149,9 +170,10 @@ for (const { mapName, keys } of checks) {
 
 if (!anyFailed) {
   console.log(
-    '\n✓ Every handler type in CardActionModalsHost.tsx has a matching entry\n' +
-    '  in HANDLER_COMPONENT_META, HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS,\n' +
-    '  and HANDLER_EMAIL_TEMPLATES (src/react/utils/handlerMeta.ts).'
+    `\n✓ Every handler type in CardActionModalsHost.tsx has a matching entry\n` +
+    `  in all ${checks.length} Record<HandlerType, …> table(s) found in\n` +
+    `  src/react/utils/handlerMeta.ts:\n` +
+    checks.map(c => `    • ${c.mapName}`).join('\n')
   );
   process.exit(0);
 }
