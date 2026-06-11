@@ -1,0 +1,138 @@
+# New action flow: DEPOSIT_INVOICE follow-up modal
+
+## Context
+This app manages wardrobe-fitting leads through staged statuses. After a deal is
+accepted via the "open deal" action (`OpenDealActionModal.tsx` +
+`POST /api/quickbooks/contacts/:contactId/accept-deal` in `quickbooks.js`), a deposit
+invoice is created in QuickBooks and the lead moves to status `DEPOSIT_INVOICE`
+(SURVEY stage). Right now there is no action flow for that status. Build one.
+
+Follow the existing card-action architecture exactly:
+- Modals are coordinated by `src/react/components/CardActionModalsHost.tsx` (ModalState
+  union + openModal switch + JSX case per handler type).
+- Handler metadata lives in `src/react/utils/handlerMeta.ts`
+  (HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS, HANDLER_EMAIL_TEMPLATES,
+  HANDLER_COMPONENT_META).
+- Handlers are configured/bound to statuses via the admin Action Handlers page
+  (`ActionHandlersPage.tsx`) backed by `card_action_handlers` +
+  `card_action_handler_bindings`.
+- Backend endpoints follow the `POST /api/card-actions/<action>` (load data) and
+  `POST /api/card-actions/<action>/outcome` (submit result) pattern in `server.js`.
+- Lead status changes go through `patchContactProperties(contactId, { hs_lead_status })`
+  after `assertLeadStatusKey(...)`.
+- QuickBooks helpers (`fetchFromQuickBooks`, `sendQbTransactionEmail`,
+  `checkSendRateLimit`, `qb_settings` for copy-me CC/BCC and deposit percent) live in
+  `quickbooks.js`. The deposit invoice ID/doc number are stored on the lead's
+  `design_visits` record (`deposit_invoice_id`, `deposit_invoice_doc_num`).
+
+## Task 1 — Contact header standardisation
+Every card-action modal must show customer contact information at the top using the
+shared `<ModalContactHeader />` component
+(`src/react/components/modals/ModalContactHeader.tsx`). Audit ALL existing action
+modals (ArrangeVisitModal, OpenDealActionModal, DesignVisitFollowupModal,
+ContactCustomerModal, UploadPhotosModal, ReviewCustomerPhotosDrawer,
+ScheduleVisitModal, PhoneSummaryModal, DeliveryWindowModal, InstallationSlotModal,
+DesignVisitWizard, etc.) and add the header wherever it is missing, with the same
+loading-skeleton behaviour. The new modal below must use it too.
+
+## Task 2 — New handler type `deposit_invoice_followup`
+Create `src/react/components/modals/DepositInvoiceModal.tsx` and register it
+everywhere a handler type needs registering (CardActionModalsHost, handlerMeta,
+ActionHandlersPage NO_CONFIG_HANDLER_TYPES if no config block is needed). Seed a
+handler row and bind it to status `DEPOSIT_INVOICE` so it appears automatically.
+
+### On open: automatic QuickBooks payment check
+New endpoint `POST /api/card-actions/deposit-invoice` that:
+1. Loads contact info (name, phone, mobile, email, address) like the arrange-visit
+   loader at `POST /api/card-actions/arrange-visit`.
+2. Looks up the deposit invoice from `design_visits.deposit_invoice_id` (fall back to
+   searching QuickBooks invoices by CustomerRef if missing).
+3. Fetches the invoice from QuickBooks and derives payment state from `Balance` vs
+   `TotalAmt`: `paid` (Balance = 0), `partial` (0 < Balance < TotalAmt), `unpaid`.
+4. Returns: contact fields, `qbConnected`, payment state, invoice doc number, amounts
+   (total, balance, amount paid), invoice date, and the linked estimate reference.
+
+The modal shows this immediately as a status banner: green "Deposit paid" / amber
+"Awaiting payment" or "Partially paid (£X of £Y)" / neutral error state if QuickBooks
+is disconnected, with a hint linking to the QuickBooks admin settings page. While
+checking, show a loading state. QuickBooks-dependent options must be disabled when
+`qbConnected` is false.
+
+### The six options
+Render six clearly-labelled options. Highlight "Arrange survey" as the primary action
+when the invoice is paid; highlight "Re-send invoice" / "Payment reminder" when unpaid.
+
+1. **Arrange survey** (primary when paid)
+   Reuse the existing `arrange_visit` action with `visitType='survey'` — same flow as
+   `ArrangeVisitModal.tsx` (call → booked / no answer email / call back later / not
+   proceeding) and the same outcome endpoint
+   `POST /api/card-actions/arrange-visit/outcome` (booked → SURVEY_SCHEDULED,
+   email_sent → SURVEY_SCHEDULED). One change: the email step must render the
+   **`visit_invite`** template (via `POST /api/email-templates/render`) with
+   survey-appropriate variables — `visitLabel` = "survey", and either a proposed
+   date/time (confirming an appointment, using `proposedDate`/`proposedTime`/
+   `proposedDateLine`) or no proposal (requesting availability). The email remains
+   editable before sending, exactly like the existing flow. Make sure the
+   arrange-visit loader resolves `visitType='survey'` when the lead status is
+   `DEPOSIT_INVOICE` (extend the existing visit-type resolution in `server.js`).
+
+2. **Re-send deposit invoice (QuickBooks)**
+   Re-sends the existing deposit invoice through QuickBooks email, using the exact
+   same machinery as the open-deal action: `sendQbTransactionEmail('invoice', id, …)`
+   with CC/BCC from `qb_settings.copy_me_email`/`copy_me_mode`, the
+   `checkSendRateLimit` rate limiter, and the same permission level as the open-deal
+   endpoints. Confirm the recipient email (pre-filled, editable) before sending.
+   Show per-step success/failure like open-deal does.
+
+3. **Send payment reminder email**
+   A polite chase email sent from the app (via `POST /api/emails/send`), distinct from
+   re-sending the invoice. Add a new editable template
+   `deposit_invoice_payment_reminder` to TEMPLATE_DEFS in `email-templates.js`
+   (with sample variables) so admins can edit it on the Email Templates page.
+   Variables should include firstName, invoice doc number, deposit amount, balance,
+   and a **link to the QuickBooks estimate** the deposit relates to. Implementation
+   note: if the QuickBooks API cannot produce a customer-shareable estimate link, use
+   the invoice's online payment link (`Invoice.InvoiceLink`, available when online
+   invoicing is enabled) and flag this substitution in your summary. Pre-render the
+   email in the modal, editable before sending.
+
+4. **Not proceeding**
+   Customer is pulling out. Reuse the same flow and functions as the open-deal decline
+   path (`POST /api/quickbooks/contacts/:contactId/decline-deal`): mark the related
+   estimate(s) Rejected in QuickBooks, optionally send the thank-you email, and set
+   lead status to **`DECLINED_DEAL`**. Also audit the open-deal action itself: if any
+   of its not-proceeding/decline paths currently set `NOT_SUITABLE`, change them to
+   `DECLINED_DEAL`. (Leave the arrange-visit "not proceeding" outcome for other
+   statuses as-is.) Consider voiding the unpaid deposit invoice in QuickBooks as part
+   of this — include it if straightforward, behind a confirmation.
+
+5. **Log a call / contact attempt**
+   Dispatch the existing `contact_customer` handler (same pattern other modals use via
+   `dispatchCardActionHandler`) so staff can record chase calls without leaving the
+   flow.
+
+6. **Amend the deal**
+   Same as the open-deal "make amendments" path: offer the `upload_photos_and_info`
+   and `start_design_visit` handler dispatches for when the customer wants changes
+   before paying.
+
+### Conventions to follow
+- sessionStorage draft persistence keyed by contactId (see ARRANGE_VISIT_DRAFT_PREFIX
+  pattern) for any in-progress email edits.
+- CircularProgress loading states; "done" step with success summary that auto-closes
+  via setTimeout.
+- All new endpoints validate contact ownership of QuickBooks transactions
+  (CustomerRef check) like accept-deal does, and use `assertLeadStatusKey` before any
+  status patch.
+- Add entries for the new handler type and email template to handlerMeta.ts so the
+  admin Workflow/Card Actions pages display it correctly.
+- TypeScript throughout the React code; match existing MUI styling.
+
+### Testing
+Add/extend integration tests following the patterns in `test/`: the loader endpoint
+(paid/unpaid/disconnected cases), the reminder template rendering, the decline path
+setting DECLINED_DEAL, and the re-send rate limit. Manually verify the modal renders
+all six options and the banner states.
+
+When done, summarise: files changed, any places ModalContactHeader was missing and
+added, and any deviations (e.g. estimate link substitution).
