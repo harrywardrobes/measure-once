@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
-import { cacheRecord, cacheRecords, readRecord } from '../lib/offlineDb';
+import { cacheRecord, cacheRecords, readRecord, setMeta } from '../lib/offlineDb';
 
 export interface ProjectContact {
   id: string;
@@ -178,6 +178,10 @@ export function useProjectsData(): ProjectsData {
         // — a failure here must never affect the UI.
         void cacheRecords('customers', rawContacts);
         setStageCache(mergedCache);
+        // Write the merged room-assignment cache to the offline store so the
+        // Projects board reflects the most recently fetched stageCache after a
+        // network drop.  Fire-and-forget — a failure here must never affect the UI.
+        void setMeta('stageCache', mergedCache);
         setWorkflow(workflowData);
         setPlatformUsers(Array.isArray(usersData) ? usersData : []);
         setLoading(false);
