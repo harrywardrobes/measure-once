@@ -4308,7 +4308,7 @@ const LEAD_STATUS_STAGE_KEYS = [
 const LEAD_STATUS_STAGE_SET = new Set(LEAD_STATUS_STAGE_KEYS);
 
 const LEAD_STATUS_STAGE_SEEDS = {
-  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE'],
+  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE', 'DECLINED_DEAL'],
   DESIGN_VISIT: ['DESIGN_SCHEDULED', 'DESIGN_IN_PROGRESS', 'DESIGN_SENT', 'DESIGN_ACCEPTED'],
   SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT', 'READY_FOR_PRODUCTION'],
 };
@@ -4347,7 +4347,7 @@ async function ensureLeadStatusTable() {
       const options = (r.data.options || []).filter(o => !o.hidden);
       if (options.length > 0) {
         // Preserve any existing excluded_from_sales preferences; default UNQUALIFIED to true.
-        const EXCLUDED_DEFAULTS = new Set(['UNQUALIFIED', 'NOT_SUITABLE']);
+        const EXCLUDED_DEFAULTS = new Set(['UNQUALIFIED', 'NOT_SUITABLE', 'DECLINED_DEAL']);
         for (let i = 0; i < options.length; i++) {
           const o = options[i];
           const key = (o.value || '').toUpperCase();
@@ -4374,6 +4374,7 @@ async function ensureLeadStatusTable() {
     { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 5,  excluded_from_sales: false },
     { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 6,  excluded_from_sales: true  },
     { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 7,  excluded_from_sales: false },
+    { key: 'DECLINED_DEAL',        label: 'Declined Deal',        sort_order: 100, excluded_from_sales: true  },
   ];
   for (const s of DEFAULT_LEAD_STATUSES) {
     await pool.query(

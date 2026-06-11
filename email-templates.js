@@ -239,6 +239,43 @@ const TEMPLATE_DEFS = {
     body_html: '',
     footer_text: '',
   },
+
+  open_deal_deposit_invoice_sent: {
+    label: 'Open deal — deposit invoice sent',
+    description: 'Sent to a customer after their deposit invoice has been issued via QuickBooks.',
+    variables: ['firstName', 'depositPercent'],
+    subject: 'Your deposit invoice',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      "I've sent over the {{depositPercent}}% deposit invoice — please let me know if you haven't received it.",
+      '',
+      'Once received, we can then book in a survey visit to confirm the final measurements and design choices.',
+    ].join('\n'),
+    body_html: [
+      '<p>Hi {{firstName}},</p>',
+      "<p>I've sent over the <strong>{{depositPercent}}% deposit invoice</strong> — please let me know if you haven't received it.</p>",
+      '<p>Once received, we can then book in a survey visit to confirm the final measurements and design choices.</p>',
+    ].join('\n'),
+    footer_text: 'Warm regards,\nThe team',
+  },
+
+  open_deal_declined_thank_you: {
+    label: 'Open deal — declined thank you',
+    description: 'Sent optionally to a customer when a deal is declined.',
+    variables: ['firstName'],
+    subject: 'Thank you',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      'Thank you for your time — please feel free to get in touch if you have any questions regarding wardrobes.',
+    ].join('\n'),
+    body_html: [
+      '<p>Hi {{firstName}},</p>',
+      '<p>Thank you for your time — please feel free to get in touch if you have any questions regarding wardrobes.</p>',
+    ].join('\n'),
+    footer_text: 'Warm regards,\nThe team',
+  },
 };
 
 const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFS);
@@ -366,6 +403,13 @@ const SAMPLE_VARS = {
   arrange_visit_no_answer: {
     firstName: 'Jane',
     visitLabel: 'design visit',
+  },
+  open_deal_deposit_invoice_sent: {
+    firstName: 'Jane',
+    depositPercent: '10',
+  },
+  open_deal_declined_thank_you: {
+    firstName: 'Jane',
   },
 };
 
