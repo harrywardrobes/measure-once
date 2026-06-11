@@ -4920,6 +4920,17 @@ app.delete('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async
       [key]
     );
     await pool.query('DELETE FROM lead_status_config WHERE key = $1', [key]);
+    await pool.query(`
+      UPDATE lead_status_config lsc
+      SET sort_order = sub.new_order
+      FROM (
+        SELECT key,
+               ROW_NUMBER() OVER (ORDER BY sort_order ASC, key ASC) - 1 AS new_order
+        FROM lead_status_config
+        WHERE is_null_row IS NOT TRUE
+      ) sub
+      WHERE lsc.key = sub.key
+    `);
     invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
