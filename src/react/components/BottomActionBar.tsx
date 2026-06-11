@@ -68,6 +68,7 @@ export function BottomActionBar() {
   const [bar, setBarState] = useState<BarState>(CLOSED);
   const barRef = useRef<BarState>(CLOSED);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   const setBar = useCallback((next: BarState) => {
     barRef.current = next;
@@ -82,15 +83,29 @@ export function BottomActionBar() {
   }, []);
 
   // Keep --bottom-action-bar-height in sync so ToastContext can stack above it.
+  // Uses a ResizeObserver on the bar's Box so the value tracks the actual
+  // rendered height rather than a hard-coded constant.
   useEffect(() => {
     const root = document.documentElement;
-    if (bar.mode !== null) {
-      // Fall back to 64px — a safe default matching the bar's rendered height.
-      root.style.setProperty('--bottom-action-bar-height', '64px');
-    } else {
+
+    if (bar.mode === null) {
       root.style.removeProperty('--bottom-action-bar-height');
+      return;
     }
+
+    const el = boxRef.current;
+    if (!el) return;
+
+    const ro = new ResizeObserver(entries => {
+      const block = entries[0]?.borderBoxSize?.[0]?.blockSize;
+      if (block !== undefined) {
+        root.style.setProperty('--bottom-action-bar-height', `${block}px`);
+      }
+    });
+    ro.observe(el);
+
     return () => {
+      ro.disconnect();
       root.style.removeProperty('--bottom-action-bar-height');
     };
   }, [bar.mode]);
@@ -158,6 +173,7 @@ export function BottomActionBar() {
       />
       <Slide in={bar.mode !== null} direction="up" mountOnEnter unmountOnExit>
         <Box
+          ref={boxRef}
           role="status"
           aria-live="polite"
           sx={{
