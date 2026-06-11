@@ -22,6 +22,7 @@ import {
 import { updateRecentCustomer, compactRelativeTime, latestTimestamp } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { useNowTick } from '../hooks/useNowTick';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
 import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
@@ -73,6 +74,7 @@ export function CustomerDetailPage() {
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
   const contactId = getContactId();
+  const now = useNowTick();
 
   const [contact,      setContact]      = useState<Contact | null>(null);
   const [cachedName] = useState<string | null>(() => {
@@ -655,6 +657,7 @@ export function CustomerDetailPage() {
           activityCounter={
             compactRelativeTime(
               latestTimestamp(lastAttempt?.at, contact.properties.notes_last_contacted),
+              now,
             ) ?? undefined
           }
         />
