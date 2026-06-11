@@ -5,7 +5,7 @@ import { Box, Button, Stack, Typography } from '@mui/material';
  * Inline Retry / Discard strip for a contact card whose queued status/archive
  * edit has exhausted its sync retries (Offline Phase 2 — customers list).
  *
- * Task #2297 added a "Sync failed" badge but no way to act on a stuck contact
+ * A previous change added a "Sync failed" badge but no way to act on a stuck contact
  * change from the customers list. This strip surfaces below the card (outside
  * the navigation `CardActionArea`, so no interactive element is nested inside
  * the anchor) and lets a field user clear the change without leaving the list:

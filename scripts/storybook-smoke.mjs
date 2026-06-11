@@ -415,7 +415,7 @@ async function writeReport(findings, fatalMessage) {
     '- **(C)** Stories that leave `#storybook-root` empty (stuck in loading).',
     '- **(D)** React error-boundary console messages ("The above error …").',
     '',
-    'The auth-fetch hang class of bug (task #1535) is caught by check **(C)**:',
+    'The auth-fetch hang class of bug is caught by check **(C)**:',
     'any story that hangs waiting for an unauthenticated API call times out and',
     'its `#storybook-root` remains empty.',
   );

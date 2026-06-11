@@ -47,7 +47,7 @@
  *   vendor-emotion-*         14 kB     10.5 kB  (@emotion/*)
  *   vendor-mui-*            136 kB    104.4 kB  (@mui/material + @mui/system + …)
  *   vendor-mui-icons-*       15 kB     4.4 kB   (icons used by GlobalHeader/BottomNav)
- *   vendor-mui-datepickers-* 75 kB     56.8 kB  (@mui/x-date-pickers + pro; task #1539)
+ *   vendor-mui-datepickers-* 75 kB     56.8 kB  (@mui/x-date-pickers + pro; added when date-picker support was introduced)
  *
  * Lazy chunks (vendor-zxcvbn) are printed in the table but never fail the
  * build — only a warning is emitted if they grow beyond their soft limit.
@@ -115,7 +115,7 @@ const THRESHOLDS = [
     prefix: 'vendor-mui-datepickers',
     label: 'vendor-mui-datepickers',
     alwaysLoaded: true,
-    threshold: 75 * 1024,       // 75 kB — @mui/x-date-pickers + pro (task #1539)
+    threshold: 75 * 1024,       // 75 kB — @mui/x-date-pickers + pro (added when date-picker support was introduced)
   },
   {
     prefix: 'vendor-mui',

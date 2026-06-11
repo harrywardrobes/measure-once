@@ -2,8 +2,8 @@
 /**
  * check-public-island-bootstrap.mjs
  *
- * Guards the single-source-of-truth contract introduced in task #1909 and
- * extended in task #1919.
+ * Guards the single-source-of-truth contract for public island and bootstrap
+ * island ID sets.
  *
  * Background
  * ----------

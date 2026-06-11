@@ -105,7 +105,7 @@ const meta: Meta<typeof NavRoleRow> = {
           'When `is_customized` is **false** the row shows an "Inheriting default" badge and ' +
           'faded (opacity 0.45) preview chips for whatever the Default row currently has set. ' +
           'When `is_customized` is **true** the row shows the role\'s own chips at full opacity. ' +
-          'Added in task #1900; stories added in task #1948.',
+          'Introduced alongside the nav-role permissions feature; Storybook stories added when the design system gallery was extended to cover the new row.',
       },
     },
   },

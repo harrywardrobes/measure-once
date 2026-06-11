@@ -7,7 +7,7 @@
  * production React hook — so this test exercises real production code, not a
  * hand-written mirror.
  *
- * The three critical paths from task #585 that this guards:
+ * The three critical paths that this guards:
  *   1. Per-LS row with a label        → returns that label
  *   2. Per-LS row with null label     → returns '' (admin explicitly cleared;
  *                                       must NOT fall through to per-stage default)
@@ -68,7 +68,7 @@ const NO_SUBSTATUS_MAP = {};
 //
 // null in the map means the admin explicitly cleared the label for this LS.
 // The resolver must return '' and must NOT fall through to the per-stage
-// default row.  This is the critical regression path from task #582.
+// default row.  This is the critical regression path guarded by this test.
 {
   const map = {
     'sales|cold': null,             // admin explicitly cleared this LS
