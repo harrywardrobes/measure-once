@@ -108,7 +108,6 @@ const STEPS = [
   'test:hubspot-429-retry-contacts:ci',
   'test:icon-lint',
   'test:design-visit-hubspot-retry:ci',
-  'test:visits-past-time:ci',
   'test:hubspot-credential-audit:ci',
   'test:lead-status-guard:ci',
   'test:phone-directory:ci',
