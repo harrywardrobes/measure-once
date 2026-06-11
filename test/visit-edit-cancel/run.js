@@ -7,8 +7,7 @@ const { makeSkip } = require('../helpers/report');
 //
 // Covers:
 //   (API) PATCH /api/visits/:id updates the row and returns the updated visit.
-//   (API) DELETE /api/visits/:id removes the row and returns { success: true }.
-//   (API) Both endpoints require authentication — anonymous requests are blocked.
+//   (API) PATCH requires authentication — anonymous requests are blocked.
 //   (UI)  Admin sees Edit + Cancel icon buttons on delivery and installation cards.
 //   (UI)  Manager sees Edit + Cancel icon buttons on delivery and installation cards.
 //   (UI)  Member/viewer do NOT see Edit or Cancel buttons on visit cards.
@@ -105,10 +104,6 @@ async function seedVisit(pool, { type, title, startAt, endAt, createdBy }) {
 // users so we also wait for the AuthContext privilege fetch to settle before
 // returning (edit buttons only appear once auth has loaded isAdmin/isManager).
 //
-// The CustomerDetailPage fetches /api/visits with a 732-day window (366 past +
-// 366 future) which exceeds the server's 366-day limit (returns 400). We
-// intercept GET /api/visits requests and re-issue them with a valid 60-day
-// window so the visits always load correctly in the browser.
 async function openVisitPage(browser, jar, { expectEditButtons = false } = {}) {
   const ctx = await (browser.createBrowserContext
     ? browser.createBrowserContext()
@@ -122,43 +117,14 @@ async function openVisitPage(browser, jar, { expectEditButtons = false } = {}) {
   page.on('pageerror',     e => pageLogs.push(`[pageerror] ${e.message}`));
   page.on('requestfailed', r => pageLogs.push(`[reqfailed] ${r.url()} ${r.failure()?.errorText || ''}`));
 
-  // Build a cookie header from the session jar for use in server-side fetches.
-  const cookieHeader = jar || '';
-
   // Intercept HubSpot-backed and other non-visit API calls so the page
-  // bootstraps correctly without a real HUBSPOT_TOKEN. The request handler
-  // is async so we can re-fetch visits from the real server.
+  // bootstraps correctly without a real HUBSPOT_TOKEN.
   await page.setRequestInterception(true);
   page.on('request', async req => {
     const url = req.url();
-    const method = req.method();
-
-    // GET /api/visits — the page requests a 732-day range which exceeds the
-    // server's 366-day limit. Intercept and re-issue with a valid 60-day
-    // window (30 days past → 30 days future) so visits load correctly.
-    // DELETE and PATCH to /api/visits/:id pass through to the real server.
-    if (url.includes('/api/visits') && method === 'GET') {
-      try {
-        const now = Date.now();
-        const from = new Date(now - 30 * 86400000).toISOString();
-        const to   = new Date(now + 30 * 86400000).toISOString();
-        const r = await fetch(`${BASE}/api/visits?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, {
-          headers: { Accept: 'application/json', Cookie: cookieHeader },
-        });
-        const body = await r.text();
-        await req.respond({
-          status: r.status,
-          contentType: 'application/json',
-          body: body || '[]',
-        });
-      } catch {
-        await req.respond({ status: 200, contentType: 'application/json', body: '[]' });
-      }
-      return;
-    }
 
     // Let the real server handle auth, lead-statuses, workflow, and
-    // DELETE/PATCH /api/visits/:id so cancel/edit go through the real API.
+    // PATCH /api/visits/:id so edit goes through the real API.
     if (
       url.includes('/api/auth/user') ||
       url.includes('/api/visits') ||
@@ -452,38 +418,6 @@ async function main() {
     const blocked = r.status === 401 || r.status === 302;
     record(
       '[API] Anonymous PATCH /api/visits/:id is blocked',
-      'status=401 or 302', `status=${r.status}`, blocked,
-    );
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // [API] DELETE /api/visits/:id
-  // ══════════════════════════════════════════════════════════════════════════
-  console.log('\n  [API] DELETE /api/visits/:id');
-  {
-    // Seed a throw-away visit for the API delete probe.
-    const tmpId = await seedVisit(pool, {
-      type: 'other', title: 'API delete probe',
-      startAt: futureISO(20, 9), endAt: futureISO(20, 10),
-      createdBy: users.admin.email,
-    });
-    const r = await adminClient.delete(`/api/visits/${tmpId}`);
-    const dbRow = await pool.query(`SELECT id FROM visits WHERE id=$1`, [tmpId]);
-    record(
-      '[API] DELETE /api/visits/:id returns { success: true } and row is gone',
-      `status=200, success=true, db rows=0`,
-      `status=${r.status}, success=${r.json?.success}, db rows=${dbRow.rowCount}`,
-      r.status === 200 && r.json?.success === true && dbRow.rowCount === 0,
-    );
-  }
-
-  // Anon DELETE must be blocked.
-  {
-    const anon = makeClient(null);
-    const r = await anon.delete(`/api/visits/${deliveryId}`);
-    const blocked = r.status === 401 || r.status === 302;
-    record(
-      '[API] Anonymous DELETE /api/visits/:id is blocked',
       'status=401 or 302', `status=${r.status}`, blocked,
     );
   }

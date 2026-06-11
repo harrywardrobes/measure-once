@@ -5318,8 +5318,7 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
 // Admins can attach an interactive "handler" to a card action label. Built-in
 // handler types:
 //   • add_design_visit_to_calendar — click opens a date/time picker; on submit
-//     a `visits` row (type=design) + a Google Calendar event are created via
-//     existing endpoints (POST /api/visits, POST /api/events).
+//     a Google Calendar event is created via POST /api/events.
 //   • schedule_visit — generic version of the above; visit type (survey,
 //     installation, remedial, workshop, etc.) is set via config.visitType.
 //   • summarise_phone_call — click opens a textarea modal; on submit a HubSpot

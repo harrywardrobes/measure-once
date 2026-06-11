@@ -88,38 +88,9 @@ function validatePayload(body) {
   };
 }
 
-// Maximum allowed date range for GET /api/visits queries (366 days)
-const VISITS_MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
-
-function parseDateParam(v) {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? undefined : d;
-}
-
-// Visits are shared, organization-wide business data (same trust model as
-// HubSpot CRM notes/tasks). Any authenticated user may create, edit, or delete
-// any visit. created_by is stored for audit only.
-router.get('/api/visits', isAuthenticated, visitsRateLimiter, async (req, res) => {
-  const from = parseDateParam(req.query.from);
-  const to   = parseDateParam(req.query.to);
-  // Both from and to are required to prevent unbounded full-table scans
-  if (!from || !to) return res.status(400).json({ error: 'from and to query parameters are required' });
-  if (from === undefined || to === undefined) return res.status(400).json({ error: 'Invalid from/to' });
-  if (to - from > VISITS_MAX_RANGE_MS) return res.status(400).json({ error: 'Date range must not exceed 366 days' });
-  try {
-    const sql = 'SELECT * FROM visits WHERE start_at < $1 AND end_at > $2 ORDER BY start_at ASC';
-    const r = await pool.query(sql, [to.toISOString(), from.toISOString()]);
-    res.json(r.rows.map(mapDatabaseRowToVisit));
-  } catch (e) {
-    logger.error({ err: e.message }, 'GET /api/visits failed:');
-    res.status(500).json({ error: 'Failed to load visits' });
-  }
-});
-
-// Single-record GET. Returns the same camelCase shape as the list route,
-// including `version` and `updatedAt` so offline edits can carry a base for
-// optimistic-concurrency conflict detection (see syncEngine.detectConflict).
+// Single-record GET. Returns the camelCase shape including `version` and
+// `updatedAt` so offline edits can carry a base for optimistic-concurrency
+// conflict detection (see syncEngine.detectConflict).
 router.get('/api/visits/:id', isAuthenticated, visitsRateLimiter, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
@@ -133,9 +104,9 @@ router.get('/api/visits/:id', isAuthenticated, visitsRateLimiter, async (req, re
   }
 });
 
-// PATCH is kept read-write so existing visits (delivery windows, installation
-// slots, etc.) that live in the visits table can still be edited or deleted.
-// New visit creation goes directly to Google Calendar via POST /api/events.
+// PATCH is kept so existing visits (delivery windows, installation slots, etc.)
+// that live in the visits table can still be edited. New visit creation goes
+// directly to Google Calendar via POST /api/events.
 router.patch('/api/visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
@@ -155,19 +126,6 @@ router.patch('/api/visits/:id', isAuthenticated, requirePrivilege('member'), asy
   } catch (e) {
     logger.error({ err: e.message }, 'PATCH /api/visits failed:');
     res.status(500).json({ error: 'Failed to update visit' });
-  }
-});
-
-router.delete('/api/visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  try {
-    const r = await pool.query('DELETE FROM visits WHERE id=$1 RETURNING id', [id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true });
-  } catch (e) {
-    logger.error({ err: e.message }, 'DELETE /api/visits failed:');
-    res.status(500).json({ error: 'Failed to delete visit' });
   }
 });
 

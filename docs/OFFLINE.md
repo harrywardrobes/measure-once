@@ -52,7 +52,7 @@ client reloads once on `controllerchange` to run against the new bundle.
 | workbox precache | React bundle/chunks/assets, fonts, CSS, icons, manifest, stable HTML routes (`/`, `/customers`, `/profile`), and the offline fallback (`/offline.html`) | Precache (revisioned) | until next build | — |
 | `mo-pages` | App-shell navigations (dynamic EJS pages, e.g. `/customers/:id`) | NetworkFirst (3s timeout) | 24h | 50 |
 | `mo-customers` | `GET /api/contacts-all`, `…lead-status-counts`, `…substatus-counts`, `/api/lead-statuses`, `/api/lead-substatuses`, `/api/workflow`, `/api/contacts/:id`(`/localdata`\|`/tasks`) | StaleWhileRevalidate | 12h | 200 |
-| `mo-visits` | `GET /api/visits`, `/api/design-visits`(`/:id`), `/api/events` | StaleWhileRevalidate | 12h | 100 |
+| `mo-visits` | `GET /api/visits/:id`, `/api/design-visits`(`/:id`), `/api/events` | StaleWhileRevalidate | 12h | 100 |
 | `mo-photos` | `GET /api/card-actions/review-customer-photos/:id`, `/api/customer-info/*` | StaleWhileRevalidate | 12h | 100 |
 | `mo-customer-photos` | `GET /api/customer-info-photos/:key` (HMAC-signed submission photo images) | StaleWhileRevalidate | 12h | 200 |
 | `mo-google-fonts-css` | Google Fonts stylesheets | StaleWhileRevalidate | — | — |
