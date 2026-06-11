@@ -5,7 +5,7 @@
  *   loading → hub → one of three paths:
  *     • confirmed  → ScheduleVisitModal (visitType locked to 'design') →
  *                    POST /api/card-actions/design-visit-followup/outcome → done
- *     • resend     → editable email (visit_invite template) →
+ *     • resend     → optional date/time picker + editable email (visit_invite template) →
  *                    POST /api/emails/send →
  *                    POST /api/card-actions/design-visit-followup/outcome → done
  *     • not_proceeding → POST /api/card-actions/design-visit-followup/outcome → done
@@ -27,6 +27,11 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
@@ -56,6 +61,15 @@ function clearDraftStep(key: string): void {
   try { sessionStorage.removeItem(key); } catch { /* ignore */ }
 }
 
+/** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
+function buildProposedDateLine(date: Dayjs | null, time: Dayjs | null): string {
+  if (!date && !time) return '';
+  const parts: string[] = [];
+  if (date) parts.push(date.format('D MMMM YYYY'));
+  if (time) parts.push(time.format('h:mm A'));
+  return `We have a proposed slot available: ${parts.join(' at ')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
+}
+
 export interface DesignVisitFollowupModalProps {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
@@ -75,6 +89,9 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   const [emailBody, setEmailBody] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
+
+  const [resendDate, setResendDate] = useState<Dayjs | null>(null);
+  const [resendTime, setResendTime] = useState<Dayjs | null>(null);
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [outcomeError, setOutcomeError] = useState('');
@@ -108,21 +125,21 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // "Resend invite" — fetch editable visit_invite template
-  function handleResendInvite() {
-    goToStep('resend');
+  /** Fetch (or re-fetch) the visit_invite template, incorporating optional proposed date/time. */
+  function fetchResendTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null) {
     setEmailLoading(true);
     setEmailError('');
-    const firstName = (contactInfo?.contactName || '').split(' ')[0] || 'there';
+    const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     POST('/api/email-templates/render', {
       key: 'visit_invite',
       vars: {
         firstName,
         visitLabel: 'design visit',
         visitDuration: '60',
-        location: contactInfo?.contactAddress ? ` at ${contactInfo.contactAddress}` : '',
-        proposedDate: '',
-        proposedTime: '',
+        location: info?.contactAddress ? ` at ${info.contactAddress}` : '',
+        proposedDate: date ? date.format('D MMMM YYYY') : '',
+        proposedTime: time ? time.format('h:mm A') : '',
+        proposedDateLine: buildProposedDateLine(date, time),
       },
     })
       .then((data) => {
@@ -136,6 +153,21 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
       })
       .finally(() => setEmailLoading(false));
   }
+
+  // "Resend invite" — fetch editable visit_invite template
+  function handleResendInvite() {
+    goToStep('resend');
+    setResendDate(null);
+    setResendTime(null);
+    fetchResendTemplate(null, null, contactInfo);
+  }
+
+  // Re-fetch template whenever the proposed date/time changes (only on the resend step)
+  useEffect(() => {
+    if (step !== 'resend') return;
+    fetchResendTemplate(resendDate, resendTime, contactInfo);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resendDate, resendTime]);
 
   // "Confirmed" — open ScheduleVisitModal
   function handleConfirmed() {
@@ -294,6 +326,26 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
           <Typography variant="body2" color="text.secondary">
             Sending to: <strong>{contactInfo?.contactEmail || '—'}</strong>
           </Typography>
+          <Stack spacing={1.5}>
+            <Typography variant="body2" color="text.secondary">
+              Optionally include a proposed date and time in the email:
+            </Typography>
+            <Stack direction="row" spacing={1.5}>
+              <DatePicker
+                label="Proposed date"
+                value={resendDate}
+                onChange={(v) => setResendDate(v)}
+                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                disablePast
+              />
+              <TimePicker
+                label="Proposed time"
+                value={resendTime}
+                onChange={(v) => setResendTime(v)}
+                slotProps={{ textField: { size: 'small', fullWidth: true } }}
+              />
+            </Stack>
+          </Stack>
           {emailLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
               <CircularProgress size={24} />
@@ -361,26 +413,28 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   })();
 
   return (
-    <>
-      <Dialog open={hubDialogOpen} onClose={step === 'hub' ? handleClose : undefined} maxWidth="xs" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          {renderContent()}
-        </DialogContent>
-        {renderActions() && (
-          <DialogActions>{renderActions()}</DialogActions>
-        )}
-      </Dialog>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <>
+        <Dialog open={hubDialogOpen} onClose={step === 'hub' ? handleClose : undefined} maxWidth="sm" fullWidth>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            {renderContent()}
+          </DialogContent>
+          {renderActions() && (
+            <DialogActions>{renderActions()}</DialogActions>
+          )}
+        </Dialog>
 
-      <ScheduleVisitModal
-        handler={handler}
-        ctx={ctx}
-        visitType="design"
-        contactAddress={contactInfo?.contactAddress}
-        open={scheduleOpen}
-        onClose={handleScheduleClose}
-        onSuccess={handleScheduleSuccess}
-      />
-    </>
+        <ScheduleVisitModal
+          handler={handler}
+          ctx={ctx}
+          visitType="design"
+          contactAddress={contactInfo?.contactAddress}
+          open={scheduleOpen}
+          onClose={handleScheduleClose}
+          onSuccess={handleScheduleSuccess}
+        />
+      </>
+    </LocalizationProvider>
   );
 }

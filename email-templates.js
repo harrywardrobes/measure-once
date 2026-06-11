@@ -280,7 +280,7 @@ const TEMPLATE_DEFS = {
   visit_invite: {
     label: 'Visit Invite',
     description: 'Sent to a customer to invite them to propose a time for a design visit.',
-    variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDate', 'proposedTime'],
+    variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDate', 'proposedTime', 'proposedDateLine'],
     subject: 'Your {{visitLabel}} — getting in touch',
     body_text: [
       'Hi {{firstName}},',
@@ -289,7 +289,7 @@ const TEMPLATE_DEFS = {
       '',
       "We'd love to arrange a time that works for you. The visit usually takes around {{visitDuration}} minutes{{location}}.",
       '',
-      'Please reply to this email with your availability over the next week — let us know which days and times work best and we\'ll confirm a slot for you.',
+      '{{proposedDateLine}}Please reply to this email with your availability over the next week — let us know which days and times work best and we\'ll confirm a slot for you.',
       '',
       'Best regards',
     ].join('\n'),
@@ -463,6 +463,7 @@ const SAMPLE_VARS = {
     location: ' at 14 Oak Street, London',
     proposedDate: '',
     proposedTime: '',
+    proposedDateLine: '',
   },
   visit_confirmation: {
     firstName: 'Jane',
