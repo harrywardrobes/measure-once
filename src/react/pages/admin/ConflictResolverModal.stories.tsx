@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import Box from '@mui/material/Box';
 
 import { ConflictResolverModal } from './ActionHandlersPage';
+import type { HandlerType } from '../../components/CardActionModalsHost';
 
 const meta: Meta = {
   title: 'Features/ActionHandlers/ConflictResolverModal',
@@ -62,14 +63,14 @@ const INITIAL_TWO_HANDLERS = [
   {
     id: 1,
     name: 'Send quote message',
-    type: 'show_message',
+    type: 'show_message' as HandlerType,
     config: { title: 'Quote sent', message: 'Remember to attach the PDF.' },
     bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
   },
   {
     id: 2,
     name: 'Schedule survey visit',
-    type: 'schedule_visit',
+    type: 'schedule_visit' as HandlerType,
     config: { visitType: 'survey' },
     bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
   }
@@ -79,21 +80,21 @@ const INITIAL_THREE_HANDLERS_SUB = [
   {
     id: 3,
     name: 'Start design visit (A)',
-    type: 'start_design_visit',
+    type: 'start_design_visit' as HandlerType,
     config: { inProgressLeadStatus: 'in_progress', submittedLeadStatus: 'dv_submitted' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 4,
     name: 'Show next-step message',
-    type: 'show_message',
+    type: 'show_message' as HandlerType,
     config: { title: '', message: 'Upload the design brief before continuing.' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 5,
     name: 'Schedule follow-up visit',
-    type: 'schedule_visit',
+    type: 'schedule_visit' as HandlerType,
     config: { visitType: 'remedial' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   }

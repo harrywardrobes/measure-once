@@ -141,7 +141,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Binding      { stage_key?: string; status_key?: string; }
-interface Handler      { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
+interface Handler      { id: number; name: string; type: HandlerType; config: Record<string, unknown>; bindings: Binding[]; }
 interface LeadStatus   { key: string; label: string; stage: string | null; shorthand: string; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
 interface CALabel      { stage_key: string; status_key: string; label: string; }
 interface EmailTemplate { key: string; label: string; }
@@ -572,7 +572,7 @@ function HandlerEditorModal({
                 label="Action type"
                 inputProps={{ id: 'cah-type' }}
                 value={handlerType}
-                onChange={e => { setHandlerType(String(e.target.value)); setConflictList([]); }}
+                onChange={e => { setHandlerType(e.target.value as HandlerType); setConflictList([]); }}
               >
                 {Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>
@@ -688,7 +688,7 @@ function HandlerEditorModal({
                   return (
                     <Typography key={h.id} variant="body2">
                       • <strong>{slotLabel}</strong> is already wired to{' '}
-                      <strong>{h.name || HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type}</strong> — bind anyway?
+                      <strong>{h.name || HANDLER_TYPE_LABELS[h.type] || h.type}</strong> — bind anyway?
                     </Typography>
                   );
                 })}
@@ -784,7 +784,7 @@ export function ConflictResolverModal({
         </Typography>
         <Stack spacing={1}>
           {conflicting.map(h => {
-            const typeLbl = HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type;
+            const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
             const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
             const isRemoving = removingId === h.id;
             return (
@@ -859,8 +859,8 @@ async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>
 // ── Sub-component: handler summary ────────────────────────────────────────────
 
 function HandlerBoundTo({ h }: { h: Handler }) {
-  const summary = HANDLER_MODAL_SUMMARY[h.type as HandlerType];
-  const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type as HandlerType] ?? [];
+  const summary = HANDLER_MODAL_SUMMARY[h.type];
+  const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type] ?? [];
   const templateItems = templateKeys
     .map(k => _emailTemplatesRef.current.find(t => t.key === k))
     .filter((t): t is EmailTemplate => t !== undefined);
@@ -962,7 +962,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
 }
 
 function HandlerSummary({ h }: { h: Handler }) {
-  const typeLbl = HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type;
+  const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
   const actionName = h.config?.action_name ? (
     <span className="adm-handler-actionname">{String(h.config.action_name)}</span>
   ) : null;

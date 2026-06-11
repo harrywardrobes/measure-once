@@ -29,7 +29,7 @@ interface LeadStatus {
 }
 interface CALabel  { stage_key: string; status_key: string; label: string; }
 interface Binding  { stage_key?: string; status_key?: string; }
-interface Handler  { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
+interface Handler  { id: number; name: string; type: HandlerType; config: Record<string, unknown>; bindings: Binding[]; }
 
 interface StatusModel {
   key: string; label: string; shorthand: string;
