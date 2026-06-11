@@ -403,6 +403,14 @@ function requireHubspotToken(req, res, next) {
 }
 // QuickBooks routes (auth enforced inside the router)
 app.use(quickbooksRoutes);
+// Enforce onboarding completion for scoped routers that are mounted before the
+// global /api auth gate.  requireOnboardingComplete already calls next() when
+// req.user is absent, so public/token-gated routes inside these routers are
+// unaffected.
+app.use('/api/visits', requireOnboardingComplete);
+app.use('/api/design-visits', requireOnboardingComplete);
+app.use('/api/customer-info', requireOnboardingComplete);
+app.use('/api/photo-reviews', requireOnboardingComplete);
 app.use(visitsRouter);
 app.use(designVisitsRouter);
 app.use(customerInfoRouter);
