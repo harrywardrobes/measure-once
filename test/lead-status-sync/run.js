@@ -13,6 +13,8 @@ const UI_PROBE_LABELS = [
   '(N) visibilitychange fires during in-flight lead-status fetch — race guard',
   '(O) visibilitychange fires while /api/lead-substatuses is in-flight — sub-status race guard',
   '(P) BroadcastChannel fires while /api/lead-substatuses is in-flight — symmetric race guard',
+  '[Q] contacts re-fetch — hs_webhook BC triggers re-fetch; admin_mutation does not',
+  '[R] contacts re-fetch — visibilitychange catch-up: hs_webhook re-fetches, admin_mutation does not',
 ];
 
 // test/lead-status-sync/run.js
@@ -83,6 +85,8 @@ const PROBE_LABELS = [
   '[N] race guard — visibilitychange during in-flight lead-status fetch',
   '[O] race guard — visibilitychange during in-flight sub-status fetch',
   '[P] race guard — BC during in-flight sub-status fetch',
+  '[Q] contacts refresh — hs_webhook BC triggers re-fetch; admin_mutation does not',
+  '[R] contacts refresh — visibilitychange catch-up triggers re-fetch for hs_webhook only',
 ];
 
 // ── test fixtures ─────────────────────────────────────────────────────────────
@@ -2140,6 +2144,340 @@ async function main() {
     await pRaceAdminTab.close();
     await pRaceTab.close();
 
+    // ── (Q) onContactsRefresh — BroadcastChannel path ─────────────────────────
+    // Tests the `onContactsRefresh` callback wired to `useLeadStatusSync` in
+    // `CustomersPage.tsx`.  When a `lead_statuses_changed` BroadcastChannel
+    // message carries `{ src: 'hs_webhook' }`, `refresh()` calls
+    // `onContactsRefreshRef.current?.()`, which increments `refreshNonce` and
+    // triggers a contacts re-fetch (`GET /api/contacts-all`).  When the message
+    // carries `{ src: 'admin_mutation' }`, `refresh()` does NOT call the
+    // callback (admin renames only change label definitions, not contact records).
+    //
+    // Probe steps (hs_webhook sub-case):
+    //   1. Open a fresh Customers tab with Puppeteer request interception.
+    //   2. Respond to every /api/contacts-all hit with a lightweight mock
+    //      payload (same pattern as sections K/L) and count the requests.
+    //   3. Wait for bootstrap (waitForBootstrapFns) then wait until the initial
+    //      contacts fetch has been intercepted.
+    //   4. Post a 'lead_statuses_changed' BC message with { src: 'hs_webhook' }
+    //      from a second same-origin tab.
+    //   5. Poll until /api/contacts-all is hit at least once more — asserts the
+    //      callback incremented refreshNonce and triggered a re-fetch.
+    //
+    // Probe steps (admin_mutation sub-case):
+    //   1-3. Same setup on a fresh tab.
+    //   4. Post a 'lead_statuses_changed' BC message with { src: 'admin_mutation' }.
+    //   5. Wait 2 s and assert /api/contacts-all was NOT hit again.
+    console.log('\n  [Q] onContactsRefresh — BroadcastChannel path');
+
+    const qMockPayload = JSON.stringify({
+      results: [{
+        id: 'privtest-q-contact',
+        properties: {
+          firstname: 'PrivTest', lastname: 'QContact',
+          email: 'privtest-q@example.com',
+          hs_lead_status: LS_KEY, hw_lead_substatus: SS_KEY,
+        },
+      }],
+      total: 1, totalPages: 1, page: 1,
+    });
+
+    // ── Q sub-case 1: hs_webhook triggers contacts re-fetch ───────────────────
+    const qHookTab = await browser.newPage();
+    await qHookTab.setCacheEnabled(false);
+    await injectSession(qHookTab, adminClient.cookie);
+
+    let qHookContactsCount = 0;
+    await qHookTab.setRequestInterception(true);
+    qHookTab.on('request', req => {
+      if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+        qHookContactsCount++;
+        req.respond({ status: 200, contentType: 'application/json', body: qMockPayload });
+      } else {
+        req.continue();
+      }
+    });
+
+    await qHookTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await waitForBootstrapFns(qHookTab);
+
+    // Wait for the initial contacts-all request to land (up to 8 s).
+    await new Promise(res => {
+      const iv = setInterval(() => {
+        if (qHookContactsCount >= 1) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 8000);
+    });
+    record(
+      '[Q] initial /api/contacts-all request intercepted on hs_webhook tab',
+      'at least 1 contacts-all request within 8 s',
+      `count=${qHookContactsCount}`,
+      qHookContactsCount >= 1,
+    );
+
+    const qHookBaseCount = qHookContactsCount;
+
+    // Post BC message with src: 'hs_webhook' from a second same-origin tab.
+    const qHookAdminTab = await browser.newPage();
+    await injectSession(qHookAdminTab, adminClient.cookie);
+    await qHookAdminTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await qHookAdminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage({ src: 'hs_webhook' });
+    });
+
+    // Poll until contacts-all is hit again (refreshNonce bumped by onContactsRefresh).
+    const qHookRefetched = await new Promise(res => {
+      const iv = setInterval(() => {
+        if (qHookContactsCount > qHookBaseCount) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 7000);
+    });
+    record(
+      '[Q] hs_webhook BC message triggers /api/contacts-all re-fetch',
+      `/api/contacts-all count > ${qHookBaseCount} within 7 s`,
+      `count=${qHookContactsCount} base=${qHookBaseCount}`,
+      qHookRefetched,
+    );
+
+    await qHookAdminTab.close();
+    await qHookTab.close();
+
+    // ── Q sub-case 2: admin_mutation does NOT trigger contacts re-fetch ────────
+    const qMutTab = await browser.newPage();
+    await qMutTab.setCacheEnabled(false);
+    await injectSession(qMutTab, adminClient.cookie);
+
+    let qMutContactsCount = 0;
+    await qMutTab.setRequestInterception(true);
+    qMutTab.on('request', req => {
+      if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+        qMutContactsCount++;
+        req.respond({ status: 200, contentType: 'application/json', body: qMockPayload });
+      } else {
+        req.continue();
+      }
+    });
+
+    await qMutTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await waitForBootstrapFns(qMutTab);
+
+    // Wait for the initial contacts-all request to land.
+    await new Promise(res => {
+      const iv = setInterval(() => {
+        if (qMutContactsCount >= 1) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 8000);
+    });
+
+    const qMutBaseCount = qMutContactsCount;
+
+    // Post BC message with src: 'admin_mutation'.
+    const qMutAdminTab = await browser.newPage();
+    await injectSession(qMutAdminTab, adminClient.cookie);
+    await qMutAdminTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await qMutAdminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage({ src: 'admin_mutation' });
+    });
+
+    // Wait 2 s and assert no additional contacts-all request was made.
+    await new Promise(r => setTimeout(r, 2000));
+    const qMutNoRefetch = qMutContactsCount === qMutBaseCount;
+    record(
+      '[Q] admin_mutation BC message does NOT trigger /api/contacts-all re-fetch',
+      `/api/contacts-all count stays at ${qMutBaseCount} for 2 s`,
+      `count=${qMutContactsCount} base=${qMutBaseCount}`,
+      qMutNoRefetch,
+    );
+
+    await qMutAdminTab.close();
+    await qMutTab.close();
+
+    // ── (R) onContactsRefresh — visibilitychange catch-up path ────────────────
+    // Tests that the `onVisibility` handler inside `useLeadStatusSync` also
+    // honours the `hs_webhook` / `admin_mutation` src distinction.  When a BC
+    // message fires while the tab is "hidden" (simulated via JS), the handler
+    // stores `src` in `lastBcSrcRef`.  The immediate `refresh(src)` call from
+    // the BC listener still fires (no visibility guard on the BC path), and
+    // when the tab becomes "visible" `onVisibility` reads `lastBcSrcRef.current`
+    // and calls `refresh(src)` again as a catch-up.  For `hs_webhook` this means
+    // at least one additional contacts-all hit; for `admin_mutation` there are none.
+    //
+    // Probe steps (hs_webhook sub-case):
+    //   1. Open a fresh Customers tab with /api/contacts-all mocked + counted.
+    //   2. Wait for bootstrap and initial contacts fetch.
+    //   3. Simulate tab hidden (override document.visibilityState → 'hidden').
+    //   4. Post a 'lead_statuses_changed' BC message with { src: 'hs_webhook' }
+    //      from a second same-origin tab.  The BC handler fires immediately,
+    //      calls refresh('hs_webhook'), and bumps refreshNonce → contacts re-fetch.
+    //   5. Simulate tab visible (restore visibilityState, dispatch visibilitychange).
+    //      The onVisibility handler reads lastBcSrcRef.current = 'hs_webhook' and
+    //      calls refresh('hs_webhook') again → second contacts re-fetch.
+    //   6. Assert /api/contacts-all count increased.
+    //
+    // Probe steps (admin_mutation sub-case):
+    //   1-3. Same setup.
+    //   4. Post { src: 'admin_mutation' } BC message while hidden.
+    //   5. Simulate tab visible.
+    //   6. Wait 2 s and assert count did NOT increase.
+    console.log('\n  [R] onContactsRefresh — visibilitychange catch-up path');
+
+    const rMockPayload = qMockPayload;
+
+    // ── R sub-case 1: hs_webhook triggers re-fetch on visibilitychange ─────────
+    const rHookTab = await browser.newPage();
+    await rHookTab.setCacheEnabled(false);
+    await injectSession(rHookTab, adminClient.cookie);
+
+    let rHookContactsCount = 0;
+    await rHookTab.setRequestInterception(true);
+    rHookTab.on('request', req => {
+      if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+        rHookContactsCount++;
+        req.respond({ status: 200, contentType: 'application/json', body: rMockPayload });
+      } else {
+        req.continue();
+      }
+    });
+
+    await rHookTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await waitForBootstrapFns(rHookTab);
+
+    // Wait for the initial contacts-all request to land (up to 8 s).
+    await new Promise(res => {
+      const iv = setInterval(() => {
+        if (rHookContactsCount >= 1) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 8000);
+    });
+
+    const rHookBaseCount = rHookContactsCount;
+
+    // Simulate tab hidden so visibilitychange tracking is exercised.
+    await rHookTab.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Post BC with src: 'hs_webhook' from a second same-origin tab.
+    // The BC handler in the hidden tab fires refresh('hs_webhook') immediately,
+    // bumping refreshNonce → /api/contacts-all re-fetch #1.
+    const rHookAdminTab = await browser.newPage();
+    await injectSession(rHookAdminTab, adminClient.cookie);
+    await rHookAdminTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await rHookAdminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage({ src: 'hs_webhook' });
+    });
+
+    // Give the BC handler a tick to fire, then simulate tab visible.
+    await new Promise(r => setTimeout(r, 200));
+
+    // Restore visibilityState to visible and fire visibilitychange.
+    // onVisibility reads lastBcSrcRef.current = 'hs_webhook', clears it, and
+    // calls refresh('hs_webhook') → bumps refreshNonce again → re-fetch #2.
+    await rHookTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Poll until at least one contacts-all re-fetch has landed.
+    const rHookRefetched = await new Promise(res => {
+      const iv = setInterval(() => {
+        if (rHookContactsCount > rHookBaseCount) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 7000);
+    });
+    record(
+      '[R] hs_webhook BC + visibilitychange triggers /api/contacts-all re-fetch',
+      `/api/contacts-all count > ${rHookBaseCount} within 7 s`,
+      `count=${rHookContactsCount} base=${rHookBaseCount}`,
+      rHookRefetched,
+    );
+
+    await rHookAdminTab.close();
+    await rHookTab.close();
+
+    // ── R sub-case 2: admin_mutation does NOT trigger re-fetch ─────────────────
+    const rMutTab = await browser.newPage();
+    await rMutTab.setCacheEnabled(false);
+    await injectSession(rMutTab, adminClient.cookie);
+
+    let rMutContactsCount = 0;
+    await rMutTab.setRequestInterception(true);
+    rMutTab.on('request', req => {
+      if (/\/api\/contacts-all(\?|$)/.test(req.url())) {
+        rMutContactsCount++;
+        req.respond({ status: 200, contentType: 'application/json', body: rMockPayload });
+      } else {
+        req.continue();
+      }
+    });
+
+    await rMutTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await waitForBootstrapFns(rMutTab);
+
+    // Wait for the initial contacts-all request to land.
+    await new Promise(res => {
+      const iv = setInterval(() => {
+        if (rMutContactsCount >= 1) { clearInterval(iv); res(true); }
+      }, 100);
+      setTimeout(() => { clearInterval(iv); res(false); }, 8000);
+    });
+
+    const rMutBaseCount = rMutContactsCount;
+
+    // Simulate tab hidden.
+    await rMutTab.evaluate(() => {
+      Object.defineProperty(document, 'visibilityState',
+        { get: () => 'hidden', configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Post BC with src: 'admin_mutation' while hidden.
+    const rMutAdminTab = await browser.newPage();
+    await injectSession(rMutAdminTab, adminClient.cookie);
+    await rMutAdminTab.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await rMutAdminTab.evaluate(() => {
+      new BroadcastChannel('lead_statuses_changed').postMessage({ src: 'admin_mutation' });
+    });
+
+    // Give the BC handler a tick, then simulate tab visible.
+    await new Promise(r => setTimeout(r, 200));
+
+    await rMutTab.evaluate(() => {
+      const proto   = Document.prototype;
+      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
+                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      if (ownDesc) {
+        Object.defineProperty(document, 'visibilityState', ownDesc);
+      } else {
+        Object.defineProperty(document, 'visibilityState',
+          { get: () => 'visible', configurable: true });
+      }
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    // Wait 2 s and assert no additional contacts-all request was made.
+    await new Promise(r => setTimeout(r, 2000));
+    const rMutNoRefetch = rMutContactsCount === rMutBaseCount;
+    record(
+      '[R] admin_mutation BC + visibilitychange does NOT trigger /api/contacts-all re-fetch',
+      `/api/contacts-all count stays at ${rMutBaseCount} for 2 s`,
+      `count=${rMutContactsCount} base=${rMutBaseCount}`,
+      rMutNoRefetch,
+    );
+
+    await rMutAdminTab.close();
+    await rMutTab.close();
+
   } finally {
     await browser.close().catch(() => {});
   }
@@ -2350,6 +2688,34 @@ async function writeReport(runId, findings) {
     '  Exercises the `subBc.addEventListener` → `refresh()` →',
     '  `loadLeadSubstatuses()` path in `useLeadStatusSync` (`CustomersPage.tsx`)',
     '  under a concurrent-fetch race.',
+    '- **(Q) onContactsRefresh — BroadcastChannel path**: opens two fresh Customers',
+    '  tabs (one per sub-case), each with Puppeteer request interception that mocks',
+    '  `GET /api/contacts-all` and counts every hit. Waits for bootstrap and the',
+    '  initial contacts fetch to land. Sub-case 1: posts a `lead_statuses_changed`',
+    '  BroadcastChannel message with `{ src: \'hs_webhook\' }` from a second',
+    '  same-origin tab; polls until `/api/contacts-all` count increases — asserts',
+    '  that `refresh(\'hs_webhook\')` called `onContactsRefreshRef.current?.()`,',
+    '  which incremented `refreshNonce` and triggered a re-fetch. Sub-case 2: posts',
+    '  `{ src: \'admin_mutation\' }`; waits 2 s and asserts the count is unchanged —',
+    '  confirms that admin-label renames do not cause a contacts re-load. Exercises',
+    '  the `if (src === \'hs_webhook\') { onContactsRefreshRef.current?.(); }` branch',
+    '  inside `refresh()` in `useLeadStatusSync` (`CustomersPage.tsx`).',
+    '- **(R) onContactsRefresh — visibilitychange catch-up path**: symmetric to [Q]',
+    '  but exercises the `onVisibility` catch-up path in `useLeadStatusSync`.',
+    '  Opens two fresh Customers tabs (one per sub-case) with the same',
+    '  contacts-all mock + count approach. After the initial fetch lands, simulates',
+    '  the tab becoming hidden (overrides `document.visibilityState` to `\'hidden\'`,',
+    '  dispatches `visibilitychange`). Sub-case 1: posts `{ src: \'hs_webhook\' }`',
+    '  BC from a second tab while hidden — the BC handler fires `refresh(\'hs_webhook\')`',
+    '  immediately (contacts re-fetch #1), then restoring `visibilityState` to',
+    '  `\'visible\'` and dispatching `visibilitychange` causes `onVisibility` to read',
+    '  `lastBcSrcRef.current = \'hs_webhook\'` and call `refresh(\'hs_webhook\')`',
+    '  again (re-fetch #2); asserts count increased. Sub-case 2: posts',
+    '  `{ src: \'admin_mutation\' }` while hidden, restores visibility; waits 2 s',
+    '  and asserts count unchanged — confirms neither the BC handler nor the',
+    '  `onVisibility` catch-up triggers a contacts re-fetch for `admin_mutation`.',
+    '  Exercises the `lastBcSrcRef` → `onVisibility` → `refresh(src)` path in',
+    '  `useLeadStatusSync` (`CustomersPage.tsx`).',
     '',
     '## Notes',
     '',
