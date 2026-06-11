@@ -23,6 +23,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface CreateProps {
   mode?: 'create';
@@ -31,6 +33,7 @@ interface CreateProps {
   open: boolean;
   onClose: () => void;
   onSaved?: () => void;
+  demo?: boolean;
 }
 
 interface CreateDirectProps {
@@ -58,7 +61,10 @@ export function InstallationSlotModal(props: Props) {
   const isCreateDirect = props.mode === 'create-direct';
   const visit = isEdit ? props.visit : undefined;
 
-  const cfg = (!isEdit && !isCreateDirect) ? ((props as CreateProps).handler.config || {}) : {};
+  const isCardAction = !isEdit && !isCreateDirect;
+  const demo = isCardAction ? !!(props as CreateProps).demo : false;
+  const contactEmail = isCardAction ? (props as CreateProps).ctx.contactEmail : undefined;
+  const cfg = isCardAction ? ((props as CreateProps).handler.config || {}) : {};
   const contactName = isEdit
     ? visit?.customerName
     : isCreateDirect
@@ -141,12 +147,13 @@ export function InstallationSlotModal(props: Props) {
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
-    hasUnsavedChanges,
+    demo ? false : hasUnsavedChanges,
     handleClose,
     submitting,
   );
 
   async function doSubmit() {
+    if (demo) return;
     if (!startDt || !startDt.isValid()) return;
     const durationInt = parseInt(duration, 10);
     const start = startDt.toDate();
@@ -304,6 +311,7 @@ export function InstallationSlotModal(props: Props) {
   }
 
   function handleSubmit() {
+    if (demo) return;
     setError('');
     if (!title.trim()) { setError('Title is required.'); return; }
     if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
@@ -356,9 +364,12 @@ export function InstallationSlotModal(props: Props) {
       </Dialog>
 
       <Dialog open={props.open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DemoDialogTitle demo={demo}>{dialogTitle}</DemoDialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            {isCardAction && (
+              <ContactInfoHeader name={contactName} email={contactEmail} />
+            )}
             <TextField
               id="cah-is-title"
               label="Title"
@@ -459,14 +470,16 @@ export function InstallationSlotModal(props: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting}
-            data-testid="cah-primary"
-          >
-            {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save changes' : 'Schedule')}
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={submitting || demo}
+              data-testid="cah-primary"
+            >
+              {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save changes' : 'Schedule')}
+            </Button>
+          </DemoActionTooltip>
         </DialogActions>
       </Dialog>
 

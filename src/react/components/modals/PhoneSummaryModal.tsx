@@ -13,6 +13,8 @@ import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface FollowUpProps {
   handler: CardActionHandlerData;
@@ -68,9 +70,10 @@ interface Props {
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
-export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
+export function PhoneSummaryModal({ handler, ctx, open, onClose, demo }: Props) {
   const cfg = handler.config || {};
   const showToast = useToast();
   const [summary, setSummary] = useState('');
@@ -88,12 +91,13 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
-    hasUnsavedChanges,
+    demo ? false : hasUnsavedChanges,
     handleClose,
     submitting,
   );
 
   async function handleSubmit() {
+    if (demo) return;
     setError('');
     if (!summary.trim()) { setError('Please type a summary first.'); return; }
 
@@ -124,11 +128,12 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
   return (
     <>
       <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DialogTitle>
+        <DemoDialogTitle demo={demo}>
           {ctx.contactName ? `Phone call summary — ${ctx.contactName}` : 'Phone call summary'}
-        </DialogTitle>
+        </DemoDialogTitle>
         <DialogContent>
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
             <TextField
               id="cah-pc-summary"
               label="What did you discuss?"
@@ -149,14 +154,16 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting}
-            data-testid="cah-primary"
-          >
-            {submitting ? 'Saving…' : 'Save note'}
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={submitting || demo}
+              data-testid="cah-primary"
+            >
+              {submitting ? 'Saving…' : 'Save note'}
+            </Button>
+          </DemoActionTooltip>
         </DialogActions>
       </Dialog>
       <FollowUpEmailModal

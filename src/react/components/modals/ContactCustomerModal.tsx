@@ -16,12 +16,16 @@ import { POST, PATCH } from '../../utils/api';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DEMO_CONTACT } from './demoData';
 
 interface Props {
   contactId: string;
   contactName: string;
   contactEmail: string;
   onClose: () => void;
+  demo?: boolean;
 }
 
 type Phase =
@@ -88,11 +92,32 @@ function relativeTime(iso: string): string {
   return `${months} month${months === 1 ? '' : 's'} ago`;
 }
 
-export function ContactCustomerModal({ contactId, contactName, contactEmail, onClose }: Props) {
+const DEMO_CONTACT_DATA: ContactData = {
+  contactName: DEMO_CONTACT.name,
+  contactEmail: DEMO_CONTACT.email,
+  phone: DEMO_CONTACT.phone,
+  mobile: DEMO_CONTACT.mobile,
+  whatsapp: DEMO_CONTACT.whatsapp,
+  leadStatus: null,
+  callAttempted: false,
+  emailSent: false,
+  whatsappSent: false,
+  lastAttemptAt: null,
+  lastAttemptBy: null,
+  attemptLog: [],
+  historySessionCount: 0,
+  historyTotalAttempts: 0,
+  historyEverCalled: false,
+  historyEverEmailed: false,
+  historyEverWhatsapped: false,
+  historyAttemptLog: [],
+};
+
+export function ContactCustomerModal({ contactId, contactName, contactEmail, onClose, demo }: Props) {
   const { user: currentUser } = useAuth();
 
-  const [phase, setPhase] = useState<Phase>('loading');
-  const [contactData, setContactData] = useState<ContactData | null>(null);
+  const [phase, setPhase] = useState<Phase>(demo ? 'contact' : 'loading');
+  const [contactData, setContactData] = useState<ContactData | null>(demo ? DEMO_CONTACT_DATA : null);
   const [loadError, setLoadError] = useState('');
   const [advanceError, setAdvanceError] = useState('');
 
@@ -124,6 +149,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (demo) {
+      setContactData(DEMO_CONTACT_DATA);
+      setPhase('contact');
+      return;
+    }
     setPhase('loading');
     setLoadError('');
     setAdvanceError('');
@@ -171,6 +201,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   ) {
     const newValue = !currentValue;
     setValue(newValue);
+    if (demo) return;
     setInFlight(true);
     setError('');
     try {
@@ -204,6 +235,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   async function handleDone() {
+    if (demo) return;
     const currentLeadStatus = contactData?.leadStatus || null;
     const isNullStatus =
       !currentLeadStatus ||
@@ -234,6 +266,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   async function handleConfirmNoResponse() {
+    if (demo) return;
     const currentLeadStatus = contactData?.leadStatus || null;
     setPhase('advancing');
     setAdvanceError('');
@@ -256,6 +289,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   function handleSendUploadLink() {
+    if (demo) return;
     const ctx = {
       contactId,
       contactName: contactData?.contactName || contactName,
@@ -276,7 +310,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     <Dialog open onClose={() => { if (phase !== 'advancing') onClose(); }} maxWidth="xs" fullWidth>
       {phase === 'loading' && (
         <>
-          <DialogTitle>Contact Customer</DialogTitle>
+          <DemoDialogTitle demo={demo}>Contact Customer</DemoDialogTitle>
           <DialogContent>
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress size={36} />
@@ -293,36 +327,21 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
 
       {phase === 'contact' && (
         <>
-          <DialogTitle>Call {displayName}</DialogTitle>
+          <DemoDialogTitle demo={demo}>Call {displayName}</DemoDialogTitle>
           <DialogContent>
             <Stack spacing={2} sx={{ mt: 0.5 }}>
               {loadError && (
                 <Alert severity="warning">{loadError}</Alert>
               )}
-              {(phone || mobile || whatsapp) ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {phone && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Phone</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{phone}</Typography>
-                    </Box>
-                  )}
-                  {mobile && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">Mobile</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{mobile}</Typography>
-                    </Box>
-                  )}
-                  {whatsapp && (
-                    <Box>
-                      <Typography variant="body2" color="text.secondary">WhatsApp</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{whatsapp}</Typography>
-                    </Box>
-                  )}
-                </Box>
-              ) : !loadError ? (
-                <Alert severity="warning">No phone number on record for this contact.</Alert>
-              ) : null}
+              {!loadError && (
+                <ContactInfoHeader
+                  name={displayName}
+                  phone={phone}
+                  mobile={mobile}
+                  whatsapp={whatsapp}
+                  email={contactData?.contactEmail || contactEmail}
+                />
+              )}
 
               <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -678,13 +697,16 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             </Stack>
           </DialogContent>
           <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', pb: 2, px: 2 }}>
-            <Button
-              onClick={handleSendUploadLink}
-              variant="outlined"
-              data-testid="cc-send-upload-link"
-            >
-              Send Upload Link
-            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                onClick={handleSendUploadLink}
+                variant="outlined"
+                disabled={demo}
+                data-testid="cc-send-upload-link"
+              >
+                Send Upload Link
+              </Button>
+            </DemoActionTooltip>
             <Button
               onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
               variant="outlined"
@@ -693,13 +715,16 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             >
               No Response
             </Button>
-            <Button
-              onClick={handleDone}
-              variant="contained"
-              data-testid="cc-done"
-            >
-              Done
-            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                onClick={handleDone}
+                variant="contained"
+                disabled={demo}
+                data-testid="cc-done"
+              >
+                Done
+              </Button>
+            </DemoActionTooltip>
           </DialogActions>
         </>
       )}
@@ -714,9 +739,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         const anyEver        = everCalled || everEmailed || everWhatsapped;
         return (
           <>
-            <DialogTitle>Mark as No Response?</DialogTitle>
+            <DemoDialogTitle demo={demo}>Mark as No Response?</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+                {!loadError && (
+                  <ContactInfoHeader
+                    name={displayName}
+                    phone={phone}
+                    mobile={mobile}
+                    whatsapp={whatsapp}
+                    email={contactData?.contactEmail || contactEmail}
+                  />
+                )}
                 <Typography variant="body2">
                   This will advance the lead status to <strong>No Response</strong>.
                 </Typography>
@@ -735,14 +769,17 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
             </DialogContent>
           <DialogActions>
             <Button onClick={() => setPhase('contact')}>Cancel</Button>
-            <Button
-              onClick={handleConfirmNoResponse}
-              variant="contained"
-              color="warning"
-              data-testid="cc-confirm-no-response"
-            >
-              Confirm
-            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                onClick={handleConfirmNoResponse}
+                variant="contained"
+                color="warning"
+                disabled={demo}
+                data-testid="cc-confirm-no-response"
+              >
+                Confirm
+              </Button>
+            </DemoActionTooltip>
           </DialogActions>
         </>
         );

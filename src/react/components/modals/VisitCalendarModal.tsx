@@ -19,12 +19,15 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface Props {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
@@ -45,7 +48,7 @@ const VISIT_TYPE_PLACEHOLDERS: Record<string, string> = {
   other:        'Notes for this visit',
 };
 
-export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
+export function VisitCalendarModal({ handler, ctx, open, onClose, demo }: Props) {
   const showToast = useToast();
   const cfg = handler.config || {};
   const visitType      = (cfg.visitType as string) || 'design';
@@ -104,9 +107,10 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
-    useDiscardGuard(hasUnsavedChanges, handleClose, submitting);
+    useDiscardGuard(demo ? false : hasUnsavedChanges, handleClose, submitting);
 
   async function doSubmit() {
+    if (demo) return;
     if (!startDt || !startDt.isValid()) return;
     const durationInt = parseInt(duration, 10);
     const start = startDt.toDate();
@@ -132,6 +136,7 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function handleSubmit() {
+    if (demo) return;
     setError('');
     if (!title.trim()) { setError('Title is required.'); return; }
     if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
@@ -184,9 +189,10 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
       </Dialog>
 
       <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DemoDialogTitle demo={demo}>{dialogTitle}</DemoDialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
             <TextField
               id="cah-dv-title"
               label="Title"
@@ -258,14 +264,16 @@ export function VisitCalendarModal({ handler, ctx, open, onClose }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting}
-            data-testid="cah-primary"
-          >
-            {submitting ? 'Scheduling…' : 'Schedule'}
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={submitting || demo}
+              data-testid="cah-primary"
+            >
+              {submitting ? 'Scheduling…' : 'Schedule'}
+            </Button>
+          </DemoActionTooltip>
         </DialogActions>
       </Dialog>
 

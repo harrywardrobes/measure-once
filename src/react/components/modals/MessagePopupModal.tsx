@@ -3,24 +3,25 @@ import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
+import { DemoDialogTitle } from './demoMode';
 
 interface Props {
   handler: CardActionHandlerData;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
-export function MessagePopupModal({ handler, open, onClose }: Props) {
+export function MessagePopupModal({ handler, open, onClose, demo }: Props) {
   const cfg = handler.config || {};
   const title = (cfg.title as string) || 'Action required';
   const message = (cfg.message as string) || '';
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
+      <DemoDialogTitle demo={demo}>{title}</DemoDialogTitle>
       <DialogContent>
         <Typography
           variant="body2"

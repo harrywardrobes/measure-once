@@ -83,7 +83,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 44 * 1024,       // 44 kB — mount runtime + shell UI + card-action modals (raised: localStorageKeys constants file pulled into always-loaded bundle via AppBootstrapContext/CommandPalette/formatters; measured 43.1 kB)
+    threshold: 45 * 1024,       // 45 kB — mount runtime + shell UI + card-action modals (raised: shared ContactInfoHeader + demo-mode preview wrappers added to the always-loaded card-action modals; measured 44.3 kB)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {

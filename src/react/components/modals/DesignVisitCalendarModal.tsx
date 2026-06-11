@@ -20,12 +20,15 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface Props {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 interface DraftState {
@@ -66,7 +69,7 @@ function clearDraft(key: string): void {
   }
 }
 
-export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props) {
+export function DesignVisitCalendarModal({ handler, ctx, open, onClose, demo }: Props) {
   const showToast = useToast();
   const cfg = handler.config || {};
   const defaultDuration = (cfg.defaultDurationMin as number) || 60;
@@ -75,7 +78,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     (ctx.contactName ? `Design visit — ${ctx.contactName}` : 'Design visit');
 
   const key = draftKey(handler.id, ctx.contactId);
-  const draft = loadDraft(key);
+  const draft = demo ? {} : loadDraft(key);
 
   const freshStart = dayjs().add(24, 'hour').startOf('hour');
   const restoredStart = draft.startDt ? dayjs(draft.startDt) : null;
@@ -113,8 +116,9 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
     (startDt !== null && !startDt.isSame(initialStartRef.current));
 
   useEffect(() => {
+    if (demo) return;
     saveDraft(key, { title, duration, location, notes, startDt: startDt?.toISOString() });
-  }, [key, title, duration, location, notes, startDt]);
+  }, [key, title, duration, location, notes, startDt, demo]);
 
   useEffect(() => {
     if (!open) {
@@ -148,9 +152,10 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
-    useDiscardGuard(hasUnsavedChanges, handleDismiss, submitting);
+    useDiscardGuard(demo ? false : hasUnsavedChanges, handleDismiss, submitting);
 
   async function doSubmit() {
+    if (demo) return;
     if (!startDt || !startDt.isValid()) return;
     const durationInt = parseInt(duration, 10);
     const start = startDt.toDate();
@@ -177,6 +182,7 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
   }
 
   function handleSubmit() {
+    if (demo) return;
     setError('');
     if (!title.trim()) { setError('Title is required.'); return; }
     if (!startDt || !startDt.isValid()) { setError('Start time is required.'); return; }
@@ -225,11 +231,12 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
       </Dialog>
 
       <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DialogTitle>
+        <DemoDialogTitle demo={demo}>
           {ctx.contactName ? `Schedule design visit for ${ctx.contactName}` : 'Schedule design visit'}
-        </DialogTitle>
+        </DemoDialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
             <TextField
               id="cah-dv-title"
               label="Title"
@@ -309,14 +316,16 @@ export function DesignVisitCalendarModal({ handler, ctx, open, onClose }: Props)
         </DialogContent>
         <DialogActions>
           <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting}
-            data-testid="cah-primary"
-          >
-            {submitting ? 'Scheduling…' : 'Schedule'}
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={submitting || demo}
+              data-testid="cah-primary"
+            >
+              {submitting ? 'Scheduling…' : 'Schedule'}
+            </Button>
+          </DemoActionTooltip>
         </DialogActions>
       </Dialog>
 

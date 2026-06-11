@@ -18,12 +18,15 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useToast } from '../../contexts/ToastContext';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 interface Props {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 interface LinkStatus {
@@ -108,7 +111,7 @@ function formatExpiry(expiresAt: string): string {
   return `expires in ${diffDays} days`;
 }
 
-export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Props) {
+export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo }: Props) {
   const showToast = useToast();
   const [phase, setPhase] = useState<Phase>('checking');
   const [linkStatus, setLinkStatus] = useState<LinkStatus | null>(null);
@@ -188,15 +191,28 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
 
   useEffect(() => {
     if (!open) return;
+    if (demo) {
+      setGeneratedLink({
+        formLink: `${window.location.origin}/customer-info/demo-token`,
+        token: 'demo-token',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      setLinkError('');
+      setCheckError('');
+      setError('');
+      setPhase('ready');
+      return;
+    }
     const controller = new AbortController();
     checkStatus(ctx.contactId, controller.signal);
     return () => {
       controller.abort();
       generateAbortRef.current?.abort();
     };
-  }, [open, ctx.contactId, checkStatus]);
+  }, [open, ctx.contactId, checkStatus, demo]);
 
   async function handleSend() {
+    if (demo) return;
     setError('');
     setSubmitting(true);
     try {
@@ -442,23 +458,30 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
             {copyAndClosing ? 'Copying…' : 'Copy & close'}
           </Button>
         )}
-        <Button
-          variant="contained"
-          onClick={handleSend}
-          disabled={submitting || !!linkError || copyAndClosing}
-          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-          data-testid="cah-primary"
-        >
-          {submitting ? 'Sending…' : sendLabel}
-        </Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            variant="contained"
+            onClick={handleSend}
+            disabled={submitting || !!linkError || copyAndClosing || demo}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+            data-testid="cah-primary"
+          >
+            {submitting ? 'Sending…' : sendLabel}
+          </Button>
+        </DemoActionTooltip>
       </>
     );
   }
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth data-testid="upload-photos-dialog">
-      <DialogTitle data-testid="upload-photos-dialog-title">{title}</DialogTitle>
-      <DialogContent>{renderContent()}</DialogContent>
+      <DemoDialogTitle demo={demo} data-testid="upload-photos-dialog-title">{title}</DemoDialogTitle>
+      <DialogContent>
+        {phase !== 'sent' && (
+          <ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />
+        )}
+        {renderContent()}
+      </DialogContent>
       <DialogActions>{renderActions()}</DialogActions>
     </Dialog>
   );

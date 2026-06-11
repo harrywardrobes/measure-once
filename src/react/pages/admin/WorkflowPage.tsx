@@ -10,6 +10,10 @@ import {
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   GlobalStyles,
   InputAdornment,
@@ -44,6 +48,17 @@ import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 import { STAGE_COLORS } from '../../theme';
 import { resolveActionLabel } from '../../utils/resolveActionLabel.mjs';
+import { DEMO_CONTACT } from '../../components/modals/demoData';
+import { MessagePopupModal } from '../../components/modals/MessagePopupModal';
+import { VisitCalendarModal } from '../../components/modals/VisitCalendarModal';
+import { DesignVisitCalendarModal } from '../../components/modals/DesignVisitCalendarModal';
+import { PhoneSummaryModal } from '../../components/modals/PhoneSummaryModal';
+import { DeliveryWindowModal } from '../../components/modals/DeliveryWindowModal';
+import { InstallationSlotModal } from '../../components/modals/InstallationSlotModal';
+import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
+import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
+import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
+import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -206,10 +221,12 @@ function ActionButtonPreview({
   label,
   stageKey,
   hasHandler,
+  onClick,
 }: {
   label: string;
   stageKey: string;
   hasHandler: boolean;
+  onClick?: () => void;
 }) {
   const colors = STAGE_COLORS[stageKey];
   if (!hasHandler || !label) {
@@ -234,8 +251,13 @@ function ActionButtonPreview({
     );
   }
 
-  return (
+  const clickable = Boolean(onClick);
+  const button = (
     <Box
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } } : undefined}
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -245,6 +267,12 @@ function ActionButtonPreview({
         bgcolor: colors?.bg ?? '#8B2BFF',
         boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
         maxWidth: 200,
+        cursor: clickable ? 'pointer' : 'default',
+        transition: 'transform 0.12s ease, opacity 0.12s ease',
+        ...(clickable && {
+          '&:hover': { transform: 'scale(1.04)', opacity: 0.92 },
+          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+        }),
       }}
     >
       <Typography
@@ -263,6 +291,9 @@ function ActionButtonPreview({
       </Typography>
     </Box>
   );
+
+  if (!clickable) return button;
+  return <Tooltip title="Click to preview modal">{button}</Tooltip>;
 }
 
 // ── CallChainStepper ─────────────────────────────────────────────────────────
@@ -464,6 +495,7 @@ function StatusRow({
   emailTemplates,
   labelMap,
   isFlashing,
+  onPreviewClick,
 }: {
   ls: LeadStatus;
   stageKey: string;
@@ -471,6 +503,7 @@ function StatusRow({
   emailTemplates: EmailTemplate[];
   labelMap: Record<string, string | null>;
   isFlashing: boolean;
+  onPreviewClick?: (handler: Handler) => void;
 }) {
   const lsKey          = String(ls.key || '').toLowerCase();
   const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
@@ -576,6 +609,11 @@ function StatusRow({
               label={resolvedLabel}
               stageKey={stageKey}
               hasHandler={hasHandler}
+              onClick={
+                hasHandler && onPreviewClick && statusHandlers[0]
+                  ? () => onPreviewClick(statusHandlers[0])
+                  : undefined
+              }
             />
           </Box>
           {hasHandler ? (
@@ -723,6 +761,7 @@ function StageAccordionNew({
   flashedSlots,
   accordionRef,
   forcedOpen,
+  onPreviewClick,
 }: {
   stageKey: string;
   stageLabel: string;
@@ -734,6 +773,7 @@ function StageAccordionNew({
   flashedSlots: Set<string>;
   accordionRef?: React.RefObject<HTMLDivElement>;
   forcedOpen?: boolean;
+  onPreviewClick?: (handler: Handler) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
@@ -834,6 +874,7 @@ function StageAccordionNew({
                     emailTemplates={emailTemplates}
                     labelMap={labelMap}
                     isFlashing={flashedSlots.has(slotKey)}
+                    onPreviewClick={onPreviewClick}
                   />
                 );
               })}
@@ -843,6 +884,67 @@ function StageAccordionNew({
       </Accordion>
     </Box>
   );
+}
+
+// ── WorkflowDemoModalHost ─────────────────────────────────────────────────────
+
+const DEMO_CTX: CardActionContext = {
+  contactId: 'demo-preview',
+  contactName: 'Jane Smith',
+  contactEmail: DEMO_CONTACT.email,
+};
+
+function WorkflowDemoModalHost({
+  handler,
+  onClose,
+}: {
+  handler: Handler;
+  onClose: () => void;
+}) {
+  const common = { open: true, onClose, demo: true } as const;
+  switch (handler.type) {
+    case 'show_message':
+      return <MessagePopupModal handler={handler} {...common} />;
+    case 'add_design_visit_to_calendar':
+      return <DesignVisitCalendarModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'schedule_visit':
+      return <VisitCalendarModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'summarise_phone_call':
+      return <PhoneSummaryModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'schedule_delivery_window':
+      return <DeliveryWindowModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'schedule_installation_slot':
+      return <InstallationSlotModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'upload_photos_and_info':
+      return <UploadPhotosModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'arrange_visit':
+      return <ArrangeVisitModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'contact_customer':
+      return (
+        <ContactCustomerModal
+          contactId={DEMO_CTX.contactId}
+          contactName={DEMO_CTX.contactName}
+          contactEmail={DEMO_CTX.contactEmail}
+          onClose={onClose}
+          demo
+        />
+      );
+    default:
+      return (
+        <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
+          <DialogTitle>Demo preview not available</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary">
+              {HANDLER_TYPE_LABELS[handler.type] || handler.type} does not have a
+              demo-capable modal preview.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={onClose}>Close</Button>
+          </DialogActions>
+        </Dialog>
+      );
+  }
 }
 
 // ── WorkflowPage ──────────────────────────────────────────────────────────────
@@ -862,6 +964,7 @@ export function WorkflowPage() {
   const [searchText,       setSearchText]       = useState('');
   const [flashedSlots,     setFlashedSlots]     = useState<Set<string>>(new Set());
   const [forcedOpenStages, setForcedOpenStages] = useState<Set<string>>(new Set());
+  const [demoModal,        setDemoModal]        = useState<{ handler: Handler } | null>(null);
 
   const isFirstLoad          = useRef(true);
   const prevSnapshotRef      = useRef<Record<string, number>>({});
@@ -1169,6 +1272,7 @@ export function WorkflowPage() {
                     flashedSlots={flashedSlots}
                     accordionRef={getAccordionRef(stage.key)}
                     forcedOpen={forcedOpenStages.has(stage.key.toLowerCase())}
+                    onPreviewClick={(handler) => setDemoModal({ handler })}
                   />
                 ))}
               </Stack>
@@ -1195,6 +1299,13 @@ export function WorkflowPage() {
           </Box>
         )}
       </Stack>
+
+      {demoModal && (
+        <WorkflowDemoModalHost
+          handler={demoModal.handler}
+          onClose={() => setDemoModal(null)}
+        />
+      )}
     </>
   );
 }

@@ -8,7 +8,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -25,12 +24,16 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { ContactInfoHeader } from './ContactInfoHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DEMO_CONTACT } from './demoData';
 
 interface Props {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 type Step =
@@ -92,14 +95,28 @@ function visitLabel(visitType: 'design' | 'survey'): string {
   return visitType === 'survey' ? 'survey visit' : 'design visit';
 }
 
-export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
+const DEMO_CONTACT_INFO: ContactInfo = {
+  visitType: DEMO_CONTACT.visitType,
+  contactName: DEMO_CONTACT.name,
+  contactPhone: DEMO_CONTACT.phone,
+  contactMobilePhone: DEMO_CONTACT.mobile,
+  contactWhatsAppPhone: DEMO_CONTACT.whatsapp,
+  contactEmail: DEMO_CONTACT.email,
+  contactAddress: DEMO_CONTACT.address,
+};
+
+export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) {
   const key = draftKey(ctx.contactId);
-  const draft = loadDraft(key);
+  const draft = demo ? {} : loadDraft(key);
 
   const showToast = useToast();
 
-  const [step, setStep] = useState<Step>('loading');
-  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [step, setStep] = useState<Step>(demo ? 'call' : 'loading');
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(demo ? DEMO_CONTACT_INFO : null);
+  // True while the background contact-info fetch is in flight (e.g. during a
+  // draft restore where the step jumps past 'loading' but contactInfo is null).
+  // Lets ContactInfoHeader show skeletons instead of a false "no details" warning.
+  const [contactLoading, setContactLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -117,7 +134,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   const _hasUnsavedChangesRef = useRef(hasUnsavedChanges);
   _hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-  const [address, setAddress]       = useState(draft.address ?? '');
+  const [address, setAddress]       = useState(demo ? DEMO_CONTACT.address : (draft.address ?? ''));
   const [bookedSlot, setBookedSlot] = useState<Dayjs | null>(
     draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : null,
   );
@@ -136,6 +153,15 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
     setActionError('');
     setNoAnswerTemplate(null);
 
+    if (demo) {
+      setContactInfo(DEMO_CONTACT_INFO);
+      setContactLoading(false);
+      setStep(prev => prev === 'loading' ? 'call' : prev);
+      return;
+    }
+
+    setContactLoading(true);
+
     const hasDraft = draft.step && draft.step !== 'loading' && draft.step !== 'done';
     if (hasDraft) {
       setStep(draft.step as Step);
@@ -153,6 +179,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
       .then((data: unknown) => {
         const d = data as ContactInfo;
         setContactInfo(d);
+        setContactLoading(false);
         if (!hasDraft) {
           // Fresh open: initialise address and step from the API response.
           // Use functional update so a stale response from a rapid reopen
@@ -174,6 +201,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
           .catch(() => { /* silently ignore — buildNoAnswerEmail fallback used */ });
       })
       .catch((e: Error) => {
+        setContactLoading(false);
         if (!hasDraft) {
           // Fresh open: show the error and advance past the loading spinner.
           setLoadError(e.message || 'Could not load contact info.');
@@ -186,6 +214,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   }, [open]);
 
   useEffect(() => {
+    if (demo) return;
     if (step === 'loading' || step === 'done') return;
     saveDraft(key, {
       step,
@@ -203,22 +232,23 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function handleDiscard() {
-    clearDraft(key);
+    if (!demo) clearDraft(key);
     handleClose();
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
-    _hasUnsavedChangesRef.current,
+    demo ? false : _hasUnsavedChangesRef.current,
     handleDiscard,
     submitting,
   );
 
   async function handleOutcome(outcome: 'not_proceeding' | 'call_back_later') {
     if (outcome === 'call_back_later') {
-      clearDraft(key);
+      if (!demo) clearDraft(key);
       onClose();
       return;
     }
+    if (demo) return;
     setSubmitting(true);
     setActionError('');
     try {
@@ -260,6 +290,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   }
 
   async function handleBooked() {
+    if (demo) return;
     if (!bookedSlot || !bookedSlot.isValid()) {
       setActionError('Please select a date and time.');
       return;
@@ -334,6 +365,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
   }
 
   async function handleEmailSent() {
+    if (demo) return;
     if (!emailBody.trim()) {
       setActionError('Email body cannot be empty.');
       return;
@@ -403,52 +435,26 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
         {step === 'call' && (
           <>
-            <DialogTitle>Call {displayName}</DialogTitle>
+            <DemoDialogTitle demo={demo}>Call {displayName}</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
-                {(landline || mobile || whatsapp) ? (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {landline && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">Phone</Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{landline}</Typography>
-                      </Box>
-                    )}
-                    {mobile && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">Mobile</Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{mobile}</Typography>
-                      </Box>
-                    )}
-                    {whatsapp && (
-                      <Box>
-                        <Typography variant="body2" color="text.secondary">WhatsApp</Typography>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>{whatsapp}</Typography>
-                      </Box>
-                    )}
-                  </Box>
-                ) : (
-                  <Alert severity="warning">No phone number on record for this contact.</Alert>
-                )}
+                <ContactInfoHeader
+                  name={displayName}
+                  phone={landline}
+                  mobile={mobile}
+                  whatsapp={whatsapp}
+                  email={contactInfo?.contactEmail || ctx.contactEmail}
+                  loading={contactLoading && !contactInfo}
+                />
                 <Typography variant="body2">
                   Call {displayName} to book their {label}. What was the outcome?
                 </Typography>
-                <Divider />
                 {actionError && (
                   <Alert severity="error">{actionError}</Alert>
                 )}
               </Stack>
             </DialogContent>
             <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', pb: 2, px: 2 }}>
-              <Button
-                disabled={submitting}
-                onClick={() => { setActionError(''); setMadeProgress(true); setStep('booked'); }}
-                variant="contained"
-                color="success"
-                data-testid="av-outcome-booked"
-              >
-                Booked
-              </Button>
               <Button
                 disabled={submitting}
                 onClick={() => {
@@ -480,14 +486,25 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
               >
                 Call back later
               </Button>
+              <DemoActionTooltip demo={demo}>
+                <Button
+                  disabled={submitting || demo}
+                  onClick={() => handleOutcome('not_proceeding')}
+                  color="error"
+                  variant="outlined"
+                  data-testid="av-outcome-not-proceeding"
+                >
+                  {submitting ? <CircularProgress size={18} /> : 'Not proceeding'}
+                </Button>
+              </DemoActionTooltip>
               <Button
                 disabled={submitting}
-                onClick={() => handleOutcome('not_proceeding')}
-                color="error"
-                variant="outlined"
-                data-testid="av-outcome-not-proceeding"
+                onClick={() => { setActionError(''); setMadeProgress(true); setStep('booked'); }}
+                variant="contained"
+                color="success"
+                data-testid="av-outcome-booked"
               >
-                {submitting ? <CircularProgress size={18} /> : 'Not proceeding'}
+                Booked
               </Button>
             </DialogActions>
           </>
@@ -495,9 +512,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
 
         {step === 'booked' && (
           <>
-            <DialogTitle>Book {label} for {displayName}</DialogTitle>
+            <DemoDialogTitle demo={demo}>Book {label} for {displayName}</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
+                <ContactInfoHeader
+                  name={displayName}
+                  phone={landline}
+                  mobile={mobile}
+                  whatsapp={whatsapp}
+                  email={contactInfo?.contactEmail || ctx.contactEmail}
+                  loading={contactLoading && !contactInfo}
+                />
                 <DateTimePicker
                   label="Visit date & time"
                   value={bookedSlot}
@@ -527,23 +552,33 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
-              <Button
-                variant="contained"
-                onClick={handleBooked}
-                disabled={submitting}
-                data-testid="av-booked-confirm"
-              >
-                {submitting ? <CircularProgress size={18} color="inherit" /> : 'Confirm booking'}
-              </Button>
+              <DemoActionTooltip demo={demo}>
+                <Button
+                  variant="contained"
+                  onClick={handleBooked}
+                  disabled={submitting || demo}
+                  data-testid="av-booked-confirm"
+                >
+                  {submitting ? <CircularProgress size={18} color="inherit" /> : 'Confirm booking'}
+                </Button>
+              </DemoActionTooltip>
             </DialogActions>
           </>
         )}
 
         {step === 'email' && (
           <>
-            <DialogTitle>Ask {displayName} for availability</DialogTitle>
+            <DemoDialogTitle demo={demo}>Ask {displayName} for availability</DemoDialogTitle>
             <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
+                <ContactInfoHeader
+                  name={displayName}
+                  phone={landline}
+                  mobile={mobile}
+                  whatsapp={whatsapp}
+                  email={contactInfo?.contactEmail || ctx.contactEmail}
+                  loading={contactLoading && !contactInfo}
+                />
                 <Typography variant="body2" color="text.secondary">
                   We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
                 </Typography>
@@ -574,14 +609,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose }: Props) {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
-              <Button
-                variant="contained"
-                onClick={handleEmailSent}
-                disabled={submitting}
-                data-testid="av-email-send"
-              >
-                {submitting ? <CircularProgress size={18} color="inherit" /> : 'Send email'}
-              </Button>
+              <DemoActionTooltip demo={demo}>
+                <Button
+                  variant="contained"
+                  onClick={handleEmailSent}
+                  disabled={submitting || demo}
+                  data-testid="av-email-send"
+                >
+                  {submitting ? <CircularProgress size={18} color="inherit" /> : 'Send email'}
+                </Button>
+              </DemoActionTooltip>
             </DialogActions>
           </>
         )}
