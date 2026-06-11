@@ -14,6 +14,8 @@
  *   in the call-chain column and Modal Detail Card.
  */
 
+import type { HandlerType } from '../components/CardActionModalsHost';
+
 export interface HandlerModalSummary {
   steps: string;
   hubspot: string;
@@ -85,7 +87,7 @@ export const HANDLER_TYPE_LABELS: Record<string, string> = {
   contact_customer:             'Contact customer (call / email / WhatsApp)',
 };
 
-export const HANDLER_EMAIL_TEMPLATES: Record<string, string[]> = {
+export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   upload_photos_and_info:       ['customer_invite', 'admin_notification', 'customer_thank_you'],
   review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
   arrange_visit:                ['arrange_visit_no_answer'],

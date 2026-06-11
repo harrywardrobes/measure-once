@@ -40,6 +40,7 @@ import {
   HANDLER_TYPE_LABELS,
   HANDLER_COMPONENT_META,
 } from '../../utils/handlerMeta';
+import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 import { STAGE_COLORS } from '../../theme';
 import { resolveActionLabel } from '../../utils/resolveActionLabel.mjs';
@@ -351,7 +352,7 @@ function ModalDetailCard({
     ? `Sets lead status to in-progress on open; to ${handler.config.submittedLeadStatus} on submit`
     : summary?.hubspot ?? '';
 
-  const templateKeys  = HANDLER_EMAIL_TEMPLATES[handler.type] ?? [];
+  const templateKeys  = HANDLER_EMAIL_TEMPLATES[handler.type as HandlerType] ?? [];
   const templateItems = templateKeys
     .map(k => emailTemplates.find(t => t.key === k))
     .filter((t): t is EmailTemplate => t !== undefined);

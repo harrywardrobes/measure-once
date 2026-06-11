@@ -35,6 +35,8 @@ type ModalState =
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string };
 
+export type HandlerType = Exclude<ModalState['type'], 'none'>;
+
 export function CardActionModalsHost() {
   const [modal, setModal] = useState<ModalState>({ type: 'none' });
 
