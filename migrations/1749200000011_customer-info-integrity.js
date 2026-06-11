@@ -51,11 +51,39 @@ exports.up = (pgm) => {
 
   pgm.sql(`
     DO $$ BEGIN
-      IF NOT EXISTS (
+      -- Already a proper UNIQUE/PK constraint of this name? Nothing to do.
+      IF EXISTS (
         SELECT 1 FROM information_schema.table_constraints
         WHERE constraint_name = 'pro_submission_id_unique'
           AND table_name = 'photo_review_outcomes'
       ) THEN
+        RETURN;
+      END IF;
+
+      -- A relation (index) of this name already exists but no matching
+      -- constraint backs it — e.g. the schema was provisioned by a tool that
+      -- created the unique index without a named table constraint. Promote
+      -- that existing unique index into the constraint instead of issuing a
+      -- plain ADD CONSTRAINT, which would try to build a second index of the
+      -- same name and fail with "relation pro_submission_id_unique already
+      -- exists". Scope the match to a UNIQUE, non-partial index that actually
+      -- belongs to photo_review_outcomes so an unrelated same-named index
+      -- elsewhere can never be promoted (USING INDEX would otherwise fail).
+      IF EXISTS (
+        SELECT 1
+        FROM pg_class i
+        JOIN pg_index ix  ON ix.indexrelid = i.oid
+        JOIN pg_class t   ON t.oid = ix.indrelid
+        WHERE i.relname = 'pro_submission_id_unique'
+          AND i.relkind = 'i'
+          AND t.relname = 'photo_review_outcomes'
+          AND ix.indisunique
+          AND ix.indpred IS NULL
+      ) THEN
+        ALTER TABLE photo_review_outcomes
+          ADD CONSTRAINT pro_submission_id_unique
+          UNIQUE USING INDEX pro_submission_id_unique;
+      ELSE
         ALTER TABLE photo_review_outcomes
           ADD CONSTRAINT pro_submission_id_unique UNIQUE (submission_id);
       END IF;

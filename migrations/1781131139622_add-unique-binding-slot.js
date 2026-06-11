@@ -25,7 +25,7 @@ exports.up = (pgm) => {
 
   // Step 2: add a unique expression index so future inserts cannot duplicate a slot.
   pgm.sql(`
-    CREATE UNIQUE INDEX card_action_handler_bindings_slot_unique
+    CREATE UNIQUE INDEX IF NOT EXISTS card_action_handler_bindings_slot_unique
     ON card_action_handler_bindings (
       COALESCE(stage_key, ''),
       COALESCE(status_key, '')

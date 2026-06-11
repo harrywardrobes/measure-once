@@ -258,12 +258,27 @@ exports.up = (pgm) => {
         (stage_key IS NULL AND substatus_id IS NOT NULL)
       )
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS cahb_label_uniq
-      ON card_action_handler_bindings (stage_key, status_key)
-      WHERE substatus_id IS NULL;
-    CREATE UNIQUE INDEX IF NOT EXISTS cahb_substatus_uniq
-      ON card_action_handler_bindings (substatus_id)
-      WHERE substatus_id IS NOT NULL;
+    -- These two indexes reference substatus_id. On a fresh DB the column was
+    -- just created above so they apply normally. If this migration is re-run
+    -- against a schema where a later migration (1749200000019_remove-substatuses)
+    -- or an external schema sync has already dropped substatus_id, skip them —
+    -- Postgres cascades these indexes away with the column, and the slot-unique
+    -- index added by a later migration takes their place.
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'card_action_handler_bindings'
+          AND column_name = 'substatus_id'
+      ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS cahb_label_uniq
+          ON card_action_handler_bindings (stage_key, status_key)
+          WHERE substatus_id IS NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS cahb_substatus_uniq
+          ON card_action_handler_bindings (substatus_id)
+          WHERE substatus_id IS NOT NULL;
+      END IF;
+    END $$;
     DO $$
     BEGIN
       IF EXISTS (

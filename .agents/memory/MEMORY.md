@@ -10,4 +10,5 @@
 - [Offline conflict restore](offline-conflict-restore.md) — resolveConflict evicts cache online / patches it offline; per-field restore needs write body keys to match the GET read shape (design visits don't).
 - [DV write/read shape mismatch](dv-write-read-shape.md) — design-visit edits are camelCase but the server reads snake_case; conflict diff/restore/cache-patch must bridge the two.
 - [Overlay hover tooltip](overlay-hover-tooltip.md) — in TokenHighlightField, never make backdrop spans interactive (steals caret); hit-test the input's pointer vs span rects + controlled Tooltip.
+- [Boot migrations vs publish flow](boot-migrations-vs-publish-flow.md) — prod crash-loops when pgmigrations is empty + schema externally provisioned; every migration must survive a full re-run against an arbitrary historical schema.
 - [Rate-limit migrations table](rate-limit-migrations-table.md) — public.migrations is owned by @acpr/rate-limit-postgresql (not Replit); never drop it; db-migrate.js self-heals it on boot.
