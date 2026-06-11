@@ -53,6 +53,7 @@ export interface ProjectWorkflowDef {
 export interface ProjectsData {
   loading: boolean;
   error: string | null;
+  fromCache: boolean;
   contacts: ProjectContact[];
   stageCache: Record<string, ProjectRoom[]>;
   workflow: ProjectWorkflowDef | undefined;
@@ -75,6 +76,7 @@ export function useProjectsData(): ProjectsData {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [stageCache, setStageCache] = useState<Record<string, ProjectRoom[]>>({});
   const [workflow, setWorkflow] = useState<ProjectWorkflowDef | undefined>(undefined);
@@ -184,6 +186,7 @@ export function useProjectsData(): ProjectsData {
         void setMeta('stageCache', mergedCache);
         setWorkflow(workflowData);
         setPlatformUsers(Array.isArray(usersData) ? usersData : []);
+        setFromCache(false);
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
@@ -207,6 +210,7 @@ export function useProjectsData(): ProjectsData {
             setStageCache(cachedStage);
           }
           setRoomAssignmentsStale(false);
+          setFromCache(true);
           setError(null);
           setLoading(false);
           return;
@@ -397,6 +401,7 @@ export function useProjectsData(): ProjectsData {
   return {
     loading,
     error,
+    fromCache,
     contacts,
     stageCache,
     workflow,

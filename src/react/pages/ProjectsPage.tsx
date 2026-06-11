@@ -975,6 +975,7 @@ export function ProjectsPage() {
   const {
     loading,
     error,
+    fromCache,
     contacts,
     stageCache,
     workflow,
@@ -1556,6 +1557,13 @@ export function ProjectsPage() {
           }
         >
           Dev mode is ON — only test contacts are shown
+        </Alert>
+      )}
+
+      {/* Offline cached-data banner */}
+      {!loading && fromCache && (
+        <Alert severity="info" sx={{ borderRadius: 0, flexShrink: 0, py: 0 }} data-testid="projects-offline-banner">
+          You&apos;re offline — showing saved projects from your last visit.
         </Alert>
       )}
 
