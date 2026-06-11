@@ -155,7 +155,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           sx={{
             zIndex: 'var(--z-toast, 9500)',
-            bottom: 'calc(64px + env(safe-area-inset-bottom)) !important',
+            bottom: 'calc(var(--bottom-nav-height, 0px) + env(safe-area-inset-bottom)) !important',
           }}
         >
           <Alert

@@ -187,6 +187,14 @@ function NavSkeleton({ count }: { count: number }) {
 
 export function BottomNav() {
   const theme = useTheme();
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--bottom-nav-height', '64px');
+    return () => {
+      document.documentElement.style.removeProperty('--bottom-nav-height');
+    };
+  }, []);
+
   const { isManager, loading: privLoading } = usePrivilege();
   const { prefs, loading: prefsLoading, patchPref } = usePrefs();
   const [value, setValue] = useState<string | false>(() =>
