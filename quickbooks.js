@@ -621,6 +621,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
       let invoiceId     = null;
       let invoiceDocNum = null;
       let idempotentRetry = false;
+      let sendAlreadyDone = false;
 
       const lockClient = await pool.connect();
       let advisoryLockHeld = false;
@@ -634,7 +635,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         // Re-check idempotency table under the advisory lock so a concurrent
         // request that also passed the pre-lock SELECT now sees the committed row.
         const existing = await lockClient.query(
-          'SELECT invoice_id, invoice_doc_num FROM open_deal_invoices WHERE estimate_id = $1',
+          'SELECT invoice_id, invoice_doc_num, sent_at FROM open_deal_invoices WHERE estimate_id = $1',
           [estimateId]
         );
         if (existing.rows.length > 0) {
@@ -643,8 +644,14 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
           idempotentRetry = true;
           steps.estimateAccepted = true; // was accepted on the prior call
           steps.invoiceCreated   = true;
+          // If the invoice was already sent on a previous (non-concurrent) call,
+          // mark sendAlreadyDone so the send-lock block skips the send step and
+          // the final response includes sendSkipped: true.
+          if (existing.rows[0].sent_at != null) {
+            sendAlreadyDone = true;
+          }
           logger.warn(
-            { estimateId, contactId, invoiceId },
+            { estimateId, contactId, invoiceId, sendAlreadyDone },
             '[accept-deal] idempotency: existing invoice found — skipping create, completing remaining steps'
           );
         } else {
@@ -730,7 +737,6 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
       const sendLockKey    = estimateId + ':send';
       const sendLockClient = await pool.connect();
       let sendLockHeld  = false;
-      let sendAlreadyDone = false;
       try {
         await sendLockClient.query(
           'SELECT pg_advisory_lock(hashtext($1)::bigint)',

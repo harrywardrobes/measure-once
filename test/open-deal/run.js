@@ -1015,6 +1015,23 @@ async function main() {
         secondInvCreateCount === 0
           ? 'no invoice create call on retry (correct)'
           : `${secondInvCreateCount} unexpected invoice create call(s) on retry`);
+
+      // The first call completed fully (invoice created + sent), so the
+      // sequential retry must see sent_at IS NOT NULL and return sendSkipped=true.
+      record('I.second-call-send-skipped',
+        r2.body?.sendSkipped === true,
+        r2.body?.sendSkipped === true
+          ? 'sendSkipped=true returned on sequential retry after completed send'
+          : `sendSkipped flag missing or false on sequential retry: ${js(r2.body).slice(0, 150)}`);
+
+      // No new QB invoice send call should have been issued on the retry.
+      const secondSendCount = mockQb.state.calls.filter(
+        c => c.method === 'POST' && /\/invoice\/[^/]+\/send$/.test(c.path)
+      ).length;
+      record('I.no-duplicate-send', secondSendCount === 0,
+        secondSendCount === 0
+          ? 'no QB invoice send call on sequential retry (correct)'
+          : `${secondSendCount} unexpected QB send call(s) on sequential retry`);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
