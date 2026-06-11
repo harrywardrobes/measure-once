@@ -266,6 +266,8 @@ export function DeliveryWindowModal(props: Props) {
     void doSubmit();
   }
 
+  const isLegacyAppointment = isEdit && visit && !visit.googleEventId;
+
   const dialogTitle = isEdit
     ? (contactName ? `Edit delivery window for ${contactName}` : 'Edit delivery window')
     : (contactName ? `Schedule delivery window for ${contactName}` : 'Schedule delivery window');
@@ -306,6 +308,12 @@ export function DeliveryWindowModal(props: Props) {
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             {isCardAction && (
               <ContactInfoHeader name={contactName} email={contactEmail} />
+            )}
+            {isLegacyAppointment && (
+              <Alert severity="warning">
+                This appointment was created before the Google Calendar migration and cannot be edited here.
+                Please delete it and create a new one from the shared calendar.
+              </Alert>
             )}
             <TextField
               id="cah-dw-title"
@@ -367,7 +375,7 @@ export function DeliveryWindowModal(props: Props) {
             <Button
               variant="contained"
               onClick={handleSubmit}
-              disabled={submitting || demo}
+              disabled={submitting || demo || !!isLegacyAppointment}
               data-testid="cah-primary"
             >
               {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save changes' : 'Schedule')}

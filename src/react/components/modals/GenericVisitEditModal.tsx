@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
@@ -197,6 +198,8 @@ export function GenericVisitEditModal(props: Props) {
     }
   }
 
+  const isLegacyAppointment = isEdit && !isCreate && !(props as EditProps).visit.googleEventId;
+
   const dialogTitle = isCreate
     ? (contactName ? `Schedule ${label.toLowerCase()} for ${contactName}` : `Schedule ${label.toLowerCase()}`)
     : (contactName ? `Edit ${label.toLowerCase()} for ${contactName}` : `Edit ${label.toLowerCase()}`);
@@ -207,6 +210,12 @@ export function GenericVisitEditModal(props: Props) {
         <DialogTitle>{dialogTitle}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            {isLegacyAppointment && (
+              <Alert severity="warning">
+                This appointment was created before the Google Calendar migration and cannot be edited here.
+                Please delete it and create a new one from the shared calendar.
+              </Alert>
+            )}
             <TextField
               label="Title"
               value={title}
@@ -254,7 +263,7 @@ export function GenericVisitEditModal(props: Props) {
           <Button
             variant="contained"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || isLegacyAppointment}
             startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
             data-testid="generic-visit-save"
           >
