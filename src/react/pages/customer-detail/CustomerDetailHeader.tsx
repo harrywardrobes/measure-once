@@ -99,15 +99,15 @@ export function CustomerDetailHeader({
       ].join(', ');
       return (
         <Box sx={{ py: 0.25 }}>
-          <Typography variant="caption" display="block" sx={{ fontWeight: 600, lineHeight: 1.5 }}>
+          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, lineHeight: 1.5 }}>
             {formatDate(lastAttempt.at)}
           </Typography>
           {lastAttempt.by && (
-            <Typography variant="caption" display="block" sx={{ lineHeight: 1.5, opacity: 0.85 }}>
+            <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.5, opacity: 0.85 }}>
               {`by ${lastAttempt.by}`}
             </Typography>
           )}
-          <Typography variant="caption" display="block" sx={{ lineHeight: 1.5, opacity: 0.85 }}>
+          <Typography variant="caption" sx={{ display: 'block', lineHeight: 1.5, opacity: 0.85 }}>
             {[
               lastAttempt.count > 0
                 ? `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'}`
