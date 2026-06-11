@@ -406,6 +406,46 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
   });
 }
 
+function DepositInvoiceBadge({
+  depositInvoiceId,
+  depositInvoiceDocNum,
+}: {
+  depositInvoiceId: string;
+  depositInvoiceDocNum: string | null;
+}) {
+  const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
+  };
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleClick}
+      title="View deposit invoice"
+      sx={{
+        appearance: 'none',
+        border: '1px solid',
+        borderColor: 'primary.main',
+        bgcolor: 'primary.50',
+        color: 'primary.dark',
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        lineHeight: 1.4,
+        '&:hover': { bgcolor: 'primary.100' },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 function QBBadge({
   invoices,
   onOpen,
@@ -501,6 +541,7 @@ function CustomerCard({
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
+  depositInvoice,
   syncStatus,
   syncFailedIds,
   lastAttempt,
@@ -522,6 +563,7 @@ function CustomerCard({
     substageId: string | undefined,
   ) => string;
   draftVisitId?: number | string | null;
+  depositInvoice?: { id: string; docNum: string | null } | null;
   /**
    * Offline-queue status for this contact's pending status/archive edits, or
    * null when nothing is queued. Drives the per-card "Pending sync" /
@@ -674,6 +716,12 @@ function CustomerCard({
               })}
             </Stack>
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
+            {depositInvoice && (
+              <DepositInvoiceBadge
+                depositInvoiceId={depositInvoice.id}
+                depositInvoiceDocNum={depositInvoice.docNum}
+              />
+            )}
           </Box>
 
         </Box>
@@ -858,6 +906,10 @@ export function CustomersPage(): React.ReactElement {
   const [draftVisitIds, setDraftVisitIds] = React.useState<Record<string, number | string>>({});
   const [draftRefreshTick, setDraftRefreshTick] = React.useState(0);
 
+  // ── Deposit invoice info ─────────────────────────────────────────────────────
+  // Batch-fetched for visible contacts so "Deposit invoice #XXXX" badges appear.
+  const [depositInvoiceMap, setDepositInvoiceMap] = React.useState<Record<string, { id: string; docNum: string | null }>>({});
+
   // ── Counts state ────────────────────────────────────────────────────────────
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
@@ -981,6 +1033,26 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     return subscribeDesignVisitDraftChanged(() => setDraftRefreshTick((t) => t + 1));
   }, []);
+
+  // Batch-fetch deposit invoice info for the visible contacts.
+  React.useEffect(() => {
+    if (contacts.length === 0) {
+      setDepositInvoiceMap({});
+      return;
+    }
+    let cancelled = false;
+    const ids = contacts.map((c) => c.id).join(',');
+    fetch(`/api/design-visits/deposit-invoices?contactIds=${encodeURIComponent(ids)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ contactId: string; depositInvoiceId: string; depositInvoiceDocNum: string | null }>) => {
+        if (cancelled) return;
+        const map: Record<string, { id: string; docNum: string | null }> = {};
+        for (const row of rows) map[row.contactId] = { id: row.depositInvoiceId, docNum: row.depositInvoiceDocNum };
+        setDepositInvoiceMap(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contacts]);
 
   // After the first successful contacts render, restore the scroll
   // position saved when the user navigated into a customer (see
@@ -1557,6 +1629,7 @@ export function CustomersPage(): React.ReactElement {
                   cardActionHandlerFor={cardActionHandlerFor}
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
+                  depositInvoice={depositInvoiceMap[contact.id] ?? null}
                   syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
                   syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
                   lastAttempt={lastAttemptMap[contact.id] ?? null}

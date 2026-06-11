@@ -17,6 +17,8 @@ interface Props {
   whatsappEnabled?: boolean;
   activityCounter?: string;
   lastAttempt?: LastAttempt;
+  depositInvoiceId?: string | null;
+  depositInvoiceDocNum?: string | null;
 }
 
 export function CustomerDetailHeader({
@@ -28,6 +30,8 @@ export function CustomerDetailHeader({
   whatsappEnabled,
   activityCounter,
   lastAttempt,
+  depositInvoiceId,
+  depositInvoiceDocNum,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -169,6 +173,24 @@ export function CustomerDetailHeader({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            {depositInvoiceId && (
+              <a
+                href={`/invoices#inv-${encodeURIComponent(depositInvoiceId)}`}
+                title="View deposit invoice"
+                style={{
+                  fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
+                  padding: '3px 7px', borderRadius: 6,
+                  background: 'var(--surface-muted)',
+                  border: '1px solid var(--orchid)',
+                  color: 'var(--orchid)',
+                  letterSpacing: '0.02em', flexShrink: 0,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice'}
+              </a>
+            )}
             {activityCounter && (
               <Tooltip
                 title={activityTooltipContent}

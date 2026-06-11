@@ -129,6 +129,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/design-visit-followup',              level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/design-visit-followup/outcome',      level: 'member', body: { contactId: '0', outcome: 'confirmed' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/open-deal',                          level: 'member', body: { contactId: '0' }, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/open-deal/deposit-invoice-email-preview', level: 'member', body: { firstName: 'Test', depositPercent: '10' } },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/accept-deal',               level: 'manager', body: { estimateId: '1' } },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/decline-deal',              level: 'manager', body: {} },
   { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },
@@ -138,6 +139,7 @@ const ROUTES = [
   // Design-visit member-level surface (design-visits.js).
   { method: 'GET',    path: '/api/design-visits',              level: 'member' },
   { method: 'GET',    path: '/api/design-visits/in-progress',  level: 'member' },
+  { method: 'GET',    path: '/api/design-visits/deposit-invoices', level: 'member' },
   { method: 'GET',    path: '/api/design-visits/0',            level: 'member' },
   { method: 'POST',   path: '/api/design-visits',             level: 'member',  body: {} },
   { method: 'PATCH',  path: '/api/design-visits/0',           level: 'member',  body: {} },

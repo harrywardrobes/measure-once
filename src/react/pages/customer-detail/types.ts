@@ -66,6 +66,8 @@ export interface DesignVisit {
   created_at?: string;
   estimate_total_pence?: number;
   qb_estimate_doc_num?: string | null;
+  deposit_invoice_id?: string | null;
+  deposit_invoice_doc_num?: string | null;
   rooms?: DesignVisitRoom[];
   notes?: string | null;
   revision_note?: string | null;

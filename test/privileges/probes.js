@@ -1017,6 +1017,75 @@ async function runProbes({ clients, users, pool, runId }) {
     }
   }
 
+  // ── Design-visit deposit-invoice member isolation ─────────────────────────
+  // A member must not see deposit invoice data for a visit they did not create.
+  // This probe seeds a visit created by the admin user, then queries the
+  // deposit-invoices batch endpoint as the member and asserts an empty result.
+  {
+    const syntheticContactId = `privtest-dv-${runId}`;
+    let insertedDvId = null;
+    try {
+      const ins = await pool.query(
+        `INSERT INTO design_visits
+           (contact_id, status, created_by, deposit_invoice_id, deposit_invoice_doc_num,
+            updated_at, version)
+         VALUES ($1, 'submitted', $2, 'test-inv-id-privtest', 'INV-9999-privtest',
+                 NOW(), 1)
+         RETURNING id`,
+        [syntheticContactId, String(users.admin.id)],
+      );
+      insertedDvId = ins.rows[0]?.id;
+    } catch (e) {
+      // If the insert fails (e.g. schema not migrated), skip gracefully.
+      findings.push({
+        category: 'access-control',
+        name: 'deposit-invoices member isolation: seed row insert failed — probe skipped',
+        expected: 'design_visits INSERT succeeded',
+        observed: `error: ${e.message}`,
+        severity: 'medium', ok: false, skipped: true,
+        detail: 'Run npm run db:migrate to apply the deposit_invoice_id migration.',
+      });
+    }
+
+    if (insertedDvId !== null) {
+      const r = await clients.member.get(
+        `/api/design-visits/deposit-invoices?contactIds=${encodeURIComponent(syntheticContactId)}`
+      );
+      const rows = Array.isArray(r.json) ? r.json : [];
+      const empty = rows.length === 0;
+      await record(
+        'access-control',
+        'member cannot see deposit invoice for a visit they did not create',
+        'empty array (member scoping enforced)',
+        `status=${r.status} rows=${JSON.stringify(rows)}`,
+        'high', r.status === 200 && empty,
+        'GET /api/design-visits/deposit-invoices must filter by created_by for members. ' +
+        'A non-empty result means deposit invoice data for other users\' contacts is leaking.',
+      );
+
+      // Confirm a manager CAN see it (no ownership restriction for managers).
+      const rm = await clients.manager.get(
+        `/api/design-visits/deposit-invoices?contactIds=${encodeURIComponent(syntheticContactId)}`
+      );
+      const managerRows = Array.isArray(rm.json) ? rm.json : [];
+      const managerSees = Array.isArray(managerRows) && managerRows.length === 1
+        && managerRows[0].depositInvoiceId === 'test-inv-id-privtest';
+      await record(
+        'access-control',
+        'manager can see deposit invoice regardless of creator',
+        '1 row with depositInvoiceId=test-inv-id-privtest',
+        `status=${rm.status} rows=${JSON.stringify(managerRows)}`,
+        'medium', rm.status === 200 && managerSees,
+        'GET /api/design-visits/deposit-invoices must NOT filter by created_by for managers/admins.',
+      );
+
+      // Clean up synthetic row.
+      try {
+        await pool.query(`DELETE FROM design_visits WHERE id = $1`, [insertedDvId]);
+      } catch {}
+    }
+  }
+
   // ── Rate-limit hammering (runs last) ──────────────────────────────────────
   // loginLimiter    = 20 attempts / 15 min keyed on req.ip (auth.js:207-209).
   // accessRequestLimiter = 5/hr, shared with /api/forgot-password

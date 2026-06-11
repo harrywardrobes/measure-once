@@ -1233,6 +1233,53 @@ router.get('/api/design-visits/in-progress', isAuthenticated, requirePrivilege('
   }
 });
 
+router.get('/api/design-visits/deposit-invoices', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  try {
+    let contactIds = req.query.contactIds;
+    if (!contactIds) return res.json([]);
+    if (typeof contactIds === 'string') contactIds = contactIds.split(',');
+    contactIds = Array.from(
+      new Set(
+        (Array.isArray(contactIds) ? contactIds : [contactIds])
+          .map(id => String(id).trim())
+          .filter(Boolean),
+      ),
+    ).slice(0, 100);
+    if (!contactIds.length) return res.json([]);
+    const callerPrivilege = getRequestPrivilegeLevel(req);
+    const isMemberOnly = callerPrivilege === 'member';
+    const callerId = req.user?.claims?.sub;
+    let r;
+    if (isMemberOnly) {
+      r = await pool.query(
+        `SELECT DISTINCT ON (contact_id) contact_id, deposit_invoice_id, deposit_invoice_doc_num
+           FROM design_visits
+          WHERE contact_id = ANY($1)
+            AND deposit_invoice_id IS NOT NULL
+            AND created_by = $2
+          ORDER BY contact_id, created_at DESC`,
+        [contactIds, String(callerId)],
+      );
+    } else {
+      r = await pool.query(
+        `SELECT DISTINCT ON (contact_id) contact_id, deposit_invoice_id, deposit_invoice_doc_num
+           FROM design_visits
+          WHERE contact_id = ANY($1)
+            AND deposit_invoice_id IS NOT NULL
+          ORDER BY contact_id, created_at DESC`,
+        [contactIds],
+      );
+    }
+    res.json(r.rows.map(row => ({
+      contactId:           row.contact_id,
+      depositInvoiceId:    row.deposit_invoice_id,
+      depositInvoiceDocNum: row.deposit_invoice_doc_num,
+    })));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/api/design-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });

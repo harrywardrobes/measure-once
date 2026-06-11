@@ -661,6 +661,8 @@ export function CustomerDetailPage() {
             ) ?? undefined
           }
           lastAttempt={lastAttempt}
+          depositInvoiceId={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_id ?? null}
+          depositInvoiceDocNum={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_doc_num ?? null}
         />
       )}
 

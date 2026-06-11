@@ -612,6 +612,20 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                         <span data-testid="dv-date" style={sxDate}>QB #{v.qb_estimate_doc_num}</span>
                       </>
                     )}
+                    {v.deposit_invoice_id && (
+                      <>
+                        <span style={sxMetaSep}>·</span>
+                        <a
+                          data-testid="dv-deposit-invoice-link"
+                          href={`/invoices#inv-${encodeURIComponent(v.deposit_invoice_id)}`}
+                          style={{ ...sxDate, color: 'var(--orchid)', textDecoration: 'none' }}
+                          title="View deposit invoice in QuickBooks invoices"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          Deposit invoice{v.deposit_invoice_doc_num ? ` #${v.deposit_invoice_doc_num}` : ''}
+                        </a>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
