@@ -17,6 +17,9 @@ const DesignVisitFollowupModal = React.lazy(() =>
 const OpenDealActionModal = React.lazy(() =>
   import('./modals/OpenDealActionModal').then(m => ({ default: m.OpenDealActionModal }))
 );
+const DepositInvoiceModal = React.lazy(() =>
+  import('./modals/DepositInvoiceModal').then(m => ({ default: m.DepositInvoiceModal }))
+);
 import { broadcastDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { broadcastContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
@@ -35,7 +38,8 @@ type ModalState =
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string }
   | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'open_deal';                     handler: CardActionHandlerData; ctx: CardActionContext };
+  | { type: 'open_deal';                     handler: CardActionHandlerData; ctx: CardActionContext }
+  | { type: 'deposit_invoice_followup';      handler: CardActionHandlerData; ctx: CardActionContext };
 
 export type HandlerType = Exclude<ModalState['type'], 'none'>;
 
@@ -78,6 +82,9 @@ export function CardActionModalsHost() {
           break;
         case 'open_deal':
           setModal({ type: 'open_deal', handler, ctx });
+          break;
+        case 'deposit_invoice_followup':
+          setModal({ type: 'deposit_invoice_followup', handler, ctx });
           break;
         default:
           console.warn('[CardActionModalsHost] Unknown handler type:', handler.type);
@@ -155,6 +162,11 @@ export function CardActionModalsHost() {
       {modal.type === 'open_deal' && (
         <React.Suspense fallback={null}>
           <OpenDealActionModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        </React.Suspense>
+      )}
+      {modal.type === 'deposit_invoice_followup' && (
+        <React.Suspense fallback={null}>
+          <DepositInvoiceModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
         </React.Suspense>
       )}
     </>

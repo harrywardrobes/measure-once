@@ -5775,7 +5775,7 @@ app.post('/api/card-actions/arrange-visit',
       );
       const props = r.data?.properties || {};
       const leadStatus = String(props.hs_lead_status || '').toLowerCase();
-      const visitType = leadStatus === 'awaiting_deposit' ? 'survey' : 'design';
+      const visitType = (leadStatus === 'awaiting_deposit' || leadStatus === 'deposit_invoice') ? 'survey' : 'design';
       const firstName = String(props.firstname || '');
       const lastName  = String(props.lastname  || '');
       const contactName          = [firstName, lastName].filter(Boolean).join(' ') || '';
@@ -6300,6 +6300,388 @@ app.post('/api/card-actions/open-deal',
       }
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/open-deal error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── deposit_invoice_followup: loader ─────────────────────────────────────────
+// Fetches HubSpot contact props + deposit invoice from QB (via stored
+// deposit_invoice_id on design_visits).  Returns payment-state summary.
+app.post('/api/card-actions/deposit-invoice',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,zip' }, timeout: 15000 }
+      );
+      const props = r.data?.properties || {};
+      const firstName     = String(props.firstname || '');
+      const lastName      = String(props.lastname  || '');
+      const contactName   = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactEmail  = String(props.email   || '');
+      const contactPhone  = String(props.phone   || '');
+      const contactMobile = String(props.mobilephone || '');
+      const addressParts  = [props.address, props.city, props.zip].filter(Boolean);
+      const contactAddress = addressParts.join(', ');
+
+      // Look up deposit_invoice_id + qb_estimate_id from the most-recent design_visit
+      let storedInvoiceId  = null;
+      let storedDocNum     = null;
+      let storedEstimateId = null;
+      try {
+        const dvRow = await pool.query(
+          `SELECT deposit_invoice_id, deposit_invoice_doc_num, qb_estimate_id
+           FROM design_visits
+           WHERE contact_id = $1
+             AND deposit_invoice_id IS NOT NULL
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [contactId]
+        );
+        if (dvRow.rows[0]) {
+          storedInvoiceId  = dvRow.rows[0].deposit_invoice_id;
+          storedDocNum     = dvRow.rows[0].deposit_invoice_doc_num || null;
+          storedEstimateId = dvRow.rows[0].qb_estimate_id || null;
+        }
+      } catch {}
+
+      let qbConnected      = false;
+      let invoiceId        = storedInvoiceId;
+      let invoiceDocNum    = storedDocNum;
+      let invoiceTotalAmt  = 0;
+      let invoiceBalance   = 0;
+      let invoicePaidAmt   = 0;
+      let invoiceTxnDate   = null;
+      let invoiceLink      = null;
+      let paymentState     = 'unknown';
+
+      try {
+        let invoiceData = null;
+        if (invoiceId) {
+          // Fetch by stored ID with ownership validation
+          const invData = await quickbooksRoutes.fetchFromQuickBooks(`/invoice/${encodeURIComponent(invoiceId)}`);
+          invoiceData = invData?.Invoice ?? null;
+          if (invoiceData) {
+            const owner = String(invoiceData.CustomerRef?.value || '');
+            if (owner && owner !== contactId) {
+              logger.warn(
+                { invoiceId, owner, contactId },
+                '[deposit-invoice] Stored invoice belongs to different contact — ignoring'
+              );
+              invoiceData = null;
+              invoiceId   = null;
+            }
+          }
+        } else {
+          // Fall back to querying by CustomerRef
+          const qResult = await quickbooksRoutes.fetchFromQuickBooks('/query', {
+            query: `SELECT * FROM Invoice WHERE CustomerRef = '${contactId}' MAXRESULTS 1`,
+          });
+          const rows = qResult?.QueryResponse?.Invoice || [];
+          if (rows.length > 0) invoiceData = rows[0];
+        }
+        qbConnected = true;
+
+        if (invoiceData) {
+          invoiceId       = invoiceData.Id || invoiceId;
+          invoiceDocNum   = invoiceData.DocNumber || invoiceDocNum || null;
+          invoiceTotalAmt = parseFloat(invoiceData.TotalAmt || 0);
+          invoiceBalance  = parseFloat(invoiceData.Balance  || 0);
+          invoicePaidAmt  = invoiceTotalAmt - invoiceBalance;
+          invoiceTxnDate  = invoiceData.TxnDate || null;
+          invoiceLink     = invoiceData.InvoiceLink || null;
+
+          if (invoiceBalance <= 0 && invoiceTotalAmt > 0) {
+            paymentState = 'paid';
+          } else if (invoicePaidAmt > 0 && invoiceBalance > 0) {
+            paymentState = 'partial';
+          } else {
+            paymentState = 'unpaid';
+          }
+        }
+      } catch (qbErr) {
+        if (!String(qbErr.message).includes('not connected')) {
+          logger.warn({ err: qbErr.message }, '[deposit-invoice] QB invoice fetch failed:');
+        }
+      }
+
+      res.json({
+        contactName,
+        contactEmail,
+        contactPhone,
+        contactMobile,
+        contactAddress,
+        qbConnected,
+        paymentState,
+        invoiceId,
+        invoiceDocNum,
+        invoiceTotalAmt,
+        invoiceBalance,
+        invoicePaidAmt,
+        invoiceTxnDate,
+        invoiceLink,
+        qbEstimateId: storedEstimateId || null,
+      });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/deposit-invoice error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── deposit_invoice_followup: resend invoice via QB email ────────────────────
+app.post('/api/card-actions/deposit-invoice/resend',
+  isAuthenticated, requireManagerOrAdmin,
+  async (req, res) => {
+    const contactId  = String(req.body?.contactId  || '');
+    const invoiceId  = String(req.body?.invoiceId  || '');
+    const recipientEmail = String(req.body?.recipientEmail || '').trim();
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    if (!/^\d+$/.test(invoiceId)) return res.status(400).json({ error: 'Invalid invoiceId.' });
+
+    try {
+      const allowed = await quickbooksRoutes.checkSendRateLimit(req.user.claims.sub);
+      if (!allowed) {
+        return res.status(429).json({ error: 'Send rate limit reached. Please wait before re-sending.', code: 'RATE_LIMIT' });
+      }
+
+      // Ownership check: ensure the invoice belongs to this contact
+      const invData = await quickbooksRoutes.fetchFromQuickBooks(`/invoice/${encodeURIComponent(invoiceId)}`);
+      const inv = invData?.Invoice;
+      if (!inv) return res.status(404).json({ error: 'Invoice not found in QuickBooks.', code: 'INVOICE_NOT_FOUND' });
+      const invOwner = String(inv?.CustomerRef?.value || '');
+      if (invOwner !== contactId) {
+        return res.status(403).json({ error: 'Invoice does not belong to this contact.', code: 'INVOICE_OWNER_MISMATCH' });
+      }
+
+      await quickbooksRoutes.sendQbTransactionEmail('invoice', invoiceId, {
+        sendTo: recipientEmail || undefined,
+      });
+
+      res.json({ ok: true });
+    } catch (e) {
+      if (String(e.message).includes('not connected')) {
+        return res.status(503).json({ error: 'QuickBooks is not connected.', code: 'QB_NOT_CONNECTED' });
+      }
+      if (e.response?.status === 429) {
+        return res.status(429).json({ error: 'QuickBooks rate limit reached.', code: 'QB_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/deposit-invoice/resend error:');
+      res.status(502).json({ error: e.message || 'Could not re-send invoice.', code: 'QB_ERROR' });
+    }
+  }
+);
+
+// Mail helpers shared by deposit-invoice handlers ─────────────────────────────
+function _depInv_buildFromHeader() {
+  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!raw) return raw;
+  if (/</.test(raw)) return raw;
+  return `Measure Once <${raw}>`;
+}
+function _depInv_buildReplyTo() {
+  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+}
+function _createMailTransport() {
+  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
+    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
+    return {
+      sendMail(opts) {
+        return new Promise((resolve, reject) => {
+          try {
+            require('fs').appendFileSync(fpath, JSON.stringify(opts) + '\n');
+            resolve({ messageId: `override-${Date.now()}` });
+          } catch (e) { reject(e); }
+        });
+      },
+    };
+  }
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return require('nodemailer').createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
+function _buildFromHeader() { return _depInv_buildFromHeader(); }
+function _buildReplyTo()    { return _depInv_buildReplyTo(); }
+
+// ── deposit_invoice_followup: not-proceeding → DECLINED_DEAL ─────────────────
+// Shares the decline-deal pipeline: reject pending estimate, optionally void
+// the invoice, optionally send an editable thank-you email, then set lead
+// status to DECLINED_DEAL.
+app.post('/api/card-actions/deposit-invoice/not-proceeding',
+  isAuthenticated, requireManagerOrAdmin,
+  async (req, res) => {
+    const contactId    = String(req.body?.contactId    || '');
+    const contactEmail = String(req.body?.contactEmail || '').trim() || null;
+    const contactName  = String(req.body?.contactName  || '').trim() || '';
+    const sendThankYou = req.body?.sendThankYou === true;
+    const voidInvoice  = req.body?.voidInvoice  === true;
+    const invoiceId    = req.body?.invoiceId ? String(req.body.invoiceId).trim() : null;
+    const emailSubject = req.body?.emailSubject ? String(req.body.emailSubject).trim() : null;
+    const emailBody    = req.body?.emailBody    ? String(req.body.emailBody).trim()    : null;
+
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    if (invoiceId && !/^\d+$/.test(invoiceId)) return res.status(400).json({ error: 'Invalid invoiceId.' });
+
+    const steps = {
+      estimateRejected:  false,
+      invoiceVoided:     false,
+      thankYouSent:      false,
+      statusUpdated:     false,
+    };
+
+    try {
+      // Look up linked estimate from design_visits (non-fatal if absent)
+      let linkedEstimateId = null;
+      try {
+        const dvEst = await pool.query(
+          `SELECT qb_estimate_id FROM design_visits
+           WHERE contact_id = $1 AND qb_estimate_id IS NOT NULL
+           ORDER BY created_at DESC LIMIT 1`,
+          [contactId]
+        );
+        linkedEstimateId = dvEst.rows[0]?.qb_estimate_id || null;
+      } catch {}
+
+      // 1. Reject linked estimate in QB (delegates to same logic as decline-deal; non-fatal)
+      if (linkedEstimateId) {
+        try {
+          const t = await quickbooksRoutes.getValidTokens();
+          if (t) {
+            const qbBase  = quickbooksRoutes.getQuickBooksBaseUrl();
+            const authHdr = { Authorization: `Bearer ${t.access_token}` };
+            const jsonHdr = { ...authHdr, 'Content-Type': 'application/json', Accept: 'application/json' };
+            const qbPrm   = { minorversion: 65 };
+            const oResp = await require('axios').get(
+              `${qbBase}/v3/company/${t.realm_id}/estimate/${encodeURIComponent(linkedEstimateId)}`,
+              { headers: { ...authHdr, Accept: 'application/json' }, params: qbPrm, timeout: 8000 }
+            );
+            const est = oResp.data?.Estimate;
+            const estOwner = String(est?.CustomerRef?.value || '');
+            if (est && estOwner === contactId && est.SyncToken != null) {
+              await require('axios').post(
+                `${qbBase}/v3/company/${t.realm_id}/estimate`,
+                { sparse: true, Id: linkedEstimateId, SyncToken: est.SyncToken, TxnStatus: 'Rejected' },
+                { headers: jsonHdr, params: qbPrm, timeout: 8000 }
+              );
+              steps.estimateRejected = true;
+            }
+          }
+        } catch (e) {
+          logger.warn({ err: e.message }, '[deposit-invoice/not-proceeding] reject estimate failed (non-fatal):');
+        }
+      } else {
+        steps.estimateRejected = true; // nothing to reject
+      }
+
+      // 2. Optionally void the deposit invoice.
+      //    ENFORCEMENT: only unpaid invoices (Balance > 0) may be voided.
+      //    Attempting to void a paid invoice is a hard 400 — callers cannot
+      //    bypass the UI restriction by posting directly to this route.
+      if (voidInvoice && invoiceId) {
+        const vt = await quickbooksRoutes.getValidTokens();
+        if (vt) {
+          const vBase    = quickbooksRoutes.getQuickBooksBaseUrl();
+          const vAuthHdr = { Authorization: `Bearer ${vt.access_token}` };
+          const vPrm     = { minorversion: 65 };
+          const vResp = await require('axios').get(
+            `${vBase}/v3/company/${vt.realm_id}/invoice/${encodeURIComponent(invoiceId)}`,
+            { headers: { ...vAuthHdr, Accept: 'application/json' }, params: vPrm, timeout: 8000 }
+          );
+          const vInv = vResp.data?.Invoice;
+          if (vInv && Number(vInv.Balance || 0) <= 0) {
+            return res.status(400).json({
+              error: 'Invoice is already paid and cannot be voided.',
+              code: 'INVOICE_ALREADY_PAID',
+              steps,
+            });
+          }
+          // Invoice is unpaid — proceed with void (non-fatal for QB write errors)
+          try {
+            const vOwner  = String(vInv?.CustomerRef?.value || '');
+            if (vInv && vOwner === contactId && vInv.SyncToken != null) {
+              const vJsonHdr = { ...vAuthHdr, 'Content-Type': 'application/json', Accept: 'application/json' };
+              await require('axios').post(
+                `${vBase}/v3/company/${vt.realm_id}/invoice`,
+                { sparse: true, Id: invoiceId, SyncToken: vInv.SyncToken, void: true },
+                { headers: vJsonHdr, params: vPrm, timeout: 8000 }
+              );
+              steps.invoiceVoided = true;
+            }
+          } catch (e) {
+            logger.warn({ err: e.message }, '[deposit-invoice/not-proceeding] void invoice failed (non-fatal):');
+          }
+        } else {
+          steps.invoiceVoided = false;
+        }
+      } else {
+        steps.invoiceVoided = !voidInvoice;
+      }
+
+      // 3. Optional thank-you email — uses caller-provided subject/body when supplied,
+      //    otherwise falls back to the open_deal_declined_thank_you template.
+      if (sendThankYou && contactEmail) {
+        try {
+          const { getEmailTemplate, renderEmail } = require('./email-templates');
+          const template  = await getEmailTemplate('open_deal_declined_thank_you');
+          const firstName = contactName.split(' ')[0] || 'there';
+          const rendered  = renderEmail(template, { textVars: { firstName } });
+          const transport = _createMailTransport();
+          if (transport) {
+            const replyTo = _buildReplyTo();
+            await transport.sendMail({
+              from:    _buildFromHeader(),
+              ...(replyTo ? { replyTo } : {}),
+              to:      contactEmail,
+              subject: emailSubject || rendered.subject,
+              text:    emailBody    || rendered.text,
+              html:    emailBody    || rendered.html || rendered.text,
+            });
+            steps.thankYouSent = true;
+          }
+        } catch (e) {
+          logger.warn({ err: e.message }, '[deposit-invoice/not-proceeding] thank-you email failed (non-fatal):');
+        }
+      } else {
+        steps.thankYouSent = !sendThankYou;
+      }
+
+      // 4. Update lead status to DECLINED_DEAL
+      try {
+        await assertLeadStatusKey('DECLINED_DEAL');
+        await patchContactProperties(contactId, { hs_lead_status: 'DECLINED_DEAL' });
+        steps.statusUpdated = true;
+      } catch (e) {
+        if (e.code === 'LEAD_STATUS_REMOVED') {
+          return res.status(422).json({
+            error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey, steps,
+          });
+        }
+        logger.error({ err: e.message }, '[deposit-invoice/not-proceeding] lead status update failed:');
+        return res.status(502).json({
+          error: `Steps completed but lead status could not be updated: ${e.message}`, steps,
+        });
+      }
+
+      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL' });
+    } catch (e) {
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/deposit-invoice/not-proceeding error:');
+      res.status(503).json({ error: e.message, steps });
     }
   }
 );

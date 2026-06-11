@@ -44,6 +44,10 @@ export interface HandlerComponentMeta {
 }
 
 export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
+  deposit_invoice_followup: {
+    steps: '6 options — arrange survey / re-send invoice / send reminder / not proceeding / log call / amend deal',
+    hubspot: 'Stays DEPOSIT_INVOICE unless not-proceeding → DECLINED_DEAL or arrange-survey outcome updates status',
+  },
   schedule_visit: {
     steps: '1 step — date, time, duration, title, location, notes',
     hubspot: 'No HubSpot record changed',
@@ -87,6 +91,7 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
 };
 
 export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
+  deposit_invoice_followup:     'Deposit invoice follow-up',
   schedule_visit:               'Schedule visit',
   summarise_phone_call:         'Summarise phone call',
   show_message:                 'Show informational message',
@@ -105,6 +110,7 @@ export function isHandlerType(v: string): v is HandlerType {
 }
 
 export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
+  deposit_invoice_followup:     ['deposit_invoice_payment_reminder', 'open_deal_declined_thank_you'],
   upload_photos_and_info:       ['photo_review_invite', 'admin_notification', 'customer_thank_you'],
   review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
   arrange_visit:                ['arrange_visit_no_answer'],
@@ -118,6 +124,10 @@ export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
 };
 
 export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {
+  deposit_invoice_followup: {
+    component: 'DepositInvoiceModal',
+    filePath:  'src/react/components/modals/DepositInvoiceModal.tsx',
+  },
   show_message: {
     component: 'MessagePopupModal',
     filePath:  'src/react/components/modals/MessagePopupModal.tsx',

@@ -81,3 +81,6 @@ export const DVF_DRAFT_PREFIX = 'dvf-draft-';
 
 /** Open-deal action modal drafts: `${OPEN_DEAL_DRAFT_PREFIX}${contactId}` */
 export const OPEN_DEAL_DRAFT_PREFIX = 'mo-open-deal-draft-';
+
+/** Deposit-invoice followup modal drafts: `${DEPOSIT_INVOICE_DRAFT_PREFIX}${contactId}` */
+export const DEPOSIT_INVOICE_DRAFT_PREFIX = 'mo-deposit-invoice-draft-';

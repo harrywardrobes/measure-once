@@ -347,6 +347,40 @@ const TEMPLATE_DEFS = {
     footer_text: 'Warm regards,\nThe Measure Once team',
   },
 
+  deposit_invoice_payment_reminder: {
+    label: 'Deposit invoice — payment reminder',
+    description: 'Sent to a customer as a payment reminder for their deposit invoice.',
+    variables: ['firstName', 'invoiceDocNum', 'depositAmount', 'balanceAmount', 'invoiceLink'],
+    variableDescriptions: {
+      firstName:     "Customer's first name. Empty if no first name is recorded.",
+      invoiceDocNum: "QuickBooks invoice document number, e.g. '1023'. Empty if not available.",
+      depositAmount: "Total amount of the deposit invoice, e.g. '£450.00'. Always present when this email is sent.",
+      balanceAmount: "Outstanding balance remaining on the invoice, e.g. '£450.00'. Equal to depositAmount if unpaid.",
+      // Note: QB does not expose a shareable estimate URL; invoiceLink is the invoice
+      // online-payment link returned by the loader endpoint (Invoice.InvoiceLink field).
+      invoiceLink:   "Online payment link for the invoice (if available from QuickBooks). Empty if QB is not connected or the link is not available.",
+    },
+    subject: 'Reminder: your deposit invoice',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      'I just wanted to follow up regarding your deposit invoice{{invoiceDocNum}} — we haven\'t received payment yet.',
+      '',
+      'Outstanding balance: {{balanceAmount}}',
+      '{{invoiceLink}}',
+      '',
+      'If you have any questions or would like to discuss payment, please don\'t hesitate to get in touch.',
+    ].join('\n'),
+    body_html: [
+      '<p>Hi {{firstName}},</p>',
+      "<p>I just wanted to follow up regarding your deposit invoice{{invoiceDocNum}} — we haven't received payment yet.</p>",
+      '<p><strong>Outstanding balance: {{balanceAmount}}</strong></p>',
+      '{{invoiceLink}}',
+      '<p>If you have any questions or would like to discuss payment, please don\'t hesitate to get in touch.</p>',
+    ].join('\n'),
+    footer_text: 'Warm regards,\nThe team',
+  },
+
   visit_confirmation: {
     label: 'Visit Confirmation',
     description: 'Sent to a customer to confirm the details of their upcoming visit.',
@@ -525,6 +559,13 @@ const SAMPLE_VARS = {
     proposedDate: '',
     proposedTime: '',
     proposedDateLine: '',
+  },
+  deposit_invoice_payment_reminder: {
+    firstName:     'Jane',
+    invoiceDocNum: '#1023',
+    depositAmount: '£450.00',
+    balanceAmount: '£450.00',
+    invoiceLink:   '',
   },
   visit_confirmation: {
     firstName: 'Jane',

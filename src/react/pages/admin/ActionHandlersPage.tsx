@@ -59,6 +59,7 @@ export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'arrange_visit',
   'contact_customer',
   'open_deal',
+  'deposit_invoice_followup',
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
