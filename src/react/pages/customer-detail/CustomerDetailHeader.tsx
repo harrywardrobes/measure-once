@@ -19,6 +19,7 @@ interface Props {
   lastAttempt?: LastAttempt;
   depositInvoiceId?: string | null;
   depositInvoiceDocNum?: string | null;
+  depositInvoicePaid?: boolean | null;
 }
 
 export function CustomerDetailHeader({
@@ -32,6 +33,7 @@ export function CustomerDetailHeader({
   lastAttempt,
   depositInvoiceId,
   depositInvoiceDocNum,
+  depositInvoicePaid,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -176,13 +178,23 @@ export function CustomerDetailHeader({
             {depositInvoiceId && (
               <a
                 href={`/invoices#inv-${encodeURIComponent(depositInvoiceId)}`}
-                title="View deposit invoice"
+                title={
+                  depositInvoicePaid === true  ? 'Deposit paid — view invoice' :
+                  depositInvoicePaid === false ? 'Deposit outstanding — view invoice' :
+                                                'View deposit invoice'
+                }
                 style={{
                   fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
                   padding: '3px 7px', borderRadius: 6,
-                  background: 'var(--surface-muted)',
-                  border: '1px solid var(--orchid)',
-                  color: 'var(--orchid)',
+                  background: depositInvoicePaid === true  ? '#dcfce7' :
+                              depositInvoicePaid === false ? '#fef3c7' :
+                                                            'var(--surface-muted)',
+                  border: depositInvoicePaid === true  ? '1px solid #bbf7d0' :
+                          depositInvoicePaid === false ? '1px solid #fbbf24' :
+                                                        '1px solid var(--orchid)',
+                  color: depositInvoicePaid === true  ? '#166534' :
+                         depositInvoicePaid === false ? '#92400e' :
+                                                       'var(--orchid)',
                   letterSpacing: '0.02em', flexShrink: 0,
                   textDecoration: 'none',
                   cursor: 'pointer',

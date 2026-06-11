@@ -410,9 +410,11 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
 function DepositInvoiceBadge({
   depositInvoiceId,
   depositInvoiceDocNum,
+  paid,
 }: {
   depositInvoiceId: string;
   depositInvoiceDocNum: string | null;
+  paid?: boolean | null;
 }) {
   const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -420,18 +422,26 @@ function DepositInvoiceBadge({
     e.preventDefault();
     window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
   };
+  const title =
+    paid === true  ? 'Deposit paid — view invoice' :
+    paid === false ? 'Deposit outstanding — view invoice' :
+                    'View deposit invoice';
+  const colors =
+    paid === true  ? { borderColor: STATUS_COLORS.success.border,  bgcolor: STATUS_COLORS.success.bg,      color: STATUS_COLORS.success.text,  hoverBg: STATUS_COLORS.successLight.bg  } :
+    paid === false ? { borderColor: STATUS_COLORS.warning.border,  bgcolor: STATUS_COLORS.warning.bg,      color: STATUS_COLORS.warning.text,  hoverBg: STATUS_COLORS.warningLight.bg  } :
+                     null;
   return (
     <Box
       component="button"
       type="button"
       onClick={handleClick}
-      title="View deposit invoice"
+      title={title}
       sx={{
         appearance: 'none',
         border: '1px solid',
-        borderColor: 'primary.main',
-        bgcolor: 'primary.50',
-        color: 'primary.dark',
+        borderColor: colors ? colors.borderColor : 'primary.main',
+        bgcolor: colors ? colors.bgcolor : 'primary.50',
+        color: colors ? colors.color : 'primary.dark',
         px: 1,
         py: 0.25,
         borderRadius: 1,
@@ -439,7 +449,7 @@ function DepositInvoiceBadge({
         fontWeight: 600,
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { bgcolor: 'primary.100' },
+        '&:hover': { bgcolor: colors ? colors.hoverBg : 'primary.100' },
       }}
     >
       {label}
@@ -543,6 +553,7 @@ function CustomerCard({
   resolveActionLabel,
   draftVisitId,
   depositInvoice,
+  depositInvoicePaid,
   syncStatus,
   syncFailedIds,
   lastAttempt,
@@ -565,6 +576,12 @@ function CustomerCard({
   ) => string;
   draftVisitId?: number | string | null;
   depositInvoice?: { id: string; docNum: string | null } | null;
+  /**
+   * Whether the deposit invoice has been paid, derived from the QB invoices
+   * store. `true` = paid, `false` = outstanding, `null` = unknown (QB not
+   * connected, not yet loaded, or invoice not found in the list).
+   */
+  depositInvoicePaid?: boolean | null;
   /**
    * Offline-queue status for this contact's pending status/archive edits, or
    * null when nothing is queued. Drives the per-card "Pending sync" /
@@ -721,6 +738,7 @@ function CustomerCard({
               <DepositInvoiceBadge
                 depositInvoiceId={depositInvoice.id}
                 depositInvoiceDocNum={depositInvoice.docNum}
+                paid={depositInvoicePaid}
               />
             )}
           </Box>
@@ -860,7 +878,7 @@ export function CustomersPage(): React.ReactElement {
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const { invoices: qbInvoices, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
+  const { invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
   const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null>>({});
@@ -890,6 +908,14 @@ export function CustomersPage(): React.ReactElement {
   // ── Deposit invoice info ─────────────────────────────────────────────────────
   // Batch-fetched for visible contacts so "Deposit invoice #XXXX" badges appear.
   const [depositInvoiceMap, setDepositInvoiceMap] = React.useState<Record<string, { id: string; docNum: string | null }>>({});
+
+  // Index QB invoices by their QB ID so we can derive paid status without
+  // a linear scan per card. Rebuilt whenever the loaded invoice list changes.
+  const qbInvoicesById = React.useMemo(() => {
+    const m = new Map<string, QBInvoice>();
+    for (const inv of qbInvoices) m.set(inv.id, inv);
+    return m;
+  }, [qbInvoices]);
 
   // ── Counts state ────────────────────────────────────────────────────────────
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
@@ -1621,6 +1647,14 @@ export function CustomersPage(): React.ReactElement {
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
                   depositInvoice={depositInvoiceMap[contact.id] ?? null}
+                  depositInvoicePaid={(() => {
+                    if (!qbLoaded) return null;
+                    const di = depositInvoiceMap[contact.id];
+                    if (!di) return null;
+                    const inv = qbInvoicesById.get(di.id);
+                    if (!inv) return null;
+                    return (inv.balance ?? 0) <= 0;
+                  })()}
                   syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
                   syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
                   lastAttempt={lastAttemptMap[contact.id] ?? null}
