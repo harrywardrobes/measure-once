@@ -1,0 +1,248 @@
+Here's a comprehensive Replit prompt based on your answers:
+
+---
+
+```
+# Measure Once — Modal Consistency & Workflow Demo Preview
+
+This is a React 18 + MUI v9 + TypeScript codebase. All components live under `src/react/`. Please break this into multiple sequential tasks as described below.
+
+---
+
+## CONTEXT
+
+The app has a card-action modal system. When a user clicks an action button on a customer card, it dispatches to `CardActionModalsHost` which renders the correct modal. Key files:
+
+- Modals: `src/react/components/modals/`
+- Modal host: `src/react/components/CardActionModalsHost.tsx`
+- Workflow admin page: `src/react/pages/admin/WorkflowPage.tsx`
+- Dispatch utils: `src/react/utils/dispatchCardActionHandler.ts`, `src/react/utils/cardActionModalRegistry.ts`
+
+---
+
+## TASK 1 — Create a shared `ContactInfoHeader` component
+
+Create `src/react/components/modals/ContactInfoHeader.tsx`.
+
+**Props interface:**
+```typescript
+interface ContactInfoHeaderProps {
+  name: string;
+  phone?: string;
+  mobile?: string;
+  whatsapp?: string;
+  email?: string;
+  loading?: boolean; // show skeleton placeholders instead of values
+}
+```
+
+**Behaviour:**
+- Render at the top of a `DialogContent`, ABOVE all other content (before any Stack spacing)
+- Show the customer name as a bold `Typography variant="subtitle1"` with `fontWeight: 700`
+- For each present contact number (phone, mobile, whatsapp), render a label (`body2`, `color="text.secondary"`) and the number as a clickable `<a href=\`tel:${number}\`>` styled to match `Typography variant="h6" fontWeight={600}` — no default browser link styling, inherit the text colour
+- Show email as a plain `Typography` (not a link) with a small mail icon from `@mui/icons-material/Email`
+- If NO numbers and NO email are present (and `loading` is false), show a `<Alert severity="warning">No contact details on record.</Alert>`
+- If `loading` is true, show MUI `Skeleton` placeholders for name and one number row
+- Add a `<Divider sx={{ mt: 1.5, mb: 0 }} />` at the bottom of the component so there is a clear separator before the rest of the modal content
+- Keep the component visually compact — this is a header, not a full contact card
+
+---
+
+## TASK 2 — Integrate `ContactInfoHeader` into all relevant modals
+
+Apply the `ContactInfoHeader` to the TOP of `DialogContent` in the following modals. In each case, remove any pre-existing inline phone number display blocks that are being replaced.
+
+### 2a. `ArrangeVisitModal.tsx`
+- The contact info data is fetched from `/api/card-actions/arrange-visit` and stored in `contactInfo` state
+- Add `<ContactInfoHeader>` at the top of DialogContent for the `'call'`, `'booked'`, and `'email'` steps
+- Pass `loading={step === 'loading' || contactInfo === null}` for the call step so it shows a skeleton while data loads
+- The `name` should come from `contactInfo?.contactName || ctx.contactName`
+- Remove the existing inline Box block that renders phone/mobile/whatsapp in the 'call' step (the `{(landline || mobile || whatsapp) ? ... }` block) — `ContactInfoHeader` replaces it
+- Pass `email={contactInfo?.contactEmail || ctx.contactEmail}`
+
+### 2b. `ContactCustomerModal.tsx`
+- Contact data is fetched from `/api/card-actions/contact-customer` and stored in `contactData` state
+- Add `<ContactInfoHeader>` at the top of DialogContent in the `'contact'` phase and `'no_response_confirm'` phase
+- Pass `loading={phase === 'loading'}` on the contact phase
+- Remove the existing inline Box block that renders phone/mobile/whatsapp in the 'contact' phase (the `{(phone || mobile || whatsapp) ? ...}` block) — `ContactInfoHeader` replaces it
+- Note: this modal currently has different props (`contactId, contactName, contactEmail`) — the name comes from `contactData?.contactName || contactName` and email from `contactData?.contactEmail || contactEmail`
+
+### 2c. `PhoneSummaryModal.tsx`
+- Read this file and identify where contact context is available
+- If the modal loads contact data from an API, add `ContactInfoHeader` at the top with loading state
+- If it only has `ctx` (contactName, contactEmail), show those — phone numbers may not be available and that is fine; show what is available
+
+### 2d. `UploadPhotosModal.tsx`
+- This modal has `handler` and `ctx` props; `ctx` contains `contactName` and `contactEmail`
+- Add `<ContactInfoHeader name={ctx.contactName} email={ctx.contactEmail} />` at the top of DialogContent for all phases except the final 'sent' phase
+
+### 2e. All scheduling modals
+Apply `<ContactInfoHeader>` from `ctx` to the following — they all have `{ handler, ctx, open, onClose }` props and `ctx` always contains `contactName` and `contactEmail` (phone numbers are not available in these modals, so just show name and email):
+- `DesignVisitCalendarModal.tsx`
+- `VisitCalendarModal.tsx`
+- `DeliveryWindowModal.tsx`
+- `InstallationSlotModal.tsx`
+
+---
+
+## TASK 3 — Consistent action button ordering across all modals
+
+**Rule:** In every `<DialogActions>`, the cancel/back/dismiss button must be first (left), and the primary confirm/submit action must be last (right). Destructive actions (e.g. "Not proceeding") should use `color="error" variant="outlined"` and sit between cancel and the primary confirm.
+
+Audit and fix the following files to match this pattern:
+- `ArrangeVisitModal.tsx` — the 'call' step has 4 buttons; reorder so: Cancel/Close → Not Proceeding → Call back later → No answer → Booked (or whatever logical order makes sense, but cancel leftmost, booked rightmost)
+- `ContactCustomerModal.tsx` — the 'contact' phase actions; ensure "Done" (primary) is rightmost, and add a cancel/close button leftmost
+- `PhoneSummaryModal.tsx`
+- `UploadPhotosModal.tsx`
+- `DesignVisitCalendarModal.tsx`
+- `VisitCalendarModal.tsx`
+- `DeliveryWindowModal.tsx`
+- `InstallationSlotModal.tsx`
+- `MessagePopupModal.tsx`
+
+For multi-step modals with Back/Next, Back should be leftmost, the primary action rightmost.
+
+---
+
+## TASK 4 — Add `demo` prop support to all modals
+
+This enables the WorkflowPage to open any modal in a non-destructive preview mode.
+
+**For each of the following modals**, add an optional `demo?: boolean` prop to their Props interface:
+- `ArrangeVisitModal.tsx`
+- `ContactCustomerModal.tsx`
+- `PhoneSummaryModal.tsx`
+- `UploadPhotosModal.tsx`
+- `DesignVisitCalendarModal.tsx`
+- `VisitCalendarModal.tsx`
+- `DeliveryWindowModal.tsx`
+- `InstallationSlotModal.tsx`
+- `MessagePopupModal.tsx`
+
+**When `demo={true}`:**
+1. Skip ALL API calls (`POST`, `GET`, `PATCH` etc) — instead, populate state immediately with the placeholder data below
+2. Skip all `sessionStorage` / `localStorage` draft reads and writes
+3. Show a small `<Chip label="Demo preview" size="small" color="info" variant="outlined" />` in the top-right of `DialogTitle` (use a flex row with `justifyContent: 'space-between'` on the title content)
+4. Disable all submit/confirm/send buttons — add a `title="Demo mode — no changes will be saved"` tooltip to each disabled primary action button
+5. Still allow navigation between steps/phases (e.g. clicking "Booked" to see the booking step) — just don't fire API calls
+6. Still allow editing of form fields so the user can see how the UI responds
+
+**Placeholder demo data to use across all modals:**
+```typescript
+const DEMO_CONTACT = {
+  name: 'Jane Smith',
+  phone: '01234 567890',
+  mobile: '07891 234567',
+  whatsapp: '07891 234567',
+  email: 'jane.smith@example.com',
+  address: '42 Example Street, London, SW1A 1AA',
+  visitType: 'design' as const,
+};
+```
+
+Export this constant from `src/react/components/modals/demoDta.ts` (create this file) and import it in each modal.
+
+For `ArrangeVisitModal` in demo mode, set `contactInfo` state immediately on open to the demo data (skip the fetch). For `ContactCustomerModal`, set `contactData` state immediately.
+
+---
+
+## TASK 5 — Make `ActionButtonPreview` in WorkflowPage clickable for demo previews
+
+In `src/react/pages/admin/WorkflowPage.tsx`:
+
+### 5a. Update `StatusRow` to support a preview click
+Add an `onPreviewClick?: (handler: Handler) => void` prop to `StatusRow`. When `hasHandler` is true, wrap the `ActionButtonPreview` component in a `<Tooltip title="Click to preview modal">` and make the entire `ActionButtonPreview` box clickable (add `onClick={() => onPreviewClick?.(statusHandlers[0])}`, `cursor: 'pointer'`, and a subtle `'&:hover': { opacity: 0.85, transform: 'scale(1.02)' }` transition).
+
+### 5b. Add `onPreviewClick` prop through `StageAccordionNew`
+Pass `onPreviewClick` as a prop from `StageAccordionNew` down to each `StatusRow`.
+
+### 5c. Add demo modal state to `WorkflowPage`
+Add state:
+```typescript
+const [demoModal, setDemoModal] = useState<{ handler: Handler } | null>(null);
+```
+
+Pass `onPreviewClick={(handler) => setDemoModal({ handler })}` to each `StageAccordionNew`.
+
+### 5d. Create a `WorkflowDemoModalHost` component inside `WorkflowPage.tsx`
+This is a local component (not exported) that renders the correct modal based on handler type. It should:
+- Accept `{ handler: Handler; onClose: () => void }`
+- Use the demo placeholder context:
+```typescript
+const DEMO_CTX = {
+  contactId: 'demo-preview',
+  contactName: 'Jane Smith',
+  contactEmail: 'jane.smith@example.com',
+};
+```
+- Switch on `handler.type` and render the corresponding modal with `demo={true}` and `open={true}`:
+  - `arrange_visit` → `<ArrangeVisitModal handler={...} ctx={DEMO_CTX} open demo onClose={onClose} />`
+  - `contact_customer` → `<ContactCustomerModal contactId="demo-preview" contactName="Jane Smith" contactEmail="jane.smith@example.com" demo onClose={onClose} />`
+  - `upload_photos_and_info` → `<UploadPhotosModal ...>`
+  - `show_message` → `<MessagePopupModal ...>`
+  - `add_design_visit_to_calendar` → `<DesignVisitCalendarModal ...>`
+  - `schedule_visit` → `<VisitCalendarModal ...>`
+  - `schedule_delivery_window` → `<DeliveryWindowModal ...>`
+  - `schedule_installation_slot` → `<InstallationSlotModal ...>`
+  - `summarise_phone_call` → `<PhoneSummaryModal ...>`
+  - For `start_design_visit` and `review_customer_photos`, show a simple `<Dialog open>` with a message "Demo preview not available for this modal type." and a Close button
+- For `MessagePopupModal`, pass the handler's config to display the actual configured message text
+
+### 5e. Render `WorkflowDemoModalHost` in `WorkflowPage`
+At the bottom of the WorkflowPage JSX, after the accordions, add:
+```typescript
+{demoModal && (
+  <WorkflowDemoModalHost
+    handler={demoModal.handler}
+    onClose={() => setDemoModal(null)}
+  />
+)}
+```
+
+---
+
+## CONSTRAINTS & NOTES
+
+- Do NOT modify `CardActionModalsHost.tsx` — the demo feature is entirely local to WorkflowPage
+- Do NOT change any API routes or backend files
+- Do NOT modify `DiscardConfirmDialog.tsx` — the discard guard should be bypassed in demo mode (when `demo=true`, the `useDiscardGuard` hook should always report `hasUnsavedChanges = false`)
+- Preserve all existing `data-testid` attributes
+- TypeScript must remain clean — no `any` casts, no TS errors
+- Do not add comments unless explaining a non-obvious constraint
+- MUI imports should remain as individual named imports (not barrel imports) to preserve tree-shaking
+- The `DEMO_CONTACT` / `DEMO_CTX` data should only appear in the two files: `demoData.ts` and `WorkflowPage.tsx` — don't duplicate the literal strings
+
+---
+
+## FILE CHECKLIST
+
+New files to create:
+- `src/react/components/modals/ContactInfoHeader.tsx`
+- `src/react/components/modals/demoData.ts`
+
+Files to modify:
+- `src/react/components/modals/ArrangeVisitModal.tsx`
+- `src/react/components/modals/ContactCustomerModal.tsx`
+- `src/react/components/modals/PhoneSummaryModal.tsx`
+- `src/react/components/modals/UploadPhotosModal.tsx`
+- `src/react/components/modals/DesignVisitCalendarModal.tsx`
+- `src/react/components/modals/VisitCalendarModal.tsx`
+- `src/react/components/modals/DeliveryWindowModal.tsx`
+- `src/react/components/modals/InstallationSlotModal.tsx`
+- `src/react/components/modals/MessagePopupModal.tsx`
+- `src/react/pages/admin/WorkflowPage.tsx`
+
+Files NOT to touch:
+- `CardActionModalsHost.tsx`
+- `DiscardConfirmDialog.tsx`
+- `useDiscardGuard.ts` (handle demo bypass inside each modal instead)
+- Any backend / API route files
+```
+
+---
+
+This covers all 5 tasks cleanly. A few things to be aware of when you paste it in:
+
+- **Task order matters** — Tasks 1 and 4 (`ContactInfoHeader` and `demoData.ts`) need to be created before Task 2 integrates them into the modals
+- **PhoneSummaryModal** — I haven't read that file fully, so the prompt tells Replit to read it first and adapt accordingly rather than assuming its structure
+- If Replit hits complexity limits on any single task (especially Task 2 which touches 8 files), it can split them by file
