@@ -1,0 +1,71 @@
+# Task: New "Design Visit Follow-up" compound card action + visit calendar reorganisation
+
+Read `.agents/skills/add-card-action-handler/SKILL.md` first and follow its 8-step checklist for the new handler type. This task has four parts — do them in order, since Parts 2 and 3 depend on Part 1.
+
+---
+
+## Part 1 — Reorganise "Add to Calendar" into one reusable visit-scheduling action
+
+Today there are two near-duplicate modals: `src/react/components/modals/DesignVisitCalendarModal.tsx` and `src/react/components/modals/VisitCalendarModal.tsx`. Neither sends email, and visits live in an internal `visits` table that we are retiring.
+
+1. **Merge the two modals** into a single `ScheduleVisitModal` (in `src/react/components/modals/`) parameterised by `visitType` (one of `design, survey, installation, delivery, remedial, workshop, other`). When `visitType` is provided (by handler config or calling context) it is locked; when not provided, show a visit-type select. Fields: title (default `"{contactName} {visit type} visit"`), date/time (DateTimePicker), duration in minutes (default 60), location, notes (with the existing type-specific placeholders, e.g. survey → "Anything the surveyor should know"). Keep the existing localStorage draft persistence, stale-draft reset, and the "<15 minutes away" warning from `DesignVisitCalendarModal`.
+
+2. **Built-in confirmation email toggle.** Add a "Send confirmation email to customer" checkbox, **default OFF**. When ticked, expand an editable subject/body preview pre-rendered from a new `visit_confirmation` template (via the existing `POST /api/email-templates/render`), and send it via `POST /api/emails/send` after the calendar event is created. Email failure is non-fatal: show a warning toast, don't roll back the event.
+
+3. **Tag Google Calendar events with the customer.** Extend `POST /api/events` (server.js ~line 2392) to accept optional `contactId` and `visitType` and write them into the Google event as `extendedProperties.private = { moContactId, moVisitType, moSource: 'measure-once' }`.
+
+4. **New endpoint** `GET /api/events?contactId=<id>` that lists events from the shared Google calendar filtered by `privateExtendedProperty moContactId=<id>` (Google Calendar API supports this filter natively). Return enough fields for the UI: id, summary, start, end, location, description, moVisitType.
+
+5. **Retire the internal visits table.** The customer detail page Visits section (`src/react/pages/customer-detail/VisitsSections.tsx`) must now fetch upcoming/past visits from `GET /api/events?contactId=...` instead of the `visits` table. Stop writing to the `visits` table everywhere (`visits.js` routes, any handler that calls `POST /api/visits`). Do not drop the table or its migration — just deprecate the code paths (comment them as deprecated). Where the Visits section previously offered edit/delete on a visit row, wire those to Google Calendar event update/delete (`events.patch` / `events.delete`); at minimum support delete.
+
+6. **Generic "Book a visit" button** in the Visits section header on the customer detail page, opening `ScheduleVisitModal` with the visit-type select enabled (no locked type), contactId/contactName/contactEmail passed in, and the confirmation-email toggle available.
+
+7. **Update existing handler types** `add_design_visit_to_calendar` and `schedule_visit` to dispatch the merged modal (`add_design_visit_to_calendar` = merged modal with `visitType` locked to `design`). Update `src/react/utils/handlerMeta.ts` (HANDLER_MODAL_SUMMARY, HANDLER_COMPONENT_META, HANDLER_EMAIL_TEMPLATES — both now list `visit_confirmation`) and the admin panel descriptions.
+
+---
+
+## Part 2 — Email template changes (`email-templates.js`)
+
+1. **Rename** the existing `customer_invite` template (the photo/info upload form invite) to key `photo_review_invite`, display name **"Photo Review — Invite"**, matching the existing `photo_review_not_suitable` / `photo_review_rough_estimate` naming. Write a migration that updates the `email_templates` row key in place (preserve any admin edits), and update every code reference: `customer-info.js` (`sendCustomerInviteEmail`), the defaults in `email-templates.js`, `handlerMeta.ts` HANDLER_EMAIL_TEMPLATES, and admin UI labels.
+
+2. **New template `visit_invite`** ("Visit Invite") — sent when inviting or re-inviting a customer to book a visit. Variables: `{{firstName}}`, `{{visitLabel}}` (e.g. "design visit", "survey"), `{{visitDuration}}`, `{{location}}`, and optional `{{proposedDate}}` / `{{proposedTime}}`. Write sensible default copy inviting the customer to reply or call to agree a time. Admin-editable like all other templates.
+
+3. **New template `visit_confirmation`** ("Visit Confirmation") — sent from the calendar action's email toggle. Variables: `{{firstName}}`, `{{visitLabel}}`, `{{visitDate}}`, `{{visitTime}}`, `{{visitDuration}}`, `{{location}}`.
+
+4. **Sub-statuses have been removed from HubSpot.** Remove every `hw_lead_substatus` write across the codebase (notably the arrange-visit OUTCOME_MAP in server.js ~5988–6034), and audit all email template default copy and variables so nothing references a sub-status. Lead status (`hs_lead_status`) writes remain.
+
+---
+
+## Part 3 — New compound card action: `design_visit_followup`
+
+A new handler type shown on the action bar when the contact's lead status is **`DESIGN_INVITED`** (this key already exists in HubSpot — validate it following the `scripts/check-lead-status-keys.mjs` convention). Bind it to the appropriate `(stage_key, 'DESIGN_INVITED')` slot via the admin handlers UI / seed.
+
+Implement as a React modal dispatched via `CardActionModalsHost.tsx`, modelled on `ArrangeVisitModal.tsx` (including sessionStorage draft persistence keyed by contactId, cleared on successful outcome).
+
+**Backend init route** — `POST /api/card-actions/design-visit-followup`: fetches contact from HubSpot (firstname, lastname, email, phone, mobilephone, WhatsApp, address) and returns it with `visitType: 'design'`. Middleware: `isAuthenticated`, `requirePrivilege('member')`, `requireHubspotToken`, `hubspotMutationLimiter` (same chain as arrange-visit).
+
+**Modal flow** — loading step, then a hub step with three paths:
+
+1. **"Customer confirmed"** → embeds the Part 1 `ScheduleVisitModal` step with `visitType` locked to `design` and the contact's address pre-filled as location. Creates the tagged Google Calendar event, offers the confirmation-email toggle (default OFF, editable preview of `visit_confirmation`), then calls the outcome route with `outcome: 'confirmed'`, which sets `hs_lead_status = DESIGN_SCHEDULED`. **This is the only path that changes lead status to DESIGN_SCHEDULED — never set it automatically on open or on resend.**
+
+2. **"Resend invite"** → pre-renders the `visit_invite` template into editable subject/body fields (same pattern as ArrangeVisitModal's no-answer email step), sends via `POST /api/emails/send`. Lead status stays `DESIGN_INVITED`. Record outcome `invite_resent` (no status change).
+
+3. **"Not proceeding"** → outcome route sets `hs_lead_status = NOT_SUITABLE` (parity with arrange-visit).
+
+**Backend outcome route** — `POST /api/card-actions/design-visit-followup/outcome` with body `{ contactId, outcome }`, outcomes `confirmed | invite_resent | not_proceeding`. No `hw_lead_substatus` writes. On any status change, broadcast the lead-status change the same way arrange-visit does so the Lead Status Rail refreshes.
+
+**Registration** — follow the skill's 8-step checklist: add `design_visit_followup` to `CARD_ACTION_HANDLER_TYPES`; add a `_validateHandlerConfig` branch (config keys: `defaultDurationMin` 5–1440 default 60, `defaultTitle` ≤120 chars); add to `HANDLER_TYPE_LABELS` / `HANDLER_TYPE_DESCRIPTIONS` in `public/admin.html`; add the dispatch branch routing to the React modal; add `handlerMeta.ts` entries (HANDLER_EMAIL_TEMPLATES: `['visit_invite', 'visit_confirmation']`).
+
+**Related change** — since sub-statuses no longer distinguish "suggested" from "agreed": change Arrange Visit's `email_sent` outcome for design visits to set `hs_lead_status = DESIGN_INVITED` (instead of `DESIGN_SCHEDULED`). `booked` still sets `DESIGN_SCHEDULED` directly. Update the mapping table in the skill doc to match.
+
+---
+
+## Part 4 — Acceptance criteria
+
+- A contact with lead status `DESIGN_INVITED` shows the new action; completing the "customer confirmed" path creates a Google Calendar event tagged with `moContactId`/`moVisitType`, optionally sends `visit_confirmation` (only if the staff member ticked the toggle), and moves the lead to `DESIGN_SCHEDULED`.
+- "Resend invite" sends an editable `visit_invite` email and leaves the status untouched.
+- The customer detail Visits section lists that calendar event (and any other event tagged with the contact) without reading the `visits` table.
+- "Book a visit" from the customer page can create a tagged event of any visit type, with the same optional confirmation email.
+- The old photo-upload invite still works end to end under its new `photo_review_invite` key, including resend (expiring old tokenised links).
+- `grep -r hw_lead_substatus` shows no remaining writes; no email template mentions sub-statuses.
+- Existing test suites still pass (`docs/TEST_SUITES.md`); use the `MAIL_TRANSPORT_FILE_OVERRIDE` file transport to assert email sends in any new tests.

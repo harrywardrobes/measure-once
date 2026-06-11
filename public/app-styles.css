@@ -1277,43 +1277,17 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 
 
 /* Card-action stages renderer (admin Card-actions tab) */
-.admin-page .adm-ca-stage {
-  margin-bottom: 22px; border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-}
-.admin-page .adm-ca-stage-toggle {
-  width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; background: var(--paper);
-  border: 0; border-bottom: 1px solid var(--border);
-  font-weight: 600; font-size: .85rem; color: var(--ink-2);
-  cursor: pointer; text-align: left; font: inherit;
-}
-.admin-page .adm-ca-stage-toggle.is-collapsed { border-bottom: 0; }
-.admin-page .adm-ca-chevron {
-  display: inline-block; width: 10px;
-  transition: transform .15s ease;
-}
-.admin-page .adm-ca-chevron.is-collapsed { transform: rotate(-90deg); }
 .admin-page .adm-ca-empty {
   padding: 14px; font-size: .78rem; color: var(--ink-4);
 }
 .admin-page .adm-ca-block {
-  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
 }
-.admin-page .adm-ca-block-head {
-  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
-}
-.admin-page .adm-ca-block-title { font-size: .85rem; color: var(--ink-1); }
+.admin-page .adm-ca-block-title { font-size: .85rem; color: var(--ink-1); flex-shrink: 0; white-space: nowrap; }
 .admin-page .adm-ca-block-title.is-null { font-style: italic; }
-.admin-page .adm-ca-default-row {
-  display: flex; align-items: center; gap: 12px;
-  margin-bottom: 6px; flex-wrap: wrap;
-}
-.admin-page .adm-ca-default-label {
-  flex: 0 0 220px; font-size: .78rem; color: var(--ink-3);
-}
 .admin-page .adm-ca-default-input {
-  flex: 1; min-width: 160px;
+  flex: 1; min-width: 120px; max-width: 260px;
   padding: 5px 8px; font-size: .82rem;
 }
 .admin-page .adm-ca-sub-list { margin-top: 8px; }
@@ -1466,6 +1440,7 @@ input[type="text"]:focus, input[type="date"]:focus, select:focus, textarea:focus
 .admin-page .adm-handler-summary-head {
   display: flex; align-items: center; gap: 6px;
   font-weight: 600; font-size: .82rem; color: var(--plum-light);
+  user-select: none;
 }
 .admin-page .adm-handler-summary-desc {
   margin-top: 5px; font-size: .78rem; color: var(--ink-2);

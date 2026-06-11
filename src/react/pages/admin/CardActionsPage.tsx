@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Accordion, AccordionDetails, AccordionSummary,
   Alert, Box, Button, Card, CardContent, CircularProgress, Stack, Typography,
   Dialog, DialogTitle, DialogContent, DialogActions, List, ListItem, ListItemText,
   Tooltip,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useToast } from '../../contexts/ToastContext';
-import { STATUS_COLORS } from '../../theme';
+import { STATUS_COLORS, STAGE_COLORS } from '../../theme';
 import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
@@ -168,9 +170,6 @@ export function CardActionsPage() {
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
   const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
-  const [collapsed,      setCollapsed]      = useState<Set<string>>(new Set());
-  const didInitCollapse = useRef(false);
-
   const [loading,       setLoading]       = useState(true);
   const [reloadKey,     setReloadKey]     = useState(0);
   const [resolvedSlots, setResolvedSlots] = useState<Set<string>>(new Set());
@@ -203,10 +202,6 @@ export function CardActionsPage() {
         label: (data as WorkflowStage).label ?? key,
       }));
       setWorkflowStages(stages);
-      if (!didInitCollapse.current) {
-        didInitCollapse.current = true;
-        setCollapsed(new Set(stages.map(s => s.key)));
-      }
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
       setHandlers(safeArr(hdl));
@@ -335,12 +330,6 @@ export function CardActionsPage() {
 
   const { globalNull, stages } = buildModel(labels, statuses, workflowStages);
 
-  const toggleStage = (key: string) => setCollapsed(prev => {
-    const n = new Set(prev);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
-
   return (
     <Stack spacing={2}>
       <Card variant="outlined">
@@ -366,68 +355,67 @@ export function CardActionsPage() {
             ) : (
               <>
                 {/* ── Global "No lead status" block ──────────────────────── */}
-                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} key={`__global__-${reloadKey}`}>
-                  <div className="adm-ca-block-head">
-                    <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
-                    <span className="adm-text-muted-xs">
-                      contact has no <code>hs_lead_status</code>
-                    </span>
-                  </div>
-                  <div className="adm-ca-default-row" data-testid="ca-default-row-global">
-                    <div className="adm-ca-default-label">Action label</div>
-                    <input type="text" className="field ca-default-input adm-ca-default-input"
-                      maxLength={128}
-                      data-kind="ls-default"
-                      data-stage="__global__"
-                      data-status=""
-                      data-original={globalNull.defaultLabel}
-                      defaultValue={globalNull.defaultLabel}
-                      placeholder="(Action label)"
-                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                    />
-                    <HandlerBadges stageKey="__global__" statusKey="" handlers={handlers} />
-                    {resolvedSlots.has('ls:__global__:') && (
-                      <span className="ca-resolved-pill" style={{
-                        display: 'inline-flex', alignItems: 'center',
-                        padding: '1px 8px', marginLeft: 6,
-                        background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
-                        borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
-                        lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
-                      }}>✓ Resolved</span>
-                    )}
-                  </div>
+                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`__global__-${reloadKey}`}>
+                  <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
+                  <span className="adm-text-muted-xs" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                    no <code>hs_lead_status</code>
+                  </span>
+                  <input type="text" className="field ca-default-input adm-ca-default-input"
+                    maxLength={128}
+                    data-kind="ls-default"
+                    data-stage="__global__"
+                    data-status=""
+                    data-original={globalNull.defaultLabel}
+                    defaultValue={globalNull.defaultLabel}
+                    placeholder="(Action label)"
+                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                  />
+                  <HandlerBadges stageKey="__global__" statusKey="" handlers={handlers} />
+                  {resolvedSlots.has('ls:__global__:') && (
+                    <span className="ca-resolved-pill" style={{
+                      display: 'inline-flex', alignItems: 'center',
+                      padding: '1px 8px', marginLeft: 6,
+                      background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
+                      borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                      lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                    }}>✓ Resolved</span>
+                  )}
                 </div>
 
                 {/* ── Per-stage accordion sections ────────────────────────── */}
                 {!stages.length ? (
                   <p className="admin-msg admin-msg--muted">No card action stages configured.</p>
                 ) : stages.map(stage => {
-              const isCollapsed = collapsed.has(stage.key);
-              const bodyId = `ca-stage-body-${stage.key}`;
-              return (
-                <section className="adm-ca-stage" key={stage.key} data-stage-section={stage.key}>
-                  <button type="button"
-                    className={`ca-stage-toggle adm-ca-stage-toggle${isCollapsed ? ' is-collapsed' : ''}`}
-                    data-stage-toggle={stage.key}
-                    aria-expanded={!isCollapsed}
-                    aria-controls={bodyId}
-                    onClick={() => toggleStage(stage.key)}>
-                    <span className={`ca-stage-chevron adm-ca-chevron${isCollapsed ? ' is-collapsed' : ''}`} aria-hidden="true">▾</span>
-                    <span className="fw-600">{stage.label}</span>
-                  </button>
-                  <div id={bodyId} data-stage-body={stage.key} style={isCollapsed ? { display: 'none' } : undefined}>
-                    {stage.statuses.length === 0 ? (
-                      <div className="adm-ca-empty"><em>No lead statuses configured for this stage yet.</em></div>
-                    ) : stage.statuses.map(ls => {
-                      return (
-                        <div key={`${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key}>
-                          <div className="adm-ca-block-head">
+                  const colors = STAGE_COLORS[stage.key];
+                  const borderColor = colors?.bg ?? '#8B2BFF';
+                  const count = stage.statuses.length;
+                  return (
+                    <Accordion
+                      key={stage.key}
+                      defaultExpanded={false}
+                      disableGutters
+                      variant="outlined"
+                      sx={{
+                        borderLeft: `4px solid ${borderColor}`,
+                        borderRadius: 1,
+                        mb: 1,
+                        '&:before': { display: 'none' },
+                      }}
+                    >
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 44, px: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: borderColor, flexShrink: 0 }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{stage.label}</Typography>
+                          <Typography variant="caption" color="text.secondary">{count} status{count !== 1 ? 'es' : ''}</Typography>
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ p: 0 }}>
+                        {stage.statuses.length === 0 ? (
+                          <div className="adm-ca-empty"><em>No lead statuses configured for this stage yet.</em></div>
+                        ) : stage.statuses.map(ls => (
+                          <div key={`${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key} data-testid="ca-default-row">
                             <strong className="adm-ca-block-title">{ls.label}</strong>
-                            <span className="adm-text-faint-mono">{ls.key}</span>
-                          </div>
-
-                          <div className="adm-ca-default-row" data-testid="ca-default-row">
-                            <div className="adm-ca-default-label">Action label</div>
+                            <span style={{ fontSize: '.72rem', color: 'var(--ink-4)', flexShrink: 0, whiteSpace: 'nowrap' }}>{ls.key}</span>
                             <input type="text" className="field ca-default-input adm-ca-default-input"
                               maxLength={128}
                               data-kind="ls-default"
@@ -449,14 +437,11 @@ export function CardActionsPage() {
                               }}>✓ Resolved</span>
                             )}
                           </div>
-
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                        ))}
+                      </AccordionDetails>
+                    </Accordion>
+                  );
+                })}
               </>
             )}
           </div>
