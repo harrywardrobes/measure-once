@@ -753,6 +753,14 @@ export function CustomerDetailPage() {
           loaded={lsLoaded}
           focusedLeadStatus={focusedLs}
           onFocusChange={setFocusedLs}
+          activityCounter={
+            compactRelativeTime(
+              latestTimestamp(lastAttempt?.at, contact?.properties.notes_last_contacted),
+              now,
+            ) ?? undefined
+          }
+          lastAttempt={lastAttempt}
+          notesLastContacted={contact?.properties.notes_last_contacted}
         />
       </div>
 

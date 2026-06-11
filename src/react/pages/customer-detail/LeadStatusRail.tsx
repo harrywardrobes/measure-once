@@ -1,12 +1,14 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { LeadStatus, Contact, STAGE_COLOURS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { CheckBadgeIcon } from './CheckBadgeIcon';
+import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 
 interface Props {
   contact: Contact | null;
@@ -14,6 +16,9 @@ interface Props {
   loaded: boolean;
   focusedLeadStatus: string | null;
   onFocusChange: (value: string) => void;
+  activityCounter?: string;
+  lastAttempt?: LastAttempt;
+  notesLastContacted?: string;
 }
 
 export function LeadStatusRail({
@@ -22,6 +27,9 @@ export function LeadStatusRail({
   loaded,
   focusedLeadStatus,
   onFocusChange,
+  activityCounter,
+  lastAttempt,
+  notesLastContacted,
 }: Props) {
   const { isManager } = usePrivilege();
   const canEdit = isManager;
@@ -245,7 +253,7 @@ export function LeadStatusRail({
                   }}>
                     {focusedEntry.label}
                   </Typography>
-                  <Box sx={{ mt: '3px', display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Box sx={{ mt: '3px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
                     {isFocusedCurrent && (
                       <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)', mt: '2px' }}>
                         Current stage
@@ -260,6 +268,27 @@ export function LeadStatusRail({
                       <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)', mt: '2px' }}>
                         Upcoming
                       </Typography>
+                    )}
+                    {activityCounter && (
+                      <Tooltip
+                        title={buildActivityTooltipContent(lastAttempt ?? null, notesLastContacted)}
+                        arrow
+                        placement="bottom"
+                        enterDelay={200}
+                      >
+                        <Typography
+                          component="span"
+                          sx={{
+                            fontSize: '0.72rem',
+                            color: 'var(--ink-4)',
+                            mt: '2px',
+                            cursor: 'default',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {(isFocusedCurrent || isFocusedPast || isFocusedFuture) ? '·\u00a0' : ''}{activityCounter === 'now' ? 'just now' : `${activityCounter} ago`}
+                        </Typography>
+                      </Tooltip>
                     )}
                   </Box>
                 </Box>

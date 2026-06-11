@@ -11,8 +11,10 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { POST, PATCH } from '../../utils/api';
+import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -674,21 +676,38 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
               )}
 
               {attemptLog.length === 0 && lastAttemptAt && (
-                <Box
-                  sx={{
-                    px: 1.5,
-                    py: 1,
-                    bgcolor: 'grey.50',
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                  }}
+                <Tooltip
+                  title={buildActivityTooltipContent(
+                    {
+                      at: lastAttemptAt,
+                      by: lastAttemptBy,
+                      count: historyTotalAttempts,
+                      method: null,
+                      methodCounts: null,
+                    } satisfies LastAttempt,
+                    lastAttemptAt,
+                  )}
+                  arrow
+                  placement="top"
+                  enterDelay={200}
                 >
-                  <Typography variant="caption" color="text.secondary">
-                    Last contacted {relativeTime(lastAttemptAt)}
-                    {lastAttemptBy ? ` · ${lastAttemptBy}` : ''}
-                  </Typography>
-                </Box>
+                  <Box
+                    sx={{
+                      px: 1.5,
+                      py: 1,
+                      bgcolor: 'grey.50',
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      cursor: 'default',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Last contacted {relativeTime(lastAttemptAt)}
+                      {lastAttemptBy ? ` · ${lastAttemptBy}` : ''}
+                    </Typography>
+                  </Box>
+                </Tooltip>
               )}
 
               {advanceError && (

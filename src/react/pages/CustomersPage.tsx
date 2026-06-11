@@ -739,68 +739,76 @@ function CustomerCard({
           nested interactive elements inside the navigation anchor) when this
           contact has a queued status/archive edit that exhausted its retries. */}
       {lastAttempt?.at && (
-        <Box
-          sx={{
-            px: 2,
-            py: '6px',
-            bgcolor: 'grey.50',
-            borderTop: '1px solid',
-            borderColor: 'divider',
-          }}
+        <Tooltip
+          title={buildActivityTooltipContent(lastAttempt, contact.properties?.notes_last_contacted)}
+          arrow
+          placement="top"
+          enterDelay={200}
         >
-          {lastAttempt.count > 0
-            ? (() => {
-                const methodOrder = ['call', 'email', 'whatsapp'];
-                const labels: Record<string, (n: number) => string> = {
-                  call:      (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
-                  email:     (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
-                  whatsapp:  (n) => `${n} WhatsApp`,
-                };
-                const mc = lastAttempt.methodCounts || {};
-                const breakdown = [
-                  ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => labels[m](mc[m])),
-                  ...Object.keys(mc).filter((m) => !methodOrder.includes(m) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
-                ].join(', ');
-                const lastVerb =
-                  lastAttempt.method === 'call'      ? 'Last called'
-                  : lastAttempt.method === 'email'   ? 'Last emailed'
-                  : lastAttempt.method === 'whatsapp' ? 'Last WhatsApp\'d'
-                  : 'Last contacted';
-                const line1 = [
-                  `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'}`,
-                  ...(breakdown ? [breakdown] : []),
-                ].join(' · ');
-                const line2 = `${lastVerb} ${relativeTime(lastAttempt.at)}`;
-                return (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', wordBreak: 'break-word' }}>
-                    <Typography variant="caption" color="text.secondary" component="span">
-                      {line1}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      component="span"
-                      sx={{ '@media (max-width: 359px)': { display: 'none' } }}
-                    >
-                      &nbsp;·&nbsp;
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      component="span"
-                      sx={{ '@media (max-width: 359px)': { flexBasis: '100%' } }}
-                    >
-                      {line2}
-                    </Typography>
-                  </Box>
-                );
-              })()
-            : (
-              <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                {`Contacted ${relativeTime(lastAttempt.at)}${lastAttempt.by ? ` · ${lastAttempt.by}` : ''}`}
-              </Typography>
-            )}
-        </Box>
+          <Box
+            sx={{
+              px: 2,
+              py: '6px',
+              bgcolor: 'grey.50',
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              cursor: 'default',
+            }}
+          >
+            {lastAttempt.count > 0
+              ? (() => {
+                  const methodOrder = ['call', 'email', 'whatsapp'];
+                  const labels: Record<string, (n: number) => string> = {
+                    call:      (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
+                    email:     (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
+                    whatsapp:  (n) => `${n} WhatsApp`,
+                  };
+                  const mc = lastAttempt.methodCounts || {};
+                  const breakdown = [
+                    ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => labels[m](mc[m])),
+                    ...Object.keys(mc).filter((m) => !methodOrder.includes(m) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
+                  ].join(', ');
+                  const lastVerb =
+                    lastAttempt.method === 'call'      ? 'Last called'
+                    : lastAttempt.method === 'email'   ? 'Last emailed'
+                    : lastAttempt.method === 'whatsapp' ? 'Last WhatsApp\'d'
+                    : 'Last contacted';
+                  const line1 = [
+                    `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'}`,
+                    ...(breakdown ? [breakdown] : []),
+                  ].join(' · ');
+                  const line2 = `${lastVerb} ${relativeTime(lastAttempt.at)}`;
+                  return (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', wordBreak: 'break-word' }}>
+                      <Typography variant="caption" color="text.secondary" component="span">
+                        {line1}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="span"
+                        sx={{ '@media (max-width: 359px)': { display: 'none' } }}
+                      >
+                        &nbsp;·&nbsp;
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="span"
+                        sx={{ '@media (max-width: 359px)': { flexBasis: '100%' } }}
+                      >
+                        {line2}
+                      </Typography>
+                    </Box>
+                  );
+                })()
+              : (
+                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                  {`Contacted ${relativeTime(lastAttempt.at)}${lastAttempt.by ? ` · ${lastAttempt.by}` : ''}`}
+                </Typography>
+              )}
+          </Box>
+        </Tooltip>
       )}
 
       {syncStatus === 'failed' && <ContactSyncRecovery failedIds={failedIds} />}
