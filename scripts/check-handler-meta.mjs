@@ -4,11 +4,12 @@
  *
  * Static lint: every handler type declared in the ModalState union in
  * `src/react/components/CardActionModalsHost.tsx` must have a matching
- * entry in each of the three maps in `src/react/utils/handlerMeta.ts`:
+ * entry in each of the four maps in `src/react/utils/handlerMeta.ts`:
  *
  *   • HANDLER_COMPONENT_META
  *   • HANDLER_MODAL_SUMMARY
  *   • HANDLER_TYPE_LABELS
+ *   • HANDLER_EMAIL_TEMPLATES
  *
  * The check fails with a clear error listing any handler types that are
  * present in the host but absent from any map, so that a developer
@@ -108,13 +109,15 @@ const metaSrc = readFileSync(META_FILE, 'utf8');
 const componentMetaKeys  = extractMapKeys(metaSrc, 'HANDLER_COMPONENT_META');
 const modalSummaryKeys   = extractMapKeys(metaSrc, 'HANDLER_MODAL_SUMMARY');
 const typeLabelKeys      = extractMapKeys(metaSrc, 'HANDLER_TYPE_LABELS');
+const emailTemplateKeys  = extractMapKeys(metaSrc, 'HANDLER_EMAIL_TEMPLATES');
 
 // ── Cross-reference each map ───────────────────────────────────────────────
 
 const checks = [
-  { mapName: 'HANDLER_COMPONENT_META', keys: componentMetaKeys },
-  { mapName: 'HANDLER_MODAL_SUMMARY',  keys: modalSummaryKeys  },
-  { mapName: 'HANDLER_TYPE_LABELS',    keys: typeLabelKeys     },
+  { mapName: 'HANDLER_COMPONENT_META',  keys: componentMetaKeys },
+  { mapName: 'HANDLER_MODAL_SUMMARY',   keys: modalSummaryKeys  },
+  { mapName: 'HANDLER_TYPE_LABELS',     keys: typeLabelKeys     },
+  { mapName: 'HANDLER_EMAIL_TEMPLATES', keys: emailTemplateKeys },
 ];
 
 // ── Report ─────────────────────────────────────────────────────────────────
@@ -147,8 +150,8 @@ for (const { mapName, keys } of checks) {
 if (!anyFailed) {
   console.log(
     '\n✓ Every handler type in CardActionModalsHost.tsx has a matching entry\n' +
-    '  in HANDLER_COMPONENT_META, HANDLER_MODAL_SUMMARY, and HANDLER_TYPE_LABELS\n' +
-    '  (src/react/utils/handlerMeta.ts).'
+    '  in HANDLER_COMPONENT_META, HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS,\n' +
+    '  and HANDLER_EMAIL_TEMPLATES (src/react/utils/handlerMeta.ts).'
   );
   process.exit(0);
 }
