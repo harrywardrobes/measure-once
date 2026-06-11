@@ -142,7 +142,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
 
 interface Binding      { stage_key?: string; status_key?: string; }
 interface Handler      { id: number; name: string; type: HandlerType; config: Record<string, unknown>; bindings: Binding[]; }
-interface LeadStatus   { key: string; label: string; stage: string | null; shorthand: string; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
+interface LeadStatus   { key: string; label: string; stage: string | null; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
 interface CALabel      { stage_key: string; status_key: string; label: string; }
 interface EmailTemplate { key: string; label: string; }
 

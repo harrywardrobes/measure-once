@@ -32,7 +32,6 @@ const STATUSES = [
     key: 'quote_sent',
     label: 'Quote sent',
     stage: 'sales',
-    shorthand: 'QS',
     sort_order: 2,
     excluded_from_sales: false,
     is_null_row: false
@@ -41,7 +40,6 @@ const STATUSES = [
     key: 'survey_booked',
     label: 'Survey booked',
     stage: 'survey',
-    shorthand: 'SB',
     sort_order: 3,
     excluded_from_sales: false,
     is_null_row: false

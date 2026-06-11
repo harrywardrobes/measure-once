@@ -67,7 +67,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LeadStatus {
-  key: string; label: string; stage: string | null; shorthand: string;
+  key: string; label: string; stage: string | null;
   sort_order: number; excluded_from_sales: boolean; is_null_row: boolean;
 }
 interface CALabel { stage_key: string; status_key: string; label: string; }
@@ -548,20 +548,6 @@ function StatusRow({
             {ls.label}
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4, mb: 0.4 }}>
-            {ls.shorthand && (
-              <Chip
-                label={ls.shorthand}
-                size="small"
-                sx={{
-                  height: 17,
-                  fontSize: '0.6rem',
-                  fontFamily: 'monospace',
-                  bgcolor: 'rgba(0,0,0,0.05)',
-                  color: 'text.secondary',
-                  '.MuiChip-label': { px: 0.5 },
-                }}
-              />
-            )}
             {ls.is_null_row && (
               <Chip
                 label="stage default"
@@ -796,7 +782,6 @@ function StageAccordionNew({
       list = list.filter(ls => {
         const lsKey = ls.key.toLowerCase();
         if (ls.label.toLowerCase().includes(q)) return true;
-        if (ls.shorthand?.toLowerCase().includes(q)) return true;
         const hs = handlersForSlot(handlers, stageKey, lsKey);
         return hs.some(h => {
           if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
@@ -1190,7 +1175,7 @@ export function WorkflowPage() {
         {/* ── Search ── */}
         <TextField
           size="small"
-          placeholder="Filter by status label, shorthand, handler name, or component…"
+          placeholder="Filter by status label, handler name, or component…"
           value={searchText}
           onChange={e => setSearchText(e.target.value)}
           slotProps={{

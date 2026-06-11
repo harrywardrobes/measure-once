@@ -64,7 +64,6 @@ const LEAD_STATUSES_FIXTURE = [
     key:                 'NEW_LEAD',
     label:               'New Lead',
     stage:               'SALES',
-    shorthand:           'NL',
     sort_order:          1,
     excluded_from_sales: false,
     is_null_row:         false,

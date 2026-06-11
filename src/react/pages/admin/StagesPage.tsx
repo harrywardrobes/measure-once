@@ -76,7 +76,6 @@ interface LeadStatus {
   key: string;
   label: string;
   stage: string | null;
-  shorthand: string;
   sort_order: number;
   excluded_from_sales: boolean;
   is_null_row: boolean;
@@ -149,15 +148,6 @@ function NullStatusRow({ status, handlerCount }: { status: LeadStatus; handlerCo
       <td style={{ ...TD, color: 'var(--neutral-400)' }}>—</td>
       <td style={{ ...TD, fontFamily: 'var(--font-mono)', color: 'var(--neutral-400)', fontSize: '0.75rem' }}>— none —</td>
       <td style={TD}>
-        <input type="text" className="field ls-shorthand-input" maxLength={4}
-          defaultValue={status.shorthand || ''} data-key={status.key}
-          title="4-character shorthand"
-          onInput={(e) => { const t = e.currentTarget; t.value = t.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 56, textAlign: 'center', fontFamily: 'var(--font-mono)' }}
-        />
-      </td>
-      <td style={TD}>
         <input type="text" className="field ls-label-input" defaultValue={status.label} data-key={status.key}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
           style={{ width: '100%', minWidth: 140 }}
@@ -199,15 +189,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
         </select>
       </td>
       <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{status.key}</td>
-      <td style={TD}>
-        <input type="text" className="field ls-shorthand-input" maxLength={4}
-          defaultValue={status.shorthand || ''} data-key={status.key}
-          title="4-character shorthand"
-          onInput={(e) => { const t = e.currentTarget; t.value = t.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-          style={{ width: 56, textAlign: 'center', fontFamily: 'var(--font-mono)' }}
-        />
-      </td>
       <td style={TD}>
         <input type="text" className="field ls-label-input" defaultValue={status.label} data-key={status.key}
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
@@ -396,7 +377,7 @@ export function StagesPage() {
     type RowChange = {
       key: string;
       diff: Record<string, unknown>;
-      els: { lbl?: HTMLInputElement; stg?: HTMLSelectElement; excl?: HTMLInputElement; sh?: HTMLInputElement };
+      els: { lbl?: HTMLInputElement; stg?: HTMLSelectElement; excl?: HTMLInputElement };
       orig: LeadStatus;
     };
     const changes: RowChange[] = [];
@@ -407,25 +388,15 @@ export function StagesPage() {
       const lbl  = row.querySelector<HTMLInputElement>('.ls-label-input') ?? undefined;
       const stg  = row.querySelector<HTMLSelectElement>('.ls-stage-select') ?? undefined;
       const excl = row.querySelector<HTMLInputElement>('input[type="checkbox"]') ?? undefined;
-      const sh   = row.querySelector<HTMLInputElement>('.ls-shorthand-input') ?? undefined;
       const newLbl  = lbl?.value.trim() ?? orig.label;
       const newStg2 = stg?.value || null;
       const newExcl = excl?.checked ?? orig.excluded_from_sales;
-      const rawSh   = (sh?.value.trim().toUpperCase() ?? (orig.shorthand || '')).slice(0, 4);
       if (!newLbl) return;
       const diff: Record<string, unknown> = {};
       if (newLbl !== orig.label) diff.label = newLbl;
       if (newStg2 !== (orig.stage || null)) diff.stage = newStg2;
       if (newExcl !== orig.excluded_from_sales) diff.excluded_from_sales = newExcl;
-      if (rawSh && rawSh !== (orig.shorthand || '').toUpperCase()) {
-        if (!/^[A-Z0-9]{4}$/.test(rawSh)) {
-          showToast(`Shorthand for ${key} must be 4 characters (A–Z, 0–9).`, true);
-          if (sh) sh.value = orig.shorthand || '';
-          return;
-        }
-        diff.shorthand = rawSh;
-      }
-      if (Object.keys(diff).length) changes.push({ key, diff, els: { lbl, stg, excl, sh }, orig });
+      if (Object.keys(diff).length) changes.push({ key, diff, els: { lbl, stg, excl }, orig });
     });
     if (!changes.length) { showToast('No changes to save.'); return; }
     let saved = 0, failed = 0;
@@ -442,7 +413,6 @@ export function StagesPage() {
         if (els.lbl)  els.lbl.value    = orig.label;
         if (els.stg)  els.stg.value    = orig.stage || '';
         if (els.excl) els.excl.checked = orig.excluded_from_sales;
-        if (els.sh)   els.sh.value     = orig.shorthand || '';
         msgs.push(`${key}: ${(e as Error).message}`); failed++;
       }
     }
@@ -732,7 +702,6 @@ export function StagesPage() {
                       <th style={{ ...TH, textAlign: 'center' }}>Order</th>
                       <th style={TH}>Stage</th>
                       <th style={TH}>Key</th>
-                      <th style={TH} title="4-character shorthand used to prefix sub-status keys">Shorthand</th>
                       <th style={TH}>Display Label</th>
                       <th style={{ ...TH, textAlign: 'center' }} title="Number of action handlers bound to this lead status">Handlers</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Excl. from Sales</th>

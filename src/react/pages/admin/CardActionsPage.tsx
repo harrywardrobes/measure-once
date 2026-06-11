@@ -24,7 +24,7 @@ function lsStageToKey(stage: string): string {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LeadStatus {
-  key: string; label: string; stage: string | null; shorthand: string;
+  key: string; label: string; stage: string | null;
   sort_order: number; excluded_from_sales: boolean; is_null_row: boolean;
 }
 interface CALabel  { stage_key: string; status_key: string; label: string; }
@@ -32,7 +32,7 @@ interface Binding  { stage_key?: string; status_key?: string; }
 interface Handler  { id: number; name: string; type: HandlerType; config: Record<string, unknown>; bindings: Binding[]; }
 
 interface StatusModel {
-  key: string; label: string; shorthand: string;
+  key: string; label: string;
   defaultLabel: string; defaultStatusKey: string; isNullRow: boolean;
 }
 interface StageModel { key: string; label: string; statuses: StatusModel[]; }
@@ -62,7 +62,7 @@ function buildModel(
     const lsKey  = String(s.key || '');
     const defKey = lsKey.toLowerCase();
     stage.statuses.push({
-      key: lsKey, label: s.label, shorthand: s.shorthand || '',
+      key: lsKey, label: s.label,
       defaultLabel: labelByKey[`${sk}|${defKey}`] || '',
       defaultStatusKey: defKey, isNullRow: false,
     });
@@ -74,7 +74,7 @@ function buildModel(
   // Runtime resolver now falls back to '__global__|' when no per-stage default row is found.
   const globalNullLabel = labelByKey['__global__|'] || labelByKey['sales|'] || '';
   const globalNull: StatusModel = {
-    key: '__NULL__', label: 'No lead status', shorthand: '',
+    key: '__NULL__', label: 'No lead status',
     defaultLabel: globalNullLabel,
     defaultStatusKey: '', isNullRow: true,
   };
