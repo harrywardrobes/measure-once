@@ -607,47 +607,87 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
       const depositAmt     = Math.round(estimateTotal * (depositPercent / 100) * 100) / 100;
       const estimateDocNum = estimate.DocNumber || estimateId;
 
-      // 2. Mark estimate as Accepted
-      await axios.post(
-        `${qbBase}/v3/company/${t.realm_id}/estimate`,
-        { sparse: true, Id: estimateId, SyncToken: estimate.SyncToken, TxnStatus: 'Accepted' },
-        { headers: jsonHdr, params: qbParams, timeout: 12000 }
-      );
-      steps.estimateAccepted = true;
-
-      // 3. Create deposit invoice (single line linked to the estimate via LinkedTxn)
-      const invoiceBody = {
-        TxnDate:     new Date().toISOString().slice(0, 10),
-        CustomerRef: { value: contactId },
-        ...(contactEmail ? { BillEmail: { Address: contactEmail } } : {}),
-        Line: [{
-          DetailType: 'SalesItemLineDetail',
-          Amount:     depositAmt,
-          Description: `Deposit — ${depositPercent}% of Estimate #${estimateDocNum}`,
-          SalesItemLineDetail: {
-            ItemRef:   { value: '1', name: 'Services' },
-            Qty:       1,
-            UnitPrice: depositAmt,
-          },
-        }],
-        LinkedTxn: [{ TxnId: estimateId, TxnType: 'Estimate' }],
-      };
-      const invResp = await axios.post(
-        `${qbBase}/v3/company/${t.realm_id}/invoice`,
-        invoiceBody,
-        { headers: jsonHdr, params: qbParams, timeout: 15000 }
-      );
-      const invoice = invResp.data?.Invoice;
-      if (!invoice?.Id) {
-        return res.status(502).json({
-          error: 'Invoice was created but no ID was returned from QuickBooks.', steps,
-        });
+      // 2. Idempotency check — if an invoice was already created for this estimate
+      //    (e.g. a prior call timed out before its response arrived), skip the
+      //    invoice-create step but still complete all remaining steps so a partial
+      //    failure on the first call is correctly retried to completion.
+      let invoiceId     = null;
+      let invoiceDocNum = null;
+      let idempotentRetry = false;
+      {
+        const existing = await pool.query(
+          'SELECT invoice_id, invoice_doc_num FROM open_deal_invoices WHERE estimate_id = $1',
+          [estimateId]
+        );
+        if (existing.rows.length > 0) {
+          invoiceId     = existing.rows[0].invoice_id;
+          invoiceDocNum = existing.rows[0].invoice_doc_num;
+          idempotentRetry = true;
+          steps.estimateAccepted = true; // was accepted on the prior call
+          steps.invoiceCreated   = true;
+          logger.warn(
+            { estimateId, contactId, invoiceId },
+            '[accept-deal] idempotency: existing invoice found — skipping create, completing remaining steps'
+          );
+        }
       }
-      const invoiceId     = invoice.Id;
-      const invoiceDocNum = invoice.DocNumber || null;
-      steps.invoiceCreated = true;
 
-      // 4. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
+      // 3. Mark estimate as Accepted (skip if invoice already exists from a prior call)
+      if (!idempotentRetry) {
+        await axios.post(
+          `${qbBase}/v3/company/${t.realm_id}/estimate`,
+          { sparse: true, Id: estimateId, SyncToken: estimate.SyncToken, TxnStatus: 'Accepted' },
+          { headers: jsonHdr, params: qbParams, timeout: 12000 }
+        );
+        steps.estimateAccepted = true;
+
+        // 4. Create deposit invoice (single line linked to the estimate via LinkedTxn)
+        const invoiceBody = {
+          TxnDate:     new Date().toISOString().slice(0, 10),
+          CustomerRef: { value: contactId },
+          ...(contactEmail ? { BillEmail: { Address: contactEmail } } : {}),
+          Line: [{
+            DetailType: 'SalesItemLineDetail',
+            Amount:     depositAmt,
+            Description: `Deposit — ${depositPercent}% of Estimate #${estimateDocNum}`,
+            SalesItemLineDetail: {
+              ItemRef:   { value: '1', name: 'Services' },
+              Qty:       1,
+              UnitPrice: depositAmt,
+            },
+          }],
+          LinkedTxn: [{ TxnId: estimateId, TxnType: 'Estimate' }],
+        };
+        const invResp = await axios.post(
+          `${qbBase}/v3/company/${t.realm_id}/invoice`,
+          invoiceBody,
+          { headers: jsonHdr, params: qbParams, timeout: 15000 }
+        );
+        const invoice = invResp.data?.Invoice;
+        if (!invoice?.Id) {
+          return res.status(502).json({
+            error: 'Invoice was created but no ID was returned from QuickBooks.', steps,
+          });
+        }
+        invoiceId     = invoice.Id;
+        invoiceDocNum = invoice.DocNumber || null;
+        steps.invoiceCreated = true;
+
+        // Record in the idempotency table so a subsequent retry skips create.
+        // ON CONFLICT DO NOTHING is a safety net for near-simultaneous requests.
+        try {
+          await pool.query(
+            `INSERT INTO open_deal_invoices (estimate_id, contact_id, invoice_id, invoice_doc_num)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (estimate_id) DO NOTHING`,
+            [estimateId, contactId, invoiceId, invoiceDocNum]
+          );
+        } catch (e) {
+          logger.warn({ err: e.message }, '[accept-deal] could not record invoice in open_deal_invoices (non-fatal):');
+        }
+      }
+
+      // 5. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
       let allowed;
       try {
         allowed = await checkSendRateLimit(userId);
@@ -764,7 +804,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         });
       }
 
-      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE' });
+      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE', ...(idempotentRetry ? { idempotent: true } : {}) });
     } catch (e) {
       const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
       logger.error({ err: qbMsg }, 'POST /api/quickbooks/contacts/:contactId/accept-deal error:');

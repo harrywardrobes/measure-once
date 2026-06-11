@@ -29,6 +29,7 @@ const PROBE_LABELS = [
   '(F) decline flow: estimates Rejected, thank-you sent or skipped, lead status DECLINED_DEAL',
   '(G) failed invoice send does not advance lead status and contact stays OPEN_DEAL',
   '(H) amendments path: data-load endpoint is non-mutating, lead status stays OPEN_DEAL',
+  '(I) idempotency: second accept-deal call for same estimate returns existing invoice, no duplicate created',
 ];
 
 const fs   = require('fs');
@@ -53,6 +54,7 @@ const EST_F1          = '110007';
 const EST_F2          = '110008';
 const EST_F3          = '110009';
 const EST_G           = '110010';
+const EST_I           = '110011'; // idempotency probe
 const INV_STANDALONE  = '119900'; // for standalone /invoice/:id/send probe in C
 
 // Fake numeric HubSpot contact IDs (must pass /^\d+$/ checks in routes)
@@ -332,6 +334,16 @@ async function clearSendLog(pool, userId) {
   if (userId) await pool.query('DELETE FROM qb_send_log WHERE user_id = $1', [userId]);
 }
 
+async function clearOpenDealInvoices(pool) {
+  // Remove any rows seeded by a previous run of this test suite so the
+  // idempotency guard starts each run with a clean slate.
+  const estIds = [EST_A, EST_B, EST_C, EST_D, EST_E1, EST_E2, EST_F1, EST_F2, EST_F3, EST_G, EST_I];
+  await pool.query(
+    'DELETE FROM open_deal_invoices WHERE estimate_id = ANY($1::text[])',
+    [estIds]
+  ).catch(() => { /* table may not exist on first boot before migrations */ });
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -383,6 +395,7 @@ async function main() {
 
   await cleanupTestData(pool);
   await resetRateLimitStore(pool);
+  await clearOpenDealInvoices(pool);
 
   const { child } = spawnServer();
   let exitCode = 1;
@@ -906,6 +919,83 @@ async function main() {
         noPatchH
           ? 'no HubSpot PATCH fired — lead status stays OPEN_DEAL (correct)'
           : `unexpected PATCH(es): ${js(mockHs.state.patches).slice(0, 200)}`);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probe I: Idempotency guard — second call returns existing invoice, no dup
+    // ─────────────────────────────────────────────────────────────────────────
+    console.log('\n  [I] Idempotency: second accept-deal call for same estimate');
+    {
+      await clearQbSettings(pool); // defaults (10%)
+      await clearSendLog(pool, users.manager.id);
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      mockQb.state.estimates[EST_I] = {
+        Id: EST_I, SyncToken: '1', TxnStatus: 'Pending',
+        TotalAmt: 1000,
+        CustomerRef: { value: CONTACT_ID },
+      };
+
+      // I.1: First call — should succeed and create an invoice
+      const r1 = await apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, mgr.cookie, {
+        estimateId:   EST_I,
+        contactEmail: CONTACT_EMAIL,
+        contactName:  CONTACT_NAME,
+      });
+
+      record('I.first-call-ok', r1.status === 200 && r1.body?.ok === true,
+        r1.status === 200 && r1.body?.ok === true
+          ? `HTTP 200 ok=true invoiceId=${r1.body?.invoiceId}`
+          : `HTTP ${r1.status}: ${js(r1.body).slice(0, 150)}`);
+
+      const firstInvoiceId = r1.body?.invoiceId;
+      const firstInvCreateCount = mockQb.state.calls.filter(
+        c => c.method === 'POST' && c.path.endsWith('/invoice') && !c.body.Id && !c.body.sparse
+      ).length;
+      record('I.first-call-invoice-created', firstInvCreateCount === 1,
+        firstInvCreateCount === 1
+          ? `exactly 1 invoice create call (invoiceId=${firstInvoiceId})`
+          : `expected 1 invoice create, got ${firstInvCreateCount}`);
+
+      // I.2: Second call with same estimateId — must NOT create a second invoice.
+      //      The route skips invoice create but still completes remaining steps
+      //      (QB send, app email, HubSpot status) to handle partial-failure retries.
+      await clearSendLog(pool, users.manager.id); // clear send limit from first call
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      const r2 = await apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, mgr.cookie, {
+        estimateId:   EST_I,
+        contactEmail: CONTACT_EMAIL,
+        contactName:  CONTACT_NAME,
+      });
+
+      record('I.second-call-ok', r2.status === 200 && r2.body?.ok === true,
+        r2.status === 200 && r2.body?.ok === true
+          ? `HTTP 200 ok=true (idempotent=${r2.body?.idempotent})`
+          : `HTTP ${r2.status}: ${js(r2.body).slice(0, 150)}`);
+
+      record('I.second-call-idempotent-flag', r2.body?.idempotent === true,
+        r2.body?.idempotent === true
+          ? 'idempotent=true returned'
+          : `idempotent flag missing or false: ${js(r2.body).slice(0, 150)}`);
+
+      record('I.second-call-same-invoice-id', r2.body?.invoiceId === firstInvoiceId,
+        r2.body?.invoiceId === firstInvoiceId
+          ? `same invoiceId=${firstInvoiceId} returned on retry`
+          : `invoiceId mismatch: first=${firstInvoiceId} second=${r2.body?.invoiceId}`);
+
+      // No new invoice create call (the guard skips QB invoice POST on retry)
+      const secondInvCreateCount = mockQb.state.calls.filter(
+        c => c.method === 'POST' && c.path.endsWith('/invoice') && !c.body.Id && !c.body.sparse
+      ).length;
+      record('I.no-duplicate-invoice-created', secondInvCreateCount === 0,
+        secondInvCreateCount === 0
+          ? 'no invoice create call on retry (correct)'
+          : `${secondInvCreateCount} unexpected invoice create call(s) on retry`);
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
