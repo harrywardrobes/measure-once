@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
-import { cacheRecord, readRecord } from '../lib/offlineDb';
+import { cacheRecord, cacheRecords, readRecord } from '../lib/offlineDb';
 
 export interface ProjectContact {
   id: string;
@@ -173,6 +173,10 @@ export function useProjectsData(): ProjectsData {
 
         contactsRef.current = rawContacts;
         setContacts(rawContacts);
+        // Write the freshly fetched contacts to the offline cache so the IDB
+        // copy reflects the most recent SSE-triggered re-fetch.  Fire-and-forget
+        // — a failure here must never affect the UI.
+        void cacheRecords('customers', rawContacts);
         setStageCache(mergedCache);
         setWorkflow(workflowData);
         setPlatformUsers(Array.isArray(usersData) ? usersData : []);
