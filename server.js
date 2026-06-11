@@ -5760,6 +5760,23 @@ app.delete('/api/admin/card-action-handlers/:id/binding', isAuthenticated, requi
   }
 });
 
+// Delete a card-action handler and all its bindings (cascade via FK).
+app.delete('/api/admin/card-action-handlers/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid id.' });
+  try {
+    const result = await pool.query(
+      `DELETE FROM card_action_handlers WHERE id = $1 RETURNING id`,
+      [id],
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Handler not found.' });
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e.message }, 'DELETE /api/admin/card-action-handlers/:id error:');
+    res.status(500).json({ error: 'Could not delete handler.' });
+  }
+});
+
 // Execute: summarise_phone_call → posts a HubSpot note against the contact.
 app.post('/api/card-actions/phone-call-summary',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
