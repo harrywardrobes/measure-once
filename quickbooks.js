@@ -983,12 +983,28 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
 
       // 2. Optional thank-you email — serialized with a session-level advisory
       //    lock so concurrent retries from different users send at most one email.
-      //    Under the lock we check open_deal_declines.declined_at: if already set
-      //    by a prior successful send we skip.  If the send succeeds we write
-      //    declined_at before releasing the lock so the next waiter sees it.
-      //    If the send fails we leave declined_at unset so a future retry can try
-      //    again — the lock is still released via the finally clause.
-      if (sendThankYou && contactEmail) {
+      //    Pre-check (no lock): if declined_at is already committed from a prior
+      //    session we skip the lock entirely and flag the caller so they can show
+      //    the "already sent" notice even when sendThankYou=false on the retry.
+      //    Under the lock we re-check declined_at for the concurrent case: if set
+      //    by a racing request we skip.  If the send succeeds we write declined_at
+      //    before releasing the lock.  If it fails we leave it unset so a future
+      //    retry can try again — the lock is still released via the finally clause.
+      {
+        const preCheck = await pool.query(
+          'SELECT declined_at FROM open_deal_declines WHERE contact_id = $1',
+          [contactId]
+        );
+        if (preCheck.rows[0]?.declined_at != null) {
+          logger.warn(
+            { contactId },
+            '[decline-deal] thank-you email already sent (pre-check, prior session) — skipping'
+          );
+          steps.thankYouSent     = true;
+          steps.emailAlreadySent = true;
+        }
+      }
+      if (!steps.emailAlreadySent && sendThankYou && contactEmail) {
         const declineLockKey    = contactId + ':decline';
         const declineLockClient = await pool.connect();
         let declineLockHeld = false;
@@ -1051,7 +1067,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
           }
           declineLockClient.release();
         }
-      } else {
+      } else if (!steps.emailAlreadySent) {
         steps.thankYouSent = !sendThankYou;
       }
 

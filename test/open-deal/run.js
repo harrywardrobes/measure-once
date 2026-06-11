@@ -33,6 +33,7 @@ const PROBE_LABELS = [
   '(J) concurrent idempotency: two simultaneous accept-deal calls for the same estimate produce exactly one QB invoice',
   '(K) concurrent-retry send guard: two simultaneous retries (invoice already exists) produce exactly one QB send; losing caller gets sendSkipped=true',
   '(L) concurrent-decline guard: two simultaneous decline-deal calls produce exactly one thank-you email',
+  '(M) sequential-retry decline: second decline call (sendThankYou=false) after a prior successful send returns emailAlreadySent=true',
 ];
 
 const fs   = require('fs');
@@ -61,6 +62,7 @@ const EST_I           = '110011'; // idempotency probe
 const EST_J           = '110012'; // concurrent idempotency probe
 const EST_K           = '110013'; // concurrent-retry send guard probe
 const EST_L           = '110014'; // concurrent-decline guard probe
+const EST_M           = '110015'; // sequential-retry decline probe
 const INV_STANDALONE  = '119900'; // for standalone /invoice/:id/send probe in C
 const INV_K           = '119902'; // pre-seeded invoice for probe K
 
@@ -68,6 +70,7 @@ const INV_K           = '119902'; // pre-seeded invoice for probe K
 const CONTACT_ID       = '7654321';
 const CONTACT_ID_EXTRA = '7654322'; // used for the no-thank-you branch of probe F
 const CONTACT_ID_L     = '7654330'; // used for concurrent-decline guard probe L
+const CONTACT_ID_M     = '7654331'; // used for sequential-retry decline probe M
 const REALM_ID         = 'PRIVTEST_REALM_OPEN_DEAL';
 const CONTACT_EMAIL    = 'privtest-open-deal@example.com';
 const CONTACT_NAME     = 'PrivTest OpenDeal';
@@ -355,7 +358,7 @@ async function clearOpenDealInvoices(pool) {
 async function clearOpenDealDeclines(pool) {
   // Remove any decline-guard rows left by a previous run so each test run
   // starts with a clean slate for the advisory-lock + declined_at checks.
-  const contactIds = [CONTACT_ID, CONTACT_ID_EXTRA, CONTACT_ID_L];
+  const contactIds = [CONTACT_ID, CONTACT_ID_EXTRA, CONTACT_ID_L, CONTACT_ID_M];
   await pool.query(
     'DELETE FROM open_deal_declines WHERE contact_id = ANY($1::text[])',
     [contactIds]
@@ -1289,6 +1292,91 @@ async function main() {
         declinedAt != null
           ? `declined_at=${declinedAt} — row recorded in open_deal_declines`
           : 'declined_at is NULL — guard state not persisted');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probe M: Sequential-retry decline — emailAlreadySent surfaced correctly
+    //
+    // A staff member declines a contact (sendThankYou=true) and the email is
+    // sent.  In a new session they retry with sendThankYou=false (skip email).
+    // The server must detect declined_at is already set via the pre-check and
+    // return emailAlreadySent=true so the UI can show the "already sent" notice.
+    // ─────────────────────────────────────────────────────────────────────────
+    console.log('\n  [M] Sequential-retry decline: second call (sendThankYou=false) returns emailAlreadySent=true');
+    {
+      await clearQbSettings(pool);
+      await clearOpenDealDeclines(pool);
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      mockQb.state.estimates[EST_M] = {
+        Id: EST_M, SyncToken: '1', TxnStatus: 'Pending',
+        TotalAmt: 500, CustomerRef: { value: CONTACT_ID_M },
+      };
+
+      // First decline — sendThankYou=true; expect email to be sent.
+      const r1 = await apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID_M}/decline-deal`, mgr.cookie, {
+        estimateIds:  [EST_M],
+        sendThankYou: true,
+        contactEmail: CONTACT_EMAIL,
+        contactName:  CONTACT_NAME,
+      });
+
+      record('M.first-decline-ok',
+        r1.status === 200 && r1.body?.ok === true,
+        r1.status === 200 && r1.body?.ok === true
+          ? `HTTP 200 ok=true — first decline succeeded`
+          : `HTTP ${r1.status} ${js(r1.body).slice(0, 120)}`);
+
+      record('M.first-decline-no-already-sent',
+        r1.body?.emailAlreadySent !== true,
+        r1.body?.emailAlreadySent !== true
+          ? `emailAlreadySent absent on first decline (correct)`
+          : `emailAlreadySent=true on first decline (should not be set)`);
+
+      const mailsAfterFirst = readMailFile(mailFile);
+      const thankMailsFirst = mailsAfterFirst.filter(m =>
+        String(m.subject || '').toLowerCase().includes('thank')
+        || String(m.subject || '').toLowerCase().includes('declin')
+      );
+      record('M.first-decline-email-sent',
+        thankMailsFirst.length === 1,
+        thankMailsFirst.length === 1
+          ? `1 thank-you email sent on first decline`
+          : `expected 1 email, got ${thankMailsFirst.length}`);
+
+      // Second decline — same contact, sendThankYou=false; declined_at already set.
+      const r2 = await apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID_M}/decline-deal`, admin.cookie, {
+        estimateIds:  [],
+        sendThankYou: false,
+        contactEmail: CONTACT_EMAIL,
+        contactName:  CONTACT_NAME,
+      });
+
+      record('M.retry-ok',
+        r2.status === 200 && r2.body?.ok === true,
+        r2.status === 200 && r2.body?.ok === true
+          ? `HTTP 200 ok=true — sequential retry succeeded`
+          : `HTTP ${r2.status} ${js(r2.body).slice(0, 120)}`);
+
+      record('M.retry-email-already-sent',
+        r2.body?.emailAlreadySent === true,
+        r2.body?.emailAlreadySent === true
+          ? `emailAlreadySent=true on sequential retry — notice will surface in UI`
+          : `emailAlreadySent not set on retry — r2.body=${js(r2.body).slice(0, 120)}`);
+
+      // No duplicate email must have been sent.
+      const mailsAfterRetry = readMailFile(mailFile);
+      const thankMailsAll = mailsAfterRetry.filter(m =>
+        String(m.subject || '').toLowerCase().includes('thank')
+        || String(m.subject || '').toLowerCase().includes('declin')
+      );
+      record('M.no-duplicate-email',
+        thankMailsAll.length === 1,
+        thankMailsAll.length === 1
+          ? `still exactly 1 thank-you email after retry — no duplicate`
+          : `expected 1 email total, got ${thankMailsAll.length}`);
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
