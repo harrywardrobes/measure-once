@@ -87,10 +87,6 @@ interface HandlerBinding {
   substatus_id?: number | null;
 }
 
-interface HandlerForCount {
-  id: number;
-  bindings: HandlerBinding[];
-}
 
 interface LeadStatusHealthEntry {
   key: string;
@@ -138,7 +134,7 @@ function notifyLsChanged() {
 
 // ── NullStatusRow ──────────────────────────────────────────────────────────
 
-function NullStatusRow({ status, handlerCount }: { status: LeadStatus; handlerCount: number }) {
+function NullStatusRow({ status }: { status: LeadStatus }) {
   return (
     <tr style={{ background: 'var(--neutral-50)' }} data-ls-key={status.key} data-ls-no-delete="1">
       <td style={{ ...TD, textAlign: 'center' }}>
@@ -153,7 +149,6 @@ function NullStatusRow({ status, handlerCount }: { status: LeadStatus; handlerCo
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: handlerCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{handlerCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
       <td style={{ ...TD, textAlign: 'center', color: 'var(--neutral-400)' }}>—</td>
     </tr>
@@ -162,7 +157,7 @@ function NullStatusRow({ status, handlerCount }: { status: LeadStatus; handlerCo
 
 // ── StatusRow ──────────────────────────────────────────────────────────────
 
-function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired, featureLabel, source, handlerCount }: {
+function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired, featureLabel, source }: {
   status: LeadStatus;
   index: number;
   total: number;
@@ -172,7 +167,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
   isRequired: boolean;
   featureLabel?: string;
   source?: string;
-  handlerCount: number;
 }) {
   return (
     <tr style={{ background: bgColor }} data-ls-key={status.key}>
@@ -195,7 +189,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
           style={{ width: '100%', minWidth: 140 }}
         />
       </td>
-      <td style={{ ...TD, textAlign: 'center', color: handlerCount > 0 ? 'inherit' : 'var(--neutral-400)' }}>{handlerCount || '—'}</td>
       <td style={{ ...TD, textAlign: 'center' }}>
         <input type="checkbox" defaultChecked={!!status.excluded_from_sales} data-key={status.key} />
       </td>
@@ -250,7 +243,6 @@ export function StagesPage() {
   const [newLabel, setNewLabel] = useState('');
   const [addErr, setAddErr] = useState('');
   const [healthData,   setHealthData]   = useState<LeadStatusHealth | null>(null);
-  const [handlers,     setHandlers]     = useState<HandlerForCount[]>([]);
 
   interface HsOption { value: string; label: string; displayOrder: number; hidden: boolean; }
   type ImportTag = 'NEW' | 'REORDERED' | 'OK';
@@ -308,15 +300,6 @@ export function StagesPage() {
       setHealthData(data);
     } catch {
       setHealthData(null);
-    }
-  }, []);
-
-  const fetchCounts = useCallback(async () => {
-    try {
-      const hdl = await GET<HandlerForCount[]>('/api/admin/card-action-handlers');
-      setHandlers(Array.isArray(hdl) ? hdl : []);
-    } catch {
-      /* ignore — counts are informational only */
     }
   }, []);
 
@@ -545,8 +528,7 @@ export function StagesPage() {
     fetchWorkflow();
     fetchStatuses();
     fetchHealthData();
-    fetchCounts();
-  }, [fetchWorkflow, fetchStatuses, fetchHealthData, fetchCounts]);
+  }, [fetchWorkflow, fetchStatuses, fetchHealthData]);
 
   // ── Derived data ──
 
@@ -575,17 +557,6 @@ export function StagesPage() {
     if (s.stage) {
       statusCountByLsStage.set(s.stage, (statusCountByLsStage.get(s.stage) ?? 0) + 1);
     }
-  }
-
-  const handlerCountByLsKey = new Map<string, number>();
-  for (const ls of statuses) {
-    const lsKey = ls.key.toUpperCase();
-    const count = handlers.filter(h =>
-      (h.bindings ?? []).some(b =>
-        String(b.status_key || '').toUpperCase() === lsKey,
-      ),
-    ).length;
-    if (count > 0) handlerCountByLsKey.set(lsKey, count);
   }
 
   // ── Render ──
@@ -703,7 +674,6 @@ export function StagesPage() {
                       <th style={TH}>Stage</th>
                       <th style={TH}>Key</th>
                       <th style={TH}>Display Label</th>
-                      <th style={{ ...TH, textAlign: 'center' }} title="Number of action handlers bound to this lead status">Handlers</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Excl.</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Delete</th>
                     </tr>
@@ -713,7 +683,6 @@ export function StagesPage() {
                       <NullStatusRow
                         key={`${nullRow.key}-${reloadKey}`}
                         status={nullRow}
-                        handlerCount={handlerCountByLsKey.get(nullRow.key.toUpperCase()) ?? 0}
                       />
                     )}
                     {stageGroups.map(({ stage, items }) => {
@@ -749,7 +718,6 @@ export function StagesPage() {
                               isRequired={healthData === null || (healthData.required?.some(r => r.key === s.key) ?? false)}
                               featureLabel={healthData?.required?.find(r => r.key === s.key)?.featureLabel}
                               source={healthData?.required?.find(r => r.key === s.key)?.source}
-                              handlerCount={handlerCountByLsKey.get(s.key.toUpperCase()) ?? 0}
                             />
                           ))}
                         </React.Fragment>
