@@ -6,6 +6,7 @@ import { useOfflineVisitEntries, type PendingVisitEntry } from '../../hooks/useO
 import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
+import { useQBInvoices } from '../../hooks/useQBInvoices';
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
 const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
@@ -414,6 +415,9 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const qb = useQBInvoices();
+  useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Queued offline design-visit writes for this contact (Phase 2). New visits
   // appear as their own pending cards; queued edits badge their server card.
   const pendingEntries = useOfflineVisitEntries(contactId);
@@ -612,20 +616,34 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
                         <span data-testid="dv-date" style={sxDate}>QB #{v.qb_estimate_doc_num}</span>
                       </>
                     )}
-                    {v.deposit_invoice_id && (
-                      <>
-                        <span style={sxMetaSep}>·</span>
-                        <a
-                          data-testid="dv-deposit-invoice-link"
-                          href={`/invoices#inv-${encodeURIComponent(v.deposit_invoice_id)}`}
-                          style={{ ...sxDate, color: 'var(--orchid)', textDecoration: 'none' }}
-                          title="View deposit invoice in QuickBooks invoices"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          Deposit invoice{v.deposit_invoice_doc_num ? ` #${v.deposit_invoice_doc_num}` : ''}
-                        </a>
-                      </>
-                    )}
+                    {v.deposit_invoice_id && (() => {
+                      const qbInv = (qb.connected && qb.loaded) ? qb.invoices.find(i => i.id === v.deposit_invoice_id) : undefined;
+                      const paid: boolean | null = qbInv != null ? (qbInv.balance ?? 0) <= 0 : null;
+                      const linkStyle: React.CSSProperties = paid === true
+                        ? { ...sxDate, textDecoration: 'none', background: '#dcfce7', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 4, padding: '1px 5px' }
+                        : paid === false
+                        ? { ...sxDate, textDecoration: 'none', background: '#fef3c7', border: '1px solid #fbbf24', color: '#92400e', borderRadius: 4, padding: '1px 5px' }
+                        : { ...sxDate, color: 'var(--orchid)', textDecoration: 'none' };
+                      const linkTitle = paid === true
+                        ? 'Deposit paid — view invoice'
+                        : paid === false
+                        ? 'Deposit outstanding — view invoice'
+                        : 'View deposit invoice in QuickBooks invoices';
+                      return (
+                        <>
+                          <span style={sxMetaSep}>·</span>
+                          <a
+                            data-testid="dv-deposit-invoice-link"
+                            href={`/invoices#inv-${encodeURIComponent(v.deposit_invoice_id)}`}
+                            style={linkStyle}
+                            title={linkTitle}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            Deposit invoice{v.deposit_invoice_doc_num ? ` #${v.deposit_invoice_doc_num}` : ''}
+                          </a>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
