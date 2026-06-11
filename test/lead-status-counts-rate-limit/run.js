@@ -309,11 +309,12 @@ async function main() {
 
     // ── (D) DOM notice — Puppeteer browser test ──────────────────────────────
     // The .ls-counts-error-notice DOM banner was produced by the vanilla-JS
-    // populateLeadStatusFilter() function, which was deleted from
-    // workflow-core.js in task #1228.  The DOM-seeding scaffold and the
-    // D1/D2/D2b/D3 assertions that checked for that element have been removed;
-    // the browser probe now only confirms the harness starts and the /projects
-    // page is reachable.
+    // populateLeadStatusFilter() function, which has been removed from all
+    // vanilla-JS files and now lives only in the React bundle on pages that
+    // mount the React island.  The DOM-seeding scaffold and the D1/D2/D2b/D3
+    // assertions that checked for that element have been removed; the browser
+    // probe now only confirms the harness starts and the /projects page is
+    // reachable.
     console.log('\n  [D] DOM notice (Puppeteer)');
     const D_PROBE_LABELS = [
       'D0 headless chromium launches',
@@ -354,9 +355,9 @@ async function main() {
           }
 
           // Load /projects WITHOUT request interception active, so the page
-          // initializes normally.  workflow-core.js + workflow.js are loaded
-          // here; loadLeadStatusCounts is the vanilla-JS version (the catch
-          // block sets state.leadStatusCountsError — no React island override).
+          // initializes normally.  loadLeadStatusCounts is the vanilla-JS version
+          // on this page (the catch block sets state.leadStatusCountsError —
+          // no React island override on /projects).
           await page.goto(`${BASE}/projects`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
           // Guard: confirm we haven't been bounced to /login by an auth check.
@@ -367,10 +368,10 @@ async function main() {
           } else {
             // The D1/D2/D2b/D3 probes that checked for .ls-counts-error-notice
             // relied on calling populateLeadStatusFilter() after seeding a
-            // minimal filter DOM.  That function was deleted from workflow-core.js
-            // in task #1228 (it now lives only in the React bundle as
-            // window.populateLeadStatusFilter on pages that mount the island).
-            // Those probes have been removed to avoid silent no-op assertions.
+            // minimal filter DOM.  That function now lives only in the React
+            // bundle as window.populateLeadStatusFilter on pages that mount the
+            // React island — it is not available on /projects.  Those probes
+            // have been removed to avoid silent no-op assertions.
           }
         } catch (e) {
           record('D browser probe', false, `crashed: ${e.message}`);
@@ -428,7 +429,7 @@ async function main() {
             });
           }
 
-          // Navigate to /projects so workflow-core.js + state globals load.
+          // Navigate to /projects so the page initializes and state globals load.
           await pageE.goto(`${BASE}/projects`, { waitUntil: 'domcontentloaded', timeout: 20000 });
 
           const landedUrl = pageE.url();
@@ -573,8 +574,8 @@ async function writeReport(runId) {
     '- **(D) DOM notice (Puppeteer)**: navigates `/projects` and confirms the page',
     '  is reachable. The D1/D2/D2b/D3 probes that verified `.ls-counts-error-notice`',
     '  DOM insertion have been removed: they relied on `populateLeadStatusFilter()`',
-    '  which was deleted from `workflow-core.js` in task #1228 (the function now',
-    '  lives only in the React bundle on pages that mount the React island).',
+    '  which now lives only in the React bundle on pages that mount the React island',
+    '  and is not available on `/projects`.',
     '- **(E) Pill-bar notice (Puppeteer)**: navigates `/projects` and directly sets',
     '  `state.leadStatusCountsError = true`, then fires `mo:contacts-changed` to trigger',
     '  the pill-bar renderer. Verifies that `#ls-counts-error-notice-pills` appears in',

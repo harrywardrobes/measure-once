@@ -19,7 +19,8 @@ const UI_PROBE_LABELS = [
 //
 // End-to-end live test: lead status label rename → filter-dropdown sync.
 //
-// Covers two update paths defined in public/workflow-core.js (lines 340–362):
+// Covers two update paths defined in the React bundle (useLeadStatusSync in
+// src/react/pages/CustomersPage.tsx):
 //   (A) BroadcastChannel  — admin tab saves → channel message → customer tab re-renders
 //   (B) visibilitychange  — server-side label already changed → tab gains focus → refresh
 //   (C) count format      — filter options carry a "(N)" suffix after re-render
@@ -30,10 +31,10 @@ const UI_PROBE_LABELS = [
 // customers.html and after the Promise.all in core.js bootstrap).  The test
 // compensates by calling loadLeadStatuses() + populateLeadStatusFilter() directly
 // in the page context to establish the initial filter baseline; the function is
-// no longer part of workflow-core.js — it is exposed only by the React bundle
-// as window.populateLeadStatusFilter on pages that mount the React island.  The
-// two sync paths (BroadcastChannel and visibilitychange) also invoke those same
-// functions — so the tested code paths are exercised faithfully.
+// exposed by the React bundle as window.populateLeadStatusFilter on pages that
+// mount the React island (it is not part of any vanilla-JS file).  The two sync
+// paths (BroadcastChannel and visibilitychange) also invoke those same functions
+// — so the tested code paths are exercised faithfully.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-sync
@@ -127,8 +128,8 @@ async function injectSession(page, jar) {
 }
 
 // Poll until the functions bootstrapFilter/bootstrapFilterAndSelect rely on are
-// defined in the page context.  workflow-core.js registers them synchronously
-// on evaluation; the React bundle exposes populateLeadStatusFilter after mount.
+// defined in the page context.  The React bundle exposes populateLeadStatusFilter
+// after mount; loadLeadStatuses is exposed by the same bundle on the customers page.
 // Replaces post-goto fixed delays throughout the test.
 async function waitForBootstrapFns(page, timeoutMs = 10000) {
   await pollUntil(
@@ -143,8 +144,8 @@ async function waitForBootstrapFns(page, timeoutMs = 10000) {
 // context so the filter dropdown is populated even when HubSpot is absent (the
 // test server strips HUBSPOT_TOKEN, making contacts load return 503 — which
 // prevents the normal init from reaching populateLeadStatusFilter).
-// populateLeadStatusFilter is no longer in workflow-core.js; it is exposed by
-// the React bundle as window.populateLeadStatusFilter on the customers page.
+// populateLeadStatusFilter is exposed by the React bundle as
+// window.populateLeadStatusFilter on the customers page.
 async function bootstrapFilter(page) {
   return page.evaluate(async () => {
     if (typeof loadLeadStatuses === 'function') await loadLeadStatuses();
@@ -447,8 +448,8 @@ async function main() {
       patchA.status === 200 && patchA.json?.label === LABEL_BC,
     );
 
-    // Load any workflow-core.js-bearing page in adminTab so the BroadcastChannel
-    // API is available in its context, then post the channel message.
+    // Load the customers page in adminTab so the React bundle is available in its
+    // context, then post the BroadcastChannel message.
     await adminTab.goto(`${BASE}/customers`, {
       waitUntil: 'domcontentloaded',
       timeout: 15000,
@@ -485,8 +486,9 @@ async function main() {
     // ── (B) visibilitychange path ─────────────────────────────────────────────
     // Open a fresh customers tab, bootstrap the filter to confirm it shows the
     // BC-renamed label, rename again via API, then synthesise a hidden→visible
-    // visibilitychange sequence.  The handler (workflow-core.js lines 340–347)
-    // calls loadLeadStatuses() and re-renders the React filter dropdown.
+    // visibilitychange sequence.  The handler (useLeadStatusSync in
+    // src/react/pages/CustomersPage.tsx) calls loadLeadStatuses() and re-renders
+    // the React filter dropdown.
     console.log('\n  [B] visibilitychange path');
 
     const visTab = await browser.newPage();
@@ -2187,12 +2189,12 @@ async function writeReport(runId, findings) {
     '  BroadcastChannel message from a second same-browser tab, and asserts the',
     '  `#lead-status-filter` dropdown on the Customers page reflects the new label',
     '  text (exercising the `_lsChannel.addEventListener("message", …)` handler',
-    '  in `workflow-core.js` lines 353–361).  Also asserts the stale label is gone.',
+    '  in `useLeadStatusSync`, `src/react/pages/CustomersPage.tsx`).  Also asserts the stale label is gone.',
     '- **(B) visibilitychange path**: renames the label again server-side, then',
     '  synthesises a hidden→visible visibilitychange event sequence and asserts',
     '  the dropdown updates (exercising the',
     '  `document.addEventListener("visibilitychange", …)` handler in',
-    '  `workflow-core.js` lines 340–347).  Also asserts the stale label is gone.',
+    '  `useLeadStatusSync`, `src/react/pages/CustomersPage.tsx`).  Also asserts the stale label is gone.',
     '- **(C) count format**: verifies every filter option carries a "(N)" count',
     '  suffix after the React filter dropdown re-renders, confirming label+count',
     '  are rendered together correctly.',
@@ -2354,8 +2356,8 @@ async function writeReport(runId, findings) {
     '- The test server strips `HUBSPOT_TOKEN` so `loadAllContacts()` returns 503.',
     '  Contact counts in the filter options will therefore all be 0 in CI.',
     '  The `bootstrapFilter()` helper calls `loadLeadStatuses()` +',
-    '  `window.populateLeadStatusFilter()` (exposed by the React bundle, not',
-    '  workflow-core.js) directly in the page context to establish the initial',
+    '  `window.populateLeadStatusFilter()` (exposed by the React bundle on the',
+    '  customers page) directly in the page context to establish the initial',
     '  filter state independently of the HubSpot contact load.',
     '- Sections (K) and (L) use Puppeteer `req.respond()` to intercept',
     '  `GET /api/contacts-all` and return a synthetic contact with the test',
