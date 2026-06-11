@@ -88,6 +88,10 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
     steps: '1–2 steps — log contact attempts → optionally advance lead status',
     hubspot: 'Advances lead status to ATTEMPTED_TO_CONTACT or NO_RESPONSE',
   },
+  design_visit_followup: {
+    steps: '2+ steps — hub (Confirmed / Resend invite / Not proceeding) → schedule or email step',
+    hubspot: 'Sets lead status to DESIGN_SCHEDULED (confirmed), DESIGN_INVITED (resend), or NOT_SUITABLE (not proceeding)',
+  },
 };
 
 export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
@@ -102,6 +106,7 @@ export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
   review_customer_photos:       'Review customer photos',
   arrange_visit:                'Arrange visit',
   contact_customer:             'Contact customer (call / email / WhatsApp)',
+  design_visit_followup:        'Design visit follow-up',
 };
 
 /** Runtime narrowing guard — use instead of `as HandlerType` in onChange handlers. */
@@ -110,17 +115,18 @@ export function isHandlerType(v: string): v is HandlerType {
 }
 
 export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
-  upload_photos_and_info:       ['customer_invite', 'admin_notification', 'customer_thank_you'],
+  upload_photos_and_info:       ['photo_review_invite', 'admin_notification', 'customer_thank_you'],
   review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
   arrange_visit:                ['arrange_visit_no_answer'],
   contact_customer:             [],
   start_design_visit:           [],
-  add_design_visit_to_calendar: [],
-  schedule_visit:               [],
+  add_design_visit_to_calendar: ['visit_confirmation'],
+  schedule_visit:               ['visit_confirmation'],
   summarise_phone_call:         [],
   show_message:                 [],
   schedule_delivery_window:     [],
   schedule_installation_slot:   [],
+  design_visit_followup:        ['visit_invite', 'visit_confirmation'],
 };
 
 export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {
@@ -129,12 +135,12 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
     filePath:  'src/react/components/modals/MessagePopupModal.tsx',
   },
   add_design_visit_to_calendar: {
-    component: 'DesignVisitCalendarModal',
-    filePath:  'src/react/components/modals/DesignVisitCalendarModal.tsx',
+    component: 'ScheduleVisitModal',
+    filePath:  'src/react/components/modals/ScheduleVisitModal.tsx',
   },
   schedule_visit: {
-    component: 'VisitCalendarModal',
-    filePath:  'src/react/components/modals/VisitCalendarModal.tsx',
+    component: 'ScheduleVisitModal',
+    filePath:  'src/react/components/modals/ScheduleVisitModal.tsx',
   },
   schedule_delivery_window: {
     component: 'DeliveryWindowModal',
@@ -167,5 +173,9 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
   contact_customer: {
     component: 'ContactCustomerModal',
     filePath:  'src/react/components/modals/ContactCustomerModal.tsx',
+  },
+  design_visit_followup: {
+    component: 'DesignVisitFollowupModal',
+    filePath:  'src/react/components/modals/DesignVisitFollowupModal.tsx',
   },
 };

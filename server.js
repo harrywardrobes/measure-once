@@ -2382,14 +2382,22 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
   try {
     const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
-    const events = await calendar.events.list({
+    const contactId = String(req.query.contactId || '').trim();
+    const listParams = {
       calendarId,
       timeMin: new Date().toISOString(),
-      maxResults: 20,
+      maxResults: 50,
       singleEvents: true,
       orderBy: 'startTime',
-      q: req.query.search || undefined
-    });
+    };
+    if (contactId) {
+      if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+      listParams.privateExtendedProperty = `moContactId=${contactId}`;
+    } else {
+      listParams.maxResults = 20;
+      listParams.q = req.query.search || undefined;
+    }
+    const events = await calendar.events.list(listParams);
     res.json(events.data);
   } catch (e) {
     const code = classifyGoogleError(e);
@@ -2406,7 +2414,16 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
   try {
     const auth = getGoogleClient(googleTokens);
     const calendar = google.calendar({ version: 'v3', auth });
-    const event = await calendar.events.insert({ calendarId, requestBody: req.body });
+    // Extract tagging fields from body and attach as extendedProperties.
+    // These are used by GET /api/events?contactId to filter by contact.
+    const { moContactId, moVisitType, ...eventBody } = req.body;
+    if (moContactId) {
+      const ep = eventBody.extendedProperties || {};
+      ep.private = { ...(ep.private || {}), moContactId: String(moContactId), moSource: 'measure-once' };
+      if (moVisitType) ep.private.moVisitType = String(moVisitType);
+      eventBody.extendedProperties = ep;
+    }
+    const event = await calendar.events.insert({ calendarId, requestBody: eventBody });
     res.json(event.data);
   } catch (e) {
     const code = classifyGoogleError(e);
@@ -4395,12 +4412,13 @@ async function ensureLeadStatusTable() {
 // The `source` field should identify the file and call-site so the warning message
 // points maintainers directly to the affected code.
 const HARDCODED_LEAD_STATUS_KEYS = [
-  { key: 'OPEN_DEAL',           source: 'server.js — contact create',                              featureLabel: 'Creating new contacts' },
-  { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                   featureLabel: 'Booking survey visits' },
-  { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                   featureLabel: 'Booking design visits' },
-  { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js', featureLabel: 'Marking visits as not suitable & photo review outcomes' },
-  { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission',                     featureLabel: 'Customer photo submission' },
-  { key: 'ROUGH_ESTIMATE',      source: 'photo-reviews.js — review outcome',                       featureLabel: 'Photo review outcomes' },
+  { key: 'OPEN_DEAL',           source: 'server.js — contact create',                                                   featureLabel: 'Creating new contacts' },
+  { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                                        featureLabel: 'Booking survey visits' },
+  { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP (booked), design-visit-followup outcome', featureLabel: 'Booking / confirming design visits' },
+  { key: 'DESIGN_INVITED',      source: 'server.js — arrange-visit email_sent (design), design-visit-followup resend',   featureLabel: 'Sending design visit invite' },
+  { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js, design-visit-followup not_proceeding', featureLabel: 'Marking visits as not suitable & photo review outcomes' },
+  { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission',                                          featureLabel: 'Customer photo submission' },
+  { key: 'ROUGH_ESTIMATE',      source: 'photo-reviews.js — review outcome',                                            featureLabel: 'Photo review outcomes' },
 ];
 
 async function checkHardcodedLeadStatusKeys() {
@@ -5428,6 +5446,23 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   contact_customer(_cfg) {
     return { value: {} };
   },
+  // Optional config: defaultDurationMin, defaultTitle — controls the scheduling step defaults.
+  design_visit_followup(cfg) {
+    const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 1440) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.defaultTitle !== undefined) {
+      const v = String(cfg.defaultTitle || '');
+      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
+      out.defaultTitle = v;
+    }
+    return { value: out };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(
@@ -5876,7 +5911,7 @@ app.post('/api/card-actions/arrange-visit/outcome',
       },
       email_sent: {
         survey: { hs_lead_status: 'SURVEY_SCHEDULED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED' },
+        design: { hs_lead_status: 'DESIGN_INVITED' },
       },
       not_proceeding: {
         survey: { hs_lead_status: 'NOT_SUITABLE' },
@@ -6175,6 +6210,83 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/contact-customer/:contactId/advance-status error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── design_visit_followup: load contact info ─────────────────────────────────
+app.post('/api/card-actions/design-visit-followup',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_lead_status,address,city,zip' }, timeout: 15000 }
+      );
+      const props = r.data?.properties || {};
+      const firstName    = String(props.firstname || '');
+      const lastName     = String(props.lastname  || '');
+      const contactName  = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactEmail = String(props.email || '');
+      const phone        = String(props.phone || '');
+      const mobile       = String(props.mobilephone || '');
+      const leadStatus   = props.hs_lead_status || null;
+      const addressParts = [props.address, props.city, props.zip].filter(Boolean);
+      const contactAddress = addressParts.join(', ');
+      res.json({ contactName, contactEmail, phone, mobile, leadStatus, contactAddress });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/design-visit-followup error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── design_visit_followup: record outcome → update HubSpot lead status ────────
+app.post('/api/card-actions/design-visit-followup/outcome',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    const outcome = String(req.body?.outcome || '');
+
+    // outcome → new lead status
+    const OUTCOME_STATUS = {
+      confirmed:      'DESIGN_SCHEDULED',
+      invite_resent:  'DESIGN_INVITED',
+      not_proceeding: 'NOT_SUITABLE',
+    };
+    const newLeadStatus = OUTCOME_STATUS[outcome];
+    if (!newLeadStatus) {
+      return res.status(400).json({ error: 'outcome must be one of: confirmed, invite_resent, not_proceeding.' });
+    }
+
+    try {
+      await assertLeadStatusKey(newLeadStatus);
+      await patchContactProperties(contactId, { hs_lead_status: newLeadStatus });
+      res.json({ ok: true, hs_lead_status: newLeadStatus });
+    } catch (e) {
+      if (e.code === 'LEAD_STATUS_REMOVED') {
+        return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
+      }
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/design-visit-followup/outcome error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }

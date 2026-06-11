@@ -142,6 +142,14 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• Visit type (design vs. survey) is resolved automatically from the contact\'s current hs_lead_status — awaiting_deposit → survey, everything else → design.\n' +
     '• In-progress form state is saved to sessionStorage and restored on re-open.\n' +
     '• No config keys required.',
+  design_visit_followup:
+    'Clicking the action on a card shows a hub with three paths for following up on a design visit invite.\n' +
+    '• Hub — fetches the customer\'s contact info and address from HubSpot, then shows three choices:\n' +
+    '  – Customer confirmed: opens the Schedule Visit modal locked to visit type "design" with the customer\'s address pre-filled as location. On calendar event creation, updates HubSpot lead status to DESIGN_SCHEDULED.\n' +
+    '  – Resend invite: renders an editable preview of the visit_invite email template (fetched via POST /api/email-templates/render). Staff can edit subject and body before sending via Gmail (POST /api/emails/send). On send, updates HubSpot lead status to DESIGN_INVITED.\n' +
+    '  – Not proceeding: updates HubSpot lead status to NOT_SUITABLE immediately.\n' +
+    '• Draft persistence: modal position is saved to sessionStorage per contact so a page refresh restores the current step.\n' +
+    'Optional config keys: defaultDurationMin (5–1440, default 60), defaultTitle (≤120 chars).',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────

@@ -101,7 +101,7 @@ Pages that render cards call `loadCardActionHandlers()` on this message to keep 
 
 ## Card Action → HubSpot Status Map
 
-Only `arrange_visit` mutates HubSpot contact properties. `summarise_phone_call` creates a HubSpot note on the contact but does not touch any status fields. `show_message` is fully read-only and makes no HubSpot calls.
+`arrange_visit` and `design_visit_followup` mutate HubSpot contact properties. `summarise_phone_call` creates a HubSpot note on the contact but does not touch any status fields. `show_message` is fully read-only and makes no HubSpot calls.
 
 ### `arrange_visit` — outcome × visitType mapping
 
@@ -109,9 +109,11 @@ Only `arrange_visit` mutates HubSpot contact properties. `summarise_phone_call` 
 |---|---|---|---|
 | `booked` | `design` | `DESIGN_SCHEDULED` | `DSSC_AGREED` |
 | `booked` | `survey` | `SURVEY_SCHEDULED` | `SRSC_AGREED` |
-| `email_sent` | `design` | `DESIGN_SCHEDULED` | `DSSC_SUGGESTED` |
+| `email_sent` | `design` | `DESIGN_INVITED` | `DSSC_SUGGESTED` |
 | `email_sent` | `survey` | `SURVEY_SCHEDULED` | `SRSC_SUGGESTED` |
 | `not_proceeding` | *(any)* | `NOT_SUITABLE` | *(empty — cleared)* |
+
+> **Note:** `email_sent + design` was changed from `DESIGN_SCHEDULED` to `DESIGN_INVITED` — sending an invite does not constitute a confirmed booking.
 
 ### How `visitType` is determined (server-side)
 
@@ -122,13 +124,43 @@ The server reads the contact's current `hs_lead_status` from HubSpot before appl
 
 The client never sends `visitType` directly; it is always derived server-side from the contact's live status.
 
+### `design_visit_followup` — outcome mapping
+
+| `outcome` | `hs_lead_status` set to |
+|---|---|
+| `confirmed` | `DESIGN_SCHEDULED` |
+| `invite_resent` | `DESIGN_INVITED` |
+| `not_proceeding` | `NOT_SUITABLE` |
+
+No `hw_lead_substatus` writes for this handler.
+
 ---
 
 ## Existing Handler Types Reference
 
 ### `add_design_visit_to_calendar`
-Opens a date/time modal, calls `POST /api/visits` (type `'design'`), optionally `POST /api/events` for Google Calendar.
-Config keys: `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars), `addToGoogleCalendar` (bool).
+Opens `ScheduleVisitModal` with `visitType` locked to `'design'`. Writes directly to Google Calendar via `POST /api/events` (tags event with `moContactId`/`moVisitType` extended properties). Optionally sends a `visit_confirmation` email.
+Config keys: `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars).
+
+### `schedule_visit`
+Opens `ScheduleVisitModal` with a visit-type selector. Writes directly to Google Calendar via `POST /api/events`. Optionally sends a `visit_confirmation` email.
+Config keys: `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars).
+
+### `design_visit_followup`
+Opens `DesignVisitFollowupModal` — a three-path hub for contacts sitting at `DESIGN_INVITED`.
+
+**API routes:**
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/card-actions/design-visit-followup` | Fetches contact properties from HubSpot. Returns `{ contactName, contactEmail, phone, mobile, leadStatus, contactAddress }`. |
+| `POST` | `/api/card-actions/design-visit-followup/outcome` | Accepts `{ contactId, outcome }` where `outcome` ∈ `confirmed|invite_resent|not_proceeding`. Applies HubSpot lead status change. Returns `{ ok, hs_lead_status }`. |
+
+Middleware: `isAuthenticated`, `requirePrivilege('member')`, `requireHubspotToken`, `hubspotMutationLimiter` (outcome route only).
+
+**Config keys:** `defaultDurationMin` (integer 5–1440, default 60), `defaultTitle` (≤120 chars).
+
+**Draft persistence:** modal step saved to `sessionStorage` under `mo-dvf-draft-<contactId>` (cleared on success).
 
 ### `summarise_phone_call`
 Opens a text area, calls `POST /api/card-actions/phone-call-summary` which creates a HubSpot note on the contact, then offers to draft a follow-up email via `window.openEmailCompose` or `mailto:`.

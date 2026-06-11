@@ -75,3 +75,9 @@ export const DV_WIZARD_DRAFT_EDIT_PREFIX = 'dv-wizard-draft-edit-';
 
 /** Design-visit calendar modal drafts: `${DV_CAL_DRAFT_PREFIX}${handlerId}-${contactId}` */
 export const DV_CAL_DRAFT_PREFIX = 'mo-dv-cal-draft-';
+
+/** Schedule visit modal drafts: `${SCHEDULE_VISIT_DRAFT_PREFIX}${contactId}` */
+export const SCHEDULE_VISIT_DRAFT_PREFIX = 'mo-schedule-visit-draft-';
+
+/** Design-visit follow-up modal drafts: `${DVF_DRAFT_PREFIX}${contactId}` */
+export const DVF_DRAFT_PREFIX = 'dvf-draft-';

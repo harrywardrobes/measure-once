@@ -99,6 +99,8 @@
     "test:visit-edit-cancel:ci": "node scripts/with-test-db.js test/visit-edit-cancel/run.js",
     "test:arrange-visit": "node test/arrange-visit/run.js",
     "test:arrange-visit:ci": "node scripts/with-test-db.js test/arrange-visit/run.js",
+    "test:design-visit-followup": "node test/design-visit-followup/run.js",
+    "test:design-visit-followup:ci": "node scripts/with-test-db.js test/design-visit-followup/run.js",
     "test:keyboard-shortcuts": "node test/keyboard-shortcuts/run.js",
     "test:handler-config-blocks": "vitest run src/react/pages/admin/HandlerConfigBlocks.test.tsx",
     "test:conflicts-review-logic": "vitest run src/react/components/ConflictsReview.test.ts",

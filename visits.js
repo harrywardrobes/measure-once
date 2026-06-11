@@ -155,7 +155,12 @@ router.get('/api/visits/:id', isAuthenticated, visitsRateLimiter, async (req, re
   }
 });
 
+// DEPRECATED: This route writes to the visits table, which is no longer the
+// primary data source for the customer-detail Visits section. New bookings go
+// directly to Google Calendar via POST /api/events (ScheduleVisitModal).
+// Do not add new callers — this route will be removed in a future cleanup task.
 router.post('/api/visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  console.warn('[deprecated] POST /api/visits: use POST /api/events instead');
   const userId = req.user.claims.sub;
   if (!checkVisitsRateLimit(userId)) {
     return res.status(429).json({ error: 'Too many requests. Please wait before creating more visits.' });

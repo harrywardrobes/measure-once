@@ -16,7 +16,7 @@ import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSectio
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
   Contact, Room, HubSpotTask, LeadStatus,
-  DesignVisit, Visit, GoogleEmail, WhatsAppMessage,
+  DesignVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
 import { updateRecentCustomer } from '../utils/formatters';
@@ -108,9 +108,8 @@ export function CustomerDetailPage() {
   const [dvLoading,    setDvLoading]    = useState(false);
   const [dvError,      setDvError]      = useState<string | null>(null);
 
-  const [upcomingVisits,  setUpcomingVisits]  = useState<Visit[]>([]);
-  const [pastVisits,      setPastVisits]      = useState<Visit[]>([]);
-  const [visitsLoading,   setVisitsLoading]   = useState(false);
+  // deprecated: upcomingVisits/pastVisits/visitsLoading removed — VisitsSections now
+  // fetches calendar events from GET /api/events?contactId=... internally.
 
   const [emails,          setEmails]          = useState<GoogleEmail[]>([]);
   const [emailsLoading,   setEmailsLoading]   = useState(false);
@@ -212,34 +211,10 @@ export function CustomerDetailPage() {
     }
   }, [contactId]);
 
-  const fetchVisits = useCallback(async () => {
-    setVisitsLoading(true);
-    try {
-      const from = new Date(Date.now() - 366 * 86400000).toISOString();
-      const to   = new Date(Date.now() + 366 * 86400000).toISOString();
-      const all  = await apiFetch<Visit[]>(`/api/visits?from=${from}&to=${to}`);
-      const now  = Date.now();
-      const filtered = Array.isArray(all)
-        ? all.filter(v => !v.customerId || v.customerId === contactId)
-        : [];
-      setUpcomingVisits(filtered.filter(v => new Date(v.endAt).getTime() >= now));
-      setPastVisits(filtered.filter(v => new Date(v.endAt).getTime() < now).reverse());
-      void cacheRecords('visits', filtered, (v) => `v:${v.id}`);
-    } catch {
-      // Offline fallback: read saved calendar visits from the cache (calendar
-      // visits carry an `endAt`; design visits in the same store do not).
-      const cached = await readRecords<Visit>('visits');
-      const mine = cached.filter(
-        (v) => v && typeof v === 'object' && 'endAt' in v && (!v.customerId || v.customerId === contactId),
-      );
-      if (mine.length > 0) {
-        const now = Date.now();
-        setUpcomingVisits(mine.filter(v => new Date(v.endAt).getTime() >= now));
-        setPastVisits(mine.filter(v => new Date(v.endAt).getTime() < now).reverse());
-        setFromCache(true);
-      }
-    } finally { setVisitsLoading(false); }
-  }, [contactId]);
+  // deprecated: fetchVisits removed — calendar events are fetched by VisitsSections
+  // using GET /api/events?contactId=... internally.
+  // Kept as a no-op so the conflict-resolved event handler below compiles unchanged.
+  const fetchVisits = useCallback(async () => { /* no-op */ }, []);
 
   const fetchGoogleEmails = useCallback(async (email: string) => {
     if (!email) return;
@@ -708,14 +683,10 @@ export function CustomerDetailPage() {
             <UpcomingVisitsSection
               contactId={contactId}
               contact={contact}
-              upcomingVisits={upcomingVisits}
-              loadingVisits={visitsLoading}
-              onRefresh={fetchVisits}
             />
 
             <PastVisitsSection
-              pastVisits={pastVisits}
-              loadingVisits={visitsLoading}
+              contactId={contactId}
             />
 
             <TasksSection

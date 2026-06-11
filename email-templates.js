@@ -36,9 +36,9 @@ function footerTextToHtml(footerText) {
 // `variables` is the advertised list shown to admins in the editor. The seed
 // strings are the verbatim current hardcoded content.
 const TEMPLATE_DEFS = {
-  customer_invite: {
-    label: 'Customer invite',
-    description: 'Sent to a customer inviting them to fill in the info form.',
+  photo_review_invite: {
+    label: 'Photo Review — Invite',
+    description: 'Sent to a customer inviting them to fill in the info form (photo review flow).',
     variables: ['maskedEmail', 'formLink'],
     subject: 'Tell us about your home...',
     body_text: [
@@ -276,6 +276,51 @@ const TEMPLATE_DEFS = {
     ].join('\n'),
     footer_text: 'Warm regards,\nThe team',
   },
+
+  visit_invite: {
+    label: 'Visit Invite',
+    description: 'Sent to a customer to invite them to propose a time for a design visit.',
+    variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDate', 'proposedTime'],
+    subject: 'Your {{visitLabel}} — getting in touch',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      "Thank you for your interest in booking a {{visitLabel}} with us.",
+      '',
+      "We'd love to arrange a time that works for you. The visit usually takes around {{visitDuration}} minutes{{location}}.",
+      '',
+      'Please reply to this email with your availability over the next week — let us know which days and times work best and we\'ll confirm a slot for you.',
+      '',
+      'Best regards',
+    ].join('\n'),
+    body_html: '',
+    footer_text: 'Warm regards,\nThe Measure Once team',
+  },
+
+  visit_confirmation: {
+    label: 'Visit Confirmation',
+    description: 'Sent to a customer to confirm the details of their upcoming visit.',
+    variables: ['firstName', 'visitLabel', 'visitDate', 'visitTime', 'visitDuration', 'location'],
+    subject: 'Your {{visitLabel}} is confirmed',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      "Great news — your {{visitLabel}} is confirmed!",
+      '',
+      'Here are the details:',
+      '',
+      '  Date:     {{visitDate}}',
+      '  Time:     {{visitTime}}',
+      '  Duration: {{visitDuration}} minutes',
+      '  Location: {{location}}',
+      '',
+      'If you need to reschedule or have any questions, please reply to this email.',
+      '',
+      'We look forward to seeing you.',
+    ].join('\n'),
+    body_html: '',
+    footer_text: 'Warm regards,\nThe Measure Once team',
+  },
 };
 
 const TEMPLATE_KEYS = Object.keys(TEMPLATE_DEFS);
@@ -369,7 +414,7 @@ function renderEmail(template, { textVars = {}, htmlVars = {} } = {}) {
 // One realistic placeholder value per advertised variable, per template.
 // These are only used by the preview endpoint — never sent to real customers.
 const SAMPLE_VARS = {
-  customer_invite: {
+  photo_review_invite: {
     maskedEmail: 'j***@example.com',
     formLink: 'https://example.com/form/abc123',
   },
@@ -410,6 +455,22 @@ const SAMPLE_VARS = {
   },
   open_deal_declined_thank_you: {
     firstName: 'Jane',
+  },
+  visit_invite: {
+    firstName: 'Jane',
+    visitLabel: 'design visit',
+    visitDuration: '60',
+    location: ' at 14 Oak Street, London',
+    proposedDate: '',
+    proposedTime: '',
+  },
+  visit_confirmation: {
+    firstName: 'Jane',
+    visitLabel: 'design visit',
+    visitDate: '12 June 2026',
+    visitTime: '10:00 AM',
+    visitDuration: '60',
+    location: '14 Oak Street, London',
   },
 };
 

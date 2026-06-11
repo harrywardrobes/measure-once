@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DesignVisitWizard } from './DesignVisitWizard';
 import { MessagePopupModal } from './modals/MessagePopupModal';
-import { DesignVisitCalendarModal } from './modals/DesignVisitCalendarModal';
-import { VisitCalendarModal } from './modals/VisitCalendarModal';
+import { ScheduleVisitModal } from './modals/ScheduleVisitModal';
 import { DeliveryWindowModal } from './modals/DeliveryWindowModal';
 import { InstallationSlotModal } from './modals/InstallationSlotModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
@@ -13,6 +12,9 @@ const ContactCustomerModal = React.lazy(() =>
 );
 const ReviewCustomerPhotosDrawer = React.lazy(() =>
   import('./modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
+);
+const DesignVisitFollowupModal = React.lazy(() =>
+  import('./modals/DesignVisitFollowupModal').then(m => ({ default: m.DesignVisitFollowupModal }))
 );
 import { broadcastDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { broadcastContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -33,7 +35,8 @@ type ModalState =
   | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string };
+  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string }
+  | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext };
 
 export type HandlerType = Exclude<ModalState['type'], 'none'>;
 
@@ -80,6 +83,9 @@ export function CardActionModalsHost() {
         case 'contact_customer':
           setModal({ type: 'contact_customer', contactId: ctx.contactId, contactName: ctx.contactName, contactEmail: ctx.contactEmail });
           break;
+        case 'design_visit_followup':
+          setModal({ type: 'design_visit_followup', handler, ctx });
+          break;
         default:
           console.warn('[CardActionModalsHost] Unknown handler type:', handler.type);
       }
@@ -108,10 +114,21 @@ export function CardActionModalsHost() {
         <MessagePopupModal handler={modal.handler} open onClose={close} />
       )}
       {modal.type === 'add_design_visit_to_calendar' && (
-        <DesignVisitCalendarModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        <ScheduleVisitModal
+          handler={modal.handler}
+          ctx={modal.ctx}
+          visitType="design"
+          open
+          onClose={close}
+        />
       )}
       {modal.type === 'schedule_visit' && (
-        <VisitCalendarModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        <ScheduleVisitModal
+          handler={modal.handler}
+          ctx={modal.ctx}
+          open
+          onClose={close}
+        />
       )}
       {modal.type === 'schedule_delivery_window' && (
         <DeliveryWindowModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
@@ -149,6 +166,11 @@ export function CardActionModalsHost() {
             contactEmail={modal.contactEmail}
             onClose={close}
           />
+        </React.Suspense>
+      )}
+      {modal.type === 'design_visit_followup' && (
+        <React.Suspense fallback={null}>
+          <DesignVisitFollowupModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
         </React.Suspense>
       )}
     </>

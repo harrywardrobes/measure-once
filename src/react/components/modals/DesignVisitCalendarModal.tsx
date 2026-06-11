@@ -1,3 +1,4 @@
+/** @deprecated — use ScheduleVisitModal */
 import React, { useEffect, useState } from 'react';
 import { DV_CAL_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import Alert from '@mui/material/Alert';

@@ -144,7 +144,7 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const tmpl = await getEmailTemplate('customer_invite');
+  const tmpl = await getEmailTemplate('photo_review_invite');
   const { subject, text, html } = renderEmail(tmpl, {
     textVars: { maskedEmail, formLink },
     htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },

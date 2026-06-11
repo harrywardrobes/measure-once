@@ -1,0 +1,386 @@
+/**
+ * DesignVisitFollowupModal — card-action handler for design_visit_followup.
+ *
+ * Flow:
+ *   loading → hub → one of three paths:
+ *     • confirmed  → ScheduleVisitModal (visitType locked to 'design') →
+ *                    POST /api/card-actions/design-visit-followup/outcome → done
+ *     • resend     → editable email (visit_invite template) →
+ *                    POST /api/emails/send →
+ *                    POST /api/card-actions/design-visit-followup/outcome → done
+ *     • not_proceeding → POST /api/card-actions/design-visit-followup/outcome → done
+ *
+ * Draft persistence: sessionStorage keyed per contactId (DVF_DRAFT_PREFIX).
+ * The draft only stores the current step (to restore position on refresh);
+ * email body is always freshly fetched from the template.
+ */
+import React, { useEffect, useRef, useState } from 'react';
+import { DVF_DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
+import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { POST } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
+import { ScheduleVisitModal } from './ScheduleVisitModal';
+
+type Step = 'loading' | 'hub' | 'schedule' | 'resend' | 'outcome_in_progress' | 'done';
+
+interface ContactInfo {
+  contactName: string;
+  contactEmail: string;
+  phone: string;
+  mobile: string;
+  leadStatus: string | null;
+  contactAddress: string;
+}
+
+function draftKey(contactId: string | number | null | undefined): string {
+  return `${DVF_DRAFT_PREFIX}${contactId ?? 'unknown'}`;
+}
+
+function saveDraftStep(key: string, step: Step): void {
+  try { sessionStorage.setItem(key, step); } catch { /* ignore */ }
+}
+
+function clearDraftStep(key: string): void {
+  try { sessionStorage.removeItem(key); } catch { /* ignore */ }
+}
+
+export interface DesignVisitFollowupModalProps {
+  handler: CardActionHandlerData;
+  ctx: CardActionContext;
+  open: boolean;
+  onClose: () => void;
+}
+
+export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: DesignVisitFollowupModalProps) {
+  const showToast = useToast();
+  const key = draftKey(ctx.contactId);
+
+  const [step, setStep] = useState<Step>('loading');
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [loadError, setLoadError] = useState('');
+
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState('');
+
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [outcomeError, setOutcomeError] = useState('');
+
+  const fetchedRef = useRef(false);
+
+  function goToStep(s: Step) {
+    setStep(s);
+    saveDraftStep(key, s);
+  }
+
+  function handleClose() {
+    clearDraftStep(key);
+    onClose();
+  }
+
+  useEffect(() => {
+    if (!open || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setStep('loading');
+    setLoadError('');
+    POST('/api/card-actions/design-visit-followup', { contactId: ctx.contactId })
+      .then((data) => {
+        setContactInfo(data as ContactInfo);
+        goToStep('hub');
+      })
+      .catch((e: Error) => {
+        setLoadError((e as { message?: string }).message || 'Failed to load contact info.');
+        setStep('hub');
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // "Resend invite" — fetch editable visit_invite template
+  function handleResendInvite() {
+    goToStep('resend');
+    setEmailLoading(true);
+    setEmailError('');
+    const firstName = (contactInfo?.contactName || '').split(' ')[0] || 'there';
+    POST('/api/email-templates/render', {
+      key: 'visit_invite',
+      vars: {
+        firstName,
+        visitLabel: 'design visit',
+        visitDuration: '60',
+        location: contactInfo?.contactAddress ? ` at ${contactInfo.contactAddress}` : '',
+        proposedDate: '',
+        proposedTime: '',
+      },
+    })
+      .then((data) => {
+        const d = data as { subject?: string; body_text?: string };
+        setEmailSubject(d.subject ?? '');
+        setEmailBody(d.body_text ?? '');
+      })
+      .catch(() => {
+        setEmailSubject('Your design visit — getting in touch');
+        setEmailBody(`Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`);
+      })
+      .finally(() => setEmailLoading(false));
+  }
+
+  // "Confirmed" — open ScheduleVisitModal
+  function handleConfirmed() {
+    goToStep('schedule');
+    setScheduleOpen(true);
+  }
+
+  // Called by ScheduleVisitModal on successful calendar event creation
+  function handleScheduleSuccess() {
+    setScheduleOpen(false);
+    goToStep('outcome_in_progress');
+    setOutcomeError('');
+    POST('/api/card-actions/design-visit-followup/outcome', {
+      contactId: ctx.contactId,
+      outcome: 'confirmed',
+    })
+      .then(() => {
+        showToast('Visit confirmed and scheduled', false);
+        goToStep('done');
+      })
+      .catch((e: Error) => {
+        setOutcomeError((e as { message?: string }).message || 'Failed to update lead status.');
+        goToStep('hub');
+      });
+  }
+
+  function handleScheduleClose() {
+    setScheduleOpen(false);
+    if (step === 'schedule') goToStep('hub');
+  }
+
+  async function handleSendResendEmail() {
+    if (!contactInfo?.contactEmail) return;
+    setEmailError('');
+    goToStep('outcome_in_progress');
+    try {
+      await POST('/api/emails/send', {
+        to: contactInfo.contactEmail,
+        subject: emailSubject.trim(),
+        text: emailBody.trim(),
+      });
+      await POST('/api/card-actions/design-visit-followup/outcome', {
+        contactId: ctx.contactId,
+        outcome: 'invite_resent',
+      });
+      showToast('Invite email sent', false);
+      goToStep('done');
+    } catch (e) {
+      setOutcomeError((e as { message?: string }).message || 'Failed to send email.');
+      goToStep('resend');
+    }
+  }
+
+  async function handleNotProceeding() {
+    goToStep('outcome_in_progress');
+    setOutcomeError('');
+    try {
+      await POST('/api/card-actions/design-visit-followup/outcome', {
+        contactId: ctx.contactId,
+        outcome: 'not_proceeding',
+      });
+      showToast('Contact marked as not proceeding', false);
+      goToStep('done');
+    } catch (e) {
+      setOutcomeError((e as { message?: string }).message || 'Failed to update lead status.');
+      goToStep('hub');
+    }
+  }
+
+  // Auto-close once done step is shown
+  useEffect(() => {
+    if (step === 'done') {
+      const t = setTimeout(() => handleClose(), 1200);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const hubDialogOpen = open && step !== 'schedule';
+
+  function renderContent() {
+    if (step === 'loading') {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={28} />
+        </Box>
+      );
+    }
+    if (step === 'done') {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <Typography variant="body2" color="text.secondary">Done — closing…</Typography>
+        </Box>
+      );
+    }
+    if (step === 'outcome_in_progress') {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+          <CircularProgress size={28} />
+        </Box>
+      );
+    }
+    if (step === 'hub') {
+      return (
+        <Stack spacing={2}>
+          {loadError && <Alert severity="error">{loadError}</Alert>}
+          {outcomeError && <Alert severity="error">{outcomeError}</Alert>}
+          {contactInfo && (
+            <Stack spacing={0.5}>
+              <Typography variant="body2"><strong>Name:</strong> {contactInfo.contactName || '—'}</Typography>
+              <Typography variant="body2"><strong>Email:</strong> {contactInfo.contactEmail || '—'}</Typography>
+              {(contactInfo.phone || contactInfo.mobile) && (
+                <Typography variant="body2"><strong>Phone:</strong> {contactInfo.phone || contactInfo.mobile}</Typography>
+              )}
+            </Stack>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            What happened when you followed up?
+          </Typography>
+          <Stack spacing={1.5}>
+            <Button
+              variant="contained"
+              color="success"
+              fullWidth
+              onClick={handleConfirmed}
+              data-testid="dvf-confirmed"
+            >
+              Customer confirmed — schedule visit
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={handleResendInvite}
+              disabled={!contactInfo?.contactEmail}
+              data-testid="dvf-resend"
+            >
+              Resend invite email
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              fullWidth
+              onClick={handleNotProceeding}
+              data-testid="dvf-not-proceeding"
+            >
+              Not proceeding
+            </Button>
+          </Stack>
+        </Stack>
+      );
+    }
+    if (step === 'resend') {
+      return (
+        <Stack spacing={2}>
+          {emailError && <Alert severity="error">{emailError}</Alert>}
+          <Typography variant="body2" color="text.secondary">
+            Sending to: <strong>{contactInfo?.contactEmail || '—'}</strong>
+          </Typography>
+          {emailLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : (
+            <>
+              <TextField
+                label="Subject"
+                value={emailSubject}
+                onChange={e => setEmailSubject(e.target.value)}
+                size="small"
+                fullWidth
+                slotProps={{ htmlInput: { maxLength: 300 } }}
+                data-testid="dvf-email-subject"
+              />
+              <TextField
+                label="Body"
+                value={emailBody}
+                onChange={e => setEmailBody(e.target.value)}
+                multiline
+                minRows={6}
+                size="small"
+                fullWidth
+                slotProps={{ htmlInput: { maxLength: 8000 } }}
+                data-testid="dvf-email-body"
+              />
+              <Typography variant="caption" color="text.secondary">
+                Sent from your connected Gmail account. Lead status will update to "Design Invited".
+              </Typography>
+            </>
+          )}
+        </Stack>
+      );
+    }
+    return null;
+  }
+
+  function renderActions() {
+    if (step === 'loading' || step === 'outcome_in_progress' || step === 'done') return null;
+    if (step === 'hub') {
+      return <Button onClick={handleClose}>Close</Button>;
+    }
+    if (step === 'resend') {
+      return (
+        <>
+          <Button onClick={() => goToStep('hub')}>Back</Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleSendResendEmail()}
+            disabled={emailLoading || !emailSubject.trim() || !emailBody.trim() || !contactInfo?.contactEmail}
+            data-testid="dvf-send-invite"
+          >
+            Send invite
+          </Button>
+        </>
+      );
+    }
+    return null;
+  }
+
+  const dialogTitle = (() => {
+    if (step === 'resend') return 'Resend design visit invite';
+    if (step === 'done') return 'Done';
+    return `Design visit follow-up${ctx.contactName ? ` — ${ctx.contactName}` : ''}`;
+  })();
+
+  return (
+    <>
+      <Dialog open={hubDialogOpen} onClose={step === 'hub' ? handleClose : undefined} maxWidth="xs" fullWidth>
+        <DialogTitle>{dialogTitle}</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {renderContent()}
+        </DialogContent>
+        {renderActions() && (
+          <DialogActions>{renderActions()}</DialogActions>
+        )}
+      </Dialog>
+
+      <ScheduleVisitModal
+        handler={handler}
+        ctx={ctx}
+        visitType="design"
+        contactAddress={contactInfo?.contactAddress}
+        open={scheduleOpen}
+        onClose={handleScheduleClose}
+        onSuccess={handleScheduleSuccess}
+      />
+    </>
+  );
+}
