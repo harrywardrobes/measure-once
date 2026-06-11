@@ -24,7 +24,7 @@ import {
 } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES } from '../../utils/handlerMeta';
+import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 
 import {
@@ -49,14 +49,6 @@ import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GR
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const HANDLER_TYPE_LABELS: Record<string, string> = {
-  add_design_visit_to_calendar: 'Add design visit to calendar',
-  start_design_visit:           'Start design visit wizard',
-  upload_photos_and_info:       'Upload photos & info',
-  review_customer_photos:       'Review customer photos',
-  arrange_visit:                'Arrange visit (call → book or email)',
-  contact_customer:             'Contact customer (call / email / WhatsApp)',
-};
 
 export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'add_design_visit_to_calendar',
@@ -696,7 +688,7 @@ function HandlerEditorModal({
                   return (
                     <Typography key={h.id} variant="body2">
                       • <strong>{slotLabel}</strong> is already wired to{' '}
-                      <strong>{h.name || HANDLER_TYPE_LABELS[h.type] || h.type}</strong> — bind anyway?
+                      <strong>{h.name || HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type}</strong> — bind anyway?
                     </Typography>
                   );
                 })}
@@ -792,7 +784,7 @@ export function ConflictResolverModal({
         </Typography>
         <Stack spacing={1}>
           {conflicting.map(h => {
-            const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+            const typeLbl = HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type;
             const desc    = HANDLER_TYPE_DESCRIPTIONS[h.type] || '';
             const isRemoving = removingId === h.id;
             return (
@@ -970,7 +962,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
 }
 
 function HandlerSummary({ h }: { h: Handler }) {
-  const typeLbl = HANDLER_TYPE_LABELS[h.type] || h.type;
+  const typeLbl = HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type;
   const actionName = h.config?.action_name ? (
     <span className="adm-handler-actionname">{String(h.config.action_name)}</span>
   ) : null;
