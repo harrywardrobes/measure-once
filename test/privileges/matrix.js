@@ -124,7 +124,6 @@ const ROUTES = [
   { method: 'POST',   path: '/api/personal-tasks',            level: 'member',  body: {} },
   { method: 'PATCH',  path: '/api/personal-tasks/0',          level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/personal-tasks/0',          level: 'member' },
-  { method: 'POST',   path: '/api/visits',                    level: 'member',  body: {} },
   { method: 'POST',   path: '/api/card-actions/phone-call-summary', level: 'member', body: { contactId: '0', summary: 'noop' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit',                      level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit/outcome',              level: 'member', body: { contactId: '0', outcome: 'booked', visitType: 'design' }, needsHubspot: true },

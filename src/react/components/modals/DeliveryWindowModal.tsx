@@ -80,8 +80,6 @@ export function DeliveryWindowModal(props: Props) {
   const defaultTitle = isEdit
     ? (visit?.title || 'Delivery')
     : ((cfg.defaultTitle as string) || (contactName ? `Delivery — ${contactName}` : 'Delivery'));
-  const addToGoogleDefault = !isEdit && !isCreateDirect;
-
   const initialStart = isEdit && visit
     ? dayjs(visit.startAt)
     : dayjs().add(24, 'hour').startOf('hour');
@@ -99,14 +97,12 @@ export function DeliveryWindowModal(props: Props) {
   const [range, setRange] = useState<DateRange<Dayjs>>([initialStart, initialEnd]);
   const [location, setLocation] = useState(isEdit ? (visit?.location || '') : '');
   const [notes, setNotes] = useState(isEdit ? (visit?.notes || '') : '');
-  const [addGcal, setAddGcal] = useState(addToGoogleDefault);
   const [updateGcal, setUpdateGcal] = useState(isEdit && !!visit?.googleEventId);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
 
-  const initialAddGcalRef    = useRef(addToGoogleDefault);
   const initialUpdateGcalRef = useRef(isEdit && !!visit?.googleEventId);
 
   const hasUnsavedChanges = (() => {
@@ -117,7 +113,6 @@ export function DeliveryWindowModal(props: Props) {
       notes !== initialNotesRef.current ||
       (rs !== null && !rs.isSame(initialStartRef.current)) ||
       (re !== null && !re.isSame(initialEndRef.current)) ||
-      addGcal !== initialAddGcalRef.current ||
       updateGcal !== initialUpdateGcalRef.current
     );
   })();
@@ -241,41 +236,26 @@ export function DeliveryWindowModal(props: Props) {
         handleClose();
         props.onSaved?.();
       } else if (isCreateDirect) {
-        await POST('/api/visits', {
-          type: 'delivery',
-          title: title.trim(),
-          customerId: contactId || null,
-          customerName: contactName || null,
-          startAt: start.toDate().toISOString(),
-          endAt: end.toDate().toISOString(),
-          location: location.trim() || null,
-          notes: notes.trim() || null,
-        });
-
-        if (addGcal) {
-          try {
-            await POST('/api/events', {
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              start: { dateTime: start.toDate().toISOString() },
-              end: { dateTime: end.toDate().toISOString() },
-            });
-          } catch (gcalErr) {
-            const gcalMsg = isGoogleAuthError(gcalErr)
-              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-              : gcalErr instanceof Error ? gcalErr.message : 'error';
-            showToast(`Delivery window saved; Google Calendar add failed: ${gcalMsg}`, true);
-            handleClose();
-            (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
-            props.onSaved?.();
-            return;
-          }
+        // Create-direct → Google Calendar is the single source of truth.
+        // No local visits row is written; failures stay in-modal so the user
+        // can connect Google / retry without losing their input.
+        try {
+          await POST('/api/events', {
+            moContactId: contactId || '',
+            moVisitType: 'delivery',
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toDate().toISOString() },
+            end: { dateTime: end.toDate().toISOString() },
+          });
+        } catch (gcalErr) {
+          setError(calendarErrorMessage(gcalErr));
+          return;
         }
 
-        showToast('Delivery window scheduled', false);
+        showToast('Delivery window scheduled to the shared calendar', false);
         handleClose();
-        (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
         props.onSaved?.();
       } else {
         // Card-action create → shared Google Calendar is the single source of
@@ -425,20 +405,7 @@ export function DeliveryWindowModal(props: Props) {
                 label="Also update my Google Calendar event"
               />
             )}
-            {isCreateDirect && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    id="cah-dw-google"
-                    checked={addGcal}
-                    onChange={e => setAddGcal(e.target.checked)}
-                    size="small"
-                  />
-                }
-                label="Also add to my Google Calendar"
-              />
-            )}
-            {!isEdit && !isCreateDirect && (
+            {!isEdit && (
               <Typography variant="caption" color="text.secondary">
                 This delivery window is added to the shared Measure Once Google Calendar.
               </Typography>

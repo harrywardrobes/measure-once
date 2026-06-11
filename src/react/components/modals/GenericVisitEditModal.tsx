@@ -94,6 +94,9 @@ export function GenericVisitEditModal(props: Props) {
   const [gcalChecked, setGcalChecked] = useState(
     isCreate ? true : !!(props.visit.googleEventId)
   );
+  // For edits the gcal checkbox is shown when the visit already has a googleEventId.
+  // For creates the calendar event is always created (no checkbox shown).
+  const showGcalCheckbox = !isCreate && !!(props as EditProps).visit.googleEventId;
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const hasUnsavedChanges = (() => {
@@ -127,38 +130,28 @@ export function GenericVisitEditModal(props: Props) {
     setSubmitting(true);
     try {
       if (isCreate) {
-        await POST('/api/visits', {
-          type: visitType,
-          title: title.trim(),
-          customerId: contactId || null,
-          customerName: contactName || null,
-          startAt: start.toDate().toISOString(),
-          endAt: end.toDate().toISOString(),
-          location: location.trim() || null,
-          notes: notes.trim() || null,
-        });
-
-        if (gcalChecked) {
-          try {
-            await POST('/api/events', {
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              start: { dateTime: start.toDate().toISOString() },
-              end: { dateTime: end.toDate().toISOString() },
-            });
-          } catch (gcalErr) {
-            const gcalMsg = isGoogleAuthError(gcalErr)
-              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-              : gcalErr instanceof Error ? gcalErr.message : 'error';
-            showToast(`${label} scheduled; Google Calendar add failed: ${gcalMsg}`, true);
-            handleClose();
-            props.onSaved?.();
-            return;
-          }
+        // Create → Google Calendar is the single source of truth.
+        // No local visits row is written; failures stay in-modal so the user
+        // can connect Google / retry without losing their input.
+        try {
+          await POST('/api/events', {
+            moContactId: contactId || '',
+            moVisitType: visitType,
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toDate().toISOString() },
+            end: { dateTime: end.toDate().toISOString() },
+          });
+        } catch (gcalErr) {
+          const gcalMsg = isGoogleAuthError(gcalErr)
+            ? "Google account isn't connected — reconnect in your profile to sync Calendar."
+            : gcalErr instanceof Error ? gcalErr.message : 'error';
+          setError(gcalMsg);
+          return;
         }
 
-        showToast(`${label} scheduled`, false);
+        showToast(`${label} scheduled to the shared calendar`, false);
         handleClose();
         props.onSaved?.();
       } else {
@@ -253,11 +246,7 @@ export function GenericVisitEditModal(props: Props) {
     ? (contactName ? `Schedule ${label.toLowerCase()} for ${contactName}` : `Schedule ${label.toLowerCase()}`)
     : (contactName ? `Edit ${label.toLowerCase()} for ${contactName}` : `Edit ${label.toLowerCase()}`);
 
-  const gcalLabel = isCreate
-    ? 'Also add to my Google Calendar'
-    : 'Also update my Google Calendar event';
-
-  const showGcal = isCreate || !!(props.visit.googleEventId);
+  const gcalLabel = 'Also update my Google Calendar event';
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -297,7 +286,12 @@ export function GenericVisitEditModal(props: Props) {
               fullWidth
               size="small"
             />
-            {showGcal && (
+            {isCreate && (
+              <Typography variant="caption" color="text.secondary">
+                This visit is added to the shared Measure Once Google Calendar.
+              </Typography>
+            )}
+            {showGcalCheckbox && (
               <FormControlLabel
                 control={
                   <Checkbox

@@ -88,28 +88,6 @@ function validatePayload(body) {
   };
 }
 
-// Maximum number of minutes a visit's startAt may be in the past before the
-// server rejects it. Override via VISITS_PAST_GRACE_MINUTES env var (integer).
-const PAST_TIME_GRACE_MS = (() => {
-  const raw = parseInt(process.env.VISITS_PAST_GRACE_MINUTES || '5', 10);
-  return (Number.isFinite(raw) && raw >= 0 ? raw : 5) * 60 * 1000;
-})();
-
-// Per-user POST rate limit: max 30 visits created per 10-minute sliding window
-const VISITS_RATE_WINDOW_MS = 10 * 60 * 1000;
-const VISITS_RATE_LIMIT     = 30;
-const _visitsRateMap = new Map(); // userId -> number[]  (timestamps of recent requests)
-
-function checkVisitsRateLimit(userId) {
-  const now = Date.now();
-  const cutoff = now - VISITS_RATE_WINDOW_MS;
-  const timestamps = (_visitsRateMap.get(userId) || []).filter(t => t > cutoff);
-  if (timestamps.length >= VISITS_RATE_LIMIT) return false;
-  timestamps.push(now);
-  _visitsRateMap.set(userId, timestamps);
-  return true;
-}
-
 // Maximum allowed date range for GET /api/visits queries (366 days)
 const VISITS_MAX_RANGE_MS = 366 * 24 * 60 * 60 * 1000;
 
@@ -155,39 +133,9 @@ router.get('/api/visits/:id', isAuthenticated, visitsRateLimiter, async (req, re
   }
 });
 
-// DEPRECATED: This route writes to the visits table, which is no longer the
-// primary data source for the customer-detail Visits section. New bookings go
-// directly to Google Calendar via POST /api/events (ScheduleVisitModal).
-// Do not add new callers — this route will be removed in a future cleanup task.
-router.post('/api/visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  console.warn('[deprecated] POST /api/visits: use POST /api/events instead');
-  const userId = req.user.claims.sub;
-  if (!checkVisitsRateLimit(userId)) {
-    return res.status(429).json({ error: 'Too many requests. Please wait before creating more visits.' });
-  }
-  const v = validatePayload(req.body);
-  if (v.error) return res.status(400).json({ error: v.error });
-  const startMs = new Date(v.startAt).getTime();
-  if (startMs < Date.now() - PAST_TIME_GRACE_MS) {
-    return res.status(422).json({
-      error: 'Visit start time is in the past. Please choose a future time.',
-      code:  'START_IN_PAST',
-    });
-  }
-  try {
-    const r = await pool.query(
-      `INSERT INTO visits
-       (created_by, customer_id, customer_name, type, title, start_at, end_at, is_workshop, notes, location, assignee_id, assignee_role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [userId, v.customerId, v.customerName, v.type, v.title, v.startAt, v.endAt, v.isWorkshop, v.notes, v.location, v.assigneeId, v.assigneeRole]
-    );
-    res.json(mapDatabaseRowToVisit(r.rows[0]));
-  } catch (e) {
-    logger.error({ err: e.message }, 'POST /api/visits failed:');
-    res.status(500).json({ error: 'Failed to create visit' });
-  }
-});
-
+// PATCH is kept read-write so existing visits (delivery windows, installation
+// slots, etc.) that live in the visits table can still be edited or deleted.
+// New visit creation goes directly to Google Calendar via POST /api/events.
 router.patch('/api/visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });

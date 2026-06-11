@@ -86,8 +86,6 @@ export function InstallationSlotModal(props: Props) {
     ? (visit?.title || 'Installation')
     : ((cfg.defaultTitle as string) || (contactName ? `Installation — ${contactName}` : 'Installation'));
 
-  const addToGoogleDefault = !isEdit && !isCreateDirect;
-
   const initialStart = isEdit && visit
     ? dayjs(visit.startAt)
     : dayjs().add(48, 'hour').startOf('hour');
@@ -97,7 +95,6 @@ export function InstallationSlotModal(props: Props) {
   const initialDurationRef = useRef(String(defaultDuration));
   const initialLocationRef = useRef(isEdit ? (visit?.location || '') : '');
   const initialNotesRef    = useRef(isEdit ? (visit?.notes || '') : '');
-  const initialAddGcalRef    = useRef(addToGoogleDefault);
   const initialUpdateGcalRef = useRef(isEdit && !!visit?.googleEventId);
 
   const [title, setTitle] = useState(defaultTitle);
@@ -105,7 +102,6 @@ export function InstallationSlotModal(props: Props) {
   const [duration, setDuration] = useState(String(defaultDuration));
   const [location, setLocation] = useState(isEdit ? (visit?.location || '') : '');
   const [notes, setNotes] = useState(isEdit ? (visit?.notes || '') : '');
-  const [addGcal, setAddGcal] = useState(addToGoogleDefault);
   const [updateGcal, setUpdateGcal] = useState(isEdit && !!visit?.googleEventId);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -118,7 +114,6 @@ export function InstallationSlotModal(props: Props) {
     notes !== initialNotesRef.current ||
     duration !== initialDurationRef.current ||
     (startDt !== null && !startDt.isSame(initialStartRef.current)) ||
-    addGcal !== initialAddGcalRef.current ||
     updateGcal !== initialUpdateGcalRef.current;
 
   useEffect(() => {
@@ -241,41 +236,26 @@ export function InstallationSlotModal(props: Props) {
         handleClose();
         props.onSaved?.();
       } else if (isCreateDirect) {
-        await POST('/api/visits', {
-          type: 'installation',
-          title: title.trim(),
-          customerId: contactId || null,
-          customerName: contactName || null,
-          startAt: start.toISOString(),
-          endAt: end.toISOString(),
-          location: location.trim() || null,
-          notes: notes.trim() || null,
-        });
-
-        if (addGcal) {
-          try {
-            await POST('/api/events', {
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              start: { dateTime: start.toISOString() },
-              end: { dateTime: end.toISOString() },
-            });
-          } catch (gcalErr) {
-            const gcalMsg = isGoogleAuthError(gcalErr)
-              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-              : gcalErr instanceof Error ? gcalErr.message : 'error';
-            showToast(`Installation slot saved; Google Calendar add failed: ${gcalMsg}`, true);
-            handleClose();
-            (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
-            props.onSaved?.();
-            return;
-          }
+        // Create-direct → Google Calendar is the single source of truth.
+        // No local visits row is written; failures stay in-modal so the user
+        // can connect Google / retry without losing their input.
+        try {
+          await POST('/api/events', {
+            moContactId: contactId || '',
+            moVisitType: 'installation',
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toISOString() },
+            end: { dateTime: end.toISOString() },
+          });
+        } catch (gcalErr) {
+          setError(calendarErrorMessage(gcalErr));
+          return;
         }
 
-        showToast('Installation slot scheduled', false);
+        showToast('Installation slot scheduled to the shared calendar', false);
         handleClose();
-        (window as unknown as { renderUpcomingVisits?: () => void }).renderUpcomingVisits?.();
         props.onSaved?.();
       } else {
         // Card-action create → shared Google Calendar is the single source of
@@ -445,20 +425,7 @@ export function InstallationSlotModal(props: Props) {
                 label="Also update my Google Calendar event"
               />
             )}
-            {isCreateDirect && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    id="cah-is-google"
-                    checked={addGcal}
-                    onChange={e => setAddGcal(e.target.checked)}
-                    size="small"
-                  />
-                }
-                label="Also add to my Google Calendar"
-              />
-            )}
-            {!isEdit && !isCreateDirect && (
+            {!isEdit && (
               <Typography variant="caption" color="text.secondary">
                 This installation slot is added to the shared Measure Once Google Calendar.
               </Typography>
