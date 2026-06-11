@@ -126,7 +126,7 @@ async function openProjectsPage(browser, cookie, cacheStatus) {
   }, null, 15000);
   // Step 2: wait for the loading skeleton to disappear and real content to render.
   // The sort-bar Select (.MuiSelect-root) is always present once loading=false.
-  // #room-stale-banner is now appended to document.body by workflow-core.js,
+  // #room-stale-banner is now appended to document.body by WorkflowDataContext.tsx,
   // so we no longer look for it inside #projects-view.
   await page.waitForSelector(
     '#projects-view [data-testid="sort-select"], #projects-view #lead-status-filter, #room-stale-banner',
@@ -372,7 +372,7 @@ function writeReport(findings) {
       '',
       '## Relevant files',
       '',
-      '- `public/workflow-core.js` — `_loadWorkflowStagesImpl` reads the',
+      '- `src/react/context/WorkflowDataContext.tsx` — `_loadWorkflowStagesImpl` reads the',
       '  `X-Cache-Status` header and sets `state.roomAssignmentsStale`.',
       '- `server.js` — `GET /api/localdata/all` handler that sets the header.',
     ];

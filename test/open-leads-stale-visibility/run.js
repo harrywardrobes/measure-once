@@ -382,7 +382,7 @@ async function writeReport(runId) {
     '- **(F2) Fresh response while hidden — pending clear deferred**: with the',
     '  `.ls-stale-hint` badge showing from (F1), overrides `document.hidden` to',
     '  `true`.  Uses the `__setTestPendingOpenLeadsStale(false)` hook (exposed',
-    '  by `workflow-core.js`) to set `_pendingOpenLeadsStale = false` directly,',
+    '  by `WorkflowDataContext.tsx`) to set `_pendingOpenLeadsStale = false` directly,',
     '  simulating a fresh response arriving while the tab is hidden.  Confirms',
     '  the badge is still present (the deferred false has not been applied yet),',
     '  then synthesises a `visibilitychange` event (→ visible) and confirms the',
@@ -390,13 +390,13 @@ async function writeReport(runId) {
     '',
     '## Relevant files',
     '',
-    '- `public/workflow-core.js` — `_loadOpenLeadsImpl` reads the',
+    '- `src/react/context/WorkflowDataContext.tsx` — `_loadOpenLeadsImpl` reads the',
     '  `X-Cache-Status` header; defers `state.openLeadsStale` update',
     '  when `document.hidden` is true.  The `visibilitychange` listener applies',
     '  any pending update and calls `_renderOpenLeadsStaleBadge()` which',
     '  creates/removes the `.ls-stale-hint` DOM element.',
     '- `public/app-styles.css` — `.ls-stale-hint` styles the fixed bottom banner.',
-    '- `public/survey.html` — test target page (loads `workflow-core.js`).',
+    '- `public/survey.html` — test target page.',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);

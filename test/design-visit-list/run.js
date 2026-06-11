@@ -654,7 +654,7 @@ async function writeReport(runId, findings) {
     '  `GET /api/contacts/:id` 503s and the customer-detail bootstrap replaces',
     '  `#workflow-view` with an error message. The Design-visits section is',
     '  rendered from a separate code path (`renderDesignVisits` in',
-    '  `public/customer-detail.js`) keyed off `state.selectedContactId`, so',
+    '  `src/react/pages/CustomerDetailPage.tsx`) keyed off `state.selectedContactId`, so',
     '  the test seeds `state.selectedContactId`, re-injects the section mount',
     '  if needed, and calls `renderDesignVisits()` directly. The renderer',
     '  paths under test run against the live `/api/design-visits` endpoint.',
