@@ -194,6 +194,8 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:ideas',                        'narrative — CRUD + privilege checks for Ideas page'],
   ['test:settings-tab-load',            'narrative — race-condition regression guard for settings tab'],
   ['test:invoice-admin-controls',       'narrative — privilege gates + data scoping for QB routes'],
+  ['test:qb-payment-history',           'narrative — QB payment history HTTP probe suite'],
+  ['test:payment-history-component',    'unit-flat — Vitest render checks on PaymentHistory React component'],
   ['test:project-contacts-unknown-status', 'narrative — orphan-check regression guard'],
   ['test:hubspot-credential-audit',     'narrative — audit log entries on credential changes'],
   ['test:lead-status-delete-substatus-clear', 'narrative — background job verification after status delete'],

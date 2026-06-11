@@ -7,6 +7,7 @@ import { CustomerDetailHeader } from './customer-detail/CustomerDetailHeader';
 import { RoomsTabs } from './customer-detail/RoomsTabs';
 import { TasksSection } from './customer-detail/TasksSection';
 import { InvoicesSection } from './customer-detail/InvoicesSection';
+import { PaymentHistory } from '../components/PaymentHistory';
 import { UpcomingVisitsSection, PastVisitsSection } from './customer-detail/VisitsSections';
 import { DesignVisitsList } from './customer-detail/DesignVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
@@ -712,6 +713,10 @@ export function CustomerDetailPage() {
 
             {qb.statusKnown && qb.connected && (
               <InvoicesSection contact={contact} qb={qb} />
+            )}
+
+            {qb.statusKnown && (
+              <PaymentHistory variant="list" contactId={contactId} />
             )}
 
             <UpcomingVisitsSection

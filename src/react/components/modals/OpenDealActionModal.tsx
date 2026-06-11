@@ -37,6 +37,7 @@ import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { ModalContactHeader } from './ModalContactHeader';
+import { PaymentHistory } from '../PaymentHistory';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
@@ -412,6 +413,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
             QuickBooks is not connected — the accept deal flow requires a QuickBooks connection.
           </Alert>
         )}
+        <PaymentHistory variant="banner" contactId={contactId} />
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
           What would you like to do with this deal?
         </Typography>

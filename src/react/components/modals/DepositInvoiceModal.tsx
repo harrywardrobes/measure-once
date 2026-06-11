@@ -13,7 +13,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -21,15 +20,14 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CallIcon from '@mui/icons-material/Call';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditIcon from '@mui/icons-material/Edit';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SendIcon from '@mui/icons-material/Send';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import { POST, isGoogleAuthError } from '../../utils/api';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
+import { PaymentHistory } from '../PaymentHistory';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { ModalContactHeader } from './ModalContactHeader';
@@ -43,7 +41,6 @@ interface Props {
   onClose: () => void;
 }
 
-type PaymentState = 'paid' | 'partial' | 'unpaid' | 'unknown';
 
 type Step =
   | 'loading'
@@ -64,12 +61,10 @@ interface LoaderData {
   contactMobile: string;
   contactAddress: string;
   qbConnected: boolean;
-  paymentState: PaymentState;
   invoiceId: string | null;
   invoiceDocNum: string | null;
   invoiceTotalAmt: number;
   invoiceBalance: number;
-  invoicePaidAmt: number;
   invoiceTxnDate: string | null;
   invoiceLink: string | null;
   qbEstimateId: string | null;
@@ -143,6 +138,10 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
 
   const [submitting, setSubmitting] = useState(false);
   const [doneMessage, setDoneMessage] = useState('');
+
+  // Paid state is provided by the PaymentHistory banner via onPaidStateChange.
+  // This avoids a second QB fetch — the banner fetches once and surfaces the result.
+  const [isPaid, setIsPaid] = useState<boolean | null>(null);
 
   const hasMounted = useRef(false);
 
@@ -378,53 +377,6 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   const isLoading   = step === 'loading';
   const isSubmittingStep = step === 'resend_submitting' || step === 'reminder_submitting' || step === 'not_proceeding_submitting';
 
-  function renderPaymentBanner() {
-    if (!loaderData) return null;
-
-    if (!loaderData.qbConnected) {
-      return (
-        <Alert severity="info" sx={{ py: 0.5 }}>
-          QuickBooks is not connected. Connect QB in{' '}
-          <Link href="/admin#tab-qb" sx={{ fontWeight: 600 }}>admin settings</Link>{' '}
-          to see invoice payment status.
-        </Alert>
-      );
-    }
-
-    if (!loaderData.invoiceId) {
-      return (
-        <Alert severity="warning" sx={{ py: 0.5 }}>
-          No deposit invoice found in QuickBooks for this contact.
-        </Alert>
-      );
-    }
-
-    const { paymentState, invoiceTotalAmt, invoiceBalance, invoicePaidAmt } = loaderData;
-
-    if (paymentState === 'paid') {
-      return (
-        <Alert severity="success" icon={<CheckCircleIcon fontSize="small" />} sx={{ py: 0.5 }}>
-          <strong>Invoice paid</strong> — {formatCurrency(invoiceTotalAmt)} received in full.
-        </Alert>
-      );
-    }
-
-    if (paymentState === 'partial') {
-      return (
-        <Alert severity="warning" icon={<HourglassEmptyIcon fontSize="small" />} sx={{ py: 0.5 }}>
-          <strong>Partial payment received</strong> — {formatCurrency(invoicePaidAmt)} paid,{' '}
-          {formatCurrency(invoiceBalance)} outstanding.
-        </Alert>
-      );
-    }
-
-    return (
-      <Alert severity="warning" icon={<HourglassEmptyIcon fontSize="small" />} sx={{ py: 0.5 }}>
-        <strong>Unpaid</strong> — {formatCurrency(invoiceTotalAmt)} outstanding.
-      </Alert>
-    );
-  }
-
   function renderContactHeader(opts?: { loading?: boolean }) {
     return (
       <ModalContactHeader
@@ -439,15 +391,19 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function renderHub() {
-    const isPaid    = loaderData?.paymentState === 'paid';
-    const qbOk      = loaderData?.qbConnected ?? false;
+    const qbOk       = loaderData?.qbConnected ?? false;
     const hasInvoice = !!(loaderData?.invoiceId);
 
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
         {loadError && <Alert severity="warning">{loadError}</Alert>}
-        {renderPaymentBanner()}
+        <PaymentHistory
+          variant="banner"
+          contactId={contactId}
+          invoiceId={loaderData?.invoiceId ?? null}
+          onPaidStateChange={setIsPaid}
+        />
         <Stack spacing={1.5}>
           <Button
             variant={isPaid ? 'contained' : 'outlined'}
@@ -646,7 +602,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   function renderNotProceedingConfirm() {
     const qbOk      = loaderData?.qbConnected ?? false;
     const hasInvoice = !!(loaderData?.invoiceId);
-    const unpaid    = loaderData?.paymentState !== 'paid';
+    const unpaid    = isPaid !== true;
 
     return (
       <Stack spacing={2}>

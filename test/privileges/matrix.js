@@ -133,6 +133,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/deposit-invoice',                    level: 'member',  body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/deposit-invoice/resend',             level: 'manager', body: { contactId: '0', invoiceId: '1' } },
   { method: 'POST',   path: '/api/card-actions/deposit-invoice/not-proceeding',     level: 'manager', body: { contactId: '0' }, needsHubspot: true },
+  { method: 'GET',    path: '/api/quickbooks/contacts/0/payments',                  level: 'manager' },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/accept-deal',               level: 'manager', body: { estimateId: '1' } },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/decline-deal',              level: 'manager', body: {} },
   { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },

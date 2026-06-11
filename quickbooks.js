@@ -1073,6 +1073,143 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
   }
 );
 
+// ── In-memory payment-history cache (60-second TTL, keyed by contactId) ──────────
+const _paymentHistoryCache = new Map();
+
+function _getCachedPaymentHistory(contactId) {
+  const entry = _paymentHistoryCache.get(contactId);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { _paymentHistoryCache.delete(contactId); return null; }
+  return entry.data;
+}
+
+function _setCachedPaymentHistory(contactId, data) {
+  _paymentHistoryCache.set(contactId, { data, expiresAt: Date.now() + 60000 });
+}
+
+// ── API: contact payment history ───────────────────────────────────────────────
+//
+// Returns real QuickBooks Payment entities joined to their invoices, with a
+// derived paid/partial/unpaid status per invoice and an overall summary.
+// Deposit invoices are labelled "Deposit" by matching against design_visits;
+// remaining invoices fall back to qb_settings.payment_stages labels where
+// possible, then "INV-<DocNumber>".
+//
+// Auth: requireManagerOrAdmin (same level as accept-deal / decline-deal).
+// Ownership: all Payment rows are filtered to CustomerRef === contactId.
+// Cache: 60-second in-memory cache keyed by contactId.
+router.get('/api/quickbooks/contacts/:contactId/payments',
+  isAuthenticated, requireManagerOrAdmin, quickbooksReadWriteLimiter,
+  async (req, res) => {
+    const contactId = String(req.params.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    try {
+      const cached = _getCachedPaymentHistory(contactId);
+      if (cached) return res.json(cached);
+
+      const t = await getValidTokens();
+      if (!t) return res.json({ qbConnected: false });
+
+      // Fetch payments and invoices for this customer in parallel
+      const [rawPayments, rawInvoices] = await Promise.all([
+        fetchFromQuickBooks('/query', {
+          query: `SELECT * FROM Payment WHERE CustomerRef = '${contactId}' MAXRESULTS 200`,
+        }).then(d => d.QueryResponse?.Payment || []).catch(e => {
+          logger.warn({ err: e.message }, '[payments] QB payments query failed:');
+          return [];
+        }),
+        fetchFromQuickBooks('/query', {
+          query: `SELECT * FROM Invoice WHERE CustomerRef = '${contactId}' MAXRESULTS 200`,
+        }).then(d => d.QueryResponse?.Invoice || []).catch(e => {
+          logger.warn({ err: e.message }, '[payments] QB invoices query failed:');
+          return [];
+        }),
+      ]);
+
+      // Ownership guard: discard any payment not belonging to this contact
+      const payments = rawPayments.filter(
+        p => String(p.CustomerRef?.value || '') === contactId
+      );
+
+      // Fetch deposit invoice IDs and payment_stages labels in parallel
+      const [depositInvoiceIds, paymentStages] = await Promise.all([
+        pool.query(
+          'SELECT deposit_invoice_id FROM design_visits WHERE contact_id = $1 AND deposit_invoice_id IS NOT NULL',
+          [contactId]
+        ).then(r => new Set(r.rows.map(row => String(row.deposit_invoice_id)))).catch(() => new Set()),
+        pool.query('SELECT payment_stages FROM qb_settings LIMIT 1')
+          .then(r => (Array.isArray(r.rows[0]?.payment_stages) ? r.rows[0].payment_stages : [])).catch(() => []),
+      ]);
+
+      // Label helper: "Deposit" > payment_stages match > "INV-<DocNumber>"
+      function getInvoiceLabel(inv) {
+        const invId = String(inv.Id);
+        if (depositInvoiceIds.has(invId)) return 'Deposit';
+        for (const stage of paymentStages) {
+          if (stage.label && stage.invoiceId && String(stage.invoiceId) === invId) return stage.label;
+        }
+        return inv.DocNumber ? `INV-${inv.DocNumber}` : `Invoice ${invId}`;
+      }
+
+      // Format payment rows (extract linked invoice IDs from Line[].LinkedTxn)
+      const formattedPayments = payments.map(p => ({
+        id:                p.Id,
+        reference:         p.DocNumber || null,
+        txnDate:           p.TxnDate || null,
+        totalAmt:          parseFloat(p.TotalAmt || 0),
+        unappliedAmt:      parseFloat(p.UnappliedAmt || 0),
+        paymentMethodName: p.PaymentMethodRef?.name || null,
+        linkedInvoiceIds:  (p.Line || [])
+          .flatMap(l => (l.LinkedTxn || [])
+            .filter(lt => lt.TxnType === 'Invoice')
+            .map(lt => String(lt.TxnId)))
+          .filter(Boolean),
+      }));
+
+      // Format invoice summaries with derived paid/partial/unpaid status
+      const invoiceSummaries = rawInvoices.map(inv => {
+        const totalAmt = parseFloat(inv.TotalAmt || 0);
+        const balance  = parseFloat(inv.Balance  || 0);
+        const paidAmt  = Math.max(0, totalAmt - balance);
+        const status   = balance <= 0 ? 'paid' : paidAmt > 0 ? 'partial' : 'unpaid';
+        return {
+          invoiceId:        String(inv.Id),
+          invoiceDocNumber: inv.DocNumber || null,
+          invoiceLabel:     getInvoiceLabel(inv),
+          invoiceTotalAmt:  totalAmt,
+          invoiceBalance:   balance,
+          invoicePaidAmt:   paidAmt,
+          status,
+        };
+      });
+
+      // Overall summary
+      const summary = invoiceSummaries.reduce(
+        (acc, inv) => ({
+          totalInvoiced:    acc.totalInvoiced    + inv.invoiceTotalAmt,
+          totalPaid:        acc.totalPaid        + inv.invoicePaidAmt,
+          totalOutstanding: acc.totalOutstanding + inv.invoiceBalance,
+        }),
+        { totalInvoiced: 0, totalPaid: 0, totalOutstanding: 0 }
+      );
+
+      const result = {
+        qbConnected: true,
+        payments:    formattedPayments,
+        invoices:    invoiceSummaries,
+        summary,
+      };
+
+      _setCachedPaymentHistory(contactId, result);
+      res.json(result);
+    } catch (e) {
+      logger.error({ err: e.response?.data || e.message }, 'GET /api/quickbooks/contacts/:contactId/payments error:');
+      res.status(503).json({ error: e.message });
+    }
+  }
+);
+
 module.exports = router;
 module.exports.sendQbTransactionEmail    = sendQbTransactionEmail;
 module.exports.getValidTokens            = getValidTokens;
