@@ -26,6 +26,37 @@ function breakdownString(mc: Record<string, number>): string {
 }
 
 /**
+ * Returns the two plain-text summary strings used by the customer-card
+ * activity row.  Accepts a pre-formatted relative-time string so the helper
+ * stays pure and testable.
+ *
+ * - line1: attempt count + method breakdown  (e.g. "3 attempts · 2 calls, 1 email")
+ * - line2: last-contact verb + time ago       (e.g. "Last called 2 hours ago")
+ */
+export function formatActivityRow(
+  lastAttempt: NonNullable<LastAttempt>,
+  timeAgo: string,
+): { line1: string; line2: string } {
+  const mc = lastAttempt.methodCounts || {};
+  const breakdown = breakdownString(mc);
+
+  const line1 = [
+    `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'}`,
+    ...(breakdown ? [breakdown] : []),
+  ].join(' · ');
+
+  const lastVerb =
+    lastAttempt.method === 'call'      ? 'Last called'
+    : lastAttempt.method === 'email'   ? 'Last emailed'
+    : lastAttempt.method === 'whatsapp' ? "Last WhatsApp'd"
+    : 'Last contacted';
+
+  const line2 = `${lastVerb} ${timeAgo}`;
+
+  return { line1, line2 };
+}
+
+/**
  * Builds the rich tooltip content for an activity counter badge.
  *
  * Matches the display in CustomerDetailHeader — shows formatted date/time,
