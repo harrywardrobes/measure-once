@@ -672,9 +672,10 @@ function CustomerCard({
     || (hasDraft ? 'Continue designing' : '')
     || resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
 
+  const hasNoLeadStatus = !leadStatusKey;
   const stageColors = STAGE_COLORS[primaryStageKey];
-  const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
-  const actionTextColor = hasDraft ? '#15803d' : (stageColors?.text || '#374151');
+  const actionTint = hasDraft || (hasNoLeadStatus && !!handler) ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
+  const actionTextColor = hasDraft || (hasNoLeadStatus && !!handler) ? '#15803d' : (stageColors?.text || '#374151');
 
   const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
   const activityCounter = (!dispatchingAction && actionLabel && activityTs)
