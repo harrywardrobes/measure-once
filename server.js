@@ -4780,19 +4780,31 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
 
 // ── Email templates (admin-editable) ─────────────────────────────────────────
 // Merge a DB row with its TEMPLATE_DEFS metadata (advertised variables, label).
+function _extractVarsFromString(str) {
+  const matches = [...(str || '').matchAll(/\{\{(\w+)\}\}/g)];
+  return [...new Set(matches.map((m) => m[1]))];
+}
+
 function _emailTemplateWithMeta(row) {
   const def = TEMPLATE_DEFS[row.key] || {};
+  const defaultUsed = new Set([
+    ..._extractVarsFromString(def.subject),
+    ..._extractVarsFromString(def.body_text),
+    ..._extractVarsFromString(def.body_html),
+  ]);
   return {
-    key:         row.key,
-    label:       def.label || row.key,
-    description: def.description || '',
-    variables:   def.variables || [],
-    subject:     row.subject,
-    body_text:   row.body_text,
-    body_html:   row.body_html,
-    footer_text: row.footer_text,
-    updated_at:  row.updated_at,
-    updated_by:  row.updated_by,
+    key:                  row.key,
+    label:                def.label || row.key,
+    description:          def.description || '',
+    variables:            def.variables || [],
+    variableDescriptions: def.variableDescriptions || {},
+    defaultVariablesUsed: [...defaultUsed],
+    subject:              row.subject,
+    body_text:            row.body_text,
+    body_html:            row.body_html,
+    footer_text:          row.footer_text,
+    updated_at:           row.updated_at,
+    updated_by:           row.updated_by,
   };
 }
 

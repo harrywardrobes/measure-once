@@ -68,6 +68,8 @@ interface EmailTemplate {
   label: string;
   description: string;
   variables: string[];
+  variableDescriptions?: Record<string, string>;
+  defaultVariablesUsed?: string[];
   subject: string;
   body_text: string;
   body_html: string;
@@ -355,6 +357,21 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     };
   }, [fields, template.variables]);
 
+  const defaultUsedSet = useMemo(
+    () => new Set(template.defaultVariablesUsed ?? []),
+    [template.defaultVariablesUsed],
+  );
+
+  const missingDefaultVars = useMemo(
+    () => unusedVariables.filter((v) => defaultUsedSet.has(v)),
+    [unusedVariables, defaultUsedSet],
+  );
+
+  const otherUnusedVars = useMemo(
+    () => unusedVariables.filter((v) => !defaultUsedSet.has(v)),
+    [unusedVariables, defaultUsedSet],
+  );
+
   // Group malformed placeholders by their cause so the save-guard banner and
   // confirm dialog can give each cause its own precise explanation.
   const malformedGroups = useMemo<MalformedGroup[]>(
@@ -460,17 +477,24 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
                   Available variables — click one to insert it at your cursor:
                 </Typography>
                 <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 0.75 }}>
-                  {template.variables.map((v) => (
-                    <Tooltip key={v} title={`Insert {{${v}}} into the field you're editing`}>
-                      <Chip
-                        label={`{{${v}}}`}
-                        size="small"
-                        variant="outlined"
-                        clickable
-                        onClick={() => handleInsertVariable(v)}
-                      />
-                    </Tooltip>
-                  ))}
+                  {template.variables.map((v) => {
+                    const desc = template.variableDescriptions?.[v];
+                    return (
+                      <Tooltip
+                        key={v}
+                        title={desc ? <>{desc}<br /><em>Click to insert</em></> : `Insert {{${v}}} into the field you're editing`}
+                        arrow
+                      >
+                        <Chip
+                          label={`{{${v}}}`}
+                          size="small"
+                          variant="outlined"
+                          clickable
+                          onClick={() => handleInsertVariable(v)}
+                        />
+                      </Tooltip>
+                    );
+                  })}
                 </Stack>
               </Box>
             )}
@@ -501,13 +525,27 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
               </Alert>
             )}
 
-            {unusedVariables.length > 0 && (
+            {missingDefaultVars.length > 0 && (
+              <Alert severity="warning">
+                <strong>
+                  Variable{missingDefaultVars.length > 1 ? 's' : ''} from the default template not included:
+                </strong>{' '}
+                {missingDefaultVars.map((v) => `{{${v}}}`).join(', ')}
+                {' '}— {missingDefaultVars.length > 1 ? 'these are' : 'this is'} used in the
+                built-in default but absent from your custom version.
+                If the value{missingDefaultVars.length > 1 ? 's are' : ' is'} available when the
+                email is sent, {missingDefaultVars.length > 1 ? 'they' : 'it'} won't appear in
+                the email.
+              </Alert>
+            )}
+
+            {otherUnusedVars.length > 0 && (
               <Alert severity="info" icon={false}
                 sx={{ color: 'text.secondary', bgcolor: 'transparent', px: 0, py: 0.5 }}
               >
                 <Typography variant="caption">
                   Not used:{' '}
-                  {unusedVariables.map((v) => (
+                  {otherUnusedVars.map((v) => (
                     <Box
                       key={v}
                       component="span"
