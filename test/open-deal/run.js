@@ -32,6 +32,7 @@ const PROBE_LABELS = [
   '(I) idempotency: second accept-deal call for same estimate returns existing invoice, no duplicate created',
   '(J) concurrent idempotency: two simultaneous accept-deal calls for the same estimate produce exactly one QB invoice',
   '(K) concurrent-retry send guard: two simultaneous retries (invoice already exists) produce exactly one QB send',
+  '(L) concurrent-decline guard: two simultaneous decline-deal calls produce exactly one thank-you email',
 ];
 
 const fs   = require('fs');
@@ -59,12 +60,14 @@ const EST_G           = '110010';
 const EST_I           = '110011'; // idempotency probe
 const EST_J           = '110012'; // concurrent idempotency probe
 const EST_K           = '110013'; // concurrent-retry send guard probe
+const EST_L           = '110014'; // concurrent-decline guard probe
 const INV_STANDALONE  = '119900'; // for standalone /invoice/:id/send probe in C
 const INV_K           = '119902'; // pre-seeded invoice for probe K
 
 // Fake numeric HubSpot contact IDs (must pass /^\d+$/ checks in routes)
 const CONTACT_ID       = '7654321';
 const CONTACT_ID_EXTRA = '7654322'; // used for the no-thank-you branch of probe F
+const CONTACT_ID_L     = '7654330'; // used for concurrent-decline guard probe L
 const REALM_ID         = 'PRIVTEST_REALM_OPEN_DEAL';
 const CONTACT_EMAIL    = 'privtest-open-deal@example.com';
 const CONTACT_NAME     = 'PrivTest OpenDeal';
@@ -349,6 +352,16 @@ async function clearOpenDealInvoices(pool) {
   ).catch(() => { /* table may not exist on first boot before migrations */ });
 }
 
+async function clearOpenDealDeclines(pool) {
+  // Remove any decline-guard rows left by a previous run so each test run
+  // starts with a clean slate for the advisory-lock + declined_at checks.
+  const contactIds = [CONTACT_ID, CONTACT_ID_EXTRA, CONTACT_ID_L];
+  await pool.query(
+    'DELETE FROM open_deal_declines WHERE contact_id = ANY($1::text[])',
+    [contactIds]
+  ).catch(() => { /* table may not exist on first boot before migrations */ });
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -401,6 +414,7 @@ async function main() {
   await cleanupTestData(pool);
   await resetRateLimitStore(pool);
   await clearOpenDealInvoices(pool);
+  await clearOpenDealDeclines(pool);
 
   const { child } = spawnServer();
   let exitCode = 1;
@@ -1164,6 +1178,81 @@ async function main() {
         sentAt != null
           ? `sent_at=${sentAt} — row marked sent in DB`
           : 'sent_at is still NULL — send-claim did not persist');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probe L: Concurrent-decline guard
+    //
+    // Two users fire decline-deal simultaneously for the same contact with
+    // sendThankYou=true.  The advisory lock + declined_at guard in the server
+    // must ensure exactly one thank-you email is sent even when both requests
+    // race past the initial declined_at IS NULL check.
+    // ─────────────────────────────────────────────────────────────────────────
+    console.log('\n  [L] Concurrent-decline guard: two simultaneous declines produce exactly one thank-you email');
+    {
+      await clearQbSettings(pool);
+      await clearOpenDealDeclines(pool);
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      mockQb.state.estimates[EST_L] = {
+        Id: EST_L, SyncToken: '1', TxnStatus: 'Pending',
+        TotalAmt: 750, CustomerRef: { value: CONTACT_ID_L },
+      };
+
+      // Fire two simultaneous decline requests from two different users.
+      const [r1, r2] = await Promise.all([
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID_L}/decline-deal`, mgr.cookie, {
+          estimateIds:  [EST_L],
+          sendThankYou: true,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID_L}/decline-deal`, admin.cookie, {
+          estimateIds:  [EST_L],
+          sendThankYou: true,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+      ]);
+
+      // Both requests must succeed (200).
+      record('L.both-requests-ok',
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true,
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true
+          ? `both HTTP 200 ok=true`
+          : `r1: HTTP ${r1.status} ${js(r1.body).slice(0, 100)} | r2: HTTP ${r2.status} ${js(r2.body).slice(0, 100)}`);
+
+      // Exactly one thank-you email must have been sent.
+      const lMails = readMailFile(mailFile);
+      const thankMails = lMails.filter(m =>
+        String(m.subject || '').toLowerCase().includes('thank')
+        || String(m.subject || '').toLowerCase().includes('declin')
+      );
+      record('L.exactly-one-email',
+        thankMails.length === 1,
+        thankMails.length === 1
+          ? `exactly 1 thank-you email — advisory lock prevented duplicate send`
+          : `expected 1 thank-you email, got ${thankMails.length} — ${js(lMails.map(m => ({ to: m.to, subject: m.subject }))).slice(0, 200)}`);
+
+      // Both responses must have steps.thankYouSent = true.
+      record('L.both-steps-thank-you-sent',
+        r1.body?.steps?.thankYouSent === true && r2.body?.steps?.thankYouSent === true,
+        r1.body?.steps?.thankYouSent === true && r2.body?.steps?.thankYouSent === true
+          ? 'both responses report thankYouSent=true'
+          : `r1.steps=${js(r1.body?.steps)} r2.steps=${js(r2.body?.steps)}`);
+
+      // declined_at must be set in the DB for this contact.
+      const { rows: declineRows } = await pool.query(
+        'SELECT declined_at FROM open_deal_declines WHERE contact_id = $1',
+        [CONTACT_ID_L]
+      );
+      const declinedAt = declineRows[0]?.declined_at;
+      record('L.declined-at-populated', declinedAt != null,
+        declinedAt != null
+          ? `declined_at=${declinedAt} — row recorded in open_deal_declines`
+          : 'declined_at is NULL — guard state not persisted');
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;

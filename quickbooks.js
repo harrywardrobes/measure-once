@@ -975,27 +975,74 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
       }
       steps.estimatesDeclined = true;
 
-      // 2. Optional thank-you email
+      // 2. Optional thank-you email — serialized with a session-level advisory
+      //    lock so concurrent retries from different users send at most one email.
+      //    Under the lock we check open_deal_declines.declined_at: if already set
+      //    by a prior successful send we skip.  If the send succeeds we write
+      //    declined_at before releasing the lock so the next waiter sees it.
+      //    If the send fails we leave declined_at unset so a future retry can try
+      //    again — the lock is still released via the finally clause.
       if (sendThankYou && contactEmail) {
+        const declineLockKey    = contactId + ':decline';
+        const declineLockClient = await pool.connect();
+        let declineLockHeld = false;
         try {
-          const template = await getEmailTemplate('open_deal_declined_thank_you');
-          const firstName = contactName.split(' ')[0] || 'there';
-          const rendered  = renderEmail(template, { textVars: { firstName } });
-          const transport = _createMailTransport();
-          if (transport) {
-            const replyTo = _buildReplyTo();
-            await transport.sendMail({
-              from:    _buildFromHeader(),
-              ...(replyTo ? { replyTo } : {}),
-              to:      contactEmail,
-              subject: rendered.subject,
-              text:    rendered.text,
-              html:    rendered.html || rendered.text,
-            });
+          await declineLockClient.query(
+            'SELECT pg_advisory_lock(hashtext($1)::bigint)',
+            [declineLockKey]
+          );
+          declineLockHeld = true;
+
+          // Re-check declined_at under the lock so the waiter sees committed state.
+          const declineCheck = await declineLockClient.query(
+            'SELECT declined_at FROM open_deal_declines WHERE contact_id = $1',
+            [contactId]
+          );
+          if (declineCheck.rows[0]?.declined_at != null) {
+            logger.warn(
+              { contactId },
+              '[decline-deal] thank-you email already sent (declined_at set) — skipping'
+            );
             steps.thankYouSent = true;
+          } else {
+            try {
+              const template = await getEmailTemplate('open_deal_declined_thank_you');
+              const firstName = contactName.split(' ')[0] || 'there';
+              const rendered  = renderEmail(template, { textVars: { firstName } });
+              const transport = _createMailTransport();
+              if (transport) {
+                const replyTo = _buildReplyTo();
+                await transport.sendMail({
+                  from:    _buildFromHeader(),
+                  ...(replyTo ? { replyTo } : {}),
+                  to:      contactEmail,
+                  subject: rendered.subject,
+                  text:    rendered.text,
+                  html:    rendered.html || rendered.text,
+                });
+                steps.thankYouSent = true;
+                // Record declined_at while still holding the lock so the next
+                // waiter sees it IS NOT NULL and skips the send.
+                await declineLockClient.query(
+                  `INSERT INTO open_deal_declines (contact_id, declined_at)
+                   VALUES ($1, NOW())
+                   ON CONFLICT (contact_id) DO UPDATE SET declined_at = NOW()`,
+                  [contactId]
+                );
+              }
+            } catch (e) {
+              logger.warn({ err: e.message }, '[decline-deal] thank-you email failed (non-fatal):');
+            }
           }
-        } catch (e) {
-          logger.warn({ err: e.message }, '[decline-deal] thank-you email failed (non-fatal):');
+        } catch (declineLockErr) {
+          logger.error({ err: declineLockErr.message }, '[decline-deal] decline advisory lock error:');
+        } finally {
+          if (declineLockHeld) {
+            await declineLockClient.query(
+              'SELECT pg_advisory_unlock(hashtext($1)::bigint)', [declineLockKey]
+            ).catch(() => {});
+          }
+          declineLockClient.release();
         }
       } else {
         steps.thankYouSent = !sendThankYou;
