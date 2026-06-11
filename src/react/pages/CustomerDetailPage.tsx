@@ -322,14 +322,14 @@ export function CustomerDetailPage() {
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLastAttempt,
       fetchLeadStatuses, fetchWhatsApp, notifyApiError]);
 
-  // ── Global bridges (for test compat + workflow-core.js interop) ────────────
+  // ── Global bridges (for test compat) ──────────────────────────────────────
 
   useEffect(() => {
     const g = window as unknown as Record<string, unknown>;
 
     // These are called by the test harness after setting state.selectedContact.
-    // `state` is declared `const` in workflow-core.js so it is NOT a window
-    // property; use Function() to reach the script-level lexical global.
+    // `state` is a script-level `const` (not a window property); use Function()
+    // to reach it as a lexical global.
     function getScriptState(): Record<string, unknown> | undefined {
       try {
         return Function('return typeof state !== "undefined" ? state : undefined')() as Record<string, unknown>;

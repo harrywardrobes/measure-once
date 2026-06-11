@@ -11,7 +11,7 @@ const { makeSkip } = require('../helpers/report');
 // admin probes (C–F) that precede it in the combined suite.
 //
 // Regression guard for the `canEditPipeline()` gate in
-// _renderWorkflowHeaderImpl (public/customer-detail.js lines 808–832).
+// CustomerDetailHeader (src/react/pages/customer-detail/CustomerDetailHeader.tsx).
 // If that guard ever regresses, viewer-role users would see a clickable pill
 // that opens the unified picker and can submit status changes.
 //
@@ -89,8 +89,6 @@ async function bootstrapHeader(page, lsKey, role) {
     state.selectedContactId = '999999999';
     state.user = { privilege_level: userRole };
     window.__moHeaderUser = { privilege_level: userRole };
-    state.focusedLeadStatus = null;
-
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
   }, lsKey, role);
 }

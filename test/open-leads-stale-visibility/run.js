@@ -92,9 +92,8 @@ async function makeTabVisible(page, waitMs = 600) {
 }
 
 // Returns true when the `.ls-stale-hint` DOM element is present in the document.
-// workflow-core.js registers _renderOpenLeadsStaleBadge() as the
-// renderWorkflowStages implementation; it appends/removes a #open-leads-stale-hint
-// div with class ls-stale-hint whenever state.openLeadsStale changes.
+// WorkflowDataContext.tsx renders the #open-leads-stale-hint div with class
+// ls-stale-hint via a useEffect whenever openLeadsStale changes.
 async function isBadgeVisible(page) {
   return page.evaluate(() => !!document.querySelector('.ls-stale-hint'));
 }

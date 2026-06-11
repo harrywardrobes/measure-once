@@ -9,12 +9,12 @@ const { makeSkip } = require('../helpers/report');
 // pages or request-interception sessions — mirroring the same isolation
 // guarantee as the sibling viewer test.
 //
-// Regression guard for the `canEditPrivilege()` gate in
-// _renderWorkflowHeaderImpl (public/customer-detail.js).
+// Regression guard for the privilege gate in CustomerDetailHeader
+// (src/react/pages/customer-detail/CustomerDetailHeader.tsx).
 // If that gate ever regresses and strips lsb-clickable from manager/admin
 // pills, or prevents the unified picker from opening, this suite will fail.
 //
-// canEditPrivilege() (public/core.js) currently allows: manager, admin.
+// Currently allows: manager, admin.
 // viewer and member are read-only; the sibling suite covers the viewer path.
 //
 // Usage:
@@ -92,8 +92,6 @@ async function bootstrapHeader(page, lsKey, role) {
     state.selectedContactId = '999999998';
     state.user = { privilege_level: userRole };
     window.__moHeaderUser = { privilege_level: userRole };
-    state.focusedLeadStatus = null;
-
     if (typeof renderWorkflowHeader === 'function') renderWorkflowHeader();
   }, lsKey, role);
 }

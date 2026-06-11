@@ -14,8 +14,8 @@ const PROBE_LABELS = [
 //
 // Sibling of test/lead-status-sync/run.js (which covers the Customers-page
 // filter dropdown). This file covers the per-contact tracker built in
-// _renderWorkflowStagesImpl (public/customer-detail.js) and the BC/visibility
-// handlers that call renderWorkflowStages in workflow-core.js lines 482–534.
+// CustomerDetailPage.tsx and the BC/visibilitychange handlers that call
+// renderWorkflowStages (the React bridge in that component).
 //
 // The test server runs without HUBSPOT_TOKEN, so loading a real contact via
 // /api/contacts/:id 503s and the customer-detail page replaces #workflow-view
@@ -113,7 +113,6 @@ async function bootstrapTracker(page, currentLs, currentSub = '', role = 'admin'
     state.selectedContactId = '999999999';
     state.user = { privilege_level: userRole };
     window.__moHeaderUser = { privilege_level: userRole };
-    state.focusedLeadStatus = null; // let renderer clamp to current
     window.__renderToken = window.__renderToken || ('tok_' + Math.random().toString(36).slice(2));
     if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
     return { renderToken: window.__renderToken };
@@ -972,7 +971,7 @@ async function main() {
 
     // ── (G) Viewer role: pill is read-only and does NOT open the picker ──────
     // Regression guard for the `canEditPipeline()` gate in
-    // _renderWorkflowHeaderImpl (public/customer-detail.js lines 808–832).
+    // CustomerDetailHeader (src/react/pages/customer-detail/CustomerDetailHeader.tsx).
     // If that guard ever regresses, viewer-role users would see a clickable
     // pill that opens the unified picker and can submit status changes.
     console.log('\n  [G] Viewer role: lead-status pill is read-only (no picker)');
@@ -1145,8 +1144,8 @@ async function writeReport(runId, findings) {
     '  workflow header, and asserts that the `.lead-status-badge` pill does NOT have class',
     '  `lsb-clickable` and has no `onclick` handler. Clicks the pill anyway and',
     '  confirms `#card-picker-popup` never appears. Regression guard for the',
-    '  `canEditPipeline()` gate in `_renderWorkflowHeaderImpl`',
-    '  (`public/customer-detail.js` lines 808–832).',
+    '  `canEditPipeline()` gate in `CustomerDetailHeader`',
+    '  (`src/react/pages/customer-detail/CustomerDetailHeader.tsx`).',
     '- **(F) BC + visibilitychange: pill reflects renamed sub-status**: renames the',
     '  selected sub-status via `PATCH /api/admin/lead-substatuses/:id` and fires',
     '  a `lead_substatuses_changed` BroadcastChannel message from a second tab;',
@@ -1192,7 +1191,7 @@ async function writeReport(runId, findings) {
     '  `bootstrapTracker` helper loads lead statuses + sub-statuses (which come from',
     '  PostgreSQL, not HubSpot), seeds `state.selectedContact`, and calls',
     '  `renderWorkflowStages()` — the same entry point the BC/visibilitychange',
-    '  handlers in `workflow-core.js` use to update the header pill.',
+    '  handlers in `CustomerDetailPage.tsx` use to update the header pill.',
     '- For probes C–F, Puppeteer request interception mocks `GET` and `PATCH` on',
     '  `/api/contacts/:id` so `openLeadStatusPicker` and `_quickSetLeadStatusWithSub`',
     '  complete successfully without HubSpot. All other requests are passed through.',
