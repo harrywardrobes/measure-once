@@ -867,7 +867,7 @@ async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>
 // ── Sub-component: handler summary ────────────────────────────────────────────
 
 function HandlerBoundTo({ h }: { h: Handler }) {
-  const summary = HANDLER_MODAL_SUMMARY[h.type];
+  const summary = HANDLER_MODAL_SUMMARY[h.type as HandlerType];
   const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type as HandlerType] ?? [];
   const templateItems = templateKeys
     .map(k => _emailTemplatesRef.current.find(t => t.key === k))

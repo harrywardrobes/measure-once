@@ -26,7 +26,7 @@ export interface HandlerComponentMeta {
   filePath: string;
 }
 
-export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
+export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
   add_design_visit_to_calendar: {
     steps: '1 step — date, time, duration, title, notes',
     hubspot: 'No HubSpot record changed',
@@ -73,7 +73,7 @@ export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
   },
 };
 
-export const HANDLER_TYPE_LABELS: Record<string, string> = {
+export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
   add_design_visit_to_calendar: 'Add design visit to calendar',
   schedule_visit:               'Schedule visit',
   summarise_phone_call:         'Summarise phone call',

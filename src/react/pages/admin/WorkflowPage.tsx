@@ -152,7 +152,7 @@ function handlersForSlot(
 }
 
 function handlerDisplayName(h: Handler): string {
-  return String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.name || h.type);
+  return String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type as HandlerType] || h.name || h.type);
 }
 
 function navigateToTab(tabId: string, itemKey?: string | number) {
@@ -376,7 +376,7 @@ function ModalDetailCard({
   handler: Handler;
   emailTemplates: EmailTemplate[];
 }) {
-  const summary = HANDLER_MODAL_SUMMARY[handler.type];
+  const summary = HANDLER_MODAL_SUMMARY[handler.type as HandlerType];
   const meta    = HANDLER_COMPONENT_META[handler.type];
 
   const hubspotText = handler.type === 'start_design_visit' && handler.config?.submittedLeadStatus
@@ -935,7 +935,7 @@ function WorkflowDemoModalHost({
           <DialogTitle>Demo preview not available</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary">
-              {HANDLER_TYPE_LABELS[handler.type] || handler.type} does not have a
+              {HANDLER_TYPE_LABELS[handler.type as HandlerType] || handler.type} does not have a
               demo-capable modal preview.
             </Typography>
           </DialogContent>

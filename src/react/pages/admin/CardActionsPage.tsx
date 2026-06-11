@@ -9,6 +9,7 @@ import { STATUS_COLORS } from '../../theme';
 import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -109,17 +110,17 @@ function HandlerBadges({
   };
 
   const summaries = matched
-    .map(h => HANDLER_MODAL_SUMMARY[h.type])
+    .map(h => HANDLER_MODAL_SUMMARY[h.type as HandlerType])
     .filter(Boolean) as Array<{ steps: string; hubspot: string }>;
 
   return (
     <span style={{ marginLeft: 6, display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, verticalAlign: 'middle' }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {matched.map(h => {
-          const summary = HANDLER_MODAL_SUMMARY[h.type];
+          const summary = HANDLER_MODAL_SUMMARY[h.type as HandlerType];
           const tooltipTitle = summary
-            ? `${HANDLER_TYPE_LABELS[h.type] || h.type}\n${summary.steps}\n${summary.hubspot}`
-            : `${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`;
+            ? `${HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type}\n${summary.steps}\n${summary.hubspot}`
+            : `${HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type} — manage in Action handlers`;
           return (
             <Tooltip key={h.id} title={<span style={{ whiteSpace: 'pre-line' }}>{tooltipTitle}</span>} arrow placement="top">
               <span className="ca-handler-badge adm-handler-badge"
@@ -129,7 +130,7 @@ function HandlerBadges({
                   borderRadius: 999, fontSize: '.7rem', fontWeight: 600, cursor: 'default',
                 }}>
                 <span aria-hidden="true">⚡</span>
-                <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.type)}</span>
+                <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type as HandlerType] || h.type)}</span>
               </span>
             </Tooltip>
           );

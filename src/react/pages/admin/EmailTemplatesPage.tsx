@@ -33,6 +33,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import type { HandlerType } from '../../components/CardActionModalsHost';
 import {
   analyzeTemplateTokens,
   MALFORMED_REASON_ORDER,
@@ -733,7 +734,7 @@ export default function EmailTemplatesPage() {
               {templates.map((t) => {
                 const usedByHandlers = Object.entries(HANDLER_EMAIL_TEMPLATES)
                   .filter(([, keys]) => keys.includes(t.key))
-                  .map(([type]) => ({ type, label: HANDLER_TYPE_LABELS[type] || type }));
+                  .map(([type]) => ({ type, label: HANDLER_TYPE_LABELS[type as HandlerType] || type }));
                 return (
                   <TableRow key={t.key} hover data-template-key={t.key}>
                     <TableCell>
