@@ -83,7 +83,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 45 * 1024,       // 45 kB — mount runtime + shell UI + card-action modals (raised: shared ContactInfoHeader + demo-mode preview wrappers added to the always-loaded card-action modals; measured 44.3 kB)
+    threshold: 46 * 1024,       // 46 kB — mount runtime + shell UI + card-action modals (raised: demo fixture data for DesignVisitWizard added to always-loaded bundle via CardActionModalsHost; measured 45.1 kB)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {

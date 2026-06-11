@@ -52,6 +52,12 @@ export interface DesignVisitRoomsStepProps {
    * if a draft exists. Cleared by the caller on successful submit.
    */
   draftKey?: string;
+  /**
+   * When true the step runs in read-only demo mode: photo upload and delete
+   * API calls are suppressed.  The upload control is hidden so the admin can
+   * see the rooms form layout without accidentally triggering writes.
+   */
+  demo?: boolean;
 }
 
 /**
@@ -123,6 +129,7 @@ export function DesignVisitRoomsStep({
   onNewUpload,
   onImageRemoved,
   draftKey,
+  demo,
 }: DesignVisitRoomsStepProps) {
   const [rooms, setRooms] = useState<InternalRoom[]>(() => {
     if (draftKey) {
@@ -261,8 +268,10 @@ export function DesignVisitRoomsStep({
     if (removedKey) {
       const key = removedKey;
       onImageRemoved?.(key);
-      fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
-        .catch(err => console.warn('[design-visit] photo delete failed:', err));
+      if (!demo) {
+        fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
+          .catch(err => console.warn('[design-visit] photo delete failed:', err));
+      }
     }
   }
 
@@ -287,6 +296,7 @@ export function DesignVisitRoomsStep({
    * or silently drop them.
    */
   async function handleFilesSelected(clientId: string, files: FileList | null) {
+    if (demo) return;
     if (!files || !files.length) return;
     setUploadStatusById(prev => ({ ...prev, [clientId]: 'uploading' }));
     setUploadProgressById(prev => ({ ...prev, [clientId]: 0 }));
@@ -637,18 +647,20 @@ export function DesignVisitRoomsStep({
               sx={{ mb: 1.5 }}
             />
 
-            {/* Photo upload — uploadStatus + progress drive the progress bar inside the field */}
-            <FileUploadField
-              key={fileKeyById[clientId] ?? 0}
-              label="Photos (optional)"
-              accept="image/*"
-              multiple
-              uploadStatus={uploadStatus}
-              progress={uploadProgress}
-              resetDelay={1500}
-              onStatusReset={() => setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }))}
-              onChange={files => handleFilesSelected(clientId, files)}
-            />
+            {/* Photo upload — hidden in demo mode (no writes allowed) */}
+            {!demo && (
+              <FileUploadField
+                key={fileKeyById[clientId] ?? 0}
+                label="Photos (optional)"
+                accept="image/*"
+                multiple
+                uploadStatus={uploadStatus}
+                progress={uploadProgress}
+                resetDelay={1500}
+                onStatusReset={() => setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }))}
+                onChange={files => handleFilesSelected(clientId, files)}
+              />
+            )}
 
             {/* Already-uploaded / existing photo thumbnails */}
             {data.images && data.images.length > 0 && (

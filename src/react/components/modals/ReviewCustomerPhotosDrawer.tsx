@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Drawer from '@mui/material/Drawer';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -16,6 +18,7 @@ import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { DEMO_SUBMISSION, DEMO_TOOLTIP } from './demoData';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,6 +50,10 @@ interface Props {
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  /** When true the drawer runs in read-only demo mode: placeholder data is
+   *  shown immediately, no API calls are made, and action buttons are
+   *  disabled.  Browsing and navigation still work. */
+  demo?: boolean;
 }
 
 // ── Email template defaults ───────────────────────────────────────────────────
@@ -124,7 +131,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClose }: Props) {
+export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClose, demo }: Props) {
   const [step, setStep] = useState<Step>('loading');
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [fetchError, setFetchError] = useState('');
@@ -156,6 +163,12 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     setEmailSubject('');
     setEmailBody('');
 
+    if (demo) {
+      setSubmission(DEMO_SUBMISSION as Submission);
+      setStep('review');
+      return;
+    }
+
     fetch(`/api/card-actions/review-customer-photos/${encodeURIComponent(ctx.contactId)}`)
       .then(async r => {
         const d = await r.json();
@@ -185,7 +198,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
         setFetchError((e as Error).message);
         setStep('loading');
       });
-  }, [open, ctx.contactId]);
+  }, [open, ctx.contactId, demo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleNotSuitableClick() {
     setEmailSubject(defaultNotSuitableSubject());
@@ -324,12 +337,15 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
               Back
             </Button>
           ) : null}
-          <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-            {step === 'not_suitable'   ? 'Not Suitable — confirm email' :
-             step === 'rough_estimate' ? 'Send Rough Estimate' :
-             step === 'done'           ? 'Review sent' :
-             'Review customer photos'}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+              {step === 'not_suitable'   ? 'Not Suitable — confirm email' :
+               step === 'rough_estimate' ? 'Send Rough Estimate' :
+               step === 'done'           ? 'Review sent' :
+               'Review customer photos'}
+            </Typography>
+            {demo && <Chip label="Demo preview" size="small" color="info" variant="outlined" />}
+          </Box>
           {step === 'review' && submission && (
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
               {contactDisplay}
@@ -569,21 +585,31 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 <Button onClick={handleRequestClose} color="inherit">
                   Cancel
                 </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={handleNotSuitableClick}
-                  data-testid="cah-not-suitable"
-                >
-                  Not Suitable
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleRoughEstimateClick}
-                  data-testid="cah-rough-estimate"
-                >
-                  Send Rough Estimate
-                </Button>
+                <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+                  <span>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={handleNotSuitableClick}
+                      disabled={!!demo}
+                      data-testid="cah-not-suitable"
+                    >
+                      Not Suitable
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+                  <span>
+                    <Button
+                      variant="contained"
+                      onClick={handleRoughEstimateClick}
+                      disabled={!!demo}
+                      data-testid="cah-rough-estimate"
+                    >
+                      Send Rough Estimate
+                    </Button>
+                  </span>
+                </Tooltip>
               </Stack>
             )}
 

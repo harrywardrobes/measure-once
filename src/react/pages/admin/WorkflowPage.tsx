@@ -58,6 +58,10 @@ import { InstallationSlotModal } from '../../components/modals/InstallationSlotM
 import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
 import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
 import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
+import { DesignVisitWizard } from '../../components/DesignVisitWizard';
+const ReviewCustomerPhotosDrawer = React.lazy(() =>
+  import('../../components/modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
+);
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -919,6 +923,14 @@ function WorkflowDemoModalHost({
       return <UploadPhotosModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'arrange_visit':
       return <ArrangeVisitModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'start_design_visit':
+      return <DesignVisitWizard handler={handler} ctx={DEMO_CTX} onClose={onClose} demo />;
+    case 'review_customer_photos':
+      return (
+        <React.Suspense fallback={null}>
+          <ReviewCustomerPhotosDrawer handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />
+        </React.Suspense>
+      );
     case 'contact_customer':
       return (
         <ContactCustomerModal

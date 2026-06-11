@@ -4,6 +4,7 @@ import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -11,10 +12,20 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { useToastContext } from '../contexts/ToastContext';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import {
+  DEMO_TOOLTIP,
+  DEMO_HANDLES,
+  DEMO_FURNITURE_RANGES,
+  DEMO_DOOR_STYLES,
+  DEMO_TERMS_TEXT,
+  DEMO_STEP1,
+  DEMO_ROOMS,
+} from './modals/demoData';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
@@ -71,6 +82,10 @@ export interface DesignVisitWizardProps {
   existingVisit?: ExistingVisit | null;
   onClose: () => void;
   onCatalogueReady?: () => void;
+  /** When true the wizard runs in read-only demo mode: no API calls, no
+   *  draft storage, no writes.  Navigation between steps still works but
+   *  the primary "Submit visit" button is disabled. */
+  demo?: boolean;
 }
 
 function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit | null): Step1Data {
@@ -186,7 +201,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   );
 }
 
-export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady }: DesignVisitWizardProps) {
+export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady, demo }: DesignVisitWizardProps) {
   const cfg = handler.config || {};
   const defaultDuration = cfg.defaultDurationMin || 90;
   const contactId    = ctx.contactId    || ctx.contact_id    || '';
@@ -206,9 +221,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
    * interrupted (crash / hard-close / forced reload) before the cleanup
    * useEffect could fire, so they are orphaned.  Captured once at mount time
    * so the recovery useEffect below can delete them.
+   *
+   * In demo mode there is no draft, so always empty.
    */
   const [orphanedDraftKeys] = useState<string[]>(() =>
-    editMode ? [] : extractOrphanedDraftKeys(storageKey)
+    editMode || demo ? [] : extractOrphanedDraftKeys(storageKey)
   );
 
   /**
@@ -217,12 +234,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
    * Declared after orphanedDraftKeys so the initializer can safely read it.
    */
   const [showDraftNotice, setShowDraftNotice] = useState<boolean>(() => {
-    if (editMode) return false;
+    if (editMode || demo) return false;
     if (orphanedDraftKeys.length > 0) return false;
     return loadDraft(draftKey(contactId, editVisitId)) !== null;
   });
 
   const [step1, setStep1] = useState<Step1Data>(() => {
+    // Demo mode — pre-fill with representative placeholder values.
+    if (demo) return { ...DEMO_STEP1 };
     // When the prior session was interrupted (orphaned uploads detected) we
     // intentionally skip draft restoration so the wizard starts completely
     // fresh.  Only restore the draft when there are no orphaned image uploads.
@@ -234,6 +253,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   });
 
   const [rooms, setRooms] = useState<RoomData[]>(() => {
+    // Demo mode — pre-fill with representative placeholder rooms.
+    if (demo) return DEMO_ROOMS.map(r => ({ ...r }));
     // Same guard as step1: skip draft restoration when orphaned uploads exist.
     if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
@@ -242,12 +263,12 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     return normaliseRooms(existingVisit);
   });
 
-  const [handles, setHandles]               = useState<CatalogueItem[]>([]);
-  const [furnitureRanges, setFurnitureRanges] = useState<CatalogueItem[]>([]);
-  const [doorStyles, setDoorStyles]           = useState<DoorStyleOption[]>([]);
-  const [termsText, setTermsText]             = useState('');
+  const [handles, setHandles]               = useState<CatalogueItem[]>(demo ? DEMO_HANDLES : []);
+  const [furnitureRanges, setFurnitureRanges] = useState<CatalogueItem[]>(demo ? DEMO_FURNITURE_RANGES : []);
+  const [doorStyles, setDoorStyles]           = useState<DoorStyleOption[]>(demo ? DEMO_DOOR_STYLES : []);
+  const [termsText, setTermsText]             = useState(demo ? DEMO_TERMS_TEXT : '');
   const [termsVersionNumber, setTermsVersionNumber] = useState<number | null>(null);
-  const [catalogueLoading, setCatalogueLoading] = useState(true);
+  const [catalogueLoading, setCatalogueLoading] = useState(!demo);
 
   const [s1Error, setS1Error]       = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -294,6 +315,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }, []);
 
   useEffect(() => {
+    if (demo) { onCatalogueReady?.(); return; }
     let cancelled = false;
     async function load() {
       try {
@@ -319,9 +341,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (demo) return;
     if (!editMode && cfg.intermediateLeadStatus && contactId && !intermediateStatusFiredRef.current) {
       intermediateStatusFiredRef.current = true;
       fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
@@ -330,7 +353,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         body: JSON.stringify({ hs_lead_status: cfg.intermediateLeadStatus }),
       }).catch(e => console.warn('[design-visit] intermediate lead status update failed:', e.message));
     }
-  }, [editMode, cfg.intermediateLeadStatus, contactId]);
+  }, [editMode, cfg.intermediateLeadStatus, contactId, demo]);
 
   useEffect(() => {
     const channels: BroadcastChannel[] = [];
@@ -374,8 +397,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!editMode) saveDraft(storageKey, step1, rooms);
-  }, [step1, rooms, editMode, storageKey]);
+    if (!editMode && !demo) saveDraft(storageKey, step1, rooms);
+  }, [step1, rooms, editMode, demo, storageKey]);
 
   useEffect(() => {
     return () => {
@@ -424,7 +447,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }, [onClose]);
 
   const handleClose = useCallback(() => {
-    if (!committedRef.current) {
+    if (!demo && !committedRef.current) {
       if (!editMode && hasUnsavedDraftData()) {
         setShowDiscardDialog(true);
         return;
@@ -435,10 +458,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       }
     }
     doClose();
-  }, [editMode, step1, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [demo, editMode, step1, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function advanceToStep2() {
-    if (!step1.termsAccepted) {
+    if (!demo && !step1.termsAccepted) {
       setS1Error('Please confirm the customer has accepted the terms and conditions.');
       return;
     }
@@ -542,7 +565,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     }
   }
 
-  const title = editMode
+  const title = demo
+    ? 'Design Visit'
+    : editMode
     ? 'Edit Design Visit'
     : (contactName ? `Design Visit — ${contactName}` : 'Design Visit');
 
@@ -570,10 +595,13 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           flexShrink: 0,
         }}
       >
-        <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--neutral-800)' }}>
-          {title}
-        </Typography>
-        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: 'var(--neutral-400)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--neutral-800)' }}>
+            {title}
+          </Typography>
+          {demo && <Chip label="Demo preview" size="small" color="info" variant="outlined" sx={{ flexShrink: 0 }} />}
+        </Box>
+        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: 'var(--neutral-400)', ml: 1 }}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -619,6 +647,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                 onUploadingChange={setUploading}
                 onNewUpload={key => pendingUploadKeysRef.current.add(key)}
                 onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
+                demo={demo}
               />
             )}
 
@@ -715,23 +744,27 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             )}
 
             {step === 3 && (
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={submitting}
-                startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-                sx={{
-                  background: BRAND_COLORS.orchid,
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { background: BRAND_COLORS.orchidPress },
-                  '&:disabled': { opacity: 0.55 },
-                }}
-              >
-                {submitting
-                  ? (editMode ? 'Saving…' : 'Submitting…')
-                  : (editMode ? 'Save changes' : 'Submit visit')}
-              </Button>
+              <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+                <span>
+                  <Button
+                    variant="contained"
+                    onClick={handleSubmit}
+                    disabled={demo || submitting}
+                    startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+                    sx={{
+                      background: BRAND_COLORS.orchid,
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      '&:hover': { background: BRAND_COLORS.orchidPress },
+                      '&:disabled': { opacity: 0.55 },
+                    }}
+                  >
+                    {submitting
+                      ? (editMode ? 'Saving…' : 'Submitting…')
+                      : (editMode ? 'Save changes' : 'Submit visit')}
+                  </Button>
+                </span>
+              </Tooltip>
             )}
           </Box>
         </Box>
