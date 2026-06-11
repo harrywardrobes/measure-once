@@ -57,7 +57,7 @@ export const HANDLER_MODAL_SUMMARY: Record<string, HandlerModalSummary> = {
   },
   upload_photos_and_info: {
     steps: '1 step — confirmation → emails customer a unique form link',
-    hubspot: 'Sets lead status to AWAITING_PHOTOS / AWPH_RECEIVED on submission',
+    hubspot: 'Sets lead status to AWAITING_PHOTOS on submission',
   },
   review_customer_photos: {
     steps: '2 steps — review drawer → Not Suitable or Send Rough Estimate',
