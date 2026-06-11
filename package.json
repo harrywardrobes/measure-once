@@ -258,6 +258,7 @@
     "test:ls-keys": "node scripts/check-localstorage-keys.mjs",
     "test:retired-tokens": "node scripts/check-retired-tokens.mjs",
     "test:workflow-js-no-dups": "node scripts/check-workflow-js-duplicates.mjs",
+    "test:template-vars": "node scripts/check-email-template-vars.mjs",
     "test:no-config-handler-types": "node scripts/check-no-config-handler-types.mjs",
     "test:handler-meta": "node scripts/check-handler-meta.mjs",
     "test:golden-schema": "node scripts/check-golden-schema.mjs",

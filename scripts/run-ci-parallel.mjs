@@ -71,6 +71,7 @@ const STATIC_SUITES = [
   'test:var-hex-fallbacks',
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
+  'test:template-vars',
   'test:handler-meta',
   'test:golden-schema',
   'test:conflicts-review-logic',

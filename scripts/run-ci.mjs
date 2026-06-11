@@ -48,6 +48,7 @@ const STEPS = [
   'test:component-hex-colors',
   'test:css-hex-colors',
   'test:var-hex-fallbacks',
+  'test:template-vars',
   'test:no-config-handler-types',
   'test:handler-meta',
   'test:golden-schema',
