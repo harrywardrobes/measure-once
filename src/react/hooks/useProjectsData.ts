@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
-import { cacheRecord, cacheRecords, readRecord, setMeta } from '../lib/offlineDb';
+import { cacheRecord, cacheRecords, getMeta, readRecord, readRecords, setMeta } from '../lib/offlineDb';
 
 export interface ProjectContact {
   id: string;
@@ -189,6 +189,28 @@ export function useProjectsData(): ProjectsData {
         if (cancelled) return;
         const err = e as Error;
         if (err.message === 'Unauthorized') return;
+        // Offline fallback: instead of showing an error, render the saved
+        // stageCache and contacts from IndexedDB when network fetches fail.
+        // stageCache is stored as a meta entry; contacts are in the customers
+        // store (written on every successful Projects board fetch).
+        const [cachedStage, cachedContacts] = await Promise.all([
+          getMeta<Record<string, ProjectRoom[]>>('stageCache'),
+          readRecords<ProjectContact>('customers'),
+        ]);
+        if (cancelled) return;
+        if (cachedStage != null || cachedContacts.length > 0) {
+          if (cachedContacts.length > 0) {
+            contactsRef.current = cachedContacts;
+            setContacts(cachedContacts);
+          }
+          if (cachedStage != null) {
+            setStageCache(cachedStage);
+          }
+          setRoomAssignmentsStale(false);
+          setError(null);
+          setLoading(false);
+          return;
+        }
         setError(err.message || 'Failed to load projects');
         setLoading(false);
       }
