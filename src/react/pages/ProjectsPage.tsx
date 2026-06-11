@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PROJECTS_STALENESS_KEY, PROJECTS_SUBSTAGE_KEY } from '../constants/localStorageKeys';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
+import { subscribeUrgencyChanged } from '../utils/broadcastUrgencyChanged';
 import {
   Alert,
   Avatar,
@@ -1084,18 +1085,13 @@ export function ProjectsPage() {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    let bc: BroadcastChannel | null = null;
-    if (typeof BroadcastChannel !== 'undefined') {
-      bc = new BroadcastChannel('urgency_changed');
-      bc.onmessage = (evt: MessageEvent<{ contactId?: string }>) => {
-        const contactId = evt.data?.contactId;
-        refetchUrgencyForIds(contactId ? [contactId] : null);
-      };
-    }
+    const unsubscribeUrgency = subscribeUrgencyChanged(({ contactId }) => {
+      refetchUrgencyForIds([contactId]);
+    });
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      bc?.close();
+      unsubscribeUrgency();
     };
   }, [refetchUrgencyForIds]);
 
