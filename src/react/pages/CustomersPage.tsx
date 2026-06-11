@@ -57,6 +57,7 @@ import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { useNowTick } from '../hooks/useNowTick';
 
 type LeadStatus = {
   key: string;
@@ -538,6 +539,7 @@ function CustomerCard({
    */
   lastAttempt?: { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
 }) {
+  const now = useNowTick();
   const name = contactName(contact);
   const email = contact.properties?.email || '';
   const phone = contact.properties?.phone || '';
@@ -582,7 +584,7 @@ function CustomerCard({
 
   const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
   const activityCounter = (!dispatchingAction && actionLabel && activityTs)
-    ? compactRelativeTime(activityTs)
+    ? compactRelativeTime(activityTs, now)
     : null;
 
   const handleActionClick = useCallback(

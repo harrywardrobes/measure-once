@@ -40,6 +40,7 @@ import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { compactRelativeTime, latestTimestamp } from '../utils/formatters';
+import { useNowTick } from '../hooks/useNowTick';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePrefs } from '../hooks/usePrefs';
@@ -499,6 +500,7 @@ function ProjectCard({
   const installLabel = fmtInstallDate(earliestInstall);
 
   // ── Action strip state ─────────────────────────────────────────────────────
+  const now = useNowTick();
   const [dispatchingAction, setDispatchingAction] = useState(false);
 
   // Pick the primary stage from the first room (rooms sorted by stage desc).
@@ -527,7 +529,7 @@ function ProjectCard({
 
   const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
   const activityCounter = (!dispatchingAction && actionLabel && activityTs)
-    ? compactRelativeTime(activityTs)
+    ? compactRelativeTime(activityTs, now)
     : null;
 
   // Unified dispatch: preloads the draft visit when handler is start_design_visit
