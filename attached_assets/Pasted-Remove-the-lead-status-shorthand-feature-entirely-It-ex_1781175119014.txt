@@ -1,0 +1,57 @@
+Remove the lead-status "shorthand" feature entirely. It existed only to prefix
+sub-status keys, and sub-statuses were already removed (see migration
+1749200000019_remove-substatuses.js), so it is dead weight.
+
+1. DATABASE — create a NEW migration (do NOT edit existing migration files):
+   - ALTER TABLE lead_status_config DROP COLUMN IF EXISTS shorthand;
+     (this also drops the lead_status_config_shorthand_uniq index)
+
+2. SERVER (server.js):
+   - Delete the "Lead-status shorthand" section (~lines 4308–4387):
+     _SHORTHAND_SKIP_WORDS, _SHORTHAND_VOWELS, generateShorthandCandidate(),
+     generateUniqueShorthand().
+   - Delete backfillLeadStatusShorthands() (~lines 4460–4477) and its boot-time
+     call + error handler (~lines 6678–6679).
+   - Remove `shorthand` from the two SELECT column lists in the lead-status
+     admin endpoints (~lines 4517 and 4531).
+   - In POST /api/admin/lead-statuses: remove the shorthand parsing/validation
+     block, remove shorthand from the INSERT columns/params, and remove the
+     409 "That shorthand is already in use." constraint-name check.
+   - In PUT /api/admin/lead-statuses/:key: remove shorthandProvided /
+     shorthandValue handling, remove shorthand from both UPDATE statements
+     (the null-sentinel-row update and the normal update), and remove its
+     409 constraint-name check.
+   - Update the comment near ensureLeadStatusTable() that mentions the
+     shorthand unique index.
+
+3. ADMIN UI (src/react/pages/admin/):
+   - StagesPage.tsx: remove `shorthand` from the LeadStatus interface, remove
+     the "Shorthand" <th> and both .ls-shorthand-input <input> cells (sentinel
+     row and normal row), remove the shorthand diff/validation logic in the
+     save handler (rawSh / diff.shorthand / the "must be 4 characters" toast),
+     and remove the shorthand revert line in the error path.
+   - WorkflowPage.tsx: remove `shorthand` from the LeadStatus interface,
+     remove the shorthand Chip rendered next to the status label, remove the
+     `ls.shorthand?.toLowerCase().includes(q)` clause from the search filter,
+     and change the search placeholder to "Filter by status label, handler
+     name, or component…".
+   - CardActionsPage.tsx: remove `shorthand` from the LeadStatus and
+     StatusModel interfaces and from the two object literals that set it.
+   - ActionHandlersPage.tsx: remove `shorthand` from the LeadStatus interface.
+   - ConflictResolverModal.stories.tsx: remove the `shorthand` fields from the
+     mock lead-status objects.
+
+4. TESTS:
+   - test/workflow-tab/run.js and test/settings-tab-load/run.js: remove the
+     `shorthand` key from the LEAD_STATUSES_FIXTURE objects.
+
+DO NOT TOUCH (unrelated uses of the word "shorthand"):
+   - `exports.shorthands = undefined;` in migration files and
+     scripts/create-migration.js — that is node-pg-migrate boilerplate.
+   - scripts/check-component-hex-colors.mjs and check-css-hex-colors.mjs —
+     "shorthand" there refers to the CSS border shorthand.
+   - DevEnvironmentPage.tsx "domain abbreviation conventions" text — unrelated.
+
+Afterwards run a TypeScript check and the CI test suite, and verify the admin
+Stages and Workflow pages still load and save correctly without the shorthand
+column/chip.
