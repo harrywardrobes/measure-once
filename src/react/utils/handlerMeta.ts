@@ -101,7 +101,7 @@ export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   schedule_installation_slot:   [],
 };
 
-export const HANDLER_COMPONENT_META: Record<string, HandlerComponentMeta> = {
+export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {
   show_message: {
     component: 'MessagePopupModal',
     filePath:  'src/react/components/modals/MessagePopupModal.tsx',

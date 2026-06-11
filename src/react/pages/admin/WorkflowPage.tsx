@@ -300,7 +300,7 @@ function ActionButtonPreview({
 
 function CallChainStepper({ handlerType }: { handlerType?: string }) {
   const modalCode = handlerType
-    ? (HANDLER_COMPONENT_META[handlerType]?.component ?? '(unknown component)')
+    ? (HANDLER_COMPONENT_META[handlerType as HandlerType]?.component ?? '(unknown component)')
     : '(no handler bound)';
 
   const SHARED_STEP_INDICES = new Set([1, 2, 3, 4]);
@@ -377,7 +377,7 @@ function ModalDetailCard({
   emailTemplates: EmailTemplate[];
 }) {
   const summary = HANDLER_MODAL_SUMMARY[handler.type as HandlerType];
-  const meta    = HANDLER_COMPONENT_META[handler.type];
+  const meta    = HANDLER_COMPONENT_META[handler.type as HandlerType];
 
   const hubspotText = handler.type === 'start_design_visit' && handler.config?.submittedLeadStatus
     ? `Sets lead status to in-progress on open; to ${handler.config.submittedLeadStatus} on submit`
@@ -796,7 +796,7 @@ function StageAccordionNew({
         const hs = handlersForSlot(handlers, stageKey, lsKey);
         return hs.some(h => {
           if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
-          const meta = HANDLER_COMPONENT_META[h.type];
+          const meta = HANDLER_COMPONENT_META[h.type as HandlerType];
           if (meta?.component.toLowerCase().includes(q)) return true;
           return false;
         });
