@@ -154,6 +154,10 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     error: boolean;
   }>({ subject: '', bodyText: '', loading: false, error: false });
 
+  // Email preview state (accept confirm step)
+  const [depositEmailPreview, setDepositEmailPreview] = useState<{ subject: string; html: string; text: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
   const hasMounted = useRef(false);
 
   // ── Draft persistence ───────────────────────────────────────────────────────
@@ -239,6 +243,30 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
 
     return () => { cancelled = true; };
   }, [open, contactId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Deposit invoice email preview ──────────────────────────────────────────
+  useEffect(() => {
+    if (step !== 'accept_confirm' || !contactData) return;
+
+    let cancelled = false;
+    setPreviewLoading(true);
+
+    const firstName = contactData.contactName?.split(' ')[0] ?? '';
+    const depositPercent = contactData.depositPercent ?? 10;
+
+    POST<{ subject: string; html: string; text: string }>(
+      '/api/card-actions/open-deal/deposit-invoice-email-preview',
+      { firstName, depositPercent }
+    ).then(preview => {
+      if (!cancelled) setDepositEmailPreview(preview);
+    }).catch(() => {
+      if (!cancelled) setDepositEmailPreview(null);
+    }).finally(() => {
+      if (!cancelled) setPreviewLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [step, contactData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function navigateTo(s: Step) {
     setStep(s);
@@ -655,6 +683,50 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
               <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(depositAmt)}</Typography>
             </Stack>
           </Stack>
+        </Box>
+        {/* Email preview */}
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+            Email the customer will receive:
+          </Typography>
+          {previewLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', py: 1 }}>
+              <CircularProgress size={14} />
+              <Typography variant="caption">Loading email preview…</Typography>
+            </Box>
+          )}
+          {!previewLoading && depositEmailPreview && (
+            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
+              <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <Typography variant="caption" color="text.secondary">Subject: </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 500 }}>{depositEmailPreview.subject || <em>no subject</em>}</Typography>
+              </Box>
+              {depositEmailPreview.html ? (
+                <iframe
+                  title="Deposit invoice email preview"
+                  sandbox="allow-same-origin"
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:13px;color:#1a1a1a;padding:12px 16px;margin:0;line-height:1.5;}p{margin:0 0 8px;}</style></head><body>${depositEmailPreview.html}</body></html>`}
+                  style={{ width: '100%', minHeight: 80, border: 'none', display: 'block' }}
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    try {
+                      const h = iframe.contentDocument?.body?.scrollHeight;
+                      if (h && h > 0) iframe.style.height = `${h + 24}px`;
+                    } catch (_) { /* cross-origin guard */ }
+                  }}
+                />
+              ) : (
+                <Box sx={{ px: 1.5, py: 1, fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {depositEmailPreview.text}
+                </Box>
+              )}
+            </Box>
+          )}
+          {!previewLoading && !depositEmailPreview && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              Preview unavailable — email will still be sent.
+            </Typography>
+          )}
         </Box>
         {otherEstimateIdsToDecline.length > 0 && (
           <Alert severity="info" sx={{ py: 0.25 }}>

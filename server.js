@@ -6309,6 +6309,37 @@ app.post('/api/card-actions/design-visit-followup/outcome',
   }
 );
 
+// ── open_deal: render deposit invoice email preview with real contact vars ────
+// Member-accessible (mirrors the access level of the open-deal card action).
+// Loads the live email template from the DB, substitutes the caller-supplied
+// firstName / depositPercent, and returns { subject, html, text } using the
+// same renderEmail pipeline used by the actual send path.
+app.post('/api/card-actions/open-deal/deposit-invoice-email-preview',
+  isAuthenticated, requirePrivilege('member'),
+  async (req, res) => {
+    const firstName     = String(req.body?.firstName     ?? '');
+    const depositPercent = String(req.body?.depositPercent ?? '10');
+    try {
+      const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
+      const vars = { firstName, depositPercent };
+      const htmlVars = Object.fromEntries(
+        Object.entries(vars).map(([k, v]) => [k, escapeHtml(String(v))])
+      );
+      const rendered = renderEmail(template, { textVars: vars, htmlVars });
+      if (!template.body_html.trim()) {
+        rendered.html = rendered.text
+          .split('\n')
+          .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
+          .join('');
+      }
+      res.json(rendered);
+    } catch (e) {
+      logger.error({ err: e.message }, 'POST /api/card-actions/open-deal/deposit-invoice-email-preview error:');
+      res.status(500).json({ error: 'Could not render email preview.' });
+    }
+  }
+);
+
 // ── open_deal: load contact info + QB estimates ──────────────────────────────
 app.post('/api/card-actions/open-deal',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken,
