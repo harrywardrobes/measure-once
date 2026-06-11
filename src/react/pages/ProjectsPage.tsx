@@ -21,6 +21,7 @@ import {
   Popover,
   Skeleton,
   Snackbar,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -40,6 +41,7 @@ import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { compactRelativeTime, latestTimestamp } from '../utils/formatters';
+import { buildActivityTooltipContent } from '../utils/activityTooltip';
 import { useNowTick } from '../hooks/useNowTick';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -752,12 +754,19 @@ function ProjectCard({
             {dispatchingAction ? 'Opening…' : (
               <>
                 {activityCounter && (
-                  <Box
-                    component="span"
-                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                  <Tooltip
+                    title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
+                    arrow
+                    placement="bottom"
+                    enterDelay={200}
                   >
-                    {activityCounter} ·
-                  </Box>
+                    <Box
+                      component="span"
+                      sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                    >
+                      {activityCounter} ·
+                    </Box>
+                  </Tooltip>
                 )}
                 {actionLabel}
               </>

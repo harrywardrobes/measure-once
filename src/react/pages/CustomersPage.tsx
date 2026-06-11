@@ -58,6 +58,7 @@ import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useNowTick } from '../hooks/useNowTick';
+import { buildActivityTooltipContent } from '../utils/activityTooltip';
 
 type LeadStatus = {
   key: string;
@@ -708,12 +709,19 @@ function CustomerCard({
             {dispatchingAction ? 'Opening…' : (
               <>
                 {activityCounter && (
-                  <Box
-                    component="span"
-                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                  <Tooltip
+                    title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
+                    arrow
+                    placement="bottom"
+                    enterDelay={200}
                   >
-                    {activityCounter} ·
-                  </Box>
+                    <Box
+                      component="span"
+                      sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                    >
+                      {activityCounter} ·
+                    </Box>
+                  </Tooltip>
                 )}
                 {actionLabel}
               </>
