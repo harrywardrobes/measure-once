@@ -17,6 +17,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, DELETE } from '../../utils/api';
 import { STATUS_COLORS } from '../../theme';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { DEFAULT_WORKFLOW, WorkflowDef } from '../../lib/workflowConfig';
 
 interface HubStatus {
   connected: boolean;
@@ -43,6 +44,108 @@ const W = window as unknown as Record<string, unknown>;
 
 function showToast(msg: string, err?: boolean) {
   if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
+}
+
+// ── Pipeline Stages card ────────────────────────────────────────────────────
+
+const WORKFLOW_KEY_TO_LS_STAGE: Record<string, string> = {
+  sales:        'SALES',
+  designvisit:  'DESIGN_VISIT',
+  survey:       'SURVEY',
+  order:        'ORDER',
+  workshop:     'WORKSHOP',
+  packing:      'PACKING',
+  delivery:     'DELIVERY',
+  installation: 'INSTALLATION',
+  aftercare:    'AFTERCARE',
+};
+
+const TH: React.CSSProperties = {
+  padding: '6px 8px',
+  textAlign: 'left',
+  borderBottom: '1px solid var(--neutral-200)',
+  background: 'var(--neutral-50)',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  color: 'var(--neutral-500)',
+  whiteSpace: 'nowrap',
+};
+const TD: React.CSSProperties = {
+  padding: '4px 8px',
+  borderBottom: '1px solid #f3f4f6',
+  verticalAlign: 'middle',
+};
+
+function PipelineStagesCard() {
+  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
+  const [statusCountByStage, setStatusCountByStage] = React.useState<Map<string, number>>(new Map());
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [wfRes, statuses] = await Promise.all([
+          fetch('/api/workflow').then(r => r.ok ? r.json().catch(() => null) : null) as Promise<WorkflowDef | null>,
+          GET<Array<{ stage: string | null; is_null_row: boolean }>>('/api/admin/lead-statuses'),
+        ]);
+        if (cancelled) return;
+        setWorkflow(wfRes || DEFAULT_WORKFLOW);
+        const counts = new Map<string, number>();
+        for (const s of (Array.isArray(statuses) ? statuses : [])) {
+          if (!s.is_null_row && s.stage) counts.set(s.stage, (counts.get(s.stage) ?? 0) + 1);
+        }
+        setStatusCountByStage(counts);
+      } catch {
+        if (!cancelled) setWorkflow(DEFAULT_WORKFLOW);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const stageKeys = Object.keys(workflow?.stages ?? DEFAULT_WORKFLOW.stages!);
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Pipeline stages</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          The pipeline stages defined in workflow.json. Read-only — editing is not yet supported here.
+        </Typography>
+        <Box sx={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+            <thead>
+              <tr>
+                <th style={TH}>Stage key</th>
+                <th style={TH}>Display label</th>
+                <th style={{ ...TH, textAlign: 'right' }}>Lead statuses</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageKeys.map((key, i) => {
+                const stageData = workflow?.stages?.[key];
+                const label = stageData?.label ?? key;
+                const lsStageValue = WORKFLOW_KEY_TO_LS_STAGE[key];
+                const count = lsStageValue ? (statusCountByStage.get(lsStageValue) ?? 0) : 0;
+                return (
+                  <tr key={key} style={{ background: i % 2 ? 'var(--neutral-50)' : 'white' }}>
+                    <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{key}</td>
+                    <td style={TD}>{label}</td>
+                    <td style={{ ...TD, textAlign: 'right', color: count === 0 ? 'var(--neutral-400)' : 'inherit' }}>
+                      {loading ? '…' : count}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Box>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function HubSpotPage() {
@@ -181,6 +284,8 @@ export function HubSpotPage() {
           )}
         </CardContent>
       </Card>
+
+      <PipelineStagesCard />
 
       <Card variant="outlined" id="hubspot-webhooks-card">
         <CardContent>

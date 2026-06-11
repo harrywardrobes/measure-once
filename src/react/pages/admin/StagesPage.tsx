@@ -18,7 +18,6 @@ import {
 import SyncIcon from '@mui/icons-material/Sync';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { DEFAULT_WORKFLOW, WorkflowDef } from '../../lib/workflowConfig';
 import { STAGE_COLORS } from '../../theme';
 
 // ── Stage option constants ──────────────────────────────────────────────────
@@ -36,19 +35,6 @@ const STAGE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'AFTERCARE', label: 'Aftercare' },
   { value: 'CUSTOMER_SERVICE', label: 'Customer Service' },
 ];
-
-/** Maps workflow.json stage key → lead-status stage value (used by lead statuses). */
-const WORKFLOW_KEY_TO_LS_STAGE: Record<string, string> = {
-  sales:        'SALES',
-  designvisit:  'DESIGN_VISIT',
-  survey:       'SURVEY',
-  order:        'ORDER',
-  workshop:     'WORKSHOP',
-  packing:      'PACKING',
-  delivery:     'DELIVERY',
-  installation: 'INSTALLATION',
-  aftercare:    'AFTERCARE',
-};
 
 /** Maps lead_status_config.stage → STAGE_COLORS key (for row tints). */
 const LS_STAGE_TO_COLORS_KEY: Record<string, string> = {
@@ -231,9 +217,6 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
 export function StagesPage() {
   usePageTitle('Stages · Measure Once');
 
-  // ── Workflow stages (read-only table) ──
-  const [workflow, setWorkflow] = useState<WorkflowDef | null>(null);
-
   // ── Lead statuses ──
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -265,19 +248,6 @@ export function StagesPage() {
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState | null>(null);
 
   const statusesRef = useRef<LeadStatus[]>([]);
-
-  // ── Fetch workflow ──
-
-  const fetchWorkflow = useCallback(async () => {
-    try {
-      const r = await fetch('/api/workflow');
-      if (!r.ok) { setWorkflow(DEFAULT_WORKFLOW); return; }
-      const saved = await r.json().catch(() => null) as WorkflowDef | null;
-      setWorkflow(saved || DEFAULT_WORKFLOW);
-    } catch {
-      setWorkflow(DEFAULT_WORKFLOW);
-    }
-  }, []);
 
   // ── Fetch lead statuses ──
 
@@ -525,10 +495,9 @@ export function StagesPage() {
   // ── Initial load ──
 
   useEffect(() => {
-    fetchWorkflow();
     fetchStatuses();
     fetchHealthData();
-  }, [fetchWorkflow, fetchStatuses, fetchHealthData]);
+  }, [fetchStatuses, fetchHealthData]);
 
   // ── Derived data ──
 
@@ -551,56 +520,10 @@ export function StagesPage() {
     else last.items.push(s);
   }
 
-  const stageKeys = Object.keys(workflow?.stages ?? DEFAULT_WORKFLOW.stages!);
-  const statusCountByLsStage = new Map<string, number>();
-  for (const s of real) {
-    if (s.stage) {
-      statusCountByLsStage.set(s.stage, (statusCountByLsStage.get(s.stage) ?? 0) + 1);
-    }
-  }
-
   // ── Render ──
 
   return (
     <Stack spacing={2}>
-
-      {/* ── Pipeline Stages (read-only) ─────────────────────────────────────── */}
-      <Card variant="outlined">
-        <CardContent>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Pipeline stages</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            The pipeline stages defined in workflow.json. Read-only — editing is not yet supported here.
-          </Typography>
-          <Box sx={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
-              <thead>
-                <tr>
-                  <th style={TH}>Stage key</th>
-                  <th style={TH}>Display label</th>
-                  <th style={{ ...TH, textAlign: 'right' }}>Lead statuses</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stageKeys.map((key, i) => {
-                  const stageData = workflow?.stages?.[key];
-                  const label = stageData?.label ?? key;
-                  const lsStageValue = WORKFLOW_KEY_TO_LS_STAGE[key];
-                  const count = lsStageValue ? (statusCountByLsStage.get(lsStageValue) ?? 0) : 0;
-                  return (
-                    <tr key={key} style={{ background: i % 2 ? 'var(--neutral-50)' : 'white' }}>
-                      <td style={{ ...TD, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{key}</td>
-                      <td style={TD}>{label}</td>
-                      <td style={{ ...TD, textAlign: 'right', color: count === 0 ? 'var(--neutral-400)' : 'inherit' }}>
-                        {loading ? '…' : count}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Box>
-        </CardContent>
-      </Card>
 
       {/* ── Lead Statuses ───────────────────────────────────────────────────── */}
       <Card variant="outlined">
