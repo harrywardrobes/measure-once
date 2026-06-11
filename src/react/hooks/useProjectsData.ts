@@ -359,7 +359,13 @@ export function useProjectsData(): ProjectsData {
         if (!cached || cached[roomIdx] === undefined) return prev;
         const updated = [...cached];
         updated[roomIdx] = { ...updated[roomIdx], assignedFitterId: fitterId };
-        return { ...prev, [contactId]: updated };
+        const next = { ...prev, [contactId]: updated };
+        // Write the optimistically updated stageCache back to the offline
+        // snapshot so the Projects board reflects the latest assignment after
+        // a network drop.  Fire-and-forget — a failure here must never affect
+        // the UI.
+        void setMeta('stageCache', next);
+        return next;
       });
     },
     [],
