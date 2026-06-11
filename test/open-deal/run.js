@@ -31,6 +31,7 @@ const PROBE_LABELS = [
   '(H) amendments path: data-load endpoint is non-mutating, lead status stays OPEN_DEAL',
   '(I) idempotency: second accept-deal call for same estimate returns existing invoice, no duplicate created',
   '(J) concurrent idempotency: two simultaneous accept-deal calls for the same estimate produce exactly one QB invoice',
+  '(K) concurrent-retry send guard: two simultaneous retries (invoice already exists) produce exactly one QB send',
 ];
 
 const fs   = require('fs');
@@ -57,7 +58,9 @@ const EST_F3          = '110009';
 const EST_G           = '110010';
 const EST_I           = '110011'; // idempotency probe
 const EST_J           = '110012'; // concurrent idempotency probe
+const EST_K           = '110013'; // concurrent-retry send guard probe
 const INV_STANDALONE  = '119900'; // for standalone /invoice/:id/send probe in C
+const INV_K           = '119902'; // pre-seeded invoice for probe K
 
 // Fake numeric HubSpot contact IDs (must pass /^\d+$/ checks in routes)
 const CONTACT_ID       = '7654321';
@@ -339,7 +342,7 @@ async function clearSendLog(pool, userId) {
 async function clearOpenDealInvoices(pool) {
   // Remove any rows seeded by a previous run of this test suite so the
   // idempotency guard starts each run with a clean slate.
-  const estIds = [EST_A, EST_B, EST_C, EST_D, EST_E1, EST_E2, EST_F1, EST_F2, EST_F3, EST_G, EST_I, EST_J];
+  const estIds = [EST_A, EST_B, EST_C, EST_D, EST_E1, EST_E2, EST_F1, EST_F2, EST_F3, EST_G, EST_I, EST_J, EST_K];
   await pool.query(
     'DELETE FROM open_deal_invoices WHERE estimate_id = ANY($1::text[])',
     [estIds]
@@ -1073,6 +1076,94 @@ async function main() {
         idemCount === 1
           ? 'exactly 1 row in open_deal_invoices for this estimate'
           : `expected 1 row, found ${idemCount}`);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probe K: Concurrent-retry send guard
+    //
+    // Two users retry accept-deal simultaneously for an estimate whose invoice
+    // was already created (pre-seeded open_deal_invoices row with sent_at=NULL).
+    // Both callers skip the invoice-create advisory lock and race straight to
+    // the send-claim UPDATE.  Exactly one QB send call should be observed.
+    // ─────────────────────────────────────────────────────────────────────────
+    console.log('\n  [K] Concurrent-retry send guard: two retries produce exactly one QB send');
+    {
+      await clearQbSettings(pool);
+      await clearSendLog(pool, users.manager.id);
+      await clearSendLog(pool, users.admin.id);
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      // Seed the estimate in mock QB (route step 1 fetches it before the lock).
+      mockQb.state.estimates[EST_K] = {
+        Id: EST_K, SyncToken: '1', TxnStatus: 'Pending',
+        TotalAmt: 1500,
+        CustomerRef: { value: CONTACT_ID },
+      };
+
+      // Seed the invoice in mock QB so the QB send call can succeed.
+      mockQb.state.invoices[INV_K] = {
+        Id: INV_K, DocNumber: `INVDOC${INV_K}`, SyncToken: '0', TotalAmt: 150,
+      };
+
+      // Pre-seed open_deal_invoices with sent_at=NULL to simulate a prior run
+      // that created the invoice but did not reach the send step.
+      await pool.query(
+        `INSERT INTO open_deal_invoices (estimate_id, contact_id, invoice_id, invoice_doc_num, sent_at)
+         VALUES ($1, $2, $3, $4, NULL)
+         ON CONFLICT (estimate_id) DO UPDATE SET sent_at = NULL`,
+        [EST_K, CONTACT_ID, INV_K, `INVDOC${INV_K}`]
+      );
+
+      // Fire two requests simultaneously from two different users so the
+      // per-user rate-limit cannot suppress the second send by itself.
+      const [r1, r2] = await Promise.all([
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, mgr.cookie, {
+          estimateId:   EST_K,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, admin.cookie, {
+          estimateId:   EST_K,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+      ]);
+
+      // Both requests must succeed (200).
+      record('K.both-requests-ok',
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true,
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true
+          ? `both HTTP 200 ok=true (r1.invoiceId=${r1.body?.invoiceId} r2.invoiceId=${r2.body?.invoiceId})`
+          : `r1: HTTP ${r1.status} ${js(r1.body).slice(0, 100)} | r2: HTTP ${r2.status} ${js(r2.body).slice(0, 100)}`);
+
+      // Exactly one QB invoice send POST must have been issued.
+      const sendCalls = mockQb.state.calls.filter(
+        c => c.method === 'POST' && /\/invoice\/[^/]+\/send$/.test(c.path)
+      ).length;
+      record('K.exactly-one-send', sendCalls === 1,
+        sendCalls === 1
+          ? 'exactly 1 QB invoice send call — concurrent-retry guard prevented duplicate send'
+          : `expected 1 send, got ${sendCalls} — duplicate send would have been fired`);
+
+      // Both responses must reference the same invoiceId.
+      record('K.same-invoice-id-returned',
+        r1.body?.invoiceId != null && r1.body?.invoiceId === r2.body?.invoiceId,
+        r1.body?.invoiceId != null && r1.body?.invoiceId === r2.body?.invoiceId
+          ? `same invoiceId=${r1.body?.invoiceId} returned to both callers`
+          : `mismatched invoiceIds: r1=${r1.body?.invoiceId} r2=${r2.body?.invoiceId}`);
+
+      // sent_at must be populated in the DB after the race.
+      const { rows: sentRows } = await pool.query(
+        'SELECT sent_at FROM open_deal_invoices WHERE estimate_id = $1',
+        [EST_K]
+      );
+      const sentAt = sentRows[0]?.sent_at;
+      record('K.sent-at-populated', sentAt != null,
+        sentAt != null
+          ? `sent_at=${sentAt} — row marked sent in DB`
+          : 'sent_at is still NULL — send-claim did not persist');
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;

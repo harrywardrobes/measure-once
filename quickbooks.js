@@ -713,55 +713,126 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         lockClient.release();
       }
 
-      // 5. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
-      let allowed;
+      // 5a. Advisory lock on the send step — serializes concurrent retries for
+      //     the same estimate so exactly one caller fires the QB send and
+      //     follow-up email even when both callers skipped straight past the
+      //     invoice-create lock (both saw the idempotency row and both are
+      //     different users, so the per-user rate-limit alone is insufficient).
+      //
+      //     Under the lock we check open_deal_invoices.sent_at: if already
+      //     set by a prior successful send, we skip.  If the send succeeds we
+      //     write sent_at before releasing the lock so the next waiter sees it.
+      //     If the send fails we leave sent_at NULL so a future retry can try
+      //     again — the lock is still released via the finally clause.
+      //
+      //     A distinct key suffix (':send') avoids any hash collision with the
+      //     invoice-create lock that uses the bare estimateId as its key.
+      const sendLockKey    = estimateId + ':send';
+      const sendLockClient = await pool.connect();
+      let sendLockHeld  = false;
+      let sendAlreadyDone = false;
       try {
-        allowed = await checkSendRateLimit(userId);
-      } catch (e) {
-        logger.error({ err: e.message }, '[accept-deal] send rate-limit check failed:');
-        return res.status(500).json({ error: 'Could not verify send rate limit.', steps, invoiceId, invoiceDocNum });
-      }
-      if (!allowed) {
-        return res.status(429).json({
-          error: 'Too many invoice sends. Please wait before trying again.', steps, invoiceId, invoiceDocNum,
-        });
-      }
-      try {
-        await sendQbTransactionEmail('invoice', invoiceId, { sendTo: contactEmail || undefined });
-        steps.invoiceSent = true;
-      } catch (e) {
-        const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
-        logger.error({ err: qbMsg }, '[accept-deal] QB invoice send failed:');
-        return res.status(502).json({
-          error: `Invoice created but could not be sent: ${qbMsg}`, steps, invoiceId, invoiceDocNum,
-        });
-      }
+        await sendLockClient.query(
+          'SELECT pg_advisory_lock(hashtext($1)::bigint)',
+          [sendLockKey]
+        );
+        sendLockHeld = true;
 
-      // 5. Follow-up app email — fatal: if template/send fails, status does NOT advance
-      try {
-        const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
-        const firstName = contactName.split(' ')[0] || 'there';
-        const rendered  = renderEmail(template, { textVars: { firstName, depositPercent: String(depositPercent) } });
-        const transport = _createMailTransport();
-        if (transport && contactEmail) {
-          const replyTo = _buildReplyTo();
-          await transport.sendMail({
-            from:    _buildFromHeader(),
-            ...(replyTo ? { replyTo } : {}),
-            to:      contactEmail,
-            subject: rendered.subject,
-            text:    rendered.text,
-            html:    rendered.html || rendered.text,
-          });
+        // Re-check sent_at under the lock so the waiter sees the committed value.
+        const sentCheck = await sendLockClient.query(
+          'SELECT sent_at FROM open_deal_invoices WHERE estimate_id = $1',
+          [estimateId]
+        );
+        if (sentCheck.rows[0]?.sent_at != null) {
+          sendAlreadyDone = true;
+          logger.warn(
+            { estimateId, invoiceId },
+            '[accept-deal] send already done (sent_at set) — skipping send and app email'
+          );
+          steps.invoiceSent  = true;
+          steps.appEmailSent = true;
+        } else {
+          // 5b. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
+          let allowed;
+          try {
+            allowed = await checkSendRateLimit(userId);
+          } catch (e) {
+            logger.error({ err: e.message }, '[accept-deal] send rate-limit check failed:');
+            return res.status(500).json({ error: 'Could not verify send rate limit.', steps, invoiceId, invoiceDocNum });
+          }
+          if (!allowed) {
+            return res.status(429).json({
+              error: 'Too many invoice sends. Please wait before trying again.', steps, invoiceId, invoiceDocNum,
+            });
+          }
+          try {
+            await sendQbTransactionEmail('invoice', invoiceId, { sendTo: contactEmail || undefined });
+            steps.invoiceSent = true;
+          } catch (e) {
+            const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
+            logger.error({ err: qbMsg }, '[accept-deal] QB invoice send failed:');
+            return res.status(502).json({
+              error: `Invoice created but could not be sent: ${qbMsg}`, steps, invoiceId, invoiceDocNum,
+            });
+          }
+
+          // 5c. Follow-up app email — fatal: if template/send fails, status does NOT advance
+          try {
+            const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
+            const firstName = contactName.split(' ')[0] || 'there';
+            const rendered  = renderEmail(template, { textVars: { firstName, depositPercent: String(depositPercent) } });
+            const transport = _createMailTransport();
+            if (transport && contactEmail) {
+              const replyTo = _buildReplyTo();
+              await transport.sendMail({
+                from:    _buildFromHeader(),
+                ...(replyTo ? { replyTo } : {}),
+                to:      contactEmail,
+                subject: rendered.subject,
+                text:    rendered.text,
+                html:    rendered.html || rendered.text,
+              });
+            }
+            // Mark as sent whether SMTP was configured or not — "not applicable" is not a failure
+            steps.appEmailSent = true;
+          } catch (e) {
+            logger.error({ err: e.message }, '[accept-deal] follow-up app email failed — halting before status update:');
+            return res.status(502).json({
+              error: `Invoice sent but follow-up email could not be prepared or sent: ${e.message}`,
+              steps, invoiceId, invoiceDocNum,
+            });
+          }
+
+          // Both send + app email succeeded — record the timestamp under the lock
+          // so the next waiter sees sent_at IS NOT NULL and skips.
+          // This update is part of the duplicate-send safety guarantee: if it
+          // fails the send DID go out but the guard state is not persisted, which
+          // could allow a future retry to re-send.  Treat failure as fatal so the
+          // caller can surface the problem rather than silently losing the guard.
+          const sentAtResult = await sendLockClient.query(
+            'UPDATE open_deal_invoices SET sent_at = NOW() WHERE estimate_id = $1 RETURNING 1',
+            [estimateId]
+          );
+          if ((sentAtResult.rowCount ?? 0) === 0) {
+            // Row is unexpectedly missing (e.g. manual deletion) — log loudly but
+            // do not treat as fatal since the send already happened and the user
+            // should still receive their invoice.
+            logger.error(
+              { estimateId, invoiceId },
+              '[accept-deal] sent_at UPDATE matched 0 rows — idempotency row missing after send; future retries may re-send'
+            );
+          }
         }
-        // Mark as sent whether SMTP was configured or not — "not applicable" is not a failure
-        steps.appEmailSent = true;
-      } catch (e) {
-        logger.error({ err: e.message }, '[accept-deal] follow-up app email failed — halting before status update:');
-        return res.status(502).json({
-          error: `Invoice sent but follow-up email could not be prepared or sent: ${e.message}`,
-          steps, invoiceId, invoiceDocNum,
-        });
+      } catch (sendLockErr) {
+        logger.error({ err: sendLockErr.message }, '[accept-deal] send advisory lock error:');
+        return res.status(500).json({ error: 'Could not acquire send step lock.', steps, invoiceId, invoiceDocNum });
+      } finally {
+        if (sendLockHeld) {
+          await sendLockClient.query(
+            'SELECT pg_advisory_unlock(hashtext($1)::bigint)', [sendLockKey]
+          ).catch(() => {});
+        }
+        sendLockClient.release();
       }
 
       // 6. Mark other estimates as Rejected (non-fatal)
