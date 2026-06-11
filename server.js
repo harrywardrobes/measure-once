@@ -449,7 +449,6 @@ app.use('/api/account', requireHubspotToken);
 app.use('/api/open-leads', requireHubspotToken);
 app.use('/api/project-contacts', requireHubspotToken);
 app.use('/api/contacts-all', requireHubspotToken);
-app.use('/api/workflow-stages', requireHubspotToken);
 app.use('/api/localdata', requireHubspotToken);
 // NOTE: /api/contacts, /api/deals, and /api/tasks are intentionally NOT
 // covered by a blanket requireHubspotToken mount.  Those prefixes contain
@@ -2886,86 +2885,6 @@ app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requir
     }
     logger.error({ err: e.response?.data || e.message }, 'DELETE /api/tasks/:id HubSpot error:');
     res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
-  }
-});
-
-// ── HubSpot: Batch Workflow Stages (for customer list pre-population) ─────────
-const WORKFLOW_STAGES_CACHE_TTL_MS = 300_000; // 5 minutes
-let _workflowStagesCache = null;    // { data, expiresAt }
-let _workflowStagesInflight = null; // Promise while a scan is running
-
-async function fetchWorkflowStagesFromHubspot() {
-  // Search for all notes that store workflow data
-  const searchR = await hubspotRequestWithRetry(
-    'post',
-    `${HS}/crm/v3/objects/notes/search`,
-    {
-      filterGroups: [{ filters: [{ propertyName: 'hs_note_body', operator: 'CONTAINS_TOKEN', value: 'WORKFLOW_DATA' }] }],
-      properties: ['hs_note_body'],
-      limit: 200
-    }
-  );
-
-  const notes = (searchR.data.results || []).filter(n =>
-    n.properties?.hs_note_body?.startsWith('WORKFLOW_DATA:')
-  );
-  if (!notes.length) return {};
-
-  // Batch read note → contact associations
-  const assocR = await hubspotRequestWithRetry(
-    'post',
-    `${HS}/crm/v4/associations/notes/contacts/batch/read`,
-    { inputs: notes.map(n => ({ id: n.id })) }
-  );
-
-  // Parse each note into rooms array
-  const noteData = {};
-  notes.forEach(n => {
-    try {
-      const json = JSON.parse(n.properties.hs_note_body.slice('WORKFLOW_DATA:'.length));
-      const arr = Array.isArray(json)
-        ? json
-        : [{ room: 'Main', stageKey: json.stageKey || 'sales' }];
-      noteData[n.id] = arr.map(r => ({
-        room:     r.room     || 'Main',
-        stageKey: r.stageKey || 'sales',
-      }));
-    } catch {}
-  });
-
-  // Build contactId → rooms map
-  const result = {};
-  (assocR.data.results || []).forEach(r => {
-    const noteId    = r.from?.id;
-    const contactId = r.to?.[0]?.toObjectId;
-    if (noteId && contactId && noteData[noteId]) {
-      result[String(contactId)] = noteData[noteId];
-    }
-  });
-
-  return result;
-}
-
-app.get('/api/workflow-stages', isAuthenticated, async (req, res) => {
-  try {
-    // Serve from cache if still fresh
-    if (_workflowStagesCache && Date.now() < _workflowStagesCache.expiresAt) {
-      return res.json(_workflowStagesCache.data);
-    }
-
-    // If a scan is already running, piggyback on it
-    if (!_workflowStagesInflight) {
-      _workflowStagesInflight = fetchWorkflowStagesFromHubspot().finally(() => {
-        _workflowStagesInflight = null;
-      });
-    }
-
-    const data = await _workflowStagesInflight;
-    _workflowStagesCache = { data, expiresAt: Date.now() + WORKFLOW_STAGES_CACHE_TTL_MS };
-    res.json(data);
-  } catch (e) {
-    logger.error({ err: e.response?.data || e.message }, 'GET /api/workflow-stages HubSpot error:');
-    res.json({});
   }
 });
 

@@ -4,7 +4,6 @@ import { flushSync } from 'react-dom';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { useWorkflowData } from '../context/WorkflowDataContext';
 import { CustomerDetailHeader } from './customer-detail/CustomerDetailHeader';
-import { LeadStatusRail } from './customer-detail/LeadStatusRail';
 import { RoomsTabs } from './customer-detail/RoomsTabs';
 import { TasksSection } from './customer-detail/TasksSection';
 import { InvoicesSection } from './customer-detail/InvoicesSection';
@@ -95,7 +94,6 @@ export function CustomerDetailPage() {
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [nullLsLabel,  setNullLsLabel]  = useState('No status');
   const [lsLoaded,     setLsLoaded]     = useState(false);
-  const [focusedLs,    setFocusedLs]    = useState<string | null>(null);
   const [selectedRoom, setSelectedRoom] = useState(0);
   const [workflow,     setWorkflow]     = useState<{ stages?: Record<string, { label: string }> } | null>(null);
   const qb = useQBInvoices();
@@ -354,13 +352,11 @@ export function CustomerDetailPage() {
     g.renderWorkflowStages = () => {
       const gs  = getScriptState();
       const c   = gs?.selectedContact as Contact | undefined;
-      const fl  = gs?.focusedLeadStatus as string | undefined;
       const u   = (g.__moHeaderUser as { privilege_level?: string } | undefined) // privilege-read-ok: type annotation only — value forwarded to mo:user dispatch, never used for auth
                   || (gs?.user as { privilege_level?: string } | undefined); // privilege-read-ok: type annotation only — value forwarded to mo:user dispatch, never used for auth
       if (u) window.dispatchEvent(new CustomEvent('mo:user', { detail: u }));
       flushSync(() => {
         if (c) { setContact(c); setLoading(false); setError(null); }
-        if (fl !== undefined) setFocusedLs(fl || null);
       });
     };
 
@@ -385,14 +381,12 @@ export function CustomerDetailPage() {
     // globally; these window shims are kept for the vanilla-JS picker popup
     // that still reads them directly.
     g.loadLeadStatuses    = () => fetchLeadStatuses();
-    g.__setFocusedLeadStatus = (k: string) => flushSync(() => setFocusedLs(k));
 
     return () => {
       delete g.renderWorkflowHeader;
       delete g.renderWorkflowStages;
       delete g.renderDesignVisits;
       delete g.loadLeadStatuses;
-      delete g.__setFocusedLeadStatus;
     };
   }, [contactId, fetchContact, fetchDesignVisits, fetchLeadStatuses]);
 
@@ -748,22 +742,6 @@ export function CustomerDetailPage() {
           </>
         )}
 
-        {/* Lead status rail: always rendered, shows skeleton when not loaded */}
-        <LeadStatusRail
-          contact={contact}
-          leadStatuses={leadStatuses}
-          loaded={lsLoaded}
-          focusedLeadStatus={focusedLs}
-          onFocusChange={setFocusedLs}
-          activityCounter={
-            compactRelativeTime(
-              latestTimestamp(lastAttempt?.at, contact?.properties.notes_last_contacted),
-              now,
-            ) ?? undefined
-          }
-          lastAttempt={lastAttempt}
-          notesLastContacted={contact?.properties.notes_last_contacted}
-        />
       </div>
 
       {/* Contact edit modal */}

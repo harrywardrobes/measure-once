@@ -1,10 +1,10 @@
 'use strict';
 // test/hubspot-429-retry/run.js
 //
-// Focused integration test confirming that the urgency and workflow-stages
-// endpoints recover from a transient HubSpot 429 via hubspotRequestWithRetry,
-// AND that dvHubspotRequestWithRetry in the design-visit pipeline correctly
-// retries on transient errors and exhausts gracefully on persistent failures.
+// Focused integration test confirming that the urgency endpoint recovers from
+// a transient HubSpot 429 via hubspotRequestWithRetry, AND that
+// dvHubspotRequestWithRetry in the design-visit pipeline correctly retries on
+// transient errors and exhausts gracefully on persistent failures.
 //
 //   (U1) urgency assoc-batch retry — POST /api/contacts/urgency: first call to
 //        /crm/v4/associations/contacts/tasks/batch/read returns 429 + Retry-
@@ -13,12 +13,6 @@
 //   (U2) urgency task-batch retry — assoc-batch succeeds immediately, first
 //        call to /crm/v3/objects/tasks/batch/read returns 429, retry succeeds
 //        → endpoint still returns a valid urgency map.
-//
-//   (WS) workflow-stages double retry — GET /api/workflow-stages: both the
-//        notes-search and the assoc-batch call return 429 on their first
-//        attempt and succeed on retry, all within a single cold-cache
-//        fetchWorkflowStagesFromHubspot invocation → endpoint returns the
-//        expected stage data.
 //
 //   (DV1) design-visit note 429 → retry → success — POST to submit a visit
 //        when /crm/v3/objects/notes returns 429 on the first attempt and 200
@@ -134,15 +128,6 @@ const TASK_BATCH_SUCCESS = {
       hs_timestamp: String(TASK_DUE_MS),
     },
   }],
-};
-
-// A WORKFLOW_DATA note linking note 'note101' → contact '42'.
-const NOTE_BODY = 'WORKFLOW_DATA:[{"room":"Main","stageKey":"sales"}]';
-const NOTES_SEARCH_SUCCESS = {
-  results: [{ id: 'note101', properties: { hs_note_body: NOTE_BODY } }],
-};
-const ASSOC_NOTES_SUCCESS = {
-  results: [{ from: { id: 'note101' }, to: [{ toObjectId: '42' }] }],
 };
 
 const NOTE_CREATE_SUCCESS    = { id: 'mock-note-id', properties: {} };
@@ -353,7 +338,7 @@ async function main() {
   const dvMailFile = path.join(os.tmpdir(), `dv-retry-mail-${runId}.jsonl`);
   try { fs.unlinkSync(dvMailFile); } catch {}
 
-  // Point both HubSpot API env vars at the mock so urgency/workflow-stages
+  // Point both HubSpot API env vars at the mock so urgency
   // (HUBSPOT_API_URL in server.js) and design-visit calls
   // (HUBSPOT_API_BASE_OVERRIDE in design-visits.js) hit the same mock server.
   process.env.HUBSPOT_API_URL                   = `http://127.0.0.1:${mock.port}`;
@@ -493,62 +478,6 @@ async function main() {
       u2TaskCalls[1]?.status === 200,
       `second status=${u2TaskCalls[1]?.status}`);
 
-    // ── (WS) workflow-stages: notes-search + assoc-batch both retry ───────────
-    // Both HubSpot calls inside fetchWorkflowStagesFromHubspot return 429 on
-    // their first attempt; both succeed on the retry.  This is a cold-cache
-    // request so the full fetch pipeline runs.  The endpoint must return the
-    // expected contact-to-stages mapping.
-    console.log('\n  [WS] workflow-stages: notes-search + assoc-batch 429 → retry → success');
-    mock.resetHits();
-    mock.calls.length = 0;
-    mock.configEndpoint(
-      '/crm/v3/objects/notes/search',
-      'retryOnce',
-      NOTES_SEARCH_SUCCESS,
-    );
-    mock.configEndpoint(
-      '/crm/v4/associations/notes/contacts/batch/read',
-      'retryOnce',
-      ASSOC_NOTES_SUCCESS,
-    );
-
-    const ws = await httpGet(BASE, '/api/workflow-stages', cookie);
-
-    const wsNotesCalls = mock.calls.filter(c =>
-      c.url.startsWith('/crm/v3/objects/notes/search'),
-    );
-    const wsAssocCalls = mock.calls.filter(c =>
-      c.url.startsWith('/crm/v4/associations/notes/contacts/batch/read'),
-    );
-
-    record('WS.1 endpoint returns 200',
-      ws.status === 200,
-      `status=${ws.status}`);
-    record('WS.2 response is an object',
-      ws.json && typeof ws.json === 'object' && !Array.isArray(ws.json),
-      `body=${ws.body.slice(0, 180)}`);
-    record('WS.3 contact 42 present in result',
-      ws.json && '42' in ws.json,
-      `keys=${Object.keys(ws.json || {}).join(',')} body=${ws.body.slice(0, 180)}`);
-    record('WS.4 notes-search called twice (429 + retry)',
-      wsNotesCalls.length === 2,
-      `notes calls=${wsNotesCalls.length} statuses=${wsNotesCalls.map(c => c.status).join(',')}`);
-    record('WS.5 first notes-search was a 429',
-      wsNotesCalls[0]?.status === 429,
-      `first status=${wsNotesCalls[0]?.status}`);
-    record('WS.6 second notes-search succeeded (200)',
-      wsNotesCalls[1]?.status === 200,
-      `second status=${wsNotesCalls[1]?.status}`);
-    record('WS.7 assoc-batch called twice (429 + retry)',
-      wsAssocCalls.length === 2,
-      `assoc calls=${wsAssocCalls.length} statuses=${wsAssocCalls.map(c => c.status).join(',')}`);
-    record('WS.8 first assoc-batch was a 429',
-      wsAssocCalls[0]?.status === 429,
-      `first status=${wsAssocCalls[0]?.status}`);
-    record('WS.9 second assoc-batch succeeded (200)',
-      wsAssocCalls[1]?.status === 200,
-      `second status=${wsAssocCalls[1]?.status}`);
-
     // ── (DV1) design-visit note: 429 → retry → success ───────────────────────
     // The mock returns 429 on the first POST to /crm/v3/objects/notes and 200
     // on the second.  dvHubspotRequestWithRetry must retry automatically and
@@ -556,7 +485,6 @@ async function main() {
     console.log('\n  [DV1] design-visit note: 429 → retry → success');
     mock.resetHits();
     mock.calls.length = 0;
-    // Use the exact path (not the /search sub-path used by workflow-stages).
     mock.configEndpoint('/crm/v3/objects/notes', 'retryOnce', NOTE_CREATE_SUCCESS);
 
     const dv1Id = await seedDesignVisit(pool);
@@ -1036,10 +964,6 @@ async function writeReport(runId) {
     '- **(U2) urgency task-batch retry**: `POST /api/contacts/urgency` with the',
     '  `/crm/v3/objects/tasks/batch/read` chunk call returning 429 on the first',
     '  attempt recovers and still produces a valid urgency map.',
-    '- **(WS) workflow-stages double retry**: `GET /api/workflow-stages` with both',
-    '  the notes-search and the assoc-batch inside `fetchWorkflowStagesFromHubspot`',
-    '  returning 429 on their first attempt.  Both calls retry successfully and the',
-    '  endpoint returns the expected contact-to-stages mapping.',
     '- **(DV1) design-visit note 429 → retry → success**: `POST /api/design-visits/:id/submit`',
     '  with `/crm/v3/objects/notes` returning 429 on the first attempt and 200 on',
     '  the second.  `dvHubspotRequestWithRetry` retries automatically and the',

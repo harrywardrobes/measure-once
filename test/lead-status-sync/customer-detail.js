@@ -19,10 +19,10 @@ const PROBE_LABELS = [
 //
 // The test server runs without HUBSPOT_TOKEN, so loading a real contact via
 // /api/contacts/:id 503s and the customer-detail page replaces #workflow-view
-// with an error. We compensate by re-injecting a minimal #workflow-stages div
-// into the page DOM, seeding state.selectedContact with the lead-status under
-// test, and driving renderWorkflowStages() directly — the exact same code
-// path the BroadcastChannel + visibilitychange handlers invoke.
+// with an error. We compensate by seeding state.selectedContact with the
+// lead-status under test and driving renderWorkflowStages() directly — the
+// same entry point the BroadcastChannel + visibilitychange handlers invoke to
+// refresh the CustomerDetailHeader pill.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:lead-status-sync-customer-detail
@@ -88,12 +88,11 @@ async function injectSession(page, jar) {
   });
 }
 
-// Establish the tracker DOM and seed an in-page contact. The real
-// customer-detail bootstrap replaces #workflow-view with an error when the
-// contact 503s; we replace that with a fresh #workflow-stages mount, load the
-// lead statuses + sub-statuses, set state.selectedContact to the chosen
-// hs_lead_status, then call renderWorkflowStages so the renderer runs against
-// the live data we just seeded.
+// Seed an in-page contact for the tracker tests. The real customer-detail
+// bootstrap replaces #workflow-view with an error when the contact 503s; we
+// load lead statuses + sub-statuses, set state.selectedContact to the chosen
+// hs_lead_status, then call renderWorkflowStages so the header pill renderer
+// runs against the live data we just seeded.
 //
 // IMPORTANT: stamp window.__renderToken so the BC/visibilitychange assertions
 // can prove the tracker re-rendered in place (no full page reload).
@@ -119,31 +118,6 @@ async function bootstrapTracker(page, currentLs, currentSub = '', role = 'admin'
     if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
     return { renderToken: window.__renderToken };
   }, currentLs, currentSub, role);
-}
-
-async function trackerSnapshot(page) {
-  return page.evaluate(() => {
-    const el = document.getElementById('workflow-stages');
-    if (!el) return { present: false };
-    const rail = Array.from(el.querySelectorAll('[data-ls-rail-item]')).map(r => ({
-      label:    r.querySelector('[data-ls-rail-label]')?.textContent || '',
-      current:  r.hasAttribute('data-ls-current'),
-      past:     r.hasAttribute('data-ls-past'),
-      focused:  r.hasAttribute('data-ls-focused'),
-      value:    r.getAttribute('data-value') || '',
-    }));
-    const tasks = Array.from(el.querySelectorAll('[data-substatus-key]')).map(t => ({
-      label: t.querySelector('[data-ls-status-label]')?.textContent || '',
-      sub:   t.getAttribute('data-substatus-key') || '',
-    }));
-    return {
-      present:      true,
-      rail,
-      tasks,
-      renderToken:  window.__renderToken,
-      legacyPresent: !!el.querySelector('.stage-stepper-row'),
-    };
-  });
 }
 
 async function waitFor(page, predFn, args = {}, timeoutMs = 7000) {
@@ -341,296 +315,6 @@ async function main() {
     {}, 10000);
 
     const { renderToken: initialToken } = await bootstrapTracker(detailTab, KEY_A, '');
-
-    const snap0 = await trackerSnapshot(detailTab);
-
-    // Rail order assertion: both visible test keys must appear and KEY_A must
-    // come before KEY_B (matches their sort_order). When run against the
-    // shared production DB, real lead-status rows also appear in the rail
-    // alongside our test rows — we only assert relative order + presence so
-    // the harness stays compatible with both isolated and shared databases.
-    const railValues = snap0.rail.map(r => r.value);
-    const idxA = railValues.indexOf(KEY_A);
-    const idxB = railValues.indexOf(KEY_B);
-    const orderOk = idxA !== -1 && idxB !== -1 && idxA < idxB;
-    record(
-      'rail renders one row per non-excluded lead status, in admin order',
-      `${KEY_A} appears before ${KEY_B} in rail (no ${KEY_X})`,
-      `idxA=${idxA} idxB=${idxB} railLen=${railValues.length}`,
-      orderOk,
-      `legacyFallback=${snap0.legacyPresent} rail=${JSON.stringify(railValues)}`,
-    );
-
-    const excludedAbsent = !railValues.includes(KEY_X);
-    record(
-      'excluded_from_sales status is omitted from rail',
-      `no rail entry for ${KEY_X}`,
-      `present=${!excludedAbsent}`,
-      excludedAbsent,
-    );
-
-    const currentRail = snap0.rail.find(r => r.current);
-    record(
-      "contact's hs_lead_status is marked current in the rail",
-      `rail entry with value=${KEY_A} has ls-rail-item-current class`,
-      `current=${currentRail?.value || '(none)'}`,
-      !!currentRail && currentRail.value === KEY_A,
-    );
-
-    // Sub-status panel: focused entry is current (KEY_A), so its 2 sub-statuses
-    // should appear in admin order.
-    const taskLabels = snap0.tasks.map(t => t.label);
-    const tasksOk =
-      snap0.tasks.length === 2
-      && snap0.tasks[0].sub === SUB_A_KEY
-      && snap0.tasks[1].sub === SUB_A2_KEY
-      && taskLabels[0] === SUB_A_LABEL
-      && taskLabels[1] === SUB_A2_LABEL;
-    record(
-      'focused panel shows sub-status rows from LEAD_SUBSTATUSES in order',
-      `[${SUB_A_LABEL}, ${SUB_A2_LABEL}]`,
-      `[${taskLabels.join(', ')}]`,
-      tasksOk,
-    );
-
-    // ── (A) BroadcastChannel: lead_statuses_changed ───────────────────────────
-    console.log('\n  [A] BroadcastChannel: lead_statuses_changed renames rail label in place');
-
-    // Open a second tab as the BC sender (BC does NOT deliver to self).
-    const senderTab = await browser.newPage();
-    await senderTab.setCacheEnabled(false);
-    await injectSession(senderTab, adminClient.cookie);
-    await senderTab.goto(`${BASE}/customers`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    });
-    // Poll until the customers page has bootstrapped enough to use BroadcastChannel.
-    await waitFor(senderTab, () => typeof state !== 'undefined', {}, 8000);
-
-    const patchA = await adminClient.patch(
-      `/api/admin/lead-statuses/${encodeURIComponent(KEY_A)}`,
-      { label: LABEL_A_BC },
-    );
-    record(
-      'PATCH /api/admin/lead-statuses/:key renames status A',
-      `status=200 label="${LABEL_A_BC}"`,
-      `status=${patchA.status} label="${patchA.json?.label}"`,
-      patchA.status === 200 && patchA.json?.label === LABEL_A_BC,
-    );
-
-    await senderTab.evaluate(() => {
-      new BroadcastChannel('lead_statuses_changed').postMessage('changed');
-    });
-
-    const bcRailUpdated = await waitFor(detailTab, (args) => {
-      const el = document.getElementById('workflow-stages');
-      if (!el) return false;
-      return Array.from(el.querySelectorAll('[data-ls-rail-label]'))
-        .some(n => (n.textContent || '').trim() === args.label);
-    }, { label: LABEL_A_BC }, 8000);
-
-    const snapBc = await trackerSnapshot(detailTab);
-    record(
-      'BroadcastChannel triggers tracker rail to show new label (no reload)',
-      `rail label "${LABEL_A_BC}" appears within 8 s, render token preserved`,
-      `found=${bcRailUpdated} labels=${JSON.stringify(snapBc.rail.map(r => r.label))} tokenPreserved=${snapBc.renderToken === initialToken}`,
-      bcRailUpdated && snapBc.renderToken === initialToken,
-    );
-
-    const staleA = snapBc.rail.some(r => r.label === LABEL_A_ORIG);
-    record(
-      'original label is gone from rail after BroadcastChannel rename',
-      `no rail entry with label "${LABEL_A_ORIG}"`,
-      `stalePresent=${staleA}`,
-      !staleA,
-    );
-
-    // ── (A2) BroadcastChannel: lead_substatuses_changed ───────────────────────
-    console.log('\n  [A2] BroadcastChannel: lead_substatuses_changed updates panel');
-
-    const patchSub = await adminClient.patch(
-      `/api/admin/lead-substatuses/${SUB_A_ID}`,
-      { label: SUB_A_RENAME },
-    );
-    record(
-      'PATCH /api/admin/lead-substatuses/:id renames sub-status',
-      `status=200 label="${SUB_A_RENAME}"`,
-      `status=${patchSub.status} label="${patchSub.json?.label}"`,
-      patchSub.status === 200 && patchSub.json?.label === SUB_A_RENAME,
-    );
-
-    await senderTab.evaluate(() => {
-      new BroadcastChannel('lead_substatuses_changed').postMessage('changed');
-    });
-
-    const subUpdated = await waitFor(detailTab, (args) => {
-      const el = document.getElementById('workflow-stages');
-      if (!el) return false;
-      return Array.from(el.querySelectorAll('[data-substatus-key] [data-ls-status-label]'))
-        .some(n => (n.textContent || '').trim() === args.label);
-    }, { label: SUB_A_RENAME }, 8000);
-
-    const snapSub = await trackerSnapshot(detailTab);
-    record(
-      'BroadcastChannel lead_substatuses_changed re-renders sub-status row (no reload)',
-      `task label "${SUB_A_RENAME}" appears within 8 s, render token preserved`,
-      `found=${subUpdated} tasks=${JSON.stringify(snapSub.tasks.map(t => t.label))} tokenPreserved=${snapSub.renderToken === initialToken}`,
-      subUpdated && snapSub.renderToken === initialToken,
-    );
-
-    // ── (A3) BroadcastChannel reorder: lead statuses ──────────────────────────
-    // Bump KEY_A's sort_order so it now comes AFTER KEY_B (B was 991, A was
-    // 990 — set A to 995). After the BC fan-out the rail must re-render with
-    // B before A, in place. This catches reorder-propagation regressions that
-    // a rename-only probe would miss.
-    console.log('\n  [A3] BroadcastChannel: reorder lead statuses');
-
-    const reorderLs = await adminClient.patch(
-      `/api/admin/lead-statuses/${encodeURIComponent(KEY_A)}`,
-      { sort_order: 995 },
-    );
-    record(
-      'PATCH /api/admin/lead-statuses/:key bumps KEY_A sort_order past KEY_B',
-      `status=200 sort_order=995`,
-      `status=${reorderLs.status} sort_order=${reorderLs.json?.sort_order}`,
-      reorderLs.status === 200 && reorderLs.json?.sort_order === 995,
-    );
-
-    await senderTab.evaluate(() => {
-      new BroadcastChannel('lead_statuses_changed').postMessage('reorder');
-    });
-
-    const lsReorderUpdated = await waitFor(detailTab, (args) => {
-      const el = document.getElementById('workflow-stages');
-      if (!el) return false;
-      const vals = Array.from(el.querySelectorAll('[data-ls-rail-item]'))
-        .map(r => r.getAttribute('data-value') || '');
-      const ia = vals.indexOf(args.a);
-      const ib = vals.indexOf(args.b);
-      return ia !== -1 && ib !== -1 && ib < ia;
-    }, { a: KEY_A, b: KEY_B }, 8000);
-
-    const snapLsReorder = await trackerSnapshot(detailTab);
-    const reorderedVals = snapLsReorder.rail.map(r => r.value);
-    const ridxA = reorderedVals.indexOf(KEY_A);
-    const ridxB = reorderedVals.indexOf(KEY_B);
-    record(
-      'BroadcastChannel reorder re-renders rail with new lead-status order (no reload)',
-      `${KEY_B} now appears before ${KEY_A} within 8 s, render token preserved`,
-      `idxA=${ridxA} idxB=${ridxB} tokenPreserved=${snapLsReorder.renderToken === initialToken}`,
-      lsReorderUpdated && snapLsReorder.renderToken === initialToken,
-    );
-
-    // ── (A4) BroadcastChannel reorder: sub-statuses ───────────────────────────
-    // Bump SUB_A_KEY's sort_order past SUB_A2 so the focused panel must
-    // re-render with SUB_A2 first.
-    console.log('\n  [A4] BroadcastChannel: reorder sub-statuses');
-
-    const reorderSub = await adminClient.patch(
-      `/api/admin/lead-substatuses/${SUB_A_ID}`,
-      { sort_order: 9 },
-    );
-    record(
-      'PATCH /api/admin/lead-substatuses/:id bumps SUB_A sort_order past SUB_A2',
-      `status=200 sort_order=9`,
-      `status=${reorderSub.status} sort_order=${reorderSub.json?.sort_order}`,
-      reorderSub.status === 200 && reorderSub.json?.sort_order === 9,
-    );
-
-    await senderTab.evaluate(() => {
-      new BroadcastChannel('lead_substatuses_changed').postMessage('reorder');
-    });
-
-    // Move focus back to KEY_A so the reordered sub-statuses are visible.
-    await detailTab.evaluate((k) => {
-      state.focusedLeadStatus = k;
-      if (typeof renderWorkflowStages === 'function') renderWorkflowStages();
-    }, KEY_A);
-
-    const subReorderUpdated = await waitFor(detailTab, (args) => {
-      const el = document.getElementById('workflow-stages');
-      if (!el) return false;
-      const subs = Array.from(el.querySelectorAll('[data-substatus-key]'))
-        .map(t => t.getAttribute('data-substatus-key') || '');
-      const ia  = subs.indexOf(args.a);
-      const ia2 = subs.indexOf(args.a2);
-      return ia !== -1 && ia2 !== -1 && ia2 < ia;
-    }, { a: SUB_A_KEY, a2: SUB_A2_KEY }, 8000);
-
-    const snapSubReorder = await trackerSnapshot(detailTab);
-    const subVals = snapSubReorder.tasks.map(t => t.sub);
-    const sidxA  = subVals.indexOf(SUB_A_KEY);
-    const sidxA2 = subVals.indexOf(SUB_A2_KEY);
-    record(
-      'BroadcastChannel reorder re-renders sub-status rows in new order (no reload)',
-      `${SUB_A2_KEY} now appears before ${SUB_A_KEY} within 8 s, render token preserved`,
-      `idxA=${sidxA} idxA2=${sidxA2} tokenPreserved=${snapSubReorder.renderToken === initialToken}`,
-      subReorderUpdated && snapSubReorder.renderToken === initialToken,
-    );
-
-    await senderTab.close();
-
-    // Reset KEY_A sort_order back so the visibilitychange probe below still
-    // exercises a rename without further reorder noise.
-    await adminClient.patch(
-      `/api/admin/lead-statuses/${encodeURIComponent(KEY_A)}`,
-      { sort_order: 990 },
-    );
-
-    // ── (B) visibilitychange path ─────────────────────────────────────────────
-    console.log('\n  [B] visibilitychange path');
-
-    const patchB = await adminClient.patch(
-      `/api/admin/lead-statuses/${encodeURIComponent(KEY_A)}`,
-      { label: LABEL_A_VIS },
-    );
-    record(
-      'second PATCH renames label for visibilitychange test',
-      `status=200 label="${LABEL_A_VIS}"`,
-      `status=${patchB.status} label="${patchB.json?.label}"`,
-      patchB.status === 200 && patchB.json?.label === LABEL_A_VIS,
-    );
-
-    // Synthesise hidden → visible. workflow-core.js's visibilitychange handler
-    // only refreshes when document.visibilityState === 'visible'.
-    await detailTab.evaluate(() => {
-      const proto   = Document.prototype;
-      const ownDesc = Object.getOwnPropertyDescriptor(proto, 'visibilityState')
-                   || Object.getOwnPropertyDescriptor(document, 'visibilityState');
-      Object.defineProperty(document, 'visibilityState',
-        { get: () => 'hidden', configurable: true });
-      document.dispatchEvent(new Event('visibilitychange'));
-      if (ownDesc) {
-        Object.defineProperty(document, 'visibilityState', ownDesc);
-      } else {
-        Object.defineProperty(document, 'visibilityState',
-          { get: () => 'visible', configurable: true });
-      }
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
-
-    const visUpdated = await waitFor(detailTab, (args) => {
-      const el = document.getElementById('workflow-stages');
-      if (!el) return false;
-      return Array.from(el.querySelectorAll('[data-ls-rail-label]'))
-        .some(n => (n.textContent || '').trim() === args.label);
-    }, { label: LABEL_A_VIS }, 8000);
-
-    const snapVis = await trackerSnapshot(detailTab);
-    record(
-      'visibilitychange triggers tracker rail to show new label (no reload)',
-      `rail label "${LABEL_A_VIS}" appears within 8 s, render token preserved`,
-      `found=${visUpdated} labels=${JSON.stringify(snapVis.rail.map(r => r.label))} tokenPreserved=${snapVis.renderToken === initialToken}`,
-      visUpdated && snapVis.renderToken === initialToken,
-    );
-
-    const staleBc = snapVis.rail.some(r => r.label === LABEL_A_BC);
-    record(
-      'BC-renamed label is gone after visibilitychange refresh',
-      `no rail entry with label "${LABEL_A_BC}"`,
-      `stalePresent=${staleBc}`,
-      !staleBc,
-    );
 
     // ── (C) Unified picker: sub-status rows appear indented beneath parent ────
     console.log('\n  [C] Unified picker: sub-status rows appear indented beneath parent');
@@ -1331,7 +1015,7 @@ async function main() {
     // pill (mirrors what the real page does after selectContact() succeeds).
     // The page bootstrap can't render its own header because /api/contacts/:id
     // 503s under the stripped HUBSPOT_TOKEN, so we inject a #workflow-header
-    // mount the same way probe C does for #workflow-stages.
+    // mount and seed the contact state directly.
     await bootstrapTracker(viewerTab, KEY_A, '', 'viewer');
     await viewerTab.evaluate(() => {
       const wv = document.getElementById('workflow-view');
@@ -1436,34 +1120,6 @@ async function writeReport(runId, findings) {
     '',
     '## Coverage',
     '',
-    '- **(0) initial render**: opens `/customers/:id`, seeds an in-page contact whose',
-    '  `hs_lead_status` matches one of two visible test statuses (plus one',
-    '  `excluded_from_sales` decoy), and asserts `_renderWorkflowStagesImpl` renders',
-    '  one rail row per non-excluded status in admin sort order, marks the current',
-    '  status with `data-ls-current`, and lists `LEAD_SUBSTATUSES` rows for the',
-    '  focused entry in order.',
-    '- **(A) BroadcastChannel `lead_statuses_changed`**: renames the focused-status',
-    '  label via `PATCH /api/admin/lead-statuses/:key`, posts the channel message',
-    '  from a second same-browser tab, and asserts the rail re-renders in place with',
-    '  the new label and no stale label (exercises `workflow-core.js`',
-    '  `_lsChannel` listener → `_maybeRenderStages`).',
-    '- **(A2) BroadcastChannel `lead_substatuses_changed`**: renames a sub-status',
-    '  label via `PATCH /api/admin/lead-substatuses/:id`, posts the channel message,',
-    '  and asserts the focused panel sub-status row text updates in place',
-    '  (exercises `workflow-core.js` `_subChannel` listener → `_maybeRenderStages`).',
-    '- **(A3) BroadcastChannel reorder — lead statuses**: bumps `KEY_A`\'s',
-    '  `sort_order` past `KEY_B` via PATCH, posts `lead_statuses_changed`, and',
-    '  asserts the rail re-renders in place with `KEY_B` now appearing before',
-    '  `KEY_A`. Catches reorder-propagation regressions that a rename-only probe',
-    '  would miss.',
-    '- **(A4) BroadcastChannel reorder — sub-statuses**: bumps `SUB_A`\'s',
-    '  `sort_order` past `SUB_A2` via PATCH, posts `lead_substatuses_changed`,',
-    '  and asserts the focused panel sub-status rows re-render in place with',
-    '  `SUB_A2` now appearing before `SUB_A`.',
-    '- **(B) visibilitychange path**: renames the focused-status label again, then',
-    '  synthesises a hidden→visible `visibilitychange` event sequence, and asserts',
-    '  the rail picks up the latest label (exercises `workflow-core.js`',
-    '  `document.addEventListener("visibilitychange", ...)` → `renderWorkflowStages`).',
     '- **(C) Unified picker — sub-status rows indented**: re-bootstraps the contact',
     '  state with `KEY_A` active and no sub-status, enables Puppeteer request',
     '  interception to mock `GET /api/contacts/:id` and `PATCH /api/contacts/:id`,',
@@ -1525,7 +1181,7 @@ async function writeReport(runId, findings) {
     '  the visibilitychange handler in `CustomerDetailPage.tsx` that calls',
     '  `fetchLeadSubstatuses` on tab focus.',
     '',
-    'Every BC/visibilitychange assertion (probes A–B, H–I) also checks `window.__renderToken` is',
+    'Every BC/visibilitychange assertion (probes H–I) also checks `window.__renderToken` is',
     'preserved across the re-render, proving the tracker updated in place (no full',
     'page reload).',
     '',
@@ -1533,10 +1189,10 @@ async function writeReport(runId, findings) {
     '',
     '- The test server strips `HUBSPOT_TOKEN`, so `GET /api/contacts/:id` 503s and',
     '  the customer-detail page replaces `#workflow-view` with an error. The',
-    '  `bootstrapTracker` helper rebuilds a minimal `#workflow-stages` mount, loads',
-    '  lead statuses + sub-statuses (which come from PostgreSQL, not HubSpot), seeds',
-    '  `state.selectedContact`, and calls `renderWorkflowStages()` — the same entry',
-    '  point the BC/visibilitychange handlers in `workflow-core.js` use.',
+    '  `bootstrapTracker` helper loads lead statuses + sub-statuses (which come from',
+    '  PostgreSQL, not HubSpot), seeds `state.selectedContact`, and calls',
+    '  `renderWorkflowStages()` — the same entry point the BC/visibilitychange',
+    '  handlers in `workflow-core.js` use to update the header pill.',
     '- For probes C–F, Puppeteer request interception mocks `GET` and `PATCH` on',
     '  `/api/contacts/:id` so `openLeadStatusPicker` and `_quickSetLeadStatusWithSub`',
     '  complete successfully without HubSpot. All other requests are passed through.',

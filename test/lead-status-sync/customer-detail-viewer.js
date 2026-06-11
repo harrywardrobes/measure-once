@@ -368,10 +368,9 @@ async function writeReport(runId, findings) {
     '## Notes',
     '',
     '- The test server strips `HUBSPOT_TOKEN`, so `GET /api/contacts/:id` 503s.',
-    '  `bootstrapHeader` re-injects a minimal `#workflow-stages`/`#workflow-header`',
-    '  mount and seeds `state.selectedContact` + `window.__moHeaderUser` directly,',
-    '  then calls `renderWorkflowHeader()` — the same renderer path the page uses',
-    '  after a successful contact load.',
+    '  `bootstrapHeader` seeds `state.selectedContact` + `window.__moHeaderUser`',
+    '  directly, then calls `renderWorkflowHeader()` — the same renderer path',
+    '  the page uses after a successful contact load.',
   ];
   const outPath = path.join(dir, 'lead-status-sync-customer-detail-viewer.md');
   fs.writeFileSync(outPath, lines.join('\n'));

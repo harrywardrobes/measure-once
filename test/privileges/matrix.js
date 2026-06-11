@@ -70,7 +70,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/localdata/all',             level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/workflow',                  level: 'auth' },
   { method: 'GET',    path: '/api/card-action-handlers',      level: 'auth' },
-  { method: 'GET',    path: '/api/workflow-stages',           level: 'auth' },
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
 
   { method: 'GET',    path: '/api/contacts-lead-status-counts', level: 'auth',  needsHubspot: true },
@@ -128,6 +127,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/arrange-visit/outcome',              level: 'member', body: { contactId: '0', outcome: 'booked', visitType: 'design' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/design-visit-followup',              level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/design-visit-followup/outcome',      level: 'member', body: { contactId: '0', outcome: 'confirmed' }, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/open-deal/deposit-invoice-email-preview', level: 'member', body: { firstName: 'Test', depositPercent: '10' } },
   { method: 'POST',   path: '/api/card-actions/open-deal',                          level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/open-deal/deposit-invoice-email-preview', level: 'member', body: { firstName: 'Test', depositPercent: '10' } },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/accept-deal',               level: 'manager', body: { estimateId: '1' } },
