@@ -12,8 +12,10 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -59,6 +61,17 @@ interface DraftState {
   bookedSlotIso: string | null;
   emailSubject: string;
   emailBody: string;
+  proposedEmailDateIso: string | null;
+  proposedEmailTimeIso: string | null;
+}
+
+/** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
+function buildProposedDateLine(date: Dayjs | null, time: Dayjs | null): string {
+  if (!date && !time) return '';
+  const parts: string[] = [];
+  if (date) parts.push(date.format('D MMMM YYYY'));
+  if (time) parts.push(time.format('h:mm A'));
+  return `We have a proposed slot available: ${parts.join(' at ')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
 function draftKey(contactId: string): string {
@@ -142,6 +155,14 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
   const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
 
+  const [proposedEmailDate, setProposedEmailDate] = useState<Dayjs | null>(
+    draft.proposedEmailDateIso ? dayjs(draft.proposedEmailDateIso) : null,
+  );
+  const [proposedEmailTime, setProposedEmailTime] = useState<Dayjs | null>(
+    draft.proposedEmailTimeIso ? dayjs(draft.proposedEmailTimeIso) : null,
+  );
+  const [emailLoading, setEmailLoading] = useState(false);
+
   // Pre-fetched no-answer template from the server (admin-editable). Populated
   // alongside the contact-info load so clicking "No answer" has no extra delay.
   const [noAnswerTemplate, setNoAnswerTemplate] = useState<{ subject: string; body_text: string } | null>(null);
@@ -195,7 +216,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         const vLabel = visitLabel(d.visitType ?? 'design');
         POST('/api/email-templates/render', {
           key: 'arrange_visit_no_answer',
-          vars: { firstName, visitLabel: vLabel },
+          vars: { firstName, visitLabel: vLabel, proposedDate: '', proposedTime: '', proposedDateLine: '' },
         })
           .then((t: unknown) => setNoAnswerTemplate(t as { subject: string; body_text: string }))
           .catch(() => { /* silently ignore — buildNoAnswerEmail fallback used */ });
@@ -222,8 +243,18 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       bookedSlotIso: bookedSlot?.toISOString() ?? null,
       emailSubject,
       emailBody,
+      proposedEmailDateIso: proposedEmailDate?.toISOString() ?? null,
+      proposedEmailTimeIso: proposedEmailTime?.toISOString() ?? null,
     });
-  }, [key, step, address, bookedSlot, emailSubject, emailBody]);
+  }, [key, step, address, bookedSlot, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
+
+  // Re-fetch the no-answer email template whenever the proposed date/time changes
+  // while the user is on the email step (same pattern as DesignVisitFollowupModal).
+  useEffect(() => {
+    if (step !== 'email') return;
+    fetchEmailTemplate(proposedEmailDate, proposedEmailTime, contactInfo);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposedEmailDate, proposedEmailTime]);
 
   function handleClose() {
     setActionError('');
@@ -364,6 +395,33 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     return { subject, body };
   }
 
+  function fetchEmailTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null): void {
+    setEmailLoading(true);
+    const firstName = (info?.contactName || '').split(' ')[0] || 'there';
+    const vLabel = visitLabel(info?.visitType ?? 'design');
+    POST('/api/email-templates/render', {
+      key: 'arrange_visit_no_answer',
+      vars: {
+        firstName,
+        visitLabel: vLabel,
+        proposedDate: date ? date.format('D MMMM YYYY') : '',
+        proposedTime: time ? time.format('h:mm A') : '',
+        proposedDateLine: buildProposedDateLine(date, time),
+      },
+    })
+      .then((t: unknown) => {
+        const d = t as { subject?: string; body_text?: string };
+        setEmailSubject(d.subject ?? '');
+        setEmailBody(d.body_text ?? '');
+      })
+      .catch(() => {
+        const { subject, body } = buildNoAnswerEmail(info?.contactName || 'there', vLabel);
+        setEmailSubject(subject);
+        setEmailBody(body);
+      })
+      .finally(() => setEmailLoading(false));
+  }
+
   async function handleEmailSent() {
     if (demo) return;
     if (!emailBody.trim()) {
@@ -459,16 +517,14 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                 disabled={submitting}
                 onClick={() => {
                   setActionError('');
+                  setProposedEmailDate(null);
+                  setProposedEmailTime(null);
                   if (!emailSubject && !emailBody) {
                     if (noAnswerTemplate) {
                       setEmailSubject(noAnswerTemplate.subject);
                       setEmailBody(noAnswerTemplate.body_text);
                     } else {
-                      const name = contactInfo?.contactName || ctx.contactName || 'there';
-                      const vLabel = visitLabel(contactInfo?.visitType ?? 'design');
-                      const { subject, body } = buildNoAnswerEmail(name, vLabel);
-                      setEmailSubject(subject);
-                      setEmailBody(body);
+                      fetchEmailTemplate(null, null, contactInfo);
                     }
                   }
                   setMadeProgress(true); setStep('email');
@@ -582,24 +638,52 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                 <Typography variant="body2" color="text.secondary">
                   We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
                 </Typography>
-                <TextField
-                  id="av-email-subject"
-                  label="Subject"
-                  value={emailSubject}
-                  onChange={e => setEmailSubject(e.target.value)}
-                  fullWidth
-                  size="small"
-                />
-                <TextField
-                  id="av-email-body"
-                  label="Email body"
-                  value={emailBody}
-                  onChange={e => setEmailBody(e.target.value)}
-                  fullWidth
-                  multiline
-                  minRows={8}
-                  size="small"
-                />
+                <Stack spacing={1.5}>
+                  <Typography variant="body2" color="text.secondary">
+                    Optionally include a proposed date and time in the email:
+                  </Typography>
+                  <Stack direction="row" spacing={1.5}>
+                    <DatePicker
+                      label="Proposed date"
+                      value={proposedEmailDate}
+                      onChange={(v) => setProposedEmailDate(v)}
+                      slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                      disablePast
+                    />
+                    <TimePicker
+                      label="Proposed time"
+                      value={proposedEmailTime}
+                      onChange={(v) => setProposedEmailTime(v)}
+                      slotProps={{ textField: { size: 'small', fullWidth: true } }}
+                    />
+                  </Stack>
+                </Stack>
+                {emailLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                ) : (
+                  <>
+                    <TextField
+                      id="av-email-subject"
+                      label="Subject"
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                    <TextField
+                      id="av-email-body"
+                      label="Email body"
+                      value={emailBody}
+                      onChange={e => setEmailBody(e.target.value)}
+                      fullWidth
+                      multiline
+                      minRows={8}
+                      size="small"
+                    />
+                  </>
+                )}
                 {actionError && (
                   actionError === 'GOOGLE_AUTH'
                     ? <GoogleAuthAlert />
@@ -613,7 +697,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                 <Button
                   variant="contained"
                   onClick={handleEmailSent}
-                  disabled={submitting || demo}
+                  disabled={submitting || demo || emailLoading}
                   data-testid="av-email-send"
                 >
                   {submitting ? <CircularProgress size={18} color="inherit" /> : 'Send email'}
