@@ -22,8 +22,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import EmailIcon from '@mui/icons-material/Email';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { HANDLER_MODAL_SUMMARY } from '../../utils/handlerMeta';
+import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES } from '../../utils/handlerMeta';
 
 import {
   DeliveryWindowConfig,
@@ -146,10 +147,11 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface Binding    { stage_key?: string; status_key?: string; }
-interface Handler    { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
-interface LeadStatus { key: string; label: string; stage: string | null; shorthand: string; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
-interface CALabel    { stage_key: string; status_key: string; label: string; }
+interface Binding      { stage_key?: string; status_key?: string; }
+interface Handler      { id: number; name: string; type: string; config: Record<string, unknown>; bindings: Binding[]; }
+interface LeadStatus   { key: string; label: string; stage: string | null; shorthand: string; sort_order: number; excluded_from_sales: boolean; is_null_row: boolean; }
+interface CALabel      { stage_key: string; status_key: string; label: string; }
+interface EmailTemplate { key: string; label: string; }
 
 interface ConflictItem {
   type: 'label';
@@ -172,10 +174,11 @@ interface ActionStage { stage: { key: string; label: string }; groups: ActionGro
 const W = window as unknown as Record<string, unknown>;
 const _nonce = Math.random().toString(36).slice(2);
 const _reloadRef:       { fn: (() => Promise<void>) | null }          = { fn: null };
-const _handlersRef:     { current: Handler[]    }                      = { current: [] };
-const _labelsRef:       { current: CALabel[]    }                      = { current: [] };
-const _statusesRef:     { current: LeadStatus[] }                      = { current: [] };
-const _toastRef:        { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
+const _handlersRef:       { current: Handler[]       }                      = { current: [] };
+const _labelsRef:         { current: CALabel[]       }                      = { current: [] };
+const _statusesRef:       { current: LeadStatus[]    }                      = { current: [] };
+const _emailTemplatesRef: { current: EmailTemplate[] }                      = { current: [] };
+const _toastRef:          { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
 // Refs to open modals from outside the React tree (e.g. window exposure)
 const _openEditorRef: { fn: ((slot: ActionSlot, existing?: Handler | null) => void) | null } = { fn: null };
@@ -193,6 +196,23 @@ function _handlersForSlot(slot: Partial<ActionSlot>): Handler[] {
     (b.stage_key  || '').toLowerCase() === (slot.stage_key  || '').toLowerCase()
     && (b.status_key || '').toLowerCase() === (slot.status_key || '').toLowerCase(),
   ));
+}
+
+function navigateToTab(tabId: string, itemKey?: string | number) {
+  try {
+    if (itemKey != null) {
+      localStorage.setItem(ADMIN_DEEP_LINK_KEY, String(itemKey));
+    }
+  } catch { /* ignore */ }
+  if (typeof (window as unknown as Record<string, unknown>).adminSwitchToTab === 'function') {
+    ((window as unknown as Record<string, unknown>).adminSwitchToTab as (id: string) => void)(tabId);
+  } else {
+    try {
+      localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+      localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, tabId);
+    } catch { /* ignore */ }
+    location.href = '/admin';
+  }
 }
 
 function _resolveLeadStatusLabel(key: string): string {
@@ -847,6 +867,46 @@ async function _deleteHandler(id: number, slot: ActionSlot | Partial<ActionSlot>
 
 function HandlerBoundTo({ h }: { h: Handler }) {
   const summary = HANDLER_MODAL_SUMMARY[h.type];
+  const templateKeys  = HANDLER_EMAIL_TEMPLATES[h.type] ?? [];
+  const templateItems = templateKeys
+    .map(k => _emailTemplatesRef.current.find(t => t.key === k))
+    .filter((t): t is EmailTemplate => t !== undefined);
+
+  const emailSection = (
+    <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start', mt: 0.5 }}>
+      <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontSize: '0.65rem', mt: 0.15 }}>
+        Emails:
+      </Typography>
+      {templateItems.length === 0 ? (
+        <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
+          No emails triggered
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+          {templateItems.map(t => (
+            <Chip
+              key={t.key}
+              icon={<EmailIcon sx={{ fontSize: 11 }} />}
+              label={t.label}
+              size="small"
+              clickable
+              onClick={() => navigateToTab('emailtemplates', t.key)}
+              sx={{
+                height: 18,
+                fontSize: '0.62rem',
+                bgcolor: 'rgba(16,185,129,0.08)',
+                color: 'rgb(5,150,105)',
+                '&:hover': { bgcolor: 'rgba(16,185,129,0.15)' },
+                '.MuiChip-icon': { color: 'rgb(5,150,105) !important', fontSize: '10px !important' },
+                '.MuiChip-label': { px: 0.5 },
+              }}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+
   if (!h.bindings || h.bindings.length === 0) {
     return (
       <div className="adm-handler-bound-to">
@@ -862,6 +922,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
             <span className="adm-muted-inline">HubSpot:</span> {summary.hubspot}
           </div>
         )}
+        {emailSection}
       </div>
     );
   }
@@ -902,6 +963,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
             : summary.hubspot}
         </div>
       )}
+      {emailSection}
     </div>
   );
 }
@@ -1019,18 +1081,20 @@ export function ActionHandlersPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [hdl, lbl, sta, cfl, orp] = await Promise.all([
+      const [hdl, lbl, sta, cfl, orp, tpl] = await Promise.all([
         GET('/api/admin/card-action-handlers'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers/conflicts'),
         GET('/api/admin/card-action-handlers/orphaned'),
-      ]) as [Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }];
+        GET('/api/admin/email-templates'),
+      ]) as [Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }, EmailTemplate[]];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const h  = safeArr<Handler>(hdl);
       const lb = safeArr<CALabel>(lbl);
       const st = safeArr<LeadStatus>(sta);
+      const et = safeArr<EmailTemplate>(tpl);
       const cf: ConflictData = cfl && typeof cfl === 'object'
         ? { total: Number((cfl as ConflictData).total) || 0, conflicts: safeArr<ConflictItem>((cfl as ConflictData).conflicts) }
         : { total: 0, conflicts: [] };
@@ -1042,9 +1106,10 @@ export function ActionHandlersPage() {
       setConflicts(cf);
       setOrphanedCount(orphCount);
 
-      _handlersRef.current = h;
-      _labelsRef.current   = lb;
-      _statusesRef.current = st;
+      _handlersRef.current       = h;
+      _labelsRef.current         = lb;
+      _statusesRef.current       = st;
+      _emailTemplatesRef.current = et;
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
