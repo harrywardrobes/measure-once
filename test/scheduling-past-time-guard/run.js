@@ -19,14 +19,14 @@ const PROBE_LABELS = [
   '[WARN-DW] edit button appears for near-future DW visit',
   '[WARN-DW] 15-minute warning Alert appears in DeliveryWindowModal edit mode',
   '[WARN-VCM] modal opens with DateTimePicker',
-  '[WARN-VCM] 15-minute warning Alert appears in VisitCalendarModal after DateTimePicker update',
+  '[WARN-VCM] 15-minute warning Alert appears in ScheduleVisitModal after DateTimePicker update',
 ];
 
 // test/scheduling-past-time-guard/run.js
 //
 // Covers the past-time confirmation dialog and 15-minute start-time warning
 // introduced in task #1615 for InstallationSlotModal and DeliveryWindowModal,
-// and extended in task #1677 to cover VisitCalendarModal.
+// and extended to cover ScheduleVisitModal (schedule_visit handler type).
 //
 // Probes:
 //   [IS-PAST]    InstallationSlotModal: submitting with a past startDt opens
@@ -39,7 +39,7 @@ const PROBE_LABELS = [
 //                the same confirmation dialog.
 //   [DW-BACK]    "Go back" works for the delivery window modal.
 //   [DW-PROCEED] "Schedule anyway" fires POST /api/visits for delivery windows.
-//   [VCM-PAST]   VisitCalendarModal: submitting with a past startDt opens the
+//   [VCM-PAST]   ScheduleVisitModal: submitting with a past startDt opens the
 //                "Schedule in the past?" confirmation dialog.
 //   [VCM-BACK]   Clicking "Go back" dismisses the dialog; the scheduling form
 //                stays open.
@@ -49,7 +49,7 @@ const PROBE_LABELS = [
 //                edit mode when startAt is within 15 minutes.
 //   [WARN-DW]    The 15-minute warning Alert appears in DeliveryWindowModal
 //                edit mode when start is within 15 minutes.
-//   [WARN-VCM]   The 15-minute warning Alert appears in VisitCalendarModal
+//   [WARN-VCM]   The 15-minute warning Alert appears in ScheduleVisitModal
 //                when the DateTimePicker is updated to a near-future time.
 //
 // Strategy for IS/DW/VCM past-time probes:
@@ -73,10 +73,10 @@ const PROBE_LABELS = [
 //   and sets startTimeWarning = true (minutesUntilStart = 10 < 15).
 //
 // Strategy for WARN-VCM probe:
-//   VisitCalendarModal has no edit mode via the customer-detail flow, so the
+//   ScheduleVisitModal has no edit mode via the customer-detail flow, so the
 //   warning cannot be triggered via a pre-populated startAt. Instead, we open
 //   the modal via openCardActionModal (initialStart = now + 24 h), then use
-//   Puppeteer keyboard interaction to overwrite the DateTimePicker (#cah-dv-start)
+//   Puppeteer keyboard interaction to overwrite the DateTimePicker (#cah-sv-start)
 //   with a near-future time (now + 10 min). The onChange fires, React updates
 //   startDt, the useEffect re-runs checkApproaching(), and the warning Alert
 //   appears because minutesUntilStart ≈ 10 < 15.
@@ -173,14 +173,13 @@ function writeReport(runId) {
     `## Coverage`,
     ``,
     `Tests the past-time confirmation dialog and 15-minute warning in`,
-    `InstallationSlotModal and DeliveryWindowModal (task #1615), and`,
-    `VisitCalendarModal (task #1677).`,
+    `InstallationSlotModal, DeliveryWindowModal, and ScheduleVisitModal.`,
     ``,
     `## Relevant files`,
     ``,
     `- \`src/react/components/modals/InstallationSlotModal.tsx\``,
     `- \`src/react/components/modals/DeliveryWindowModal.tsx\``,
-    `- \`src/react/components/modals/VisitCalendarModal.tsx\``,
+    `- \`src/react/components/modals/ScheduleVisitModal.tsx\``,
   ].join('\n');
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
   fs.writeFileSync(REPORT_PATH, md, 'utf8');
@@ -690,9 +689,9 @@ async function main() {
 
     await dwPage.close();
 
-    // ── [VCM-PAST / VCM-BACK / VCM-PROCEED] VisitCalendarModal past-time guard
+    // ── [VCM-PAST / VCM-BACK / VCM-PROCEED] ScheduleVisitModal past-time guard
 
-    console.log('\n  [VCM] VisitCalendarModal past-time guard');
+    console.log('\n  [VCM] ScheduleVisitModal past-time guard');
     const vcmPage = await browser.newPage();
     vcmPage.on('pageerror', () => {});
     vcmPage.on('console',   () => {});
@@ -719,13 +718,13 @@ async function main() {
       if (!m) return null;
       return {
         hasPrimary: !!m.querySelector('[data-testid=cah-primary]'),
-        hasTitle:   !!m.querySelector('input#cah-dv-title'),
+        hasTitle:   !!m.querySelector('input#cah-sv-title'),
       };
     }, { handler: vcmHandlerObj, ctx: vcmCtxObj }, 10000, 300);
 
     record(
       '[VCM] modal opens with DateTimePicker and Schedule button',
-      'dialog with #cah-dv-title and [data-testid=cah-primary]',
+      'dialog with #cah-sv-title and [data-testid=cah-primary]',
       `got=${JSON.stringify(vcmModalOpened)}`,
       !!vcmModalOpened && vcmModalOpened.hasPrimary && vcmModalOpened.hasTitle,
     );
@@ -946,17 +945,17 @@ async function main() {
       await warnPage.close();
     }
 
-    // ── [WARN-VCM] 15-minute warning in VisitCalendarModal via DateTimePicker ──
+    // ── [WARN-VCM] 15-minute warning in ScheduleVisitModal via DateTimePicker ──
     //
-    // VisitCalendarModal has no edit mode from the customer-detail flow; it
+    // ScheduleVisitModal has no edit mode from the customer-detail flow; it
     // always opens with initialStart = now + 24 h. To trigger the warning we:
     //   1. Open the modal via openCardActionModal.
-    //   2. Interact with the #cah-dv-start DateTimePicker to type a near-future
+    //   2. Interact with the #cah-sv-start DateTimePicker to type a near-future
     //      time (now + 10 min). MUI DateTimePicker segments accept digit input.
     //   3. React fires onChange → startDt state updates → useEffect re-runs
     //      checkApproaching() → startTimeWarning = true → Alert appears.
 
-    console.log('\n  [WARN-VCM] VisitCalendarModal 15-minute warning');
+    console.log('\n  [WARN-VCM] ScheduleVisitModal 15-minute warning');
 
     const vcmWarnPage = await browser.newPage();
     vcmWarnPage.on('pageerror', () => {});
@@ -984,13 +983,13 @@ async function main() {
       }
       const m = document.querySelector('[role=dialog]');
       if (!m) return null;
-      return !!m.querySelector('input#cah-dv-start') || null;
+      return !!m.querySelector('input#cah-sv-start') || null;
     }, { handler: vcmWarnHandlerObj, ctx: vcmWarnCtxObj }, 10000, 300);
 
     if (!vcmWarnModalOpened) {
       record(
         '[WARN-VCM] modal opens with DateTimePicker',
-        'dialog with input#cah-dv-start present',
+        'dialog with input#cah-sv-start present',
         'modal did not open — skipped',
         false,
       );
@@ -1009,7 +1008,7 @@ async function main() {
       const ampmKey    = nf.getHours() < 12 ? 'a' : 'p'; // a/p triggers AM/PM in MUI
 
       // Click the start input to focus the first segment (month).
-      await vcmWarnPage.click('input#cah-dv-start');
+      await vcmWarnPage.click('input#cah-sv-start');
       await new Promise(r => setTimeout(r, 200));
 
       // MUI DateTimePicker segments auto-advance when the segment is filled.
@@ -1035,7 +1034,7 @@ async function main() {
       }, null, 8000);
 
       record(
-        '[WARN-VCM] 15-minute warning Alert appears in VisitCalendarModal after DateTimePicker update',
+        '[WARN-VCM] 15-minute warning Alert appears in ScheduleVisitModal after DateTimePicker update',
         'Alert with "less than 15 minutes" or "already passed" text',
         vcmWarnAlert ? `text="${vcmWarnAlert.text}"` : 'not found',
         !!vcmWarnAlert,

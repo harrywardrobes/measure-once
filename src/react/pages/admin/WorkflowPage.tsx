@@ -51,8 +51,7 @@ import { STAGE_COLORS } from '../../theme';
 import { resolveActionLabel } from '../../utils/resolveActionLabel.mjs';
 import { DEMO_CONTACT } from '../../components/modals/demoData';
 import { MessagePopupModal } from '../../components/modals/MessagePopupModal';
-import { VisitCalendarModal } from '../../components/modals/VisitCalendarModal';
-import { DesignVisitCalendarModal } from '../../components/modals/DesignVisitCalendarModal';
+import { ScheduleVisitModal } from '../../components/modals/ScheduleVisitModal';
 import { PhoneSummaryModal } from '../../components/modals/PhoneSummaryModal';
 import { DeliveryWindowModal } from '../../components/modals/DeliveryWindowModal';
 import { InstallationSlotModal } from '../../components/modals/InstallationSlotModal';
@@ -896,9 +895,9 @@ function WorkflowDemoModalHost({
     case 'show_message':
       return <MessagePopupModal handler={handler} {...common} />;
     case 'add_design_visit_to_calendar':
-      return <DesignVisitCalendarModal handler={handler} ctx={DEMO_CTX} {...common} />;
+      return <ScheduleVisitModal handler={handler} ctx={DEMO_CTX} visitType="design" {...common} />;
     case 'schedule_visit':
-      return <VisitCalendarModal handler={handler} ctx={DEMO_CTX} {...common} />;
+      return <ScheduleVisitModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'summarise_phone_call':
       return <PhoneSummaryModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'schedule_delivery_window':
