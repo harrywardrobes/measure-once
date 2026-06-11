@@ -30,6 +30,7 @@ const PROBE_LABELS = [
   '(G) failed invoice send does not advance lead status and contact stays OPEN_DEAL',
   '(H) amendments path: data-load endpoint is non-mutating, lead status stays OPEN_DEAL',
   '(I) idempotency: second accept-deal call for same estimate returns existing invoice, no duplicate created',
+  '(J) concurrent idempotency: two simultaneous accept-deal calls for the same estimate produce exactly one QB invoice',
 ];
 
 const fs   = require('fs');
@@ -55,6 +56,7 @@ const EST_F2          = '110008';
 const EST_F3          = '110009';
 const EST_G           = '110010';
 const EST_I           = '110011'; // idempotency probe
+const EST_J           = '110012'; // concurrent idempotency probe
 const INV_STANDALONE  = '119900'; // for standalone /invoice/:id/send probe in C
 
 // Fake numeric HubSpot contact IDs (must pass /^\d+$/ checks in routes)
@@ -337,7 +339,7 @@ async function clearSendLog(pool, userId) {
 async function clearOpenDealInvoices(pool) {
   // Remove any rows seeded by a previous run of this test suite so the
   // idempotency guard starts each run with a clean slate.
-  const estIds = [EST_A, EST_B, EST_C, EST_D, EST_E1, EST_E2, EST_F1, EST_F2, EST_F3, EST_G, EST_I];
+  const estIds = [EST_A, EST_B, EST_C, EST_D, EST_E1, EST_E2, EST_F1, EST_F2, EST_F3, EST_G, EST_I, EST_J];
   await pool.query(
     'DELETE FROM open_deal_invoices WHERE estimate_id = ANY($1::text[])',
     [estIds]
@@ -996,6 +998,81 @@ async function main() {
         secondInvCreateCount === 0
           ? 'no invoice create call on retry (correct)'
           : `${secondInvCreateCount} unexpected invoice create call(s) on retry`);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probe J: Concurrent idempotency — two simultaneous calls produce one invoice
+    //
+    // Fires two accept-deal requests for the same estimate at the same time
+    // (using Promise.all) to exercise the advisory lock serialization path.
+    // Exactly one QB invoice POST should be observed; both responses must
+    // succeed (200) and return the same invoiceId.
+    // ─────────────────────────────────────────────────────────────────────────
+    console.log('\n  [J] Concurrent idempotency: two simultaneous accept-deal calls');
+    {
+      await clearQbSettings(pool);
+      await clearSendLog(pool, users.manager.id);
+      await clearSendLog(pool, users.admin.id);
+      mockQb.state.calls.length = 0;
+      mockHs.state.patches.length = 0;
+      if (fs.existsSync(mailFile)) fs.unlinkSync(mailFile);
+
+      mockQb.state.estimates[EST_J] = {
+        Id: EST_J, SyncToken: '1', TxnStatus: 'Pending',
+        TotalAmt: 2000,
+        CustomerRef: { value: CONTACT_ID },
+      };
+
+      // Fire two requests simultaneously.  Both users (manager + admin) are
+      // managers-or-admins, so both are authorised to call accept-deal.
+      // The advisory lock in the server ensures only one invoice is created
+      // in QuickBooks even though both requests race past their SELECT check.
+      const [r1, r2] = await Promise.all([
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, mgr.cookie, {
+          estimateId:   EST_J,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+        apiPost(BASE, `/api/quickbooks/contacts/${CONTACT_ID}/accept-deal`, admin.cookie, {
+          estimateId:   EST_J,
+          contactEmail: CONTACT_EMAIL,
+          contactName:  CONTACT_NAME,
+        }),
+      ]);
+
+      // Both requests must succeed (200).
+      record('J.both-requests-ok',
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true,
+        r1.status === 200 && r1.body?.ok === true && r2.status === 200 && r2.body?.ok === true
+          ? `both HTTP 200 ok=true (r1.invoiceId=${r1.body?.invoiceId} r2.invoiceId=${r2.body?.invoiceId})`
+          : `r1: HTTP ${r1.status} ${js(r1.body).slice(0, 100)} | r2: HTTP ${r2.status} ${js(r2.body).slice(0, 100)}`);
+
+      // Exactly one QB invoice create POST must have been issued.
+      const concurrentInvCreates = mockQb.state.calls.filter(
+        c => c.method === 'POST' && c.path.endsWith('/invoice') && !c.body.Id && !c.body.sparse
+      ).length;
+      record('J.exactly-one-invoice-created', concurrentInvCreates === 1,
+        concurrentInvCreates === 1
+          ? 'exactly 1 QB invoice create call — advisory lock prevented duplicate'
+          : `expected 1 invoice create, got ${concurrentInvCreates} — duplicate invoice would have been created`);
+
+      // Both responses must reference the same invoiceId.
+      record('J.same-invoice-id-returned',
+        r1.body?.invoiceId != null && r1.body?.invoiceId === r2.body?.invoiceId,
+        r1.body?.invoiceId != null && r1.body?.invoiceId === r2.body?.invoiceId
+          ? `same invoiceId=${r1.body?.invoiceId} returned to both callers`
+          : `mismatched invoiceIds: r1=${r1.body?.invoiceId} r2=${r2.body?.invoiceId}`);
+
+      // Exactly one row in the idempotency table for this estimate.
+      const { rows: idemRows } = await pool.query(
+        'SELECT COUNT(*) AS cnt FROM open_deal_invoices WHERE estimate_id = $1',
+        [EST_J]
+      );
+      const idemCount = Number(idemRows[0]?.cnt ?? 0);
+      record('J.one-idempotency-row', idemCount === 1,
+        idemCount === 1
+          ? 'exactly 1 row in open_deal_invoices for this estimate'
+          : `expected 1 row, found ${idemCount}`);
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;

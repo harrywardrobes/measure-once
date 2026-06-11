@@ -611,11 +611,29 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
       //    (e.g. a prior call timed out before its response arrived), skip the
       //    invoice-create step but still complete all remaining steps so a partial
       //    failure on the first call is correctly retried to completion.
+      //
+      //    A session-level advisory lock keyed on hashtext(estimateId) serializes
+      //    concurrent accept-deal calls for the same estimate.  Without the lock,
+      //    two simultaneous requests could both pass the SELECT check before either
+      //    INSERT completes, resulting in two QuickBooks invoices for one estimate.
+      //    The lock is held for the duration of the QB accept + invoice-create calls
+      //    and released once the idempotency row is committed (or on any error).
       let invoiceId     = null;
       let invoiceDocNum = null;
       let idempotentRetry = false;
-      {
-        const existing = await pool.query(
+
+      const lockClient = await pool.connect();
+      let advisoryLockHeld = false;
+      try {
+        await lockClient.query(
+          'SELECT pg_advisory_lock(hashtext($1)::bigint)',
+          [estimateId]
+        );
+        advisoryLockHeld = true;
+
+        // Re-check idempotency table under the advisory lock so a concurrent
+        // request that also passed the pre-lock SELECT now sees the committed row.
+        const existing = await lockClient.query(
           'SELECT invoice_id, invoice_doc_num FROM open_deal_invoices WHERE estimate_id = $1',
           [estimateId]
         );
@@ -629,62 +647,70 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
             { estimateId, contactId, invoiceId },
             '[accept-deal] idempotency: existing invoice found — skipping create, completing remaining steps'
           );
-        }
-      }
+        } else {
+          // 3. Mark estimate as Accepted
+          await axios.post(
+            `${qbBase}/v3/company/${t.realm_id}/estimate`,
+            { sparse: true, Id: estimateId, SyncToken: estimate.SyncToken, TxnStatus: 'Accepted' },
+            { headers: jsonHdr, params: qbParams, timeout: 12000 }
+          );
+          steps.estimateAccepted = true;
 
-      // 3. Mark estimate as Accepted (skip if invoice already exists from a prior call)
-      if (!idempotentRetry) {
-        await axios.post(
-          `${qbBase}/v3/company/${t.realm_id}/estimate`,
-          { sparse: true, Id: estimateId, SyncToken: estimate.SyncToken, TxnStatus: 'Accepted' },
-          { headers: jsonHdr, params: qbParams, timeout: 12000 }
-        );
-        steps.estimateAccepted = true;
+          // 4. Create deposit invoice (single line linked to the estimate via LinkedTxn)
+          const invoiceBody = {
+            TxnDate:     new Date().toISOString().slice(0, 10),
+            CustomerRef: { value: contactId },
+            ...(contactEmail ? { BillEmail: { Address: contactEmail } } : {}),
+            Line: [{
+              DetailType: 'SalesItemLineDetail',
+              Amount:     depositAmt,
+              Description: `Deposit — ${depositPercent}% of Estimate #${estimateDocNum}`,
+              SalesItemLineDetail: {
+                ItemRef:   { value: '1', name: 'Services' },
+                Qty:       1,
+                UnitPrice: depositAmt,
+              },
+            }],
+            LinkedTxn: [{ TxnId: estimateId, TxnType: 'Estimate' }],
+          };
+          const invResp = await axios.post(
+            `${qbBase}/v3/company/${t.realm_id}/invoice`,
+            invoiceBody,
+            { headers: jsonHdr, params: qbParams, timeout: 15000 }
+          );
+          const invoice = invResp.data?.Invoice;
+          if (!invoice?.Id) {
+            // Throw so the finally block releases the lock and connection, then
+            // the outer catch handles the response.  We cannot call res.json
+            // inside the advisory-lock try block because the finally would still
+            // run regardless and could double-release the client.
+            throw Object.assign(
+              new Error('Invoice was created but no ID was returned from QuickBooks.'),
+              { _qbNoInvoiceId: true, _steps: steps }
+            );
+          }
+          invoiceId     = invoice.Id;
+          invoiceDocNum = invoice.DocNumber || null;
+          steps.invoiceCreated = true;
 
-        // 4. Create deposit invoice (single line linked to the estimate via LinkedTxn)
-        const invoiceBody = {
-          TxnDate:     new Date().toISOString().slice(0, 10),
-          CustomerRef: { value: contactId },
-          ...(contactEmail ? { BillEmail: { Address: contactEmail } } : {}),
-          Line: [{
-            DetailType: 'SalesItemLineDetail',
-            Amount:     depositAmt,
-            Description: `Deposit — ${depositPercent}% of Estimate #${estimateDocNum}`,
-            SalesItemLineDetail: {
-              ItemRef:   { value: '1', name: 'Services' },
-              Qty:       1,
-              UnitPrice: depositAmt,
-            },
-          }],
-          LinkedTxn: [{ TxnId: estimateId, TxnType: 'Estimate' }],
-        };
-        const invResp = await axios.post(
-          `${qbBase}/v3/company/${t.realm_id}/invoice`,
-          invoiceBody,
-          { headers: jsonHdr, params: qbParams, timeout: 15000 }
-        );
-        const invoice = invResp.data?.Invoice;
-        if (!invoice?.Id) {
-          return res.status(502).json({
-            error: 'Invoice was created but no ID was returned from QuickBooks.', steps,
-          });
-        }
-        invoiceId     = invoice.Id;
-        invoiceDocNum = invoice.DocNumber || null;
-        steps.invoiceCreated = true;
-
-        // Record in the idempotency table so a subsequent retry skips create.
-        // ON CONFLICT DO NOTHING is a safety net for near-simultaneous requests.
-        try {
-          await pool.query(
+          // Record in the idempotency table while still holding the advisory lock
+          // so that any concurrent waiter sees the committed row immediately after
+          // we release.  ON CONFLICT DO NOTHING is a belt-and-braces guard only.
+          await lockClient.query(
             `INSERT INTO open_deal_invoices (estimate_id, contact_id, invoice_id, invoice_doc_num)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (estimate_id) DO NOTHING`,
             [estimateId, contactId, invoiceId, invoiceDocNum]
           );
-        } catch (e) {
-          logger.warn({ err: e.message }, '[accept-deal] could not record invoice in open_deal_invoices (non-fatal):');
         }
+      } catch (lockErr) {
+        // Propagate — the finally block releases the lock and connection.
+        throw lockErr;
+      } finally {
+        if (advisoryLockHeld) {
+          await lockClient.query('SELECT pg_advisory_unlock(hashtext($1)::bigint)', [estimateId]).catch(() => {});
+        }
+        lockClient.release();
       }
 
       // 5. Rate-limit check then send invoice via QB (includes CC/BCC from qb_settings)
@@ -806,6 +832,11 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
 
       res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE', ...(idempotentRetry ? { idempotent: true } : {}) });
     } catch (e) {
+      if (e._qbNoInvoiceId) {
+        // Thrown from inside the advisory-lock block to ensure the finally clause
+        // releases the lock/client before we respond (avoids a double-release).
+        return res.status(502).json({ error: e.message, steps: e._steps });
+      }
       const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
       logger.error({ err: qbMsg }, 'POST /api/quickbooks/contacts/:contactId/accept-deal error:');
       res.status(503).json({ error: qbMsg, steps });
