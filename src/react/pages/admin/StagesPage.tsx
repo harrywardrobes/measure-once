@@ -704,7 +704,7 @@ export function StagesPage() {
                       <th style={TH}>Key</th>
                       <th style={TH}>Display Label</th>
                       <th style={{ ...TH, textAlign: 'center' }} title="Number of action handlers bound to this lead status">Handlers</th>
-                      <th style={{ ...TH, textAlign: 'center' }}>Excl. from Sales</th>
+                      <th style={{ ...TH, textAlign: 'center' }}>Excl.</th>
                       <th style={{ ...TH, textAlign: 'center' }}>Delete</th>
                     </tr>
                   </thead>
