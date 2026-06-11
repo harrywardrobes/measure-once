@@ -1086,7 +1086,11 @@ export function ProjectsPage() {
     document.addEventListener('visibilitychange', onVisibility);
 
     const unsubscribeUrgency = subscribeUrgencyChanged(({ contactId }) => {
-      refetchUrgencyForIds([contactId]);
+      if (contactId) {
+        refetchUrgencyForIds([contactId]);
+      } else {
+        refetchUrgencyForIds(null);
+      }
     });
 
     return () => {

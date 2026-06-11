@@ -5,20 +5,33 @@
  */
 export const URGENCY_CHANGED_CHANNEL = 'urgency_changed';
 
-/** Shape of every message posted on URGENCY_CHANGED_CHANNEL. */
+/**
+ * Shape of every message posted on URGENCY_CHANGED_CHANNEL.
+ *
+ * `contactId` is optional.  When present, only that contact's urgency needs
+ * to be refreshed.  When absent (or an empty string), the receiver should
+ * treat it as a "refetch all" signal — e.g. after a bulk urgency update.
+ *
+ * `broadcastUrgencyChanged` therefore accepts an optional contactId, and
+ * `subscribeUrgencyChanged` passes both forms through to the handler
+ * (contactId will be `undefined` for the "refetch all" case).
+ */
 export interface UrgencyChangedMessage {
-  contactId: string;
+  contactId?: string;
 }
 
 /**
  * Broadcasts an urgency change to other tabs/windows via BroadcastChannel.
+ * Pass a contactId to target a single contact, or omit it to signal that all
+ * urgency data should be refreshed.
  * Non-fatal — silently ignored if BroadcastChannel is unavailable.
  */
-export function broadcastUrgencyChanged(contactId: string): void {
+export function broadcastUrgencyChanged(contactId?: string): void {
   if (typeof BroadcastChannel === 'undefined') return;
   try {
     const ch = new BroadcastChannel(URGENCY_CHANGED_CHANNEL);
-    ch.postMessage({ contactId } satisfies UrgencyChangedMessage);
+    const msg: UrgencyChangedMessage = contactId ? { contactId } : {};
+    ch.postMessage(msg);
     ch.close();
   } catch { /* ignore — non-fatal */ }
 }
@@ -28,8 +41,9 @@ export function broadcastUrgencyChanged(contactId: string): void {
  * Returns a cleanup function that closes the channel.  Non-fatal — silently
  * ignored if BroadcastChannel is unavailable (returns a no-op cleanup).
  *
- * Malformed messages (missing or non-string contactId) are dropped inside
- * the helper so callers never receive an invalid payload.
+ * Completely malformed messages (non-object payloads) are dropped.  Messages
+ * with a missing or empty `contactId` are passed through with
+ * `contactId: undefined` so the handler can treat them as "refetch all".
  */
 export function subscribeUrgencyChanged(
   handler: (msg: UrgencyChangedMessage) => void,
@@ -38,10 +52,15 @@ export function subscribeUrgencyChanged(
   let ch: BroadcastChannel | null = null;
   try {
     ch = new BroadcastChannel(URGENCY_CHANGED_CHANNEL);
-    ch.onmessage = (evt: MessageEvent<Partial<UrgencyChangedMessage>>) => {
-      const msg = evt.data;
-      if (!msg || typeof msg.contactId !== 'string' || msg.contactId === '') return;
-      handler(msg as UrgencyChangedMessage);
+    ch.onmessage = (evt: MessageEvent<unknown>) => {
+      const data = evt.data;
+      if (!data || typeof data !== 'object') return;
+      const msg = data as Record<string, unknown>;
+      const contactId =
+        typeof msg['contactId'] === 'string' && msg['contactId'] !== ''
+          ? msg['contactId']
+          : undefined;
+      handler({ contactId });
     };
   } catch { /* BroadcastChannel unavailable */ }
   return () => { try { ch?.close(); } catch { /* noop */ } };
