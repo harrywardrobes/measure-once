@@ -658,12 +658,16 @@ export function CustomerDetailPage() {
           lastAttempt={lastAttempt}
           depositInvoiceId={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_id ?? null}
           depositInvoiceDocNum={designVisits.find(v => v.deposit_invoice_id)?.deposit_invoice_doc_num ?? null}
-          depositInvoicePaid={(() => {
+          depositPaymentState={(() => {
             const dvWithInv = designVisits.find(v => v.deposit_invoice_id);
             if (!dvWithInv || !qb.loaded) return null;
             const inv = qb.invoices.find(i => i.id === dvWithInv.deposit_invoice_id);
             if (!inv) return null;
-            return (inv.balance ?? 0) <= 0;
+            const balance = Number(inv.balance ?? 0);
+            const total   = Number(inv.totalAmt ?? 0);
+            if (balance <= 0) return 'paid';
+            if (total > 0 && balance < total) return 'partial';
+            return 'unpaid';
           })()}
         />
       )}

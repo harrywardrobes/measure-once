@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
-import Box from '@mui/material/Box';
 import { PROVIDER_COLORS } from '../../theme';
 import { Contact, LeadStatus, contactName } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
+import { DepositInvoiceBadge, type DepositPaymentState } from '../../components/DepositInvoiceBadge';
 
 interface Props {
   contact: Contact;
@@ -19,7 +19,7 @@ interface Props {
   lastAttempt?: LastAttempt;
   depositInvoiceId?: string | null;
   depositInvoiceDocNum?: string | null;
-  depositInvoicePaid?: boolean | null;
+  depositPaymentState?: DepositPaymentState;
 }
 
 export function CustomerDetailHeader({
@@ -33,7 +33,7 @@ export function CustomerDetailHeader({
   lastAttempt,
   depositInvoiceId,
   depositInvoiceDocNum,
-  depositInvoicePaid,
+  depositPaymentState,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -176,32 +176,11 @@ export function CustomerDetailHeader({
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
             {depositInvoiceId && (
-              <a
-                href={`/invoices#inv-${encodeURIComponent(depositInvoiceId)}`}
-                title={
-                  depositInvoicePaid === true  ? 'Deposit paid — view invoice' :
-                  depositInvoicePaid === false ? 'Deposit outstanding — view invoice' :
-                                                'View deposit invoice'
-                }
-                style={{
-                  fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
-                  padding: '3px 7px', borderRadius: 6,
-                  background: depositInvoicePaid === true  ? '#dcfce7' :
-                              depositInvoicePaid === false ? '#fef3c7' :
-                                                            'var(--surface-muted)',
-                  border: depositInvoicePaid === true  ? '1px solid #bbf7d0' :
-                          depositInvoicePaid === false ? '1px solid #fbbf24' :
-                                                        '1px solid var(--orchid)',
-                  color: depositInvoicePaid === true  ? '#166534' :
-                         depositInvoicePaid === false ? '#92400e' :
-                                                       'var(--orchid)',
-                  letterSpacing: '0.02em', flexShrink: 0,
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice'}
-              </a>
+              <DepositInvoiceBadge
+                depositInvoiceId={depositInvoiceId}
+                depositInvoiceDocNum={depositInvoiceDocNum ?? null}
+                paymentState={depositPaymentState}
+              />
             )}
             {activityCounter && (
               <Tooltip
