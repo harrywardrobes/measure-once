@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -19,11 +17,10 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import type { Visit } from '../../pages/customer-detail/types';
-import { POST, PATCH, isGoogleAuthError, calendarErrorMessage } from '../../utils/api';
+import { POST, calendarErrorMessage } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { ContactInfoHeader } from './ContactInfoHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
@@ -97,13 +94,10 @@ export function DeliveryWindowModal(props: Props) {
   const [range, setRange] = useState<DateRange<Dayjs>>([initialStart, initialEnd]);
   const [location, setLocation] = useState(isEdit ? (visit?.location || '') : '');
   const [notes, setNotes] = useState(isEdit ? (visit?.notes || '') : '');
-  const [updateGcal, setUpdateGcal] = useState(isEdit && !!visit?.googleEventId);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [startTimeWarning, setStartTimeWarning] = useState(false);
   const [pastConfirmOpen, setPastConfirmOpen] = useState(false);
-
-  const initialUpdateGcalRef = useRef(isEdit && !!visit?.googleEventId);
 
   const hasUnsavedChanges = (() => {
     const [rs, re] = range;
@@ -112,8 +106,7 @@ export function DeliveryWindowModal(props: Props) {
       location !== initialLocationRef.current ||
       notes !== initialNotesRef.current ||
       (rs !== null && !rs.isSame(initialStartRef.current)) ||
-      (re !== null && !re.isSame(initialEndRef.current)) ||
-      updateGcal !== initialUpdateGcalRef.current
+      (re !== null && !re.isSame(initialEndRef.current))
     );
   })();
 
@@ -157,79 +150,45 @@ export function DeliveryWindowModal(props: Props) {
     setSubmitting(true);
     try {
       if (isEdit && visit) {
-        // Offline-aware edit. When offline / on a network error the visit update
-        // is queued and replayed on reconnect; the cached version/updated_at base
-        // lets the sync engine detect a stale overwrite for the conflict view.
-        const { sendOrQueue, queueCalendarUpdate } = await import('../../lib/offlineQueue');
+        // Google Calendar is the single source of truth for edits.
+        // Visits without a googleEventId pre-date the migration and cannot be
+        // edited here — the user is prompted to re-schedule.
+        if (!visit.googleEventId) {
+          setError('This appointment was created before the Google Calendar migration. Please delete it and create a new one from the shared calendar.');
+          return;
+        }
+
+        // Offline-aware edit. When offline / on a network error the calendar
+        // update is queued and replayed on reconnect.
+        const { sendOrQueue } = await import('../../lib/offlineQueue');
         const res = await sendOrQueue({
           area: 'visit',
           label: `Edit delivery window — ${visit.customerName || visit.id}`,
           method: 'PATCH',
-          url: `/api/visits/${visit.id}`,
+          url: `/api/events/${visit.googleEventId}`,
           body: {
-            type: 'delivery',
-            title: title.trim(),
-            customerId: visit.customerId || null,
-            customerName: visit.customerName || null,
-            startAt: start.toDate().toISOString(),
-            endAt: end.toDate().toISOString(),
-            location: location.trim() || null,
-            notes: notes.trim() || null,
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toDate().toISOString() },
+            end: { dateTime: end.toDate().toISOString() },
           },
-          conflictCheckUrl: `/api/visits/${visit.id}`,
-          recordKey: `visit:${visit.id}`,
-          dedupeKey: `visit:${visit.id}`,
-          baseVersion: visit.version ?? null,
-          baseUpdatedAt: visit.updatedAt ?? null,
+          dedupeKey: `gcal:${visit.googleEventId}`,
         });
-        if (!res.queued && !res.ok) {
-          throw new Error((res.data as { error?: string })?.error || 'Could not save.');
-        }
+
         if (res.queued) {
-          if (updateGcal && visit.googleEventId) {
-            await queueCalendarUpdate({
-              googleEventId: visit.googleEventId,
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              startISO: start.toDate().toISOString(),
-              endISO: end.toDate().toISOString(),
-              label: `Update Google Calendar — ${visit.customerName || visit.id}`,
-            });
-            showToast('Delivery window update saved offline — the visit and its Google Calendar event will sync when you reconnect', false);
-          } else {
-            showToast('Delivery window update saved offline — it will sync when you reconnect', false);
-          }
+          showToast('Delivery window update saved offline — the Google Calendar event will sync when you reconnect', false);
           handleClose();
           props.onSaved?.();
           return;
         }
 
-        const _d = res.data as { hs_lead_status?: string } | undefined;
-        if (_d?.hs_lead_status) {
-          broadcastLeadStatusChange(contactId ?? '', {
-            hs_lead_status: _d.hs_lead_status ?? '',
-          });
-        }
-
-        if (updateGcal && visit.googleEventId) {
-          try {
-            await PATCH(`/api/events/${visit.googleEventId}`, {
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              start: { dateTime: start.toDate().toISOString() },
-              end: { dateTime: end.toDate().toISOString() },
-            });
-          } catch (gcalErr) {
-            const gcalMsg = isGoogleAuthError(gcalErr)
-              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-              : gcalErr instanceof Error ? gcalErr.message : 'error';
-            showToast(`Delivery window updated; Google Calendar update failed: ${gcalMsg}`, true);
-            handleClose();
-            props.onSaved?.();
-            return;
+        if (!res.ok) {
+          const data = res.data as { error?: string; code?: string } | undefined;
+          if (data?.code === 'GOOGLE_AUTH' || data?.code === 'GOOGLE_ERROR') {
+            throw new Error("Google account isn't connected — reconnect in your profile to sync Calendar.");
           }
+          throw new Error(data?.error || 'Could not save.');
         }
 
         showToast('Delivery window updated', false);
@@ -392,24 +351,11 @@ export function DeliveryWindowModal(props: Props) {
               fullWidth
               size="small"
             />
-            {isEdit && visit?.googleEventId && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    id="cah-dw-update-google"
-                    checked={updateGcal}
-                    onChange={e => setUpdateGcal(e.target.checked)}
-                    size="small"
-                  />
-                }
-                label="Also update my Google Calendar event"
-              />
-            )}
-            {!isEdit && (
-              <Typography variant="caption" color="text.secondary">
-                This delivery window is added to the shared Measure Once Google Calendar.
-              </Typography>
-            )}
+            <Typography variant="caption" color="text.secondary">
+              {isEdit
+                ? 'Changes are saved to the shared Measure Once Google Calendar.'
+                : 'This delivery window is added to the shared Measure Once Google Calendar.'}
+            </Typography>
             {error && (
               <Typography variant="caption" color="error">{error}</Typography>
             )}

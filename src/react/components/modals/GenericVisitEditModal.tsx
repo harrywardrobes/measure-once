@@ -1,12 +1,10 @@
 import React, { useRef, useState } from 'react';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -18,10 +16,9 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
-import { PATCH, POST, isGoogleAuthError } from '../../utils/api';
+import { POST, isGoogleAuthError } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
-import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -85,18 +82,11 @@ export function GenericVisitEditModal(props: Props) {
   const initialEndRef      = useRef(initialEnd);
   const initialLocationRef = useRef(isCreate ? '' : (props.visit.location || ''));
   const initialNotesRef    = useRef(isCreate ? '' : (props.visit.notes || ''));
-  const initialGcalRef     = useRef(isCreate ? true : !!(props.visit.googleEventId));
 
   const [title, setTitle] = useState(defaultTitle);
   const [range, setRange] = useState<DateRange<Dayjs>>([initialStart, initialEnd]);
   const [location, setLocation] = useState(isCreate ? '' : (props.visit.location || ''));
   const [notes, setNotes] = useState(isCreate ? '' : (props.visit.notes || ''));
-  const [gcalChecked, setGcalChecked] = useState(
-    isCreate ? true : !!(props.visit.googleEventId)
-  );
-  // For edits the gcal checkbox is shown when the visit already has a googleEventId.
-  // For creates the calendar event is always created (no checkbox shown).
-  const showGcalCheckbox = !isCreate && !!(props as EditProps).visit.googleEventId;
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const hasUnsavedChanges = (() => {
@@ -106,8 +96,7 @@ export function GenericVisitEditModal(props: Props) {
       location !== initialLocationRef.current ||
       notes !== initialNotesRef.current ||
       (rs !== null && !rs.isSame(initialStartRef.current)) ||
-      (re !== null && !re.isSame(initialEndRef.current)) ||
-      gcalChecked !== initialGcalRef.current
+      (re !== null && !re.isSame(initialEndRef.current))
     );
   })();
 
@@ -156,79 +145,45 @@ export function GenericVisitEditModal(props: Props) {
         props.onSaved?.();
       } else {
         const visit = props.visit;
-        // Offline-aware edit. When offline / on a network error the visit update
-        // is queued and replayed on reconnect; the cached version/updated_at base
-        // lets the sync engine detect a stale overwrite for the conflict view.
-        const { sendOrQueue, queueCalendarUpdate } = await import('../../lib/offlineQueue');
+        // Google Calendar is the single source of truth for edits.
+        // Visits without a googleEventId pre-date the migration and cannot be
+        // edited here — the user is prompted to re-schedule.
+        if (!visit.googleEventId) {
+          setError('This appointment was created before the Google Calendar migration. Please delete it and create a new one from the shared calendar.');
+          return;
+        }
+
+        // Offline-aware edit. When offline / on a network error the calendar
+        // update is queued and replayed on reconnect.
+        const { sendOrQueue } = await import('../../lib/offlineQueue');
         const res = await sendOrQueue({
           area: 'visit',
           label: `Edit ${label.toLowerCase()} — ${contactName || visit.id}`,
           method: 'PATCH',
-          url: `/api/visits/${visit.id}`,
+          url: `/api/events/${visit.googleEventId}`,
           body: {
-            type: visit.type,
-            title: title.trim(),
-            customerId: visit.customerId || null,
-            customerName: visit.customerName || null,
-            startAt: start.toDate().toISOString(),
-            endAt: end.toDate().toISOString(),
-            location: location.trim() || null,
-            notes: notes.trim() || null,
+            summary: title.trim(),
+            description: notes.trim() || '',
+            location: location.trim() || '',
+            start: { dateTime: start.toDate().toISOString() },
+            end: { dateTime: end.toDate().toISOString() },
           },
-          conflictCheckUrl: `/api/visits/${visit.id}`,
-          recordKey: `visit:${visit.id}`,
-          dedupeKey: `visit:${visit.id}`,
-          baseVersion: visit.version ?? null,
-          baseUpdatedAt: visit.updatedAt ?? null,
+          dedupeKey: `gcal:${visit.googleEventId}`,
         });
-        if (!res.queued && !res.ok) {
-          throw new Error((res.data as { error?: string })?.error || 'Could not save.');
-        }
+
         if (res.queued) {
-          if (gcalChecked && visit.googleEventId) {
-            await queueCalendarUpdate({
-              googleEventId: visit.googleEventId,
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              startISO: start.toDate().toISOString(),
-              endISO: end.toDate().toISOString(),
-              label: `Update Google Calendar — ${contactName || visit.id}`,
-            });
-            showToast(`${label} update saved offline — the visit and its Google Calendar event will sync when you reconnect`, false);
-          } else {
-            showToast(`${label} update saved offline — it will sync when you reconnect`, false);
-          }
+          showToast(`${label} update saved offline — the Google Calendar event will sync when you reconnect`, false);
           handleClose();
           props.onSaved?.();
           return;
         }
 
-        const _d = res.data as { hs_lead_status?: string } | undefined;
-        if (_d?.hs_lead_status) {
-          broadcastLeadStatusChange(contactId ?? '', {
-            hs_lead_status: _d.hs_lead_status ?? '',
-          });
-        }
-
-        if (gcalChecked && visit.googleEventId) {
-          try {
-            await PATCH(`/api/events/${visit.googleEventId}`, {
-              summary: title.trim(),
-              description: notes.trim() || '',
-              location: location.trim() || '',
-              start: { dateTime: start.toDate().toISOString() },
-              end: { dateTime: end.toDate().toISOString() },
-            });
-          } catch (gcalErr) {
-            const gcalMsg = isGoogleAuthError(gcalErr)
-              ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-              : gcalErr instanceof Error ? gcalErr.message : 'error';
-            showToast(`${label} updated; Google Calendar update failed: ${gcalMsg}`, true);
-            handleClose();
-            props.onSaved?.();
-            return;
+        if (!res.ok) {
+          const data = res.data as { error?: string; code?: string } | undefined;
+          if (data?.code === 'GOOGLE_AUTH' || data?.code === 'GOOGLE_ERROR') {
+            throw new Error("Google account isn't connected — reconnect in your profile to sync Calendar.");
           }
+          throw new Error(data?.error || 'Could not save.');
         }
 
         showToast(`${label} updated`, false);
@@ -245,8 +200,6 @@ export function GenericVisitEditModal(props: Props) {
   const dialogTitle = isCreate
     ? (contactName ? `Schedule ${label.toLowerCase()} for ${contactName}` : `Schedule ${label.toLowerCase()}`)
     : (contactName ? `Edit ${label.toLowerCase()} for ${contactName}` : `Edit ${label.toLowerCase()}`);
-
-  const gcalLabel = 'Also update my Google Calendar event';
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -286,24 +239,11 @@ export function GenericVisitEditModal(props: Props) {
               fullWidth
               size="small"
             />
-            {isCreate && (
-              <Typography variant="caption" color="text.secondary">
-                This visit is added to the shared Measure Once Google Calendar.
-              </Typography>
-            )}
-            {showGcalCheckbox && (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={gcalChecked}
-                    onChange={e => setGcalChecked(e.target.checked)}
-                    size="small"
-                    disabled={submitting}
-                  />
-                }
-                label={gcalLabel}
-              />
-            )}
+            <Typography variant="caption" color="text.secondary">
+              {isCreate
+                ? 'This visit is added to the shared Measure Once Google Calendar.'
+                : 'Changes are saved to the shared Measure Once Google Calendar.'}
+            </Typography>
             {error && (
               <Typography variant="caption" color="error">{error}</Typography>
             )}
