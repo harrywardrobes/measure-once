@@ -773,8 +773,9 @@ function StageAccordionNew({
 
   const stageStatuses = useMemo(() => {
     const q = searchText.toLowerCase().trim();
+    const nullRow = statuses.find(s => s.is_null_row);
     let list = statuses
-      .filter(s => lsStageToKey(s.stage || '') === stageKey)
+      .filter(s => !s.is_null_row && lsStageToKey(s.stage || '') === stageKey)
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
     if (q) {
@@ -790,6 +791,21 @@ function StageAccordionNew({
         });
       });
     }
+
+    if (nullRow) {
+      const includeNull = !q || (() => {
+        if (nullRow.label.toLowerCase().includes(q)) return true;
+        const hs = handlersForSlot(handlers, stageKey, '');
+        return hs.some(h => {
+          if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
+          const meta = isHandlerType(h.type) ? HANDLER_COMPONENT_META[h.type] : undefined;
+          if (meta?.component.toLowerCase().includes(q)) return true;
+          return false;
+        });
+      })();
+      if (includeNull) list = [nullRow, ...list];
+    }
+
     return list;
   }, [statuses, stageKey, handlers, searchText, labels]); // eslint-disable-line react-hooks/exhaustive-deps
 
