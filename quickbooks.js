@@ -1010,6 +1010,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
               '[decline-deal] thank-you email already sent (declined_at set) — skipping'
             );
             steps.thankYouSent = true;
+            steps.emailAlreadySent = true;
           } else {
             try {
               const template = await getEmailTemplate('open_deal_declined_thank_you');
@@ -1071,7 +1072,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL' });
+      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL', ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}) });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/quickbooks/contacts/:contactId/decline-deal error:');
       res.status(503).json({ error: e.message, steps });

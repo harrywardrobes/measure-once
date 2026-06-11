@@ -1270,6 +1270,15 @@ async function main() {
           ? 'both responses report thankYouSent=true'
           : `r1.steps=${js(r1.body?.steps)} r2.steps=${js(r2.body?.steps)}`);
 
+      // The waiter (whichever request found declined_at already set) must have
+      // emailAlreadySent=true; the winner must not have it.
+      const alreadySentCount = [r1, r2].filter(r => r.body?.emailAlreadySent === true).length;
+      record('L.waiter-has-email-already-sent-flag',
+        alreadySentCount === 1,
+        alreadySentCount === 1
+          ? 'exactly 1 response has emailAlreadySent=true (waiter correctly flagged)'
+          : `expected 1 waiter flag, got ${alreadySentCount} — r1.emailAlreadySent=${r1.body?.emailAlreadySent} r2.emailAlreadySent=${r2.body?.emailAlreadySent}`);
+
       // declined_at must be set in the DB for this contact.
       const { rows: declineRows } = await pool.query(
         'SELECT declined_at FROM open_deal_declines WHERE contact_id = $1',

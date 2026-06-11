@@ -58,6 +58,7 @@ type Step =
   | 'decline_confirm'
   | 'decline_email'
   | 'decline_submitting'
+  | 'decline_done'
   | 'done';
 
 interface QbEstimate {
@@ -99,6 +100,13 @@ interface AcceptResult {
   code?: string;
   removedKey?: string;
   sendSkipped?: boolean;
+}
+
+interface DeclineResult {
+  ok?: boolean;
+  hs_lead_status?: string;
+  steps?: Record<string, boolean>;
+  emailAlreadySent?: boolean;
 }
 
 function formatCurrency(n: number): string {
@@ -148,6 +156,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   const [declineConfirmed, setDeclineConfirmed] = useState(false);
   const [sendThankYou, setSendThankYou] = useState(false);
   const [declineError, setDeclineError] = useState('');
+  const [declineResult, setDeclineResult] = useState<DeclineResult | null>(null);
 
   // Decline email preview state
   const [declineEmailPreview, setDeclineEmailPreview] = useState<{
@@ -340,7 +349,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     if (!declineConfirmed) return;
     navigateTo('decline_submitting');
     try {
-      const result = await POST<{ ok: boolean; hs_lead_status: string; steps: Record<string, boolean> }>(
+      const result = await POST<DeclineResult>(
         `/api/quickbooks/contacts/${contactId}/decline-deal`,
         {
           estimateIds:   estimateIdsToDeclineOnDecline,
@@ -351,7 +360,12 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
       );
       broadcastLeadStatusChange(contactId, { hs_lead_status: result.hs_lead_status });
       clearDraft();
-      handleClose();
+      if (result.emailAlreadySent) {
+        setDeclineResult(result);
+        navigateTo('decline_done');
+      } else {
+        handleClose();
+      }
     } catch (err: unknown) {
       const e = err as { message?: string; body?: { error?: string; code?: string } };
       const body = e?.body;
@@ -374,6 +388,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
       case 'decline_confirm':   return 'Decline deal — Step 1 of 2';
       case 'decline_email':     return 'Decline deal — Step 2 of 2';
       case 'decline_submitting':return 'Declining deal…';
+      case 'decline_done':      return 'Deal declined';
       case 'done':              return 'Deal accepted';
       default:                  return 'Open deal';
     }
@@ -919,6 +934,23 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     );
   }
 
+  function renderDeclineDone() {
+    return (
+      <Stack spacing={2} sx={{ alignItems: 'center', py: 1 }}>
+        <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main' }} />
+        <Typography variant="h6" sx={{ fontWeight: 700 }}>Deal declined</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Lead status has been updated to <strong>DECLINED_DEAL</strong>.
+        </Typography>
+        {declineResult?.emailAlreadySent && (
+          <Alert severity="info" sx={{ width: '100%' }}>
+            The thank-you email was already sent to this contact — no duplicate was sent.
+          </Alert>
+        )}
+      </Stack>
+    );
+  }
+
   function renderDone() {
     return (
       <Stack spacing={2} sx={{ alignItems: 'center', py: 1 }}>
@@ -948,7 +980,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     const submitting = step === 'accept_submitting' || step === 'decline_submitting';
     if (submitting || step === 'loading') return null;
 
-    if (step === 'done') {
+    if (step === 'done' || step === 'decline_done') {
       return <Button variant="contained" onClick={handleClose}>Close</Button>;
     }
 
@@ -1043,6 +1075,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
       case 'decline_confirm':  return renderDeclineConfirm();
       case 'decline_email':    return renderDeclineEmail();
       case 'decline_submitting':return renderDeclineSubmitting();
+      case 'decline_done':     return renderDeclineDone();
       case 'done':             return renderDone();
       default:                 return null;
     }
