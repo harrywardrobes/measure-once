@@ -1302,6 +1302,9 @@ export function ProjectsPage() {
     async (contactId: string, roomIdx: number, fitterId: string | null) => {
       setPickerOpen(false);
       setPickerAssigning(true);
+      // Apply the change optimistically so the UI responds immediately.
+      // rollback() restores the previous state if the server rejects the update.
+      const rollback = updateRoomAssignment(contactId, roomIdx, fitterId);
       try {
         const r = await fetch(`/api/contacts/${contactId}/rooms/${roomIdx}/fitter`, {
           method: 'PATCH',
@@ -1315,8 +1318,6 @@ export function ProjectsPage() {
           throw err;
         }
 
-        updateRoomAssignment(contactId, roomIdx, fitterId);
-
         const baseMsg = fitterId ? 'Fitter assigned' : 'Assignment removed';
         if (result?.syncFailed) {
           showToast(`${baseMsg} — HubSpot sync failed, CRM may be out of date`, true);
@@ -1324,6 +1325,7 @@ export function ProjectsPage() {
           showToast(baseMsg);
         }
       } catch (e: unknown) {
+        rollback();
         notifyApiError('hubspot', e);
         const code = (e as { code?: string }).code;
         if (code === 'HUBSPOT_AUTH') {
@@ -1331,7 +1333,7 @@ export function ProjectsPage() {
         } else if (code === 'HUBSPOT_RATE_LIMIT') {
           showToast('Could not save assignment — HubSpot rate limit reached. Please try again in a moment.', true);
         } else {
-          showToast('Failed to save assignment', true);
+          showToast('Could not save assignment', true);
         }
       } finally {
         setPickerAssigning(false);

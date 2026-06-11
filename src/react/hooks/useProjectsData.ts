@@ -62,7 +62,7 @@ export interface ProjectsData {
   roomAssignmentsStale: boolean;
   draftVisitIds: Record<string, number | string>;
   refresh: () => void;
-  updateRoomAssignment: (contactId: string, roomIdx: number, fitterId: string | null) => void;
+  updateRoomAssignment: (contactId: string, roomIdx: number, fitterId: string | null) => () => void;
   updateContactProperties: (contactId: string, props: Partial<ProjectContact['properties']>) => void;
 }
 
@@ -79,6 +79,8 @@ export function useProjectsData(): ProjectsData {
   const [fromCache, setFromCache] = useState(false);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [stageCache, setStageCache] = useState<Record<string, ProjectRoom[]>>({});
+  const stageCacheRef = useRef(stageCache);
+  stageCacheRef.current = stageCache;
   const [workflow, setWorkflow] = useState<ProjectWorkflowDef | undefined>(undefined);
   const [platformUsers, setPlatformUsers] = useState<ProjectPlatformUser[]>([]);
   const [roomAssignmentsStale, setRoomAssignmentsStale] = useState(false);
@@ -356,21 +358,33 @@ export function useProjectsData(): ProjectsData {
   }, []);
 
   // ── Optimistic room-assignment update ──────────────────────────────────────
+  // Returns a rollback function that restores the pre-update state in both
+  // React state and the IDB offline snapshot.  The caller must invoke the
+  // rollback if the corresponding API call fails.
   const updateRoomAssignment = useCallback(
-    (contactId: string, roomIdx: number, fitterId: string | null) => {
-      setStageCache((prev) => {
-        const cached = prev[contactId];
-        if (!cached || cached[roomIdx] === undefined) return prev;
-        const updated = [...cached];
-        updated[roomIdx] = { ...updated[roomIdx], assignedFitterId: fitterId };
-        const next = { ...prev, [contactId]: updated };
-        // Write the optimistically updated stageCache back to the offline
-        // snapshot so the Projects board reflects the latest assignment after
-        // a network drop.  Fire-and-forget — a failure here must never affect
-        // the UI.
-        void setMeta('stageCache', next);
-        return next;
-      });
+    (contactId: string, roomIdx: number, fitterId: string | null): (() => void) => {
+      const prev = stageCacheRef.current;
+      const cached = prev[contactId];
+      if (!cached || cached[roomIdx] === undefined) {
+        return () => {};
+      }
+
+      const updated = [...cached];
+      updated[roomIdx] = { ...updated[roomIdx], assignedFitterId: fitterId };
+      const next = { ...prev, [contactId]: updated };
+
+      setStageCache(next);
+      // Write the optimistically updated stageCache back to the offline
+      // snapshot so the Projects board reflects the latest assignment after
+      // a network drop.  Fire-and-forget — a failure here must never affect
+      // the UI.
+      void setMeta('stageCache', next);
+
+      // Rollback: restore the pre-update entry in both state and IDB.
+      return () => {
+        setStageCache((current) => ({ ...current, [contactId]: cached }));
+        void setMeta('stageCache', { ...stageCacheRef.current, [contactId]: cached });
+      };
     },
     [],
   );
