@@ -38,7 +38,7 @@ interface StatusModel {
   defaultLabel: string; defaultStatusKey: string; isNullRow: boolean;
 }
 interface StageModel { key: string; label: string; statuses: StatusModel[]; }
-interface BuildResult { globalNull: StatusModel; stages: StageModel[]; }
+interface BuildResult { globalNull: StatusModel; stages: StageModel[]; unassigned: StatusModel[]; }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const W = window as unknown as Record<string, unknown>;
@@ -57,12 +57,21 @@ function buildModel(
 
   const real = statuses.filter(s => !s.is_null_row);
 
+  const unassigned: StatusModel[] = [];
+
   for (const s of real) {
     const sk = lsStageToKey(s.stage || '');
-    if (!sk || !stageMap.has(sk)) continue;
-    const stage  = stageMap.get(sk)!;
     const lsKey  = String(s.key || '');
     const defKey = lsKey.toLowerCase();
+    if (!sk || !stageMap.has(sk)) {
+      unassigned.push({
+        key: lsKey, label: s.label,
+        defaultLabel: labelByKey[`|${defKey}`] || '',
+        defaultStatusKey: defKey, isNullRow: false,
+      });
+      continue;
+    }
+    const stage  = stageMap.get(sk)!;
     stage.statuses.push({
       key: lsKey, label: s.label,
       defaultLabel: labelByKey[`${sk}|${defKey}`] || '',
@@ -81,7 +90,7 @@ function buildModel(
     defaultStatusKey: '', isNullRow: true,
   };
 
-  return { globalNull, stages: Array.from(stageMap.values()) };
+  return { globalNull, stages: Array.from(stageMap.values()), unassigned };
 }
 
 function handlersForSlot(
@@ -328,7 +337,7 @@ export function CardActionsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const { globalNull, stages } = buildModel(labels, statuses, workflowStages);
+  const { globalNull, stages, unassigned } = buildModel(labels, statuses, workflowStages);
 
   return (
     <Stack spacing={2}>
@@ -442,6 +451,57 @@ export function CardActionsPage() {
                     </Accordion>
                   );
                 })}
+
+                {/* ── Unassigned (no stage) accordion ─────────────────── */}
+                {unassigned.length > 0 && (
+                  <Accordion
+                    defaultExpanded={false}
+                    disableGutters
+                    variant="outlined"
+                    sx={{
+                      borderLeft: '4px solid var(--neutral-300)',
+                      borderRadius: 1,
+                      mb: 1,
+                      '&:before': { display: 'none' },
+                    }}
+                  >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 44, px: 1.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: 'var(--neutral-300)', flexShrink: 0 }} />
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>No stage assigned</Typography>
+                        <Typography variant="caption" color="text.secondary">{unassigned.length} status{unassigned.length !== 1 ? 'es' : ''}</Typography>
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ p: 0 }}>
+                      {unassigned.map(ls => (
+                        <div key={`unassigned-${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key} data-testid="ca-default-row">
+                          <strong className="adm-ca-block-title">{ls.label}</strong>
+                          <span style={{ fontSize: '.72rem', color: 'var(--ink-4)', flexShrink: 0, whiteSpace: 'nowrap' }}>{ls.key}</span>
+                          <input type="text" className="field ca-default-input adm-ca-default-input"
+                            maxLength={128}
+                            data-kind="ls-default"
+                            data-stage=""
+                            data-status={ls.defaultStatusKey}
+                            data-original={ls.defaultLabel}
+                            defaultValue={ls.defaultLabel}
+                            placeholder="(Action label)"
+                            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                          />
+                          <HandlerBadges stageKey="" statusKey={ls.defaultStatusKey} handlers={handlers} />
+                          {resolvedSlots.has(`ls::${ls.defaultStatusKey}`) && (
+                            <span className="ca-resolved-pill" style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              padding: '1px 8px', marginLeft: 6,
+                              background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
+                              borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                              lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                            }}>✓ Resolved</span>
+                          )}
+                        </div>
+                      ))}
+                    </AccordionDetails>
+                  </Accordion>
+                )}
               </>
             )}
           </div>
