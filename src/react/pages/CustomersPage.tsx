@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, compactRelativeTime, latestTimestamp } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
@@ -78,6 +78,8 @@ type Contact = {
     createdate?: string;
     /** JSON-encoded workflow rooms; used to derive stage pills offline. */
     measure_once_rooms?: string;
+    /** HubSpot timestamp (ISO string) of the last time this contact was contacted. */
+    notes_last_contacted?: string;
   };
 };
 
@@ -578,6 +580,11 @@ function CustomerCard({
   const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
   const actionTextColor = hasDraft ? '#15803d' : (stageColors?.text || '#374151');
 
+  const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
+  const activityCounter = (!dispatchingAction && actionLabel && activityTs)
+    ? compactRelativeTime(activityTs)
+    : null;
+
   const handleActionClick = useCallback(
     async (e: React.MouseEvent) => {
       e.preventDefault();
@@ -696,7 +703,19 @@ function CustomerCard({
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
-            {dispatchingAction ? 'Opening…' : actionLabel}
+            {dispatchingAction ? 'Opening…' : (
+              <>
+                {activityCounter && (
+                  <Box
+                    component="span"
+                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                  >
+                    {activityCounter} ·
+                  </Box>
+                )}
+                {actionLabel}
+              </>
+            )}
           </Typography>
           {handler && (dispatchingAction ? (
             <CircularProgress size={12} sx={{ color: actionTextColor }} />

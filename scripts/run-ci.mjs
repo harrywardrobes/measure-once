@@ -154,6 +154,7 @@ const STEPS = [
   'test:keyboard-shortcuts',
   'test:handler-config-blocks',
   'test:conflicts-review-logic',
+  'test:formatters',
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',

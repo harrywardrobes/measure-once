@@ -39,6 +39,7 @@ import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
+import { compactRelativeTime, latestTimestamp } from '../utils/formatters';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePrefs } from '../hooks/usePrefs';
@@ -459,6 +460,7 @@ function ProjectCard({
   workflow,
   qb,
   urgency,
+  lastAttempt,
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
@@ -475,6 +477,7 @@ function ProjectCard({
   workflow: ProjectWorkflowDef | undefined;
   qb?: QBState;
   urgency: Urgency;
+  lastAttempt?: { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
@@ -521,6 +524,11 @@ function ProjectCard({
   const stageColors = STAGE_COLORS[primaryStageKey];
   const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
   const actionTextColor = hasDraft ? '#15803d' : (stageColors?.text || '#374151');
+
+  const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
+  const activityCounter = (!dispatchingAction && actionLabel && activityTs)
+    ? compactRelativeTime(activityTs)
+    : null;
 
   // Unified dispatch: preloads the draft visit when handler is start_design_visit
   // and a draft exists; otherwise dispatches normally.
@@ -739,7 +747,19 @@ function ProjectCard({
           }}
         >
           <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
-            {dispatchingAction ? 'Opening…' : actionLabel}
+            {dispatchingAction ? 'Opening…' : (
+              <>
+                {activityCounter && (
+                  <Box
+                    component="span"
+                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                  >
+                    {activityCounter} ·
+                  </Box>
+                )}
+                {actionLabel}
+              </>
+            )}
           </Typography>
           {handler && (dispatchingAction ? (
             <CircularProgress size={12} sx={{ color: actionTextColor }} />
@@ -1001,8 +1021,10 @@ export function ProjectsPage() {
   const qb = useQBInvoices();
   useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Urgency map ───────────────────────────────────────────────────────────
+  // ── Urgency map + last-attempt map ────────────────────────────────────────
   const [urgencyMap, setUrgencyMap] = useState<Record<string, Urgency>>({});
+  type LastAttemptEntry = { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
+  const [lastAttemptMap, setLastAttemptMap] = useState<Record<string, LastAttemptEntry>>({});
 
   useEffect(() => {
     if (!contacts.length) return;
@@ -1011,6 +1033,7 @@ export function ProjectsPage() {
     if (!ids.length) return;
     (async () => {
       let urgencyById: Record<string, Urgency> = {};
+      let lastAttemptById: Record<string, LastAttemptEntry> = {};
       try {
         const res = await fetch('/api/contacts/urgency', {
           method: 'POST',
@@ -1019,8 +1042,9 @@ export function ProjectsPage() {
           body: JSON.stringify({ ids }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+          const data = (await res.json()) as { urgency?: Record<string, Urgency>; lastAttempt?: Record<string, LastAttemptEntry> };
           urgencyById = data.urgency || {};
+          lastAttemptById = data.lastAttempt || {};
         }
       } catch {
         /* fall through; ids marked null below */
@@ -1033,13 +1057,19 @@ export function ProjectsPage() {
         }
         return next;
       });
+      setLastAttemptMap((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          next[id] = id in lastAttemptById ? lastAttemptById[id] : null;
+        }
+        return next;
+      });
     })();
     return () => { cancelled = true; };
   }, [contacts]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Shared helper: re-fetch urgency for a given list of contact IDs and merge
-  // into the map.  Pass null/undefined to re-fetch all contacts already present
-  // in urgencyMap (used by visibilitychange and the urgency_changed channel).
+  // Shared helper: re-fetch urgency + lastAttempt for a given list of contact
+  // IDs and merge into the maps.  Pass null to re-fetch all currently tracked.
   const refetchUrgencyForIds = useCallback(async (ids: string[] | null) => {
     const targetIds = ids ?? Object.keys(urgencyMap);
     if (!targetIds.length) return;
@@ -1051,12 +1081,20 @@ export function ProjectsPage() {
         body: JSON.stringify({ ids: targetIds }),
       });
       if (!res.ok) return;
-      const data = (await res.json()) as { urgency?: Record<string, Urgency> };
+      const data = (await res.json()) as { urgency?: Record<string, Urgency>; lastAttempt?: Record<string, LastAttemptEntry> };
       const urgencyById = data.urgency || {};
+      const lastAttemptById = data.lastAttempt || {};
       setUrgencyMap((prev) => {
         const next = { ...prev };
         for (const id of targetIds) {
           next[id] = id in urgencyById ? urgencyById[id] : null;
+        }
+        return next;
+      });
+      setLastAttemptMap((prev) => {
+        const next = { ...prev };
+        for (const id of targetIds) {
+          next[id] = id in lastAttemptById ? lastAttemptById[id] : null;
         }
         return next;
       });
@@ -1351,6 +1389,7 @@ export function ProjectsPage() {
                     workflow={workflow}
                     qb={qb}
                     urgency={urgencyMap[contact.id] ?? null}
+                    lastAttempt={lastAttemptMap[contact.id] ?? null}
                     cardActionHandlerFor={cardActionHandlerFor}
                     resolveActionLabel={resolveActionLabel}
                     draftVisitId={draftVisitIds[contact.id] ?? null}
@@ -1380,6 +1419,7 @@ export function ProjectsPage() {
             workflow={workflow}
             qb={qb}
             urgency={urgencyMap[contact.id] ?? null}
+            lastAttempt={lastAttemptMap[contact.id] ?? null}
             cardActionHandlerFor={cardActionHandlerFor}
             resolveActionLabel={resolveActionLabel}
             draftVisitId={draftVisitIds[contact.id] ?? null}

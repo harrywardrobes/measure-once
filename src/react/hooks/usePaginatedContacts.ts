@@ -16,6 +16,8 @@ export type PaginatedContact = {
     createdate?: string;
     /** JSON-encoded workflow rooms; used for offline stage filtering. */
     measure_once_rooms?: string;
+    /** HubSpot timestamp (ISO string) of the last time this contact was contacted. */
+    notes_last_contacted?: string;
   };
 };
 

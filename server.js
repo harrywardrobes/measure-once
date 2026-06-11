@@ -681,7 +681,7 @@ let _allContactsInflight = null;  // Promise while a scan is running
 const ALL_CONTACTS_PROPERTIES = [
   'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
-  'measure_once_rooms', 'hw_test_user',
+  'measure_once_rooms', 'hw_test_user', 'notes_last_contacted',
 ];
 
 async function fetchAllContactsShared() {
@@ -1865,7 +1865,7 @@ app.get('/api/project-contacts', async (req, res) => {
                 { propertyName: 'hs_lead_status', operator: 'IN', values: keys },
               ]
             }],
-            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate', 'hw_test_user'],
+            properties: ['firstname', 'lastname', 'email', 'phone', 'hs_lead_status', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate', 'hw_test_user', 'notes_last_contacted'],
             sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
             limit: 100
           };

@@ -131,6 +131,60 @@ export function updateRecentCustomer(contact: {
 }
 
 /**
+ * Returns a compact relative-time string for how long ago `value` was.
+ *
+ * Accepts ISO 8601 strings or numeric epoch-millisecond strings.
+ * Returns:
+ *   - `null`   for falsy, unparseable, or NaN inputs
+ *   - `"now"`  for future timestamps or differences under 1 minute
+ *   - `"Xmin"` for 1 min – 59 min  (e.g. "30min")
+ *   - `"Xhr"`  for 1 hr  – 23 hr   (e.g. "8hr")
+ *   - `"Xd"`   for 1 day – 6 days  (e.g. "4d")
+ *   - `"Xw"`   for 1 week – 3 weeks (e.g. "3w")
+ *   - `"Xmo"`  for 4+ weeks         (e.g. "2mo")
+ */
+export function compactRelativeTime(
+  value: string | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (!value) return null;
+  const ms = /^\d{10,}$/.test(value.trim()) ? Number(value) : Date.parse(value);
+  if (!isFinite(ms)) return null;
+  const diffMs = now.getTime() - ms;
+  if (diffMs < 60_000) return 'now';
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 60) return `${diffMin}min`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}hr`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d`;
+  const diffWeek = Math.floor(diffDay / 7);
+  if (diffWeek < 4) return `${diffWeek}w`;
+  const diffMo = Math.round(diffDay / 30.44);
+  return `${Math.max(1, diffMo)}mo`;
+}
+
+/**
+ * Returns the most-recent parseable timestamp string from `values`, or `null`
+ * if none of the inputs are parseable. Accepts ISO 8601 or epoch-ms strings.
+ */
+export function latestTimestamp(
+  ...values: Array<string | null | undefined>
+): string | null {
+  let bestMs = -Infinity;
+  let bestVal: string | null = null;
+  for (const v of values) {
+    if (!v) continue;
+    const ms = /^\d{10,}$/.test(v.trim()) ? Number(v) : Date.parse(v);
+    if (isFinite(ms) && ms > bestMs) {
+      bestMs = ms;
+      bestVal = v;
+    }
+  }
+  return bestVal;
+}
+
+/**
  * Returns the URL if it is a valid http/https URL, otherwise ''.
  */
 export function safeUrl(url: string | null | undefined): string {

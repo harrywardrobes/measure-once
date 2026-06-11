@@ -18,6 +18,8 @@ export interface ProjectContact {
     hs_lead_status?: string;
     customer_number?: string;
     zip?: string;
+    /** HubSpot timestamp (ISO string) of the last time this contact was contacted. */
+    notes_last_contacted?: string;
   };
 }
 
