@@ -12,6 +12,7 @@ export interface ContactProperties {
   customer_number?: string;
   hs_lead_status?: string;
   hs_object_id?: string;
+  notes_last_contacted?: string;
 }
 
 export interface Contact {

@@ -12,6 +12,7 @@ interface Props {
   onEditContact?: () => void;
   onOpenWhatsApp?: () => void;
   whatsappEnabled?: boolean;
+  activityCounter?: string;
 }
 
 export function CustomerDetailHeader({
@@ -21,6 +22,7 @@ export function CustomerDetailHeader({
   onEditContact,
   onOpenWhatsApp,
   whatsappEnabled,
+  activityCounter,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -160,6 +162,20 @@ export function CustomerDetailHeader({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            {activityCounter && (
+              <span
+                title="Time since last contact attempt"
+                style={{
+                  fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
+                  padding: '3px 7px', borderRadius: 6,
+                  background: 'var(--stone)', color: 'var(--ink-3)',
+                  letterSpacing: '0.02em', flexShrink: 0,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {activityCounter}
+              </span>
+            )}
             <PhotosReceivedBadge leadStatus={rawStatus} />
             <span
               className={`lead-status-badge${pillContent.empty ? ' lsb-empty' : ''}${canEdit ? ' lsb-clickable' : ''}`}

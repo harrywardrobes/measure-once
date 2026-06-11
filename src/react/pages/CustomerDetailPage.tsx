@@ -19,7 +19,7 @@ import {
   DesignVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
-import { updateRecentCustomer } from '../utils/formatters';
+import { updateRecentCustomer, compactRelativeTime, latestTimestamp } from '../utils/formatters';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
@@ -28,6 +28,7 @@ import Snackbar from '@mui/material/Snackbar';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,9 @@ export function CustomerDetailPage() {
 
   const [contactEditOpen, setContactEditOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
+
+  type LastAttemptEntry = { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
+  const [lastAttempt, setLastAttempt] = useState<LastAttemptEntry>(null);
 
   // ── Data fetchers ─────────────────────────────────────────────────────────
 
@@ -234,6 +238,23 @@ export function CustomerDetailPage() {
     finally { setWaLoading(false); }
   }, [contactId]);
 
+  const fetchLastAttempt = useCallback(async () => {
+    try {
+      const res = await fetch('/api/contacts/urgency', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [contactId] }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        lastAttempt?: Record<string, LastAttemptEntry>;
+      };
+      const entry = data.lastAttempt?.[contactId];
+      setLastAttempt(entry !== undefined ? entry : null);
+    } catch { /* best-effort — missing lastAttempt is non-fatal */ }
+  }, [contactId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Main bootstrap ─────────────────────────────────────────────────────────
 
   const bootstrap = useCallback(async () => {
@@ -290,6 +311,7 @@ export function CustomerDetailPage() {
       fetchDesignVisits();
       if (c.properties.email) fetchGoogleEmails(c.properties.email);
       fetchWhatsApp();
+      fetchLastAttempt();
     } catch (e: unknown) {
       notifyApiError('hubspot', e);
       const msg = e instanceof Error ? e.message : 'unknown error';
@@ -297,8 +319,8 @@ export function CustomerDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLeadStatuses,
-      fetchWhatsApp, notifyApiError]);
+  }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLastAttempt,
+      fetchLeadStatuses, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat + workflow-core.js interop) ────────────
 
@@ -408,6 +430,15 @@ export function CustomerDetailPage() {
       );
     });
   }, [contactId]);
+
+  // ── Refresh lastAttempt when a contact attempt is logged (any tab) ─────────
+
+  useEffect(() => {
+    return subscribeContactAttemptLogged(({ contactId: changedId }) => {
+      if (changedId !== contactId) return;
+      void fetchLastAttempt();
+    });
+  }, [contactId, fetchLastAttempt]);
 
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
 
@@ -621,6 +652,11 @@ export function CustomerDetailPage() {
           onEditContact={() => setContactEditOpen(true)}
           onOpenWhatsApp={() => setWaModalOpen(true)}
           whatsappEnabled={waEnabled}
+          activityCounter={
+            compactRelativeTime(
+              latestTimestamp(lastAttempt?.at, contact.properties.notes_last_contacted),
+            ) ?? undefined
+          }
         />
       )}
 
