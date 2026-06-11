@@ -146,6 +146,14 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   const [sendThankYou, setSendThankYou] = useState(false);
   const [declineError, setDeclineError] = useState('');
 
+  // Decline email preview state
+  const [declineEmailPreview, setDeclineEmailPreview] = useState<{
+    subject: string;
+    bodyText: string;
+    loading: boolean;
+    error: boolean;
+  }>({ subject: '', bodyText: '', loading: false, error: false });
+
   const hasMounted = useRef(false);
 
   // ── Draft persistence ───────────────────────────────────────────────────────
@@ -172,6 +180,27 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     if (!hasMounted.current) return;
     saveDraft({ step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou });
   }, [step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch live decline email preview when the step becomes visible
+  useEffect(() => {
+    if (step !== 'decline_email') return;
+    let cancelled = false;
+    const firstName = contactData?.contactName?.split(' ')[0] || '';
+    setDeclineEmailPreview({ subject: '', bodyText: '', loading: true, error: false });
+    POST<{ subject: string; body_text: string }>('/api/email-templates/render', {
+      key: 'open_deal_declined_thank_you',
+      vars: { firstName },
+    })
+      .then(data => {
+        if (cancelled) return;
+        setDeclineEmailPreview({ subject: data.subject, bodyText: data.body_text, loading: false, error: false });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDeclineEmailPreview({ subject: '', bodyText: '', loading: false, error: true });
+      });
+    return () => { cancelled = true; };
+  }, [step, contactData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load data on open ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -727,6 +756,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function renderDeclineEmail() {
+    const { subject, bodyText, loading: previewLoading, error: previewError } = declineEmailPreview;
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
@@ -734,16 +764,28 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
           Would you like to send the customer a brief thank-you email?
         </Typography>
         <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, bgcolor: 'background.default' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
             Template: <em>open_deal_declined_thank_you</em>
+            {subject ? <> — <strong>{subject}</strong></> : null}
           </Typography>
-          <Typography variant="body2">
-            Hi {contactData?.contactName?.split(' ')[0] || 'there'},
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 0.5 }}>
-            Thank you for your time — please feel free to get in touch if you have any questions regarding wardrobes.
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>Warm regards, The team</Typography>
+          {previewLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+              <CircularProgress size={14} />
+              <Typography variant="body2" color="text.secondary">Loading preview…</Typography>
+            </Box>
+          )}
+          {!previewLoading && previewError && (
+            <Typography variant="body2" color="text.secondary">
+              A brief thank-you note will be sent to the customer.
+            </Typography>
+          )}
+          {!previewLoading && !previewError && bodyText && (
+            bodyText.split('\n').map((line, i) => (
+              <Typography key={i} variant="body2" sx={{ mt: i === 0 ? 0 : 0.5 }}>
+                {line || <>&nbsp;</>}
+              </Typography>
+            ))
+          )}
         </Box>
         <Alert severity="info" sx={{ py: 0.25 }}>
           Sending to: <strong>{contactData?.contactEmail || '(no email on record)'}</strong>
