@@ -3894,14 +3894,17 @@ app.patch('/api/trades/:id/category', isAuthenticated, requireAdmin, async (req,
 
 app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req, res) => {
   const dryRun = req.body?.dry_run !== false;
+  const client = await _tradesPool.connect();
   try {
-    const { rows } = await _tradesPool.query(
+    const { rows } = await client.query(
       `SELECT id, company_name, trade_type, areas_served FROM trade_companies ORDER BY id`
     );
 
     const migrated  = [];
     const skipped   = [];
     const unmatched = [];
+
+    if (!dryRun) await client.query('BEGIN');
 
     for (const row of rows) {
       const typeValid    = TRADE_CATEGORIES.includes(row.trade_type);
@@ -3925,7 +3928,7 @@ app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req,
       const mappedAreas = [...new Set(currentAreas.map(mapAreaString).filter(Boolean))];
 
       if (!dryRun) {
-        await _tradesPool.query(
+        await client.query(
           `UPDATE trade_companies SET trade_type=$1, areas_served=$2 WHERE id=$3`,
           [newTradeType, JSON.stringify(mappedAreas), row.id]
         );
@@ -3941,9 +3944,13 @@ app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req,
       });
     }
 
+    if (!dryRun) await client.query('COMMIT');
     res.json({ dry_run: dryRun, migrated, skipped, unmatched });
   } catch (e) {
+    if (!dryRun) await client.query('ROLLBACK');
     res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -4548,13 +4555,15 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
   const options = raw.filter(o => !o.hidden);
   if (!options.length) return res.json({ upserted: 0, skipped: 0, syncError: false });
   let upserted = 0, skipped = 0;
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     for (const opt of options) {
       const key        = String(opt.value || '').trim().toUpperCase();
       const label      = String(opt.label || '').trim();
       const sort_order = typeof opt.displayOrder === 'number' ? opt.displayOrder : 0;
       if (!key || !label) { skipped++; continue; }
-      const result = await pool.query(
+      const result = await client.query(
         `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
          VALUES ($1, $2, $3, FALSE)
          ON CONFLICT (key) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
@@ -4562,6 +4571,7 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
       );
       if (result.rowCount > 0) upserted++;
     }
+    await client.query('COMMIT');
     invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
     _invalidateOpenLeadsCache();
@@ -4578,8 +4588,11 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
     }
     res.json({ upserted, skipped, syncError });
   } catch (e) {
+    await client.query('ROLLBACK');
     logger.error({ err: e.message }, 'POST /api/admin/hubspot-lead-statuses/import error:');
     res.status(500).json({ error: 'Could not import lead statuses.' });
+  } finally {
+    client.release();
   }
 });
 

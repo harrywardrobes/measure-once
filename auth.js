@@ -2119,23 +2119,29 @@ async function setupAuth(app) {
     if (!name || name.length > 64) {
       return res.status(400).json({ error: 'Role name must be 1–64 characters.' });
     }
+    const client = await pool.connect();
     try {
-      await pool.query(
+      await client.query('BEGIN');
+      await client.query(
         `INSERT INTO job_roles (name, privilege_level) VALUES ($1, $2)
          ON CONFLICT (name) DO UPDATE SET privilege_level = EXCLUDED.privilege_level`,
         [name, privilege_level]
       );
-      await pool.query(
+      await client.query(
         `INSERT INTO nav_role_configs (role_name, is_customized)
          VALUES ($1, FALSE)
          ON CONFLICT (role_name) DO NOTHING`,
         [name]
       );
+      await client.query('COMMIT');
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'add_job_role', null, `Added job role "${name}" (${privilege_level})`);
       res.json({ ok: true, name, privilege_level });
     } catch (e) {
+      await client.query('ROLLBACK');
       res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
     }
   });
 
