@@ -40,6 +40,10 @@ const TEMPLATE_DEFS = {
     label: 'Photo Review — Invite',
     description: 'Sent to a customer inviting them to fill in the info form (photo review flow).',
     variables: ['maskedEmail', 'formLink'],
+    variableDescriptions: {
+      maskedEmail: "Customer's partially masked email address, e.g. 'j***@example.com'. Shown in the email so they know the link is personalised for them.",
+      formLink:    'The unique one-time URL for the customer to open and fill in their info form. Always present.',
+    },
     subject: 'Tell us about your home...',
     body_text: [
       'Hi,',
@@ -74,6 +78,14 @@ const TEMPLATE_DEFS = {
     label: 'Admin notification',
     description: 'Sent to admins when a customer submits their info form.',
     variables: ['customerName', 'customerEmail', 'address', 'rooms', 'notes', 'photoSummary'],
+    variableDescriptions: {
+      customerName:  "Full name of the customer who submitted the form.",
+      customerEmail: "Email address of the customer.",
+      address:       "Customer's home address as entered on the form. Empty if not provided.",
+      rooms:         "Comma-separated list of rooms the customer selected on the form. Empty if none selected.",
+      notes:         "Free-text notes entered by the customer. Empty if they left the field blank.",
+      photoSummary:  "A short line describing how many photos were uploaded, e.g. '3 photos uploaded.' Empty if no photos were attached.",
+    },
     subject: 'New customer info submission – {{customerName}}',
     body_text: [
       'New customer info submission received.',
@@ -108,6 +120,9 @@ const TEMPLATE_DEFS = {
     label: 'Customer thank-you',
     description: 'Sent to a customer after they submit their info form.',
     variables: ['firstName'],
+    variableDescriptions: {
+      firstName: "Customer's first name. Empty if no first name is recorded.",
+    },
     subject: 'Thanks for sharing!',
     body_text: [
       'Hi {{firstName}},',
@@ -125,6 +140,9 @@ const TEMPLATE_DEFS = {
     label: 'Set password — welcome',
     description: 'Sent to a newly approved user with their first set-password link.',
     variables: ['link'],
+    variableDescriptions: {
+      link: 'The one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
+    },
     subject: 'Welcome to Measure Once — set your password',
     body_text: [
       "You've been granted access to Measure Once.",
@@ -144,6 +162,9 @@ const TEMPLATE_DEFS = {
     label: 'Set password — resend',
     description: 'Sent when a new set-password link is re-issued for a user.',
     variables: ['link'],
+    variableDescriptions: {
+      link: 'The new one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
+    },
     subject: 'Set your Measure Once password (new link)',
     body_text: [
       'A new password setup link has been issued for your Measure Once account.',
@@ -163,6 +184,9 @@ const TEMPLATE_DEFS = {
     label: 'Set password — reset',
     description: 'Sent when a user requests a password reset.',
     variables: ['link'],
+    variableDescriptions: {
+      link: 'The one-time URL for the recipient to reset their password. Valid for 1 hour. Always present.',
+    },
     subject: 'Reset your Measure Once password',
     body_text: [
       'A password reset was requested for your Measure Once account.',
@@ -182,6 +206,9 @@ const TEMPLATE_DEFS = {
     label: 'Photo review — not suitable',
     description: 'Sent to a customer when their enquiry is reviewed as not suitable.',
     variables: ['firstName'],
+    variableDescriptions: {
+      firstName: "Customer's first name. Empty if no first name is recorded.",
+    },
     subject: 'Regarding your enquiry',
     body_text: [
       'Hi {{firstName}},',
@@ -200,6 +227,10 @@ const TEMPLATE_DEFS = {
     label: 'Photo review — rough estimate',
     description: 'Sent to a customer with a rough estimate after a photo review.',
     variables: ['firstName', 'priceRange'],
+    variableDescriptions: {
+      firstName:  "Customer's first name. Empty if no first name is recorded.",
+      priceRange: "Rough price estimate entered by the admin, e.g. '£5,000 – £8,000'. Always present when this email is sent.",
+    },
     subject: 'Your rough estimate',
     body_text: [
       'Hi {{firstName}},',
@@ -224,6 +255,13 @@ const TEMPLATE_DEFS = {
     label: 'Arrange visit — no answer',
     description: 'Sent to a customer when we call to book a visit but get no answer, asking for their availability.',
     variables: ['firstName', 'visitLabel', 'proposedDate', 'proposedTime', 'proposedDateLine'],
+    variableDescriptions: {
+      firstName:        "Customer's first name. Empty if no first name is recorded.",
+      visitLabel:       "Type of visit, e.g. 'design visit' or 'survey'.",
+      proposedDate:     "Proposed date as a readable string, e.g. 'Friday 13 June 2026'. Empty if no date was selected.",
+      proposedTime:     "Proposed time as a readable string, e.g. '10:00 AM'. Empty if no time was selected.",
+      proposedDateLine: "If a date and time were proposed, renders as a sentence like 'We were thinking Friday 13 June at 10:00 AM — let us know if that works for you.\\n\\n' (includes trailing newlines). Empty if no proposed date/time was selected. Include this in your body so proposed times reach the customer.",
+    },
     subject: 'Booking your {{visitLabel}} — getting in touch',
     body_text: [
       'Hi {{firstName}},',
@@ -244,6 +282,10 @@ const TEMPLATE_DEFS = {
     label: 'Open deal — deposit invoice sent',
     description: 'Sent to a customer after their deposit invoice has been issued via QuickBooks.',
     variables: ['firstName', 'depositPercent'],
+    variableDescriptions: {
+      firstName:      "Customer's first name. Empty if no first name is recorded.",
+      depositPercent: "Deposit percentage as a number, e.g. '10'. Always present when this email is sent.",
+    },
     subject: 'Your deposit invoice',
     body_text: [
       'Hi {{firstName}},',
@@ -264,6 +306,9 @@ const TEMPLATE_DEFS = {
     label: 'Open deal — declined thank you',
     description: 'Sent optionally to a customer when a deal is declined.',
     variables: ['firstName'],
+    variableDescriptions: {
+      firstName: "Customer's first name. Empty if no first name is recorded.",
+    },
     subject: 'Thank you',
     body_text: [
       'Hi {{firstName}},',
@@ -310,6 +355,14 @@ const TEMPLATE_DEFS = {
     label: 'Visit Confirmation',
     description: 'Sent to a customer to confirm the details of their upcoming visit.',
     variables: ['firstName', 'visitLabel', 'visitDate', 'visitTime', 'visitDuration', 'location'],
+    variableDescriptions: {
+      firstName:    "Customer's first name. Empty if no first name is recorded.",
+      visitLabel:   "Type of visit, e.g. 'design visit' or 'survey'.",
+      visitDate:    "Confirmed date of the visit as a readable string, e.g. '12 June 2026'. Always present when this email is sent.",
+      visitTime:    "Confirmed start time of the visit, e.g. '10:00 AM'. Always present when this email is sent.",
+      visitDuration:'Expected duration of the visit in minutes.',
+      location:     "Address where the visit will take place. Empty if no address is set on the visit.",
+    },
     subject: 'Your {{visitLabel}} is confirmed',
     body_text: [
       'Hi {{firstName}},',
