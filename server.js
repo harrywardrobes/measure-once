@@ -4389,10 +4389,11 @@ async function ensureLeadStatusTable() {
     { key: 'OPEN',                 label: 'Open',                 sort_order: 1,  excluded_from_sales: false },
     { key: 'IN_PROGRESS',          label: 'In Progress',          sort_order: 2,  excluded_from_sales: false },
     { key: 'OPEN_DEAL',            label: 'Open Deal',            sort_order: 3,  excluded_from_sales: false },
-    { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 4,  excluded_from_sales: false },
-    { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 5,  excluded_from_sales: false },
-    { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 6,  excluded_from_sales: true  },
-    { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 7,  excluded_from_sales: false },
+    { key: 'DEPOSIT_INVOICE',      label: 'Deposit Invoice',      sort_order: 4,  excluded_from_sales: false },
+    { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 5,  excluded_from_sales: false },
+    { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 6,  excluded_from_sales: false },
+    { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 7,  excluded_from_sales: true  },
+    { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 8,  excluded_from_sales: false },
     { key: 'DECLINED_DEAL',        label: 'Declined Deal',        sort_order: 100, excluded_from_sales: true  },
   ];
   for (const s of DEFAULT_LEAD_STATUSES) {

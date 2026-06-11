@@ -304,9 +304,11 @@ async function seedQbToken(pool) {
   );
 }
 
-// Ensure the keys used by accept-deal / decline-deal are present and the
-// lead-status-guard cache has seen them.  We also call a no-op API request
-// that touches the DB so the cache has had a chance to warm after seeding.
+// Ensure the keys used by accept-deal / decline-deal are present in
+// lead_status_config.  DEPOSIT_INVOICE and OPEN_DEAL are now included in
+// DEFAULT_LEAD_STATUSES so they will already exist on a fresh boot, but we
+// upsert here as a belt-and-braces guard for isolated test DBs that bypass
+// the server boot seed.
 async function ensureLeadStatusKeys(pool) {
   for (const [key, label] of [
     ['OPEN_DEAL',       'Open Deal'],
