@@ -31,7 +31,7 @@ const PROBE_LABELS = [
   '(H) amendments path: data-load endpoint is non-mutating, lead status stays OPEN_DEAL',
   '(I) idempotency: second accept-deal call for same estimate returns existing invoice, no duplicate created',
   '(J) concurrent idempotency: two simultaneous accept-deal calls for the same estimate produce exactly one QB invoice',
-  '(K) concurrent-retry send guard: two simultaneous retries (invoice already exists) produce exactly one QB send',
+  '(K) concurrent-retry send guard: two simultaneous retries (invoice already exists) produce exactly one QB send; losing caller gets sendSkipped=true',
   '(L) concurrent-decline guard: two simultaneous decline-deal calls produce exactly one thank-you email',
 ];
 
@@ -1178,6 +1178,16 @@ async function main() {
         sentAt != null
           ? `sent_at=${sentAt} — row marked sent in DB`
           : 'sent_at is still NULL — send-claim did not persist');
+
+      // The losing caller (the one that found sent_at already set) must have
+      // sendSkipped=true in its response; the winner must not.
+      const skipped = [r1, r2].filter(r => r.body?.sendSkipped === true).length;
+      const notSkipped = [r1, r2].filter(r => r.body?.sendSkipped !== true).length;
+      record('K.loser-has-send-skipped-flag',
+        skipped === 1 && notSkipped === 1,
+        skipped === 1 && notSkipped === 1
+          ? `exactly 1 response has sendSkipped=true (loser correctly flagged)`
+          : `expected 1 skipped + 1 not-skipped, got ${skipped} skipped — r1.sendSkipped=${r1.body?.sendSkipped} r2.sendSkipped=${r2.body?.sendSkipped}`);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

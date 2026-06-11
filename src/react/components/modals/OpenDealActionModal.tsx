@@ -97,6 +97,7 @@ interface AcceptResult {
   steps?: Record<string, boolean>;
   code?: string;
   removedKey?: string;
+  sendSkipped?: boolean;
 }
 
 function formatCurrency(n: number): string {
@@ -921,10 +922,17 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
       <Stack spacing={2} sx={{ alignItems: 'center', py: 1 }}>
         <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main' }} />
         <Typography variant="h6" sx={{ fontWeight: 700 }}>Deposit invoice sent</Typography>
-        {acceptResult?.invoiceDocNum && (
+        {acceptResult?.invoiceDocNum && !acceptResult?.sendSkipped && (
           <Typography variant="body2" color="text.secondary">
             Invoice #{acceptResult.invoiceDocNum} created and sent to customer.
           </Typography>
+        )}
+        {acceptResult?.sendSkipped && (
+          <Alert severity="info" sx={{ width: '100%' }}>
+            {acceptResult.invoiceDocNum
+              ? `Invoice #${acceptResult.invoiceDocNum} was already sent — no duplicate was sent.`
+              : 'Invoice was already sent — no duplicate was sent.'}
+          </Alert>
         )}
         <Typography variant="body2" color="text.secondary">
           Lead status has been updated to <strong>DEPOSIT_INVOICE</strong>.

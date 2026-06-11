@@ -901,7 +901,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         });
       }
 
-      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE', ...(idempotentRetry ? { idempotent: true } : {}) });
+      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE', ...(idempotentRetry ? { idempotent: true } : {}), ...(sendAlreadyDone ? { sendSkipped: true } : {}) });
     } catch (e) {
       if (e._qbNoInvoiceId) {
         // Thrown from inside the advisory-lock block to ensure the finally clause
