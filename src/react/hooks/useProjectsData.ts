@@ -232,15 +232,24 @@ export function useProjectsData(): ProjectsData {
     return subscribeDesignVisitDraftChanged(() => setDraftRefreshTick((t) => t + 1));
   }, []);
 
-  // ── Patch contact properties when renamed in another tab ───────────────────
+  // ── Patch contact properties when lead-status changes in same/other tab ────
   useEffect(() => {
     return subscribeLeadStatusChange((contactId, props) => {
       setContacts((prev) =>
-        prev.map((c) =>
-          c.id === contactId
-            ? { ...c, properties: { ...c.properties, ...props } }
-            : c,
-        ),
+        prev.map((c) => {
+          if (c.id !== contactId) return c;
+          const patched: ProjectContact = {
+            ...c,
+            properties: { ...c.properties, ...props },
+          };
+          // If a valid hs_lead_status was broadcast, the contact is no longer
+          // in an unknown-status state — clear the flag so the amber badge and
+          // banner count update immediately without waiting for a full refetch.
+          if (props.hs_lead_status) {
+            patched._statusUnknown = false;
+          }
+          return patched;
+        }),
       );
     });
   }, []);
