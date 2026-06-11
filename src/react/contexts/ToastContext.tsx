@@ -10,6 +10,8 @@ import Button from '@mui/material/Button';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 
+type ToastSeverity = 'success' | 'error' | 'warning' | 'info';
+
 interface ToastAction {
   label: string;
   onClick: () => void;
@@ -18,14 +20,31 @@ interface ToastAction {
 interface ToastMessage {
   id: number;
   msg: string;
-  isError: boolean;
+  severity: ToastSeverity;
   action?: ToastAction;
   duration?: number;
 }
 
+interface ShowToastOptions {
+  severity?: ToastSeverity;
+  duration?: number;
+}
+
 interface ToastContextValue {
-  showToast: (msg: string, isError?: boolean) => void;
-  showToastWithAction: (msg: string, action: ToastAction, options?: { duration?: number }) => void;
+  /**
+   * Show a toast notification.
+   *
+   * @param msg     The message to display.
+   * @param isError Deprecated — pass `{ severity: 'error' }` instead.
+   *                Kept for backwards compatibility; maps to severity='error'.
+   * @param options Optional severity and duration overrides.
+   */
+  showToast: (msg: string, isError?: boolean, options?: ShowToastOptions) => void;
+  showToastWithAction: (
+    msg: string,
+    action: ToastAction,
+    options?: { duration?: number; severity?: ToastSeverity },
+  ) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -46,17 +65,29 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const current = toasts[0] ?? null;
 
-  const showToast = useCallback((msg: string, isError = false) => {
+  const showToast = useCallback((msg: string, isError = false, options?: ShowToastOptions) => {
     const id = ++_globalIdCounter;
-    setToasts(prev => [...prev, { id, msg, isError }]);
+    const severity: ToastSeverity =
+      options?.severity ?? (isError ? 'error' : 'success');
+    setToasts(prev => [...prev, { id, msg, severity, duration: options?.duration }]);
   }, []);
 
   const showToastWithAction = useCallback(
-    (msg: string, action: ToastAction, options?: { duration?: number }) => {
+    (
+      msg: string,
+      action: ToastAction,
+      options?: { duration?: number; severity?: ToastSeverity },
+    ) => {
       const id = ++_globalIdCounter;
       setToasts(prev => [
         ...prev,
-        { id, msg, isError: false, action, duration: options?.duration },
+        {
+          id,
+          msg,
+          severity: options?.severity ?? 'success',
+          action,
+          duration: options?.duration,
+        },
       ]);
     },
     [],
@@ -116,11 +147,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           autoHideDuration={current.duration ?? 3500}
           onClose={handleClose}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-          sx={{ zIndex: 'var(--z-toast, 9500)' }}
+          sx={{
+            zIndex: 'var(--z-toast, 9500)',
+            bottom: 'calc(64px + env(safe-area-inset-bottom)) !important',
+          }}
         >
           <Alert
             onClose={dismissCurrent}
-            severity={current.isError ? 'error' : 'success'}
+            severity={current.severity}
             variant="filled"
             action={actionNode}
             sx={{ width: '100%', minWidth: 240 }}

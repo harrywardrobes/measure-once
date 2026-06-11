@@ -7,7 +7,6 @@ import {
   CardActionArea,
   Chip,
   Skeleton,
-  Snackbar,
   Stack,
   Typography,
 } from '@mui/material';
@@ -15,6 +14,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
+import { useToastContext } from '../contexts/ToastContext';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -488,26 +488,34 @@ export function HomePage(): React.ReactElement {
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
 
-  const [qbConnectedToast, setQbConnectedToast] = React.useState(false);
-  const [googleConnectedToast, setGoogleConnectedToast] = React.useState(false);
-  const [googleAuthErrorToast, setGoogleAuthErrorToast] = React.useState(false);
+  const { showToast } = useToastContext();
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let changed = false;
     if (params.get('qb') === 'connected') {
       broadcastConnect();
-      setQbConnectedToast(true);
+      showToast(
+        qbCompany
+          ? `QuickBooks connected — ${qbCompany}`
+          : 'QuickBooks connected successfully',
+        false,
+        { duration: 6000 },
+      );
       params.delete('qb');
       changed = true;
     }
     if (params.get('connected') === 'true') {
-      setGoogleConnectedToast(true);
+      showToast('Google Calendar connected successfully', false, { duration: 6000 });
       params.delete('connected');
       changed = true;
     }
     if (params.get('error') === 'google_auth_failed') {
-      setGoogleAuthErrorToast(true);
+      showToast(
+        'Google Calendar could not be connected. Please try again.',
+        true,
+        { duration: 8000 },
+      );
       params.delete('error');
       changed = true;
     }
@@ -515,7 +523,7 @@ export function HomePage(): React.ReactElement {
       const newSearch = params.toString();
       history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [projectsError, setProjectsError] = React.useState(false);
@@ -638,58 +646,6 @@ export function HomePage(): React.ReactElement {
         onRetry={loadProjects}
       />
 
-      {/* QuickBooks reconnect success toast */}
-      <Snackbar
-        open={qbConnectedToast}
-        autoHideDuration={6000}
-        onClose={() => setQbConnectedToast(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success"
-          onClose={() => setQbConnectedToast(false)}
-          variant="filled"
-          sx={{ minWidth: 280 }}
-        >
-          {qbCompany
-            ? `QuickBooks connected — ${qbCompany}`
-            : 'QuickBooks connected successfully'}
-        </Alert>
-      </Snackbar>
-
-      {/* Google Calendar reconnect success toast */}
-      <Snackbar
-        open={googleConnectedToast}
-        autoHideDuration={6000}
-        onClose={() => setGoogleConnectedToast(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success"
-          onClose={() => setGoogleConnectedToast(false)}
-          variant="filled"
-          sx={{ minWidth: 280 }}
-        >
-          Google Calendar connected successfully
-        </Alert>
-      </Snackbar>
-
-      {/* Google Calendar auth error toast */}
-      <Snackbar
-        open={googleAuthErrorToast}
-        autoHideDuration={8000}
-        onClose={() => setGoogleAuthErrorToast(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="error"
-          onClose={() => setGoogleAuthErrorToast(false)}
-          variant="filled"
-          sx={{ minWidth: 280 }}
-        >
-          Google Calendar could not be connected. Please try again.
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

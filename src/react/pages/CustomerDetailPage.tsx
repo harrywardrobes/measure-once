@@ -24,7 +24,7 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { useNowTick } from '../hooks/useNowTick';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
 import Alert from '@mui/material/Alert';
-import Snackbar from '@mui/material/Snackbar';
+import { useToast } from '../contexts/ToastContext';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
@@ -121,7 +121,7 @@ export function CustomerDetailPage() {
   const [waModalOpen, setWaModalOpen] = useState(false);
 
   const [contactEditOpen, setContactEditOpen] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
+  const showToast = useToast();
 
   type LastAttemptEntry = { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
   const [lastAttempt, setLastAttempt] = useState<LastAttemptEntry>(null);
@@ -701,13 +701,13 @@ export function CustomerDetailPage() {
               onNotesChange={setNotes}
               onRoomSelect={handleRoomSelect}
               onSave={saveRoomsAndNotes}
-              onNotesSaved={() => setToast({ msg: 'Notes saved' })}
-              onRoomSaved={() => setToast({ msg: 'Saved' })}
-              onInstallDateSaved={() => setToast({ msg: 'Install date updated' })}
-              onCommentSaved={() => setToast({ msg: 'Comment saved' })}
-              onRoomSaveError={() => setToast({ msg: 'Failed to save — please try again', error: true })}
-              onCommentSaveError={() => setToast({ msg: 'Failed to save comment — please try again', error: true })}
-              onNotesSaveError={() => setToast({ msg: 'Failed to save notes — please try again', error: true })}
+              onNotesSaved={() => showToast('Notes saved')}
+              onRoomSaved={() => showToast('Saved')}
+              onInstallDateSaved={() => showToast('Install date updated')}
+              onCommentSaved={() => showToast('Comment saved')}
+              onRoomSaveError={() => showToast('Failed to save — please try again', true)}
+              onCommentSaveError={() => showToast('Failed to save comment — please try again', true)}
+              onNotesSaveError={() => showToast('Failed to save notes — please try again', true)}
             />
 
             {qb.statusKnown && qb.connected && (
@@ -762,7 +762,7 @@ export function CustomerDetailPage() {
             const g  = window as unknown as Record<string, unknown>;
             const st = g.state as Record<string, unknown> | undefined;
             if (st) st.selectedContact = updated;
-            setToast({ msg: 'Contact updated' });
+            showToast('Contact updated');
             // Silent background re-fetch so the header reflects HubSpot's
             // normalised values (e.g. phone formatting) without a page reload.
             // fetchContact also rewrites cp_recent_customers, so the global
@@ -782,18 +782,6 @@ export function CustomerDetailPage() {
           onClose={() => setWaModalOpen(false)}
         />
       )}
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={3500}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        message={toast?.msg}
-        slotProps={
-          toast?.error
-            ? { content: { sx: { bgcolor: 'error.dark' } } }
-            : undefined
-        }
-      />
     </div>
   );
 }

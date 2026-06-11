@@ -9,6 +9,7 @@ import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useToastContext } from '../contexts/ToastContext';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
 import { InvoiceDetailDrawer, type InvoiceSummary as QBInvoice } from '../components/InvoiceDetailDrawer';
@@ -33,7 +34,6 @@ import {
   InputAdornment,
   Select,
   Skeleton,
-  Snackbar,
   Stack,
   TextField,
   Tooltip,
@@ -931,20 +931,16 @@ export function CustomersPage(): React.ReactElement {
       })
       .catch(() => {});
   }, []);
-  // autoHideDuration is set to null while the document is hidden so the MUI
-  // Snackbar timer is paused (Page Visibility API). Restored to 8 s when the
-  // tab returns to the foreground.
-  const [snackbarHideDuration, setSnackbarHideDuration] = React.useState<number | null>(8000);
-  const bgRefreshFailedRef = React.useRef(false);
-  React.useEffect(() => { bgRefreshFailedRef.current = bgRefreshFailed; }, [bgRefreshFailed]);
+  const { showToast } = useToastContext();
   React.useEffect(() => {
-    const onVis = () => {
-      if (!bgRefreshFailedRef.current) return;
-      setSnackbarHideDuration(document.hidden ? null : 8000);
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+    if (!bgRefreshFailed) return;
+    showToast(
+      "Couldn't refresh live data — fresh results will load on your next visit",
+      false,
+      { duration: 8000 },
+    );
+    setBgRefreshFailed(false);
+  }, [bgRefreshFailed, showToast]);
 
   // Counts refresh with retry: scheduled after each successful contacts fetch.
   // Timers are tracked in a ref so they can be cancelled if the component
@@ -1687,12 +1683,6 @@ export function CustomersPage(): React.ReactElement {
           // list returns to the canonical server-side order.
           setRefreshNonce((n) => n + 1);
         }}
-      />
-      <Snackbar
-        open={bgRefreshFailed}
-        autoHideDuration={snackbarHideDuration}
-        onClose={() => setBgRefreshFailed(false)}
-        message="Couldn't refresh live data — fresh results will load on your next visit"
       />
 
       {/* Invoice detail drawer */}

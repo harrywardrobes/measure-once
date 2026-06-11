@@ -20,7 +20,6 @@ import {
   ListItemButton,
   Popover,
   Skeleton,
-  Snackbar,
   Tooltip,
   Typography,
   useMediaQuery,
@@ -52,6 +51,7 @@ import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { SortSelect } from '../components/SortSelect';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useToast } from '../contexts/ToastContext';
 import { useProjectsData } from '../hooks/useProjectsData';
 import { ProjectsPageSkeleton } from '../components/PageLoadingSkeleton';
 import type {
@@ -938,11 +938,12 @@ export function ProjectsPage() {
 
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
 
+  const showToast = useToast();
+
   const [filter, setFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortKey>('stage');
   const [groupBy, setGroupBy] = useState(false);
   const [staleDismissed, setStaleDismissed] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
 
   // ── Staleness filter ──────────────────────────────────────────────────────
   const [stalenessActive, setStalenessActive] = useState<boolean>(loadStalenessActive);
@@ -1013,7 +1014,7 @@ export function ProjectsPage() {
       const data = await res.json() as Contact;
       setEditContactData(data);
     } catch {
-      setToast({ msg: 'Could not load contact details', error: true });
+      showToast('Could not load contact details', true);
     }
   }, []);
 
@@ -1267,19 +1268,19 @@ export function ProjectsPage() {
 
         const baseMsg = fitterId ? 'Fitter assigned' : 'Assignment removed';
         if (result?.syncFailed) {
-          setToast({ msg: `${baseMsg} — HubSpot sync failed, CRM may be out of date`, error: true });
+          showToast(`${baseMsg} — HubSpot sync failed, CRM may be out of date`, true);
         } else {
-          setToast({ msg: baseMsg });
+          showToast(baseMsg);
         }
       } catch (e: unknown) {
         notifyApiError('hubspot', e);
         const code = (e as { code?: string }).code;
         if (code === 'HUBSPOT_AUTH') {
-          setToast({ msg: 'Could not save assignment — HubSpot token is invalid or expired. Ask an admin to update the token.', error: true });
+          showToast('Could not save assignment — HubSpot token is invalid or expired. Ask an admin to update the token.', true);
         } else if (code === 'HUBSPOT_RATE_LIMIT') {
-          setToast({ msg: 'Could not save assignment — HubSpot rate limit reached. Please try again in a moment.', error: true });
+          showToast('Could not save assignment — HubSpot rate limit reached. Please try again in a moment.', true);
         } else {
-          setToast({ msg: 'Failed to save assignment', error: true });
+          showToast('Failed to save assignment', true);
         }
       } finally {
         setPickerAssigning(false);
@@ -1810,20 +1811,6 @@ export function ProjectsPage() {
           <CircularProgress size={40} sx={{ color: BRAND_COLORS.plum }} />
         </Box>
       )}
-
-      {/* Toast notifications */}
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={3500}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        message={toast?.msg}
-        slotProps={
-          toast?.error
-            ? { content: { sx: { bgcolor: 'error.dark' } } }
-            : undefined
-        }
-      />
 
       {/* Invoice detail drawer */}
       <InvoiceDetailDrawer
