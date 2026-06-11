@@ -322,29 +322,6 @@ async function fetchContactFromHubSpot(contactId) {
   return r.data;
 }
 
-async function ensureSubstatusExists(substatusKey, label, parentStatusKey) {
-  // Check if sub-status exists in the local DB — schema: status_key + substatus_key are the unique pair
-  const exists = await pool.query(
-    `SELECT id FROM lead_substatuses WHERE status_key = $1 AND substatus_key = $2 LIMIT 1`,
-    [parentStatusKey, substatusKey]
-  );
-  if (exists.rows.length) return exists.rows[0].id;
-  // Insert, ignoring a race-condition duplicate
-  const ins = await pool.query(
-    `INSERT INTO lead_substatuses (status_key, substatus_key, label, action_label, sort_order)
-     VALUES ($1, $2, $3, $4, 0)
-     ON CONFLICT (status_key, substatus_key) DO UPDATE SET label = EXCLUDED.label
-     RETURNING id`,
-    [parentStatusKey, substatusKey, label, label]
-  );
-  return ins.rows[0].id;
-}
-
-async function updateHubSpotSubstatus(contactId, substatusKey) {
-  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
-  await axios.patch(url, { properties: { hw_lead_substatus: substatusKey } }, { headers: getHubSpotHeaders() });
-}
-
 // ── Photo upload (multer → object storage) ───────────────────────────────────
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file (client compresses to ≤1.5 MB before upload)
@@ -858,15 +835,6 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   try {
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
       await _patchContactProperties(lockedContactId, { hs_lead_status: 'AWAITING_PHOTOS' });
-      // Ensure sub-status exists locally, then patch HubSpot.
-      // HubSpot hw_lead_substatus values are namespaced: STATUS_KEY__SUBSTATUS_KEY
-      const awphId = await ensureSubstatusExists('AWPH_RECEIVED', 'Photos Received', 'AWAITING_PHOTOS');
-      // Set action label to "Review Photos" so the review handler is naturally surfaced
-      await pool.query(
-        `UPDATE lead_substatuses SET action_label = 'Review Photos' WHERE id = $1 AND (action_label IS NULL OR action_label = '' OR action_label = 'Photos Received')`,
-        [awphId]
-      );
-      await updateHubSpotSubstatus(lockedContactId, 'AWAITING_PHOTOS__AWPH_RECEIVED');
     }
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
