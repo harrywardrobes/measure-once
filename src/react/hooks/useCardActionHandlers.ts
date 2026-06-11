@@ -156,7 +156,13 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
     ): CardActionHandlerData | null => {
       const sKey = String(stageKey || '').toLowerCase();
       const lsKey = String(leadStatusKey || '').toLowerCase();
-      return byLabelRef.current[`${sKey}|${lsKey}`] || null;
+      const idx = byLabelRef.current;
+      return (
+        idx[`${sKey}|${lsKey}`] ||
+        idx[`${sKey}|`] ||
+        idx['__global__|'] ||
+        null
+      );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [byLabelRef],

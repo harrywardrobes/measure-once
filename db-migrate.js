@@ -27,6 +27,23 @@ const MIGRATION_RENAMES = [
   // drop-orphan-tables was bumped from 1749200000019 to 1749200000020 to make
   // room for the above renaming.
   ['1749200000019_drop-orphan-tables', '1749200000020_drop-orphan-tables'],
+  // deposit-invoice-followup-seed was originally created at 1781800000000 but
+  // had a timestamp collision with open-deal-idempotency. The file was renamed
+  // to 1782200000000 to resolve the collision; update existing DB records to
+  // match so node-pg-migrate's checkOrder passes.
+  ['1781800000000_deposit-invoice-followup-seed', '1782200000000_deposit-invoice-followup-seed'],
+  // The five migrations below (1781800000000_open-deal-idempotency through
+  // 1782100000000_lead-status-sort-order-dedup) were inserted into the DB
+  // AFTER deposit-invoice-followup-seed (which was renamed to 1782200000000).
+  // node-pg-migrate's checkOrder does a positional match — DB insertion order
+  // vs file-sort order — so any file with a timestamp < 1782200000000 that was
+  // inserted after it will always mismatch. Renaming these to timestamps > 1782200000000
+  // makes DB insertion order match file-sort order and satisfies checkOrder.
+  ['1781800000000_open-deal-idempotency', '1782300000000_open-deal-idempotency'],
+  ['1781900000000_open-deal-invoice-sent-at', '1782400000000_open-deal-invoice-sent-at'],
+  ['1781900000000_remove-delivery-installation-handlers', '1782500000000_remove-delivery-installation-handlers'],
+  ['1782000000000_open-deal-decline-guard', '1782600000000_open-deal-decline-guard'],
+  ['1782100000000_lead-status-sort-order-dedup', '1782700000000_lead-status-sort-order-dedup'],
 ];
 
 /**
