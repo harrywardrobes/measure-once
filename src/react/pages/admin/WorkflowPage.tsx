@@ -43,6 +43,7 @@ import {
   HANDLER_EMAIL_TEMPLATES,
   HANDLER_TYPE_LABELS,
   HANDLER_COMPONENT_META,
+  isHandlerType,
 } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
@@ -156,7 +157,7 @@ function handlersForSlot(
 }
 
 function handlerDisplayName(h: Handler): string {
-  return String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type as HandlerType] || h.name || h.type);
+  return String(h.config?.action_name || (isHandlerType(h.type) ? HANDLER_TYPE_LABELS[h.type] : undefined) || h.name || h.type);
 }
 
 function navigateToTab(tabId: string, itemKey?: string | number) {
@@ -304,7 +305,7 @@ function ActionButtonPreview({
 
 function CallChainStepper({ handlerType }: { handlerType?: string }) {
   const modalCode = handlerType
-    ? (HANDLER_COMPONENT_META[handlerType as HandlerType]?.component ?? '(unknown component)')
+    ? ((isHandlerType(handlerType) ? HANDLER_COMPONENT_META[handlerType] : undefined)?.component ?? '(unknown component)')
     : '(no handler bound)';
 
   const SHARED_STEP_INDICES = new Set([1, 2, 3, 4]);
@@ -380,14 +381,14 @@ function ModalDetailCard({
   handler: Handler;
   emailTemplates: EmailTemplate[];
 }) {
-  const summary = HANDLER_MODAL_SUMMARY[handler.type as HandlerType];
-  const meta    = HANDLER_COMPONENT_META[handler.type as HandlerType];
+  const summary = isHandlerType(handler.type) ? HANDLER_MODAL_SUMMARY[handler.type] : undefined;
+  const meta    = isHandlerType(handler.type) ? HANDLER_COMPONENT_META[handler.type] : undefined;
 
   const hubspotText = handler.type === 'start_design_visit' && handler.config?.submittedLeadStatus
     ? `Sets lead status to in-progress on open; to ${handler.config.submittedLeadStatus} on submit`
     : summary?.hubspot ?? '';
 
-  const templateKeys  = HANDLER_EMAIL_TEMPLATES[handler.type as HandlerType] ?? [];
+  const templateKeys  = (isHandlerType(handler.type) ? HANDLER_EMAIL_TEMPLATES[handler.type] : undefined) ?? [];
   const templateItems = templateKeys
     .map(k => emailTemplates.find(t => t.key === k))
     .filter((t): t is EmailTemplate => t !== undefined);
@@ -785,7 +786,7 @@ function StageAccordionNew({
         const hs = handlersForSlot(handlers, stageKey, lsKey);
         return hs.some(h => {
           if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
-          const meta = HANDLER_COMPONENT_META[h.type as HandlerType];
+          const meta = isHandlerType(h.type) ? HANDLER_COMPONENT_META[h.type] : undefined;
           if (meta?.component.toLowerCase().includes(q)) return true;
           return false;
         });
@@ -932,7 +933,7 @@ function WorkflowDemoModalHost({
           <DialogTitle>Demo preview not available</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary">
-              {HANDLER_TYPE_LABELS[handler.type as HandlerType] || handler.type} does not have a
+              {(isHandlerType(handler.type) ? HANDLER_TYPE_LABELS[handler.type] : undefined) || handler.type} does not have a
               demo-capable modal preview.
             </Typography>
           </DialogContent>

@@ -32,7 +32,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS, isHandlerType } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import {
   analyzeTemplateTokens,
@@ -734,7 +734,7 @@ export default function EmailTemplatesPage() {
               {templates.map((t) => {
                 const usedByHandlers = Object.entries(HANDLER_EMAIL_TEMPLATES)
                   .filter(([, keys]) => keys.includes(t.key))
-                  .map(([type]) => ({ type, label: HANDLER_TYPE_LABELS[type as HandlerType] || type }));
+                  .map(([type]) => ({ type, label: (isHandlerType(type) ? HANDLER_TYPE_LABELS[type] : undefined) || type }));
                 return (
                   <TableRow key={t.key} hover data-template-key={t.key}>
                     <TableCell>

@@ -7,6 +7,12 @@ import Box from '@mui/material/Box';
 import { ConflictResolverModal } from './ActionHandlersPage';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 
+type StoryHandler = {
+  id: number; name: string; type: HandlerType;
+  config: Record<string, unknown>;
+  bindings: Array<{ stage_key?: string; status_key?: string }>;
+};
+
 const meta: Meta = {
   title: 'Features/ActionHandlers/ConflictResolverModal',
   tags: ['autodocs'],
@@ -57,42 +63,42 @@ const SUBSTATUSES = [
   }
 ];
 
-const INITIAL_TWO_HANDLERS = [
+const INITIAL_TWO_HANDLERS: StoryHandler[] = [
   {
     id: 1,
     name: 'Send quote message',
-    type: 'show_message' as HandlerType,
+    type: 'show_message',
     config: { title: 'Quote sent', message: 'Remember to attach the PDF.' },
     bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
   },
   {
     id: 2,
     name: 'Schedule survey visit',
-    type: 'schedule_visit' as HandlerType,
+    type: 'schedule_visit',
     config: { visitType: 'survey' },
     bindings: [{ stage_key: 'sales', status_key: 'quote_sent' }]
   }
 ];
 
-const INITIAL_THREE_HANDLERS_SUB = [
+const INITIAL_THREE_HANDLERS_SUB: StoryHandler[] = [
   {
     id: 3,
     name: 'Start design visit (A)',
-    type: 'start_design_visit' as HandlerType,
+    type: 'start_design_visit',
     config: { inProgressLeadStatus: 'in_progress', submittedLeadStatus: 'dv_submitted' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 4,
     name: 'Show next-step message',
-    type: 'show_message' as HandlerType,
+    type: 'show_message',
     config: { title: '', message: 'Upload the design brief before continuing.' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   },
   {
     id: 5,
     name: 'Schedule follow-up visit',
-    type: 'schedule_visit' as HandlerType,
+    type: 'schedule_visit',
     config: { visitType: 'remedial' },
     bindings: [{ stage_key: 'sales', status_key: '' }]
   }
