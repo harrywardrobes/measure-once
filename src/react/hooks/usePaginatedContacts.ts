@@ -1,5 +1,5 @@
 import React from 'react';
-import { cacheRecords, readRecords, getMeta, setMeta } from '../lib/offlineDb';
+import { cacheRecord, cacheRecords, readRecord, readRecords, getMeta, setMeta } from '../lib/offlineDb';
 import { CONTACTS_LAST_SYNC_META_KEY } from '../constants/localStorageKeys';
 
 export { CONTACTS_LAST_SYNC_META_KEY };
@@ -59,9 +59,10 @@ export type UsePaginatedContactsResult = {
   page: number;
   setPage: (p: number) => void;
   /**
-   * Optimistically patch a single contact's properties in the local list.
-   * Only contacts that are currently in the visible page are updated; the
-   * change is purely in-memory and will be overwritten by the next fetch.
+   * Optimistically patch a single contact's properties in the local list and
+   * persist the change to the offline IndexedDB cache.  The in-memory update
+   * is immediate; the cache write is fire-and-forget so offline renders also
+   * reflect the latest value without waiting for the next full fetch.
    */
   patchContact: (contactId: string, props: Record<string, string | undefined>) => void;
 };
@@ -388,6 +389,20 @@ export function usePaginatedContacts(
             : c,
         ),
       );
+      // Persist the patch to the offline cache so that if the device goes
+      // offline immediately after the status change the IndexedDB copy is
+      // also up to date.  We read the existing cached record first so we
+      // can merge only the changed properties rather than overwriting the
+      // whole contact (the record may be in the cache even when it is not
+      // on the current visible page).  Both operations are fire-and-forget
+      // and best-effort — a failure here must never affect the UI.
+      void (async () => {
+        const existing = await readRecord<PaginatedContact>('customers', contactId);
+        const merged: PaginatedContact = existing
+          ? { ...existing, properties: { ...existing.properties, ...props } }
+          : { id: contactId, properties: props };
+        await cacheRecord('customers', contactId, merged);
+      })();
     },
     [],
   );
