@@ -5,9 +5,14 @@
  * Static lint: every entry in TEMPLATE_DEFS in `email-templates.js` must:
  *   1. Have a `variableDescriptions` key.
  *   2. Have a description for every variable listed in `variables`.
+ *   3. Every {{placeholder}} used in subject / body_text / body_html must be
+ *      declared in `variables` or `variableDescriptions` — catching the reverse
+ *      case where a placeholder is added to the body text but the variables
+ *      list is never updated.
  *
  * This prevents a new template from being added without tooltip guidance for
- * admins who edit it via the email templates admin panel.
+ * admins who edit it via the email templates admin panel, and ensures no
+ * placeholder goes undeclared (which would leave it unfilled at send time).
  *
  * How it works
  * ─────────────
@@ -17,6 +22,8 @@
  *   2. Splits it into per-template sections at top-level `  key: {` boundaries.
  *   3. From each section extracts the `variables` array items and the keys
  *      present in `variableDescriptions`.
+ *   4. Scans the full section text for {{word}} placeholders and cross-checks
+ *      them against the declared variables / variableDescriptions.
  *
  * Exit codes:
  *   0 — all templates have complete variableDescriptions
@@ -110,6 +117,26 @@ function extractVariables(text) {
 }
 
 /**
+ * Extract every {{word}} placeholder that appears anywhere in the section text.
+ * Returns a Set of identifier strings.  Used to detect placeholders that are
+ * used in subject / body_text / body_html but never declared in `variables`.
+ *
+ * The search is applied to the raw source text of the template section, so it
+ * naturally covers subject, body_text, and body_html string literals.  The
+ * variableDescriptions prose values do not contain {{…}} patterns (they
+ * describe variables in plain English), so this produces no false positives.
+ */
+function extractBodyPlaceholders(text) {
+  const placeholders = new Set();
+  const re = /\{\{(\w+)\}\}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    placeholders.add(m[1]);
+  }
+  return placeholders;
+}
+
+/**
  * Extract the keys present in `variableDescriptions: { … }` in the given
  * block of text.  Returns null if the key does not exist at all, or an empty
  * array if the block is present but empty.
@@ -156,13 +183,31 @@ for (const { key, text } of sections) {
     continue;
   }
 
+  const varSet  = new Set(variables);
   const descSet = new Set(descKeys);
+
+  // Check 1 (existing): every declared variable has a description.
   for (const v of variables) {
     if (!descSet.has(v)) {
       violations.push({
         template: key,
         type: 'missing_description',
         message: `Template "${key}": variable \`${v}\` has no entry in \`variableDescriptions\`.`,
+      });
+    }
+  }
+
+  // Check 2 (new): every {{placeholder}} used in the template body / subject
+  // must be declared in `variables` or `variableDescriptions`.  Catches the
+  // reverse case — a placeholder added to body_text/body_html/subject but
+  // never registered in the variables list, which would leave it unfilled.
+  const bodyPlaceholders = extractBodyPlaceholders(text);
+  for (const p of bodyPlaceholders) {
+    if (!varSet.has(p) && !descSet.has(p)) {
+      violations.push({
+        template: key,
+        type: 'undeclared_placeholder',
+        message: `Template "${key}": \`{{${p}}}\` is used in the template body/subject but is not declared in \`variables\` or \`variableDescriptions\`.`,
       });
     }
   }
@@ -186,12 +231,30 @@ console.error(`✗ ${violations.length} violation(s) found:\n`);
 for (const v of violations) {
   console.error(`  ${v.message}`);
 }
-console.error(
-  '\nFix: add (or update) `variableDescriptions` in the affected template(s) in\n' +
-  '     email-templates.js so every entry in `variables` has a matching key with\n' +
-  '     a human-readable description.  Example:\n\n' +
-  '       variableDescriptions: {\n' +
-  "         myVar: 'What this variable contains and when it is present.',\n" +
-  '       },'
-);
+
+const hasUndeclared = violations.some(v => v.type === 'undeclared_placeholder');
+const hasMissing    = violations.some(v => v.type !== 'undeclared_placeholder');
+
+if (hasMissing) {
+  console.error(
+    '\nFix (missing description): add (or update) `variableDescriptions` in the\n' +
+    '  affected template(s) in email-templates.js so every entry in `variables`\n' +
+    '  has a matching key with a human-readable description.  Example:\n\n' +
+    '    variableDescriptions: {\n' +
+    "      myVar: 'What this variable contains and when it is present.',\n" +
+    '    },'
+  );
+}
+if (hasUndeclared) {
+  console.error(
+    '\nFix (undeclared placeholder): add the variable to the `variables` array\n' +
+    '  AND to `variableDescriptions` in the affected template(s) in\n' +
+    '  email-templates.js.  Example:\n\n' +
+    "    variables: ['existingVar', 'myNewVar'],\n" +
+    '    variableDescriptions: {\n' +
+    "      existingVar: 'Description of the existing variable.',\n" +
+    "      myNewVar:    'What this new variable contains and when it is present.',\n" +
+    '    },'
+  );
+}
 process.exit(1);
