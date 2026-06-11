@@ -660,6 +660,7 @@ export function CustomerDetailPage() {
               now,
             ) ?? undefined
           }
+          lastAttempt={lastAttempt}
         />
       )}
 

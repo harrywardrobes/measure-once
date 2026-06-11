@@ -1,9 +1,21 @@
 import React, { useState } from 'react';
+import Tooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { PROVIDER_COLORS } from '../../theme';
 import { Contact, LeadStatus, contactName } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
+import { formatDate } from '../../utils/formatters';
+
+type LastAttempt = {
+  at: string;
+  by: string | null;
+  count: number;
+  method: string | null;
+  methodCounts?: Record<string, number> | null;
+} | null;
 
 interface Props {
   contact: Contact;
@@ -13,6 +25,7 @@ interface Props {
   onOpenWhatsApp?: () => void;
   whatsappEnabled?: boolean;
   activityCounter?: string;
+  lastAttempt?: LastAttempt;
 }
 
 export function CustomerDetailHeader({
@@ -23,6 +36,7 @@ export function CustomerDetailHeader({
   onOpenWhatsApp,
   whatsappEnabled,
   activityCounter,
+  lastAttempt,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -63,6 +77,53 @@ export function CustomerDetailHeader({
     if (!canEdit) return;
     setPickerAnchorEl(e.currentTarget);
   }
+
+  const activityTooltipContent = (() => {
+    if (lastAttempt?.at) {
+      const methodLabel =
+        lastAttempt.method === 'call'      ? 'Call'
+        : lastAttempt.method === 'email'   ? 'Email'
+        : lastAttempt.method === 'whatsapp' ? 'WhatsApp'
+        : lastAttempt.method              ? lastAttempt.method
+        : null;
+      const methodOrder = ['call', 'email', 'whatsapp'];
+      const methodLabels: Record<string, (n: number) => string> = {
+        call:      (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
+        email:     (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
+        whatsapp:  (n) => `${n} WhatsApp`,
+      };
+      const mc = lastAttempt.methodCounts || {};
+      const breakdown = [
+        ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => methodLabels[m](mc[m])),
+        ...Object.keys(mc).filter((m) => !methodOrder.includes(m) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
+      ].join(', ');
+      return (
+        <Box sx={{ py: 0.25 }}>
+          <Typography variant="caption" display="block" sx={{ fontWeight: 600, lineHeight: 1.5 }}>
+            {formatDate(lastAttempt.at)}
+          </Typography>
+          {lastAttempt.by && (
+            <Typography variant="caption" display="block" sx={{ lineHeight: 1.5, opacity: 0.85 }}>
+              {`by ${lastAttempt.by}`}
+            </Typography>
+          )}
+          <Typography variant="caption" display="block" sx={{ lineHeight: 1.5, opacity: 0.85 }}>
+            {[
+              lastAttempt.count > 0
+                ? `${lastAttempt.count} ${lastAttempt.count === 1 ? 'attempt' : 'attempts'}`
+                : null,
+              breakdown || methodLabel,
+            ].filter(Boolean).join(' · ')}
+          </Typography>
+        </Box>
+      );
+    }
+    const fallbackDate = props.notes_last_contacted;
+    if (fallbackDate) {
+      return formatDate(fallbackDate);
+    }
+    return 'Time since last contact attempt';
+  })();
 
   return (
     <div
@@ -163,18 +224,25 @@ export function CustomerDetailHeader({
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
             {activityCounter && (
-              <span
-                title="Time since last contact attempt"
-                style={{
-                  fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
-                  padding: '3px 7px', borderRadius: 6,
-                  background: 'var(--stone)', color: 'var(--ink-3)',
-                  letterSpacing: '0.02em', flexShrink: 0,
-                  fontVariantNumeric: 'tabular-nums',
-                }}
+              <Tooltip
+                title={activityTooltipContent}
+                arrow
+                placement="bottom"
+                enterDelay={200}
               >
-                {activityCounter}
-              </span>
+                <span
+                  style={{
+                    fontSize: '0.72rem', fontWeight: 600, lineHeight: 1,
+                    padding: '3px 7px', borderRadius: 6,
+                    background: 'var(--stone)', color: 'var(--ink-3)',
+                    letterSpacing: '0.02em', flexShrink: 0,
+                    fontVariantNumeric: 'tabular-nums',
+                    cursor: 'default',
+                  }}
+                >
+                  {activityCounter}
+                </span>
+              </Tooltip>
             )}
             <PhotosReceivedBadge leadStatus={rawStatus} />
             <span
