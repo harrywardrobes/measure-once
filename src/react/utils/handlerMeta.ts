@@ -12,6 +12,23 @@
  * HANDLER_COMPONENT_META — maps handler type → { component, filePath }
  *   used in WorkflowPage to show the modal component name and source path
  *   in the call-chain column and Modal Detail Card.
+ *
+ * ── CI exhaustiveness check ────────────────────────────────────────────────
+ *
+ * `scripts/check-handler-meta.mjs` (run via `npm run test:handler-meta`)
+ * automatically discovers every `export const` in this file whose type
+ * annotation is `Record<HandlerType, …>` and verifies that every handler
+ * type declared in the ModalState union in CardActionModalsHost.tsx has a
+ * matching key in each such table.
+ *
+ * This means: if you add a new lookup table here with the type
+ *
+ *   export const MY_NEW_TABLE: Record<HandlerType, …> = { … }
+ *
+ * the CI check will automatically require it to be exhaustive — no changes
+ * to the script are needed. Conversely, if you add a new handler type to
+ * CardActionModalsHost.tsx, the check will fail until every
+ * `Record<HandlerType, …>` table in this file is updated to include it.
  */
 
 import type { HandlerType } from '../components/CardActionModalsHost';
