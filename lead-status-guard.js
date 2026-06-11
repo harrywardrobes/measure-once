@@ -85,6 +85,9 @@ async function assertLeadStatusKey(key) {
  * Never call this in production code.
  */
 function _setPool(p) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('_setPool is a test-only hook and must not be called in production.');
+  }
   pool = p;
 }
 
