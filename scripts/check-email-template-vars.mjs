@@ -12,6 +12,9 @@
  *   4. Every entry in `variables` must appear as {{varName}} somewhere in the
  *      combined subject / body_text / body_html — catching dead/stale metadata
  *      where a variable is declared but never actually used in the template.
+ *   5. Every key in `variableDescriptions` must also exist in `variables` —
+ *      catching orphaned descriptions that would appear as tooltip entries in
+ *      the admin editor but would never be substituted at send time.
  *
  * This prevents a new template from being added without tooltip guidance for
  * admins who edit it via the email templates admin panel, and ensures no
@@ -228,6 +231,20 @@ for (const { key, text } of sections) {
       });
     }
   }
+
+  // Check 4 (new): every key in `variableDescriptions` must also exist in
+  // `variables`.  Catches orphaned descriptions — an entry that would appear
+  // as a tooltip in the admin editor but whose placeholder would never be
+  // substituted at send time because it is absent from the variables array.
+  for (const dk of descKeys) {
+    if (!varSet.has(dk)) {
+      violations.push({
+        template: key,
+        type: 'orphaned_description',
+        message: `Template "${key}": \`variableDescriptions\` has key \`${dk}\` but it is not listed in \`variables\` and will never be substituted at send time.`,
+      });
+    }
+  }
 }
 
 // ── Report ────────────────────────────────────────────────────────────────────
@@ -240,7 +257,8 @@ if (violations.length === 0) {
   console.log(
     `✓ All ${sections.length} template(s) have complete variableDescriptions.\n` +
     '  Every variable listed in `variables` has a matching description entry\n' +
-    '  and is referenced as a {{placeholder}} in the template body/subject.'
+    '  and is referenced as a {{placeholder}} in the template body/subject.\n' +
+    '  Every key in `variableDescriptions` is present in `variables`.'
   );
   process.exit(0);
 }
@@ -253,6 +271,7 @@ for (const v of violations) {
 const hasUndeclared = violations.some(v => v.type === 'undeclared_placeholder');
 const hasMissing    = violations.some(v => v.type === 'missing_description' || v.type === 'missing_variableDescriptions');
 const hasUnused     = violations.some(v => v.type === 'unused_variable');
+const hasOrphaned   = violations.some(v => v.type === 'orphaned_description');
 
 if (hasMissing) {
   console.error(
@@ -286,6 +305,19 @@ if (hasUnused) {
     '    variableDescriptions: {\n' +
     "      activeVar: 'Still used in the template body.',\n" +
     "      // remove staleVar entry\n" +
+    '    },'
+  );
+}
+if (hasOrphaned) {
+  console.error(
+    '\nFix (orphaned description): the key exists in `variableDescriptions` but\n' +
+    '  is absent from the `variables` array, so it will never be substituted at\n' +
+    '  send time.  Either add the key to `variables` (and use it in the template\n' +
+    '  body), or remove the orphaned entry from `variableDescriptions`.  Example:\n\n' +
+    "    variables: ['activeVar', 'orphanedKey'],  // add orphanedKey here\n" +
+    '    variableDescriptions: {\n' +
+    "      activeVar:   'Still used in the template body.',\n" +
+    "      orphanedKey: 'Description of what this variable contains.',\n" +
     '    },'
   );
 }
