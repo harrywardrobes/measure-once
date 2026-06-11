@@ -310,6 +310,9 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/hubspot-webhook',                      level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot-webhook',                      level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/hubspot-webhook',                      level: 'admin' },
+  // QuickBooks organisation-wide send settings (copy-me email, deposit %, payment stages).
+  { method: 'GET',    path: '/api/admin/qb-settings',                          level: 'admin' },
+  { method: 'PUT',    path: '/api/admin/qb-settings',                          level: 'admin', body: {} },
   // HubSpot credential management (access_token / app_id / client_secret).
   { method: 'GET',    path: '/api/admin/hubspot-credentials',                  level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/hubspot-credentials',                  level: 'admin', body: { key: 'access_token', value: 'test' } },

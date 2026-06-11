@@ -153,6 +153,7 @@
         <button class="tab-btn"        data-tab="requests"    onclick="switchTab('requests')">Pending Requests <span id="req-tab-badge"></span></button>
         <button class="tab-btn"        data-tab="auditlog"    onclick="switchTab('auditlog')">Audit log</button>
         <button class="tab-btn"        data-tab="hubspot"     onclick="switchTab('hubspot')">HubSpot</button>
+        <button class="tab-btn"        data-tab="quickbooks"  onclick="switchTab('quickbooks')">QuickBooks</button>
         <button class="tab-btn"        data-tab="settings"    onclick="switchTab('settings')">Settings</button>
         <button class="tab-btn"        data-tab="stages"      onclick="switchTab('stages')">Stages</button>
         <button class="tab-btn"        data-tab="cardactions"   onclick="switchTab('cardactions')">Card actions</button>
@@ -185,6 +186,11 @@
            React component so external JS and tests still work unchanged.
       -->
       <div class="tab-panel" id="tab-hubspot"></div>
+
+      <!-- QUICKBOOKS — React island (src/react/pages/admin/QuickBooksSettingsPage.tsx).
+           Copy-me email/CC/BCC, deposit percentage, payment stages, and
+           read-only connection info. -->
+      <div class="tab-panel" id="tab-quickbooks"></div>
 
       <!-- SETTINGS / CARD ACTIONS / ACTION HANDLERS / DESIGN VISIT
            These four panels are React islands (src/react/pages/admin/*.tsx).
@@ -248,7 +254,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'emailtemplates', 'workflow', 'devenv', 'offline'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);

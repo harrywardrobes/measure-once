@@ -37,7 +37,7 @@ function getQuickBooksRedirectUri() {
 }
 
 // ── DB ─────────────────────────────────────────────────────────────────────────
-// Schema (qb_tokens, qb_send_log + index) is created by migrations on boot.
+// Schema (qb_tokens, qb_send_log + index, qb_settings) is created by migrations on boot.
 
 // Purge rows older than 1 hour every 30 minutes to keep the table small.
 setInterval(() => {
@@ -123,6 +123,86 @@ async function fetchFromQuickBooks(path, params = {}) {
   return r.data;
 }
 
+// ── Centralised QB email send ───────────────────────────────────────────────────
+// Reads qb_settings fresh from the DB, sparse-updates BillEmailCc/BillEmailBcc
+// on the transaction, then calls the QB send endpoint.
+//
+// txnType  — 'invoice' | 'estimate' (lowercase, as used in QB API paths)
+// txnId    — numeric QB transaction ID (string or number)
+// options  — { sendTo?: string } — optional override for the recipient address
+async function sendQbTransactionEmail(txnType, txnId, { sendTo } = {}) {
+  const t = await getValidTokens();
+  if (!t) throw new Error('QuickBooks not connected');
+
+  const id = String(txnId || '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('Invalid transaction id');
+
+  // Capitalise for QB response envelope key (e.g. 'invoice' → 'Invoice')
+  const txnTypeCap = txnType.charAt(0).toUpperCase() + txnType.slice(1);
+
+  // Read settings fresh from DB on every send (never cached at startup)
+  let copyMeEmail = null;
+  let copyMeMode  = 'bcc';
+  try {
+    const sr = await pool.query('SELECT copy_me_email, copy_me_mode FROM qb_settings LIMIT 1');
+    if (sr.rows[0]) {
+      copyMeEmail = sr.rows[0].copy_me_email || null;
+      copyMeMode  = sr.rows[0].copy_me_mode  || 'bcc';
+    }
+  } catch (e) {
+    logger.warn({ err: e.message }, 'QB sendQbTransactionEmail: could not read qb_settings; proceeding without CC/BCC');
+  }
+
+  // Sparse-update BillEmailCc / BillEmailBcc if a copy-me address is configured
+  if (copyMeEmail) {
+    try {
+      // Fetch current SyncToken so the sparse update is valid
+      const currentData = await fetchFromQuickBooks(`/${txnType}/${id}`);
+      const txn = currentData[txnTypeCap];
+      const syncToken = txn?.SyncToken;
+
+      const updateBody = {
+        sparse:    true,
+        Id:        id,
+        SyncToken: String(syncToken ?? 0),
+      };
+      if (copyMeMode === 'cc') {
+        updateBody.BillEmailCc  = { Address: copyMeEmail };
+      } else {
+        updateBody.BillEmailBcc = { Address: copyMeEmail };
+      }
+
+      await axios.post(
+        `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/${txnType}`,
+        updateBody,
+        {
+          headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+          params:  { minorversion: 65 },
+          timeout: 12000
+        }
+      );
+    } catch (e) {
+      // Non-fatal: log the failure but continue to send the email
+      logger.warn({ err: e.response?.data || e.message }, `QB sendQbTransactionEmail: could not set ${copyMeMode.toUpperCase()} on ${txnType} ${id}; continuing with send`);
+    }
+  }
+
+  // Call the QB send endpoint
+  const params = { minorversion: 65 };
+  if (sendTo) params.sendTo = sendTo;
+
+  const r = await axios.post(
+    `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/${txnType}/${id}/send`,
+    {},
+    {
+      headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/octet-stream', Accept: 'application/json' },
+      params,
+      timeout: 20000
+    }
+  );
+  return r.data;
+}
+
 // ── OAuth: start ───────────────────────────────────────────────────────────────
 router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   if (!process.env.QB_CLIENT_ID) {
@@ -178,9 +258,91 @@ router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
     const t = await getValidTokens();
     if (!t) return res.json({ connected: false });
     const data = await fetchFromQuickBooks(`/companyinfo/${t.realm_id}`);
-    res.json({ connected: true, company: data.CompanyInfo?.CompanyName || 'QuickBooks' });
+    res.json({
+      connected:   true,
+      company:     data.CompanyInfo?.CompanyName || 'QuickBooks',
+      environment: process.env.QB_ENVIRONMENT === 'sandbox' ? 'sandbox' : 'production',
+    });
   } catch {
     res.json({ connected: false });
+  }
+});
+
+// ── API: admin QB settings ─────────────────────────────────────────────────────
+router.get('/api/admin/qb-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM qb_settings LIMIT 1');
+    if (!r.rows[0]) {
+      return res.json({
+        copyMeEmail:    'harry@harrywardrobes.co.uk',
+        copyMeMode:     'bcc',
+        depositPercent: 10,
+        paymentStages:  [],
+      });
+    }
+    const row = r.rows[0];
+    res.json({
+      copyMeEmail:    row.copy_me_email    ?? '',
+      copyMeMode:     row.copy_me_mode     ?? 'bcc',
+      depositPercent: Number(row.deposit_percent ?? 10),
+      paymentStages:  Array.isArray(row.payment_stages) ? row.payment_stages : [],
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/qb-settings error:');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/api/admin/qb-settings', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { copyMeEmail, copyMeMode, depositPercent, paymentStages } = req.body;
+
+    // Validate inputs
+    if (copyMeMode !== undefined && !['cc', 'bcc'].includes(copyMeMode)) {
+      return res.status(400).json({ error: 'copyMeMode must be "cc" or "bcc"' });
+    }
+    if (depositPercent !== undefined) {
+      const n = Number(depositPercent);
+      if (isNaN(n) || n < 0 || n > 100) {
+        return res.status(400).json({ error: 'depositPercent must be a number between 0 and 100' });
+      }
+    }
+    if (paymentStages !== undefined && !Array.isArray(paymentStages)) {
+      return res.status(400).json({ error: 'paymentStages must be an array' });
+    }
+
+    // Upsert: ensure exactly one row exists, then update the provided fields
+    await pool.query(`
+      INSERT INTO qb_settings (copy_me_email, copy_me_mode, deposit_percent, payment_stages)
+      SELECT 'harry@harrywardrobes.co.uk', 'bcc', 10, '[]'::jsonb
+      WHERE NOT EXISTS (SELECT 1 FROM qb_settings)
+    `);
+
+    const sets  = [];
+    const vals  = [];
+    let   idx   = 1;
+
+    if (copyMeEmail    !== undefined) { sets.push(`copy_me_email = $${idx++}`);    vals.push(String(copyMeEmail ?? '')); }
+    if (copyMeMode     !== undefined) { sets.push(`copy_me_mode = $${idx++}`);     vals.push(copyMeMode); }
+    if (depositPercent !== undefined) { sets.push(`deposit_percent = $${idx++}`);  vals.push(Number(depositPercent)); }
+    if (paymentStages  !== undefined) { sets.push(`payment_stages = $${idx++}`);   vals.push(JSON.stringify(paymentStages)); }
+
+    if (sets.length > 0) {
+      sets.push(`updated_at = NOW()`);
+      await pool.query(`UPDATE qb_settings SET ${sets.join(', ')}`, vals);
+    }
+
+    const r = await pool.query('SELECT * FROM qb_settings LIMIT 1');
+    const row = r.rows[0];
+    res.json({
+      copyMeEmail:    row.copy_me_email    ?? '',
+      copyMeMode:     row.copy_me_mode     ?? 'bcc',
+      depositPercent: Number(row.deposit_percent ?? 10),
+      paymentStages:  Array.isArray(row.payment_stages) ? row.payment_stages : [],
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, 'PUT /api/admin/qb-settings error:');
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -322,27 +484,11 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, q
   }
 
   try {
-    const { email } = req.body;
-    const t = await getValidTokens();
-    if (!t) return res.status(503).json({ error: 'QuickBooks not connected' });
-
     const invoiceId = getValidatedInvoiceId(req.params.id);
     if (!invoiceId) return res.status(400).json({ error: 'Invalid invoice id' });
 
-    const params = { minorversion: 65 };
-    if (email) {
-      params.sendTo = email;
-    }
-
-    const r = await axios.post(
-      `${getQuickBooksBaseUrl()}/v3/company/${t.realm_id}/invoice/${invoiceId}/send`,
-      {},
-      {
-        headers: { Authorization: `Bearer ${t.access_token}`, 'Content-Type': 'application/octet-stream', Accept: 'application/json' },
-        params,
-        timeout: 20000
-      }
-    );
+    const { email } = req.body;
+    await sendQbTransactionEmail('invoice', invoiceId, { sendTo: email || undefined });
     res.json({ success: true });
   } catch (e) {
     logger.error({ err: e.response?.data || e.message }, 'QB send error:');
@@ -351,3 +497,4 @@ router.post('/api/quickbooks/invoice/:id/send', isAuthenticated, requireAdmin, q
 });
 
 module.exports = router;
+module.exports.sendQbTransactionEmail = sendQbTransactionEmail;
