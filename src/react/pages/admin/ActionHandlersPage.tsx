@@ -24,7 +24,7 @@ import {
 } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
+import { HANDLER_MODAL_SUMMARY, HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS, isHandlerType } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 
 import {
@@ -572,7 +572,7 @@ function HandlerEditorModal({
                 label="Action type"
                 inputProps={{ id: 'cah-type' }}
                 value={handlerType}
-                onChange={e => { setHandlerType(e.target.value as HandlerType); setConflictList([]); }}
+                onChange={e => { if (isHandlerType(e.target.value)) { setHandlerType(e.target.value); setConflictList([]); } }}
               >
                 {Object.entries(HANDLER_TYPE_LABELS).map(([k, v]) => (
                   <option key={k} value={k}>{v}</option>

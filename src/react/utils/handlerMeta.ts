@@ -87,6 +87,11 @@ export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
   contact_customer:             'Contact customer (call / email / WhatsApp)',
 };
 
+/** Runtime narrowing guard — use instead of `as HandlerType` in onChange handlers. */
+export function isHandlerType(v: string): v is HandlerType {
+  return Object.prototype.hasOwnProperty.call(HANDLER_TYPE_LABELS, v);
+}
+
 export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   upload_photos_and_info:       ['customer_invite', 'admin_notification', 'customer_thank_you'],
   review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
