@@ -939,6 +939,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
       thankYouSent:      false,
       statusUpdated:     false,
     };
+    let thankYouError = null;
 
     try {
       // 1. Mark estimates as Rejected in QB (non-fatal; QB might not be connected)
@@ -1052,8 +1053,12 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
                    ON CONFLICT (contact_id) DO UPDATE SET declined_at = NOW()`,
                   [contactId]
                 );
+              } else {
+                thankYouError = 'No mail transport configured — thank-you email was not sent';
+                logger.warn({ contactId }, '[decline-deal] thank-you email skipped: no mail transport');
               }
             } catch (e) {
+              thankYouError = e.message || 'Email send failed';
               logger.warn({ err: e.message }, '[decline-deal] thank-you email failed (non-fatal):');
             }
           }
@@ -1088,7 +1093,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL', ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}) });
+      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL', ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}), ...(thankYouError ? { thankYouError } : {}) });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/quickbooks/contacts/:contactId/decline-deal error:');
       res.status(503).json({ error: e.message, steps });

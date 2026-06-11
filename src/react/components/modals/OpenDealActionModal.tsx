@@ -107,6 +107,7 @@ interface DeclineResult {
   hs_lead_status?: string;
   steps?: Record<string, boolean>;
   emailAlreadySent?: boolean;
+  thankYouError?: string;
 }
 
 function formatCurrency(n: number): string {
@@ -360,7 +361,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
       );
       broadcastLeadStatusChange(contactId, { hs_lead_status: result.hs_lead_status });
       clearDraft();
-      if (result.emailAlreadySent) {
+      if (result.emailAlreadySent || result.thankYouError) {
         setDeclineResult(result);
         navigateTo('decline_done');
       } else {
@@ -945,6 +946,11 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         {declineResult?.emailAlreadySent && (
           <Alert severity="info" sx={{ width: '100%' }}>
             The thank-you email was already sent to this contact — no duplicate was sent.
+          </Alert>
+        )}
+        {declineResult?.thankYouError && (
+          <Alert severity="warning" sx={{ width: '100%' }}>
+            The thank-you email could not be sent: {declineResult.thankYouError}
           </Alert>
         )}
       </Stack>
