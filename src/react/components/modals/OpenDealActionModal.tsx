@@ -150,9 +150,10 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   const [declineEmailPreview, setDeclineEmailPreview] = useState<{
     subject: string;
     bodyText: string;
+    html: string;
     loading: boolean;
     error: boolean;
-  }>({ subject: '', bodyText: '', loading: false, error: false });
+  }>({ subject: '', bodyText: '', html: '', loading: false, error: false });
 
   // Email preview state (accept confirm step)
   const [depositEmailPreview, setDepositEmailPreview] = useState<{ subject: string; html: string; text: string } | null>(null);
@@ -190,18 +191,18 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     if (step !== 'decline_email') return;
     let cancelled = false;
     const firstName = contactData?.contactName?.split(' ')[0] || '';
-    setDeclineEmailPreview({ subject: '', bodyText: '', loading: true, error: false });
-    POST<{ subject: string; body_text: string }>('/api/email-templates/render', {
+    setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: true, error: false });
+    POST<{ subject: string; body_text: string; html: string }>('/api/email-templates/render', {
       key: 'open_deal_declined_thank_you',
       vars: { firstName },
     })
       .then(data => {
         if (cancelled) return;
-        setDeclineEmailPreview({ subject: data.subject, bodyText: data.body_text, loading: false, error: false });
+        setDeclineEmailPreview({ subject: data.subject, bodyText: data.body_text, html: data.html || '', loading: false, error: false });
       })
       .catch(() => {
         if (cancelled) return;
-        setDeclineEmailPreview({ subject: '', bodyText: '', loading: false, error: true });
+        setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: false, error: true });
       });
     return () => { cancelled = true; };
   }, [step, contactData]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -828,35 +829,54 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function renderDeclineEmail() {
-    const { subject, bodyText, loading: previewLoading, error: previewError } = declineEmailPreview;
+    const { subject, bodyText, html, loading: emailLoading, error: previewError } = declineEmailPreview;
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
           Would you like to send the customer a brief thank-you email?
         </Typography>
-        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2, bgcolor: 'background.default' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Template: <em>open_deal_declined_thank_you</em>
-            {subject ? <> — <strong>{subject}</strong></> : null}
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+            Email the customer will receive:
           </Typography>
-          {previewLoading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+          {emailLoading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', py: 1 }}>
               <CircularProgress size={14} />
-              <Typography variant="body2" color="text.secondary">Loading preview…</Typography>
+              <Typography variant="caption">Loading preview…</Typography>
             </Box>
           )}
-          {!previewLoading && previewError && (
-            <Typography variant="body2" color="text.secondary">
-              A brief thank-you note will be sent to the customer.
-            </Typography>
+          {!emailLoading && !previewError && (subject || html || bodyText) && (
+            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
+              <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+                <Typography variant="caption" color="text.secondary">Subject: </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 500 }}>{subject || <em>no subject</em>}</Typography>
+              </Box>
+              {html ? (
+                <iframe
+                  title="Decline thank-you email preview"
+                  sandbox="allow-same-origin"
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:13px;color:#1a1a1a;padding:12px 16px;margin:0;line-height:1.5;}p{margin:0 0 8px;}</style></head><body>${html}</body></html>`}
+                  style={{ width: '100%', minHeight: 80, border: 'none', display: 'block' }}
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    try {
+                      const h = iframe.contentDocument?.body?.scrollHeight;
+                      if (h && h > 0) iframe.style.height = `${h + 24}px`;
+                    } catch (_) { /* cross-origin guard */ }
+                  }}
+                />
+              ) : (
+                <Box sx={{ px: 1.5, py: 1, fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                  {bodyText}
+                </Box>
+              )}
+            </Box>
           )}
-          {!previewLoading && !previewError && bodyText && (
-            bodyText.split('\n').map((line, i) => (
-              <Typography key={i} variant="body2" sx={{ mt: i === 0 ? 0 : 0.5 }}>
-                {line || <>&nbsp;</>}
-              </Typography>
-            ))
+          {!emailLoading && previewError && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+              Preview unavailable — email will still be sent.
+            </Typography>
           )}
         </Box>
         <Alert severity="info" sx={{ py: 0.25 }}>

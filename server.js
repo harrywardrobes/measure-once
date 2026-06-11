@@ -4816,8 +4816,8 @@ app.post('/api/email-templates/render', isAuthenticated, async (req, res) => {
   try {
     const template = await getEmailTemplate(key);
     if (!template) return res.status(404).json({ error: 'Template not found.' });
-    const rendered = renderEmail(template, { textVars: vars || {} });
-    res.json({ subject: rendered.subject, body_text: rendered.text });
+    const rendered = renderEmail(template, { textVars: vars || {}, htmlVars: vars || {} });
+    res.json({ subject: rendered.subject, body_text: rendered.text, html: rendered.html });
   } catch (e) {
     logger.error({ err: e.message }, 'POST /api/email-templates/render error:');
     res.status(500).json({ error: 'Could not render template.' });

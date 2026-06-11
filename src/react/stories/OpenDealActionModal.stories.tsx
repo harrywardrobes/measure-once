@@ -43,11 +43,33 @@ const contactPayload = {
 
 const contactNoQb = { ...contactPayload, qbConnected: false };
 
+const declineEmailRenderResponse = {
+  subject: 'Thank you',
+  body_text: 'Hi Jane,\n\nThank you for your time — please feel free to get in touch if you have any questions regarding wardrobes.\n\nWarm regards,\nThe team',
+  html: '<p>Hi Jane,</p>\n<p>Thank you for your time — please feel free to get in touch if you have any questions regarding wardrobes.</p>\n<p style="color:#555">Warm regards,<br>The team</p>',
+};
+
+const depositEmailPreviewResponse = {
+  subject: 'Your deposit invoice',
+  html: '<p>Hi Jane,</p>\n<p>I\'ve sent over the <strong>10% deposit invoice</strong> — please let me know if you haven\'t received it.</p>\n<p>Once received, we can then book in a survey visit to confirm the final measurements and design choices.</p>\n<p style="color:#555">Warm regards,<br>The team</p>',
+  text: "Hi Jane,\n\nI've sent over the 10% deposit invoice — please let me know if you haven't received it.",
+};
+
 function mockFetch(overrides: { contact?: object } = {}) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : (input as Request).url;
+    if (url.includes('open-deal/deposit-invoice-email-preview')) {
+      return new Response(JSON.stringify(depositEmailPreviewResponse), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
     if (url.includes('open-deal')) {
       return new Response(JSON.stringify(overrides.contact ?? contactPayload), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.includes('email-templates/render')) {
+      return new Response(JSON.stringify(declineEmailRenderResponse), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
     }
