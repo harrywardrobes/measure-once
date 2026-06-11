@@ -233,6 +233,36 @@ export const ReminderStep: Story = {
   ],
 };
 
+export const ResendStepPaid: Story = {
+  name: 'Re-send invoice step — invoice already paid',
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        setDraftStep('resend');
+        const origFetch = window.fetch;
+        window.fetch = mockFetch({ payments: paymentsPaid });
+        return <Story cleanup={() => { window.fetch = origFetch; clearDraft(); }} />;
+      }
+      return <Story />;
+    },
+  ],
+};
+
+export const ReminderStepPaid: Story = {
+  name: 'Send payment reminder step — invoice already paid',
+  decorators: [
+    (Story) => {
+      if (typeof window !== 'undefined') {
+        setDraftStep('reminder');
+        const origFetch = window.fetch;
+        window.fetch = mockFetch({ payments: paymentsPaid });
+        return <Story cleanup={() => { window.fetch = origFetch; clearDraft(); }} />;
+      }
+      return <Story />;
+    },
+  ],
+};
+
 export const NotProceedingConfirm: Story = {
   name: 'Not proceeding — Step 1 (confirm)',
   decorators: [

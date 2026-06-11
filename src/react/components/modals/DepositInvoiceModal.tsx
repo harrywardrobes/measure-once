@@ -538,6 +538,11 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
+        {isPaid && (
+          <Alert severity="warning">
+            This invoice appears to have been paid — double-check before sending.
+          </Alert>
+        )}
         {resendError && (
           <Alert severity="error" onClose={() => setResendError('')}>{resendError}</Alert>
         )}
@@ -562,6 +567,11 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
+        {isPaid && (
+          <Alert severity="warning">
+            This invoice appears to have been paid — double-check before sending.
+          </Alert>
+        )}
         {reminderError && reminderError !== 'GOOGLE_AUTH' && (
           <Alert severity="error" onClose={() => setReminderError('')}>{reminderError}</Alert>
         )}
@@ -744,7 +754,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
-            disabled={submitting || !loaderData?.invoiceId}
+            disabled={submitting || !loaderData?.invoiceId || !!isPaid}
             onClick={handleResend}
           >
             Re-send Invoice
@@ -760,7 +770,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
-            disabled={submitting || reminderLoading || !reminderBody.trim()}
+            disabled={submitting || reminderLoading || !reminderBody.trim() || !!isPaid}
             onClick={handleSendReminder}
           >
             Send Reminder
