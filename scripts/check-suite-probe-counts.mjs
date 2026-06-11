@@ -130,6 +130,7 @@ const NO_PROBE_LABELS_ALLOWLIST = new Map([
 const NO_PROBE_SUITES_ALLOWLIST = new Map([
   // -- static lints ---------------------------------------------------------
   ['test:privilege-reads',              'static-lint — binary file scan, no discrete named probes'],
+  ['test:test-only-guards',            'static-lint — binary test-only hook guard scan'],
   ['test:typo-vars',                    'static-lint — binary typography drift check'],
   ['test:color-radius-vars',            'static-lint — binary colour/radius drift check'],
   ['test:css-hex-colors',               'static-lint — binary hex-literal scan'],

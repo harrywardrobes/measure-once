@@ -39,6 +39,7 @@ const STEPS = [
   'test:color-radius-vars',
   'test:tokens-css',
   'test:privilege-reads',
+  'test:test-only-guards',
   'test:ls-keys',
   'test:retired-tokens',
   'test:mount-ids',
