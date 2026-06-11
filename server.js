@@ -4952,6 +4952,18 @@ const STAGE_ACTION_STAGE_MAP = Object.fromEntries(
 );
 const STAGE_ACTION_STAGE_KEYS = new Set(Object.values(STAGE_ACTION_STAGE_MAP));
 
+// Hardcoded action-button label defaults for specific stage+status combinations.
+// These override the LS display label so the button reads as an action ("Start
+// Design Visit") rather than a status description ("Design Scheduled").
+// Keys are "stageKey:statusKey" (both lowercase, stage with underscores removed).
+// ON CONFLICT DO NOTHING in the seed means admin customisations always win.
+const STAGE_ACTION_LABEL_DEFAULTS = {
+  'designvisit:design_scheduled':   'Start Design Visit',
+  'designvisit:design_in_progress': 'Continue Design Visit',
+  'designvisit:design_sent':        'View Design Visit',
+  'designvisit:design_accepted':    'View Design Visit',
+};
+
 // Seed one row per (card stage × lead status) combination so every card has an
 // editable per-LS row in the admin Card-actions tab. Idempotent: only inserts
 // rows that are missing, and never overwrites existing values (admin edits
@@ -4959,9 +4971,9 @@ const STAGE_ACTION_STAGE_KEYS = new Set(Object.values(STAGE_ACTION_STAGE_MAP));
 // "clear" UX in the admin tab, which PUTs an empty label rather than
 // DELETEing the row — so existing-row-with-empty-label is preserved and a
 // re-run of this seed will not resurrect it.
-// No hardcoded default labels are seeded — the admin fills them in via
-// the Card-actions tab. The seed just ensures every live lead status has
-// a row to edit (defaulting to the LS display label on first boot).
+// For stages listed in STAGE_ACTION_LABEL_DEFAULTS, the hardcoded action-
+// oriented label is used as the default; all other statuses fall back to the
+// LS display label.
 async function seedStageActionLabelsDefaults() {
   const { rows } = await pool.query(
     `SELECT key, label, stage FROM lead_status_config
@@ -4974,7 +4986,8 @@ async function seedStageActionLabelsDefaults() {
     if (!stageKey) continue;
     const statusKey = String(row.key || '').toLowerCase();
     if (!statusKey) continue;
-    const label = String(row.label || statusKey);
+    const defaultKey = `${stageKey}:${statusKey}`;
+    const label = STAGE_ACTION_LABEL_DEFAULTS[defaultKey] ?? String(row.label || statusKey);
     await pool.query(
       `INSERT INTO stage_action_labels (stage_key, status_key, label)
        VALUES ($1, $2, $3)
