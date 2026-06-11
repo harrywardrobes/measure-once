@@ -81,6 +81,20 @@ export function BottomActionBar() {
     }
   }, []);
 
+  // Keep --bottom-action-bar-height in sync so ToastContext can stack above it.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (bar.mode !== null) {
+      // Fall back to 64px — a safe default matching the bar's rendered height.
+      root.style.setProperty('--bottom-action-bar-height', '64px');
+    } else {
+      root.style.removeProperty('--bottom-action-bar-height');
+    }
+    return () => {
+      root.style.removeProperty('--bottom-action-bar-height');
+    };
+  }, [bar.mode]);
+
   // Expose stable window globals once on mount. barRef ensures callbacks
   // always access the latest state without re-registering on every render.
   useEffect(() => {
