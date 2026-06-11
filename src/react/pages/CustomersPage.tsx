@@ -57,7 +57,6 @@ import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
-import { DepositInvoiceBadge } from '../components/DepositInvoiceBadge';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useNowTick } from '../hooks/useNowTick';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
@@ -392,6 +391,68 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
   });
 }
 
+function DepositInvoiceBadge({
+  depositInvoiceId,
+  depositInvoiceDocNum,
+  paymentState,
+  loading,
+}: {
+  depositInvoiceId: string;
+  depositInvoiceDocNum: string | null;
+  paymentState?: 'paid' | 'partial' | 'unpaid' | null;
+  loading?: boolean;
+}) {
+  const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
+  };
+  const title =
+    paymentState === 'paid'    ? 'Deposit paid — view invoice' :
+    paymentState === 'partial' ? 'Deposit partially paid — view invoice' :
+    paymentState === 'unpaid'  ? 'Deposit unpaid — view invoice' :
+                                 'View deposit invoice';
+  const colors =
+    paymentState === 'paid'    ? { borderColor: STATUS_COLORS.success.border, bgcolor: STATUS_COLORS.success.bg, color: STATUS_COLORS.success.text, hoverBg: STATUS_COLORS.successLight.bg } :
+    paymentState === 'partial' ? { borderColor: STATUS_COLORS.warning.border, bgcolor: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text, hoverBg: STATUS_COLORS.warningLight.bg } :
+                                 { borderColor: STATUS_COLORS.neutral.bg,     bgcolor: STATUS_COLORS.neutral.bg, color: STATUS_COLORS.neutral.text, hoverBg: STATUS_COLORS.neutral.bg     };
+  if (loading) {
+    return (
+      <Skeleton
+        variant="rounded"
+        width={100}
+        height={22}
+        sx={{ borderRadius: 1, display: 'inline-block' }}
+      />
+    );
+  }
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleClick}
+      title={title}
+      sx={{
+        appearance: 'none',
+        border: '1px solid',
+        borderColor: colors.borderColor,
+        bgcolor: colors.bgcolor,
+        color: colors.color,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        lineHeight: 1.4,
+        '&:hover': { bgcolor: colors.hoverBg },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
 
 function QBBadge({
   invoices,
@@ -490,6 +551,7 @@ function CustomerCard({
   draftVisitId,
   depositInvoice,
   depositInvoicePaymentState,
+  depositInvoiceLoading,
   syncStatus,
   syncFailedIds,
   lastAttempt,
@@ -519,6 +581,12 @@ function CustomerCard({
    * invoice not found in the QB list).
    */
   depositInvoicePaymentState?: 'paid' | 'partial' | 'unpaid' | null;
+  /**
+   * True while QB invoices are still being fetched for the first time.
+   * When true, the deposit invoice badge shows a loading skeleton instead of a
+   * static grey "unknown" state.
+   */
+  depositInvoiceLoading?: boolean;
   /**
    * Offline-queue status for this contact's pending status/archive edits, or
    * null when nothing is queued. Drives the per-card "Pending sync" /
@@ -676,6 +744,7 @@ function CustomerCard({
                 depositInvoiceId={depositInvoice.id}
                 depositInvoiceDocNum={depositInvoice.docNum}
                 paymentState={depositInvoicePaymentState}
+                loading={depositInvoiceLoading}
               />
             )}
           </Box>
@@ -807,7 +876,7 @@ export function CustomersPage(): React.ReactElement {
 
   const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const { invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
+  const { loading: qbLoading, statusKnown: qbStatusKnown, invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
   const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null>>({});
@@ -1572,6 +1641,7 @@ export function CustomersPage(): React.ReactElement {
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
                   depositInvoice={depositInvoiceMap[contact.id] ?? null}
+                  depositInvoiceLoading={!qbStatusKnown || (qbLoading && !qbLoaded)}
                   depositInvoicePaymentState={(() => {
                     if (!qbLoaded) return null;
                     const di = depositInvoiceMap[contact.id];
