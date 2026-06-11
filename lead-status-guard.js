@@ -100,6 +100,9 @@ function _setPool(p) {
  * Never call this in production code.
  */
 function _forceStaleForTest() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('_forceStaleForTest is a test-only hook and must not be called in production.');
+  }
   _cacheAt = 0;
 }
 
