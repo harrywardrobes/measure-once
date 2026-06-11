@@ -3,6 +3,7 @@ import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/loca
 import { formatCurrency, compactRelativeTime, latestTimestamp } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
+import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -997,10 +998,20 @@ export function CustomersPage(): React.ReactElement {
     lastSyncAt,
     page,
     setPage,
+    patchContact,
   } = usePaginatedContacts(
     { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize },
     { onFetchSuccess: scheduleCounts },
   );
+
+  // Patch contacts list instantly when a lead-status change is broadcast from
+  // the Customer Detail page or any other tab/window (same behaviour as the
+  // Projects board).
+  React.useEffect(() => {
+    return subscribeLeadStatusChange((contactId, props) => {
+      patchContact(contactId, props);
+    });
+  }, [patchContact]);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {

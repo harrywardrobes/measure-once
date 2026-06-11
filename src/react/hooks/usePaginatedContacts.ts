@@ -58,6 +58,12 @@ export type UsePaginatedContactsResult = {
   lastSyncAt: number | null;
   page: number;
   setPage: (p: number) => void;
+  /**
+   * Optimistically patch a single contact's properties in the local list.
+   * Only contacts that are currently in the visible page are updated; the
+   * change is purely in-memory and will be overwritten by the next fetch.
+   */
+  patchContact: (contactId: string, props: Record<string, string | undefined>) => void;
 };
 
 export type UsePaginatedContactsOptions = {
@@ -373,5 +379,18 @@ export function usePaginatedContacts(
     };
   }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize]);
 
-  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, page: effectivePage, setPage };
+  const patchContact = React.useCallback(
+    (contactId: string, props: Record<string, string | undefined>) => {
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contactId
+            ? { ...c, properties: { ...c.properties, ...props } }
+            : c,
+        ),
+      );
+    },
+    [],
+  );
+
+  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, page: effectivePage, setPage, patchContact };
 }
