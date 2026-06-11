@@ -3,9 +3,10 @@ const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
   'seed schedule_visit handler',
-  '[VCM-PAST]    past-confirm dialog appears',
-  '[VCM-BACK]    "Go back" dismisses dialog',
-  '[VCM-PROCEED] "Schedule anyway" fires POST',
+  '[VCM] modal opens with DateTimePicker and Schedule button',
+  '[VCM-PAST] past-confirm dialog appears when submitting with past startDt',
+  '[VCM-BACK] "Go back" dismisses dialog; scheduling form stays open',
+  '[VCM-PROCEED] "Schedule anyway" fires POST /api/visits',
   '[WARN-VCM] modal opens with DateTimePicker',
   '[WARN-VCM] 15-minute warning Alert appears in ScheduleVisitModal after DateTimePicker update',
 ];
@@ -465,9 +466,9 @@ async function main() {
 
       await restoreDateMock(vcmPage);
     } else {
-      skip('[VCM-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
-      skip('[VCM-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
-      skip('[VCM-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
+      skip('[VCM-PAST] past-confirm dialog appears when submitting with past startDt', 'dialog present', 'modal did not open — skipped');
+      skip('[VCM-BACK] "Go back" dismisses dialog; scheduling form stays open', 'dialog gone', 'skipped');
+      skip('[VCM-PROCEED] "Schedule anyway" fires POST /api/visits', 'POST /api/visits', 'skipped');
     }
 
     await vcmPage.close();
