@@ -5,8 +5,6 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 
 import {
-  DeliveryWindowConfig,
-  InstallationSlotConfig,
   ScheduleVisitConfig,
   ShowMessageConfig,
   StartDesignVisitConfig
@@ -32,10 +30,6 @@ function configBlockForType(type: string): React.ReactNode {
           leadStatuses={FIXTURE_LEAD_STATUSES}
         />
       );
-    case 'schedule_delivery_window':
-      return <DeliveryWindowConfig defaultTitle="Delivery window" />;
-    case 'schedule_installation_slot':
-      return <InstallationSlotConfig defaultTitle="Installation" defaultDurationMin={240} />;
     default:
       if (NO_CONFIG_HANDLER_TYPES.has(type)) {
         return (
@@ -69,7 +63,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'Overview stories for all five handler config blocks side by side. ' +
+          'Overview stories for all handler config blocks side by side. ' +
           'Individual per-handler stories with blank / pre-filled / validation states ' +
           'live in `Features/ActionHandlerConfigBlocks/<HandlerName>` — co-located ' +
           'next to `HandlerConfigBlocks.tsx` in `src/react/pages/admin/`.'
@@ -84,7 +78,7 @@ type Story = StoryObj;
 export const LiveAddActionFlow: Story = {
   name: 'Live — full Add action modal flow',
   args: {
-    initialType: 'add_design_visit_to_calendar',
+    initialType: 'schedule_visit',
     slotLabel: 'Survey booked · Default action'
   },
   argTypes: {
@@ -105,7 +99,7 @@ export const LiveAddActionFlow: Story = {
   },
   render: (args: { initialType?: string; slotLabel?: string }) => (
     <LiveAddActionFlowDemo
-      initialType={args.initialType ?? 'add_design_visit_to_calendar'}
+      initialType={args.initialType ?? 'schedule_visit'}
       slotLabel={args.slotLabel ?? 'Survey booked · Default action'}
     />
   ),
@@ -115,17 +109,17 @@ export const LiveAddActionFlow: Story = {
         story:
           'The full "Add action" modal with a live type selector. ' +
           'Use the **Initial handler type** control in the Controls panel to open the ' +
-          'story on any of the seven handler types without touching the in-canvas dropdown. ' +
+          'story on any of the handler types without touching the in-canvas dropdown. ' +
           'Changing the **Action type** dropdown inside the modal still works as normal. ' +
-          'Types with no configurable fields (e.g. Add design visit to calendar, ' +
-          'Summarise phone call) show a "no additional configuration" placeholder.'
+          'Types with no configurable fields (e.g. Summarise phone call) show a ' +
+          '"no additional configuration" placeholder.'
       }
     }
   }
 };
 
 function ScheduleVisitWrapper() {
-  const [type, setType] = useState('add_design_visit_to_calendar');
+  const [type, setType] = useState('schedule_visit');
   return (
     <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Survey booked · Default action">
       <ScheduleVisitConfig defaultDurationMin={60} />
@@ -155,24 +149,6 @@ function StartDesignVisitWrapper() {
   );
 }
 
-function DeliveryWindowWrapper() {
-  const [type, setType] = useState('add_design_visit_to_calendar');
-  return (
-    <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Delivery ready · Default action">
-      <DeliveryWindowConfig defaultTitle="Delivery window" />
-    </ModalChrome>
-  );
-}
-
-function InstallationSlotWrapper() {
-  const [type, setType] = useState('add_design_visit_to_calendar');
-  return (
-    <ModalChrome selectedType={type} onTypeChange={setType} slotLabel="Installation booked · Default action">
-      <InstallationSlotConfig defaultTitle="Installation" defaultDurationMin={240} />
-    </ModalChrome>
-  );
-}
-
 export const AllBlocksSideBySide: Story = {
   name: 'All config blocks — side by side',
   render: () => (
@@ -182,11 +158,9 @@ export const AllBlocksSideBySide: Story = {
       sx={{ alignItems: 'flex-start', flexWrap: 'wrap' }}
     >
       {([
-        { label: 'Schedule visit',             node: <ScheduleVisitWrapper /> },
-        { label: 'Show message',               node: <ShowMessageWrapper /> },
-        { label: 'Start design visit',         node: <StartDesignVisitWrapper /> },
-        { label: 'Schedule delivery window',   node: <DeliveryWindowWrapper /> },
-        { label: 'Schedule installation slot', node: <InstallationSlotWrapper /> }
+        { label: 'Schedule visit',     node: <ScheduleVisitWrapper /> },
+        { label: 'Show message',       node: <ShowMessageWrapper /> },
+        { label: 'Start design visit', node: <StartDesignVisitWrapper /> },
       ] as { label: string; node: React.ReactNode }[]).map(({ label, node }) => (
         <Box key={label} sx={{ flex: '1 1 300px', minWidth: 300 }}>
           <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -200,36 +174,7 @@ export const AllBlocksSideBySide: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'All five config blocks rendered side by side for quick visual comparison.'
-      }
-    }
-  }
-};
-
-export const DeliveryAndInstallationSideBySide: Story = {
-  name: 'Delivery + Installation — side by side',
-  render: () => (
-    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ alignItems: 'flex-start' }}>
-      <Box sx={{ flex: 1, minWidth: 300 }}>
-        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Schedule delivery window
-        </Typography>
-        <DeliveryWindowWrapper />
-      </Box>
-      <Box sx={{ flex: 1, minWidth: 300 }}>
-        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Schedule installation slot
-        </Typography>
-        <InstallationSlotWrapper />
-      </Box>
-    </Stack>
-  ),
-  parameters: {
-    docs: {
-      description: {
-        story:
-          'Delivery window and installation slot blocks side by side — useful for ' +
-          'comparing the two scheduling handlers at a glance.'
+        story: 'All config blocks rendered side by side for quick visual comparison.'
       }
     }
   }

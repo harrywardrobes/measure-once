@@ -10,7 +10,7 @@ description: Conventions and patterns for adding new card action handler types t
 Use this skill when:
 - Adding a new card action handler type to the Measure Once dashboard
 - Implementing the `start_design_visit` multi-step design visit wizard
-- Extending `CARD_ACTION_HANDLER_TYPES`, `_validateHandlerConfig`, or `dispatchCardActionHandler`
+- Extending `CARD_ACTION_HANDLER_CONFIG_VALIDATORS`, or `dispatchCardActionHandler`
 - Adding admin panel UI sections for a new handler's catalogue data
 
 ---
@@ -23,11 +23,12 @@ Card action handlers are configurable actions attached to Sales/Survey/Design Vi
 
 | File | Purpose |
 |------|---------|
-| `server.js` (~line 3536) | `CARD_ACTION_HANDLER_TYPES` set, `_validateHandlerConfig`, `ensureCardActionHandlersTables`, all admin CRUD routes, execute routes |
-| `public/card-action-handlers.js` | Client-side dispatch (`dispatchCardActionHandler`), handler resolution, modal implementations, BroadcastChannel listener |
-| `public/admin.html` (~line 2315) | `HANDLER_TYPE_LABELS`, `HANDLER_TYPE_DESCRIPTIONS`, `renderHandlersTable`, `openHandlerEditor`, admin catalogue sub-sections |
+| `server.js` | `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` map (keys define valid types), all admin CRUD routes, execute routes |
+| `src/react/components/CardActionModalsHost.tsx` | React component that renders all handler modals; dispatches via `switch(handler.type)` |
+| `src/react/pages/admin/ActionHandlersPage.tsx` | Admin UI for creating/editing handlers; `NO_CONFIG_HANDLER_TYPES` set |
+| `src/react/pages/admin/HandlerConfigBlocks.tsx` | Per-type config block components used in the admin editor |
+| `src/react/utils/handlerMeta.ts` | `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, `HANDLER_EMAIL_TEMPLATES` — must stay in sync with server validator keys |
 | `visits.js` | `ensureVisitsTable`, visit CRUD routes (`POST /api/visits`) |
-| `quickbooks.js` | QB estimate/invoice routes, token helpers |
 | `auth.js` | `isAuthenticated`, `requireAdmin`, `requirePrivilege` middleware |
 
 ### Core DB Tables
@@ -58,33 +59,36 @@ card_action_handler_bindings (
 -- Unique indexes prevent duplicate slot bindings (cahb_label_uniq, cahb_substatus_uniq)
 ```
 
-### Valid Types List
+### Valid Types
 
-`CARD_ACTION_HANDLER_TYPES` (server.js ~3536) is a `Set` derived from the keys of `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` and is the single source of truth:
-```js
-const CARD_ACTION_HANDLER_TYPES = new Set([
-  'add_design_visit_to_calendar',
-  'summarise_phone_call',
-  'show_message',
-  'arrange_visit',
-  // add new types here (by adding a validator to CARD_ACTION_HANDLER_CONFIG_VALIDATORS)
-]);
+`CARD_ACTION_HANDLER_TYPES` is derived at runtime from the keys of `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` in `server.js`. Current types:
 ```
-The matching client object is `HANDLER_TYPE_LABELS` in `admin.html` (~line 2318) — both must stay in sync.
+schedule_visit        — required config: visitType ∈ ['design','survey','other']
+summarise_phone_call  — no required config
+show_message          — required config: message
+start_design_visit    — no required config
+upload_photos_and_info
+review_customer_photos
+arrange_visit
+contact_customer
+design_visit_followup
+open_deal
+```
 
-### Dispatch Pattern (client)
+Adding a new type: add a validator function to `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` in `server.js`. The type is automatically accepted by all CRUD routes.
 
-> **Note:** For handler types implemented as React modals (e.g. `arrange_visit`), the canonical client dispatch path is `CardActionModalsHost.tsx` (`src/react/components/CardActionModalsHost.tsx`), which renders the appropriate React modal via a `switch` on `handler.type`. The vanilla-JS `dispatchCardActionHandler` in `public/card-action-handlers.js` handles non-React handlers and remains the entry point that delegates to `CardActionModalsHost` for React-backed types.
+### Dispatch Pattern (client — React)
 
-```js
-function dispatchCardActionHandler(handler, ctx) {
-  if (handler.type === 'add_design_visit_to_calendar') return openDesignVisitModal(handler, ctx);
-  if (handler.type === 'summarise_phone_call')        return openPhoneSummaryModal(handler, ctx);
-  if (handler.type === 'show_message')                return openMessagePopup(handler, ctx);
-  if (handler.type === 'arrange_visit')               return openReactModal(handler, ctx); // → CardActionModalsHost.tsx
-  // add new type branch here
-  console.warn('Unknown card action handler type:', handler.type);
-}
+All handler types now dispatch through `CardActionModalsHost.tsx`. The vanilla-JS `dispatchCardActionHandler` in `public/card-action-handlers.js` remains the entry point and calls `window.openCardActionModal(handler, ctx)`, which is registered by `CardActionModalsHost`.
+
+```tsx
+// CardActionModalsHost.tsx — switch(handler.type)
+case 'schedule_visit':
+  return <ScheduleVisitModal handler={handler} ctx={ctx}
+           visitType={handler.config.visitType as string | undefined} ... />;
+case 'summarise_phone_call':
+  return <PhoneSummaryModal handler={handler} ctx={ctx} ... />;
+// add new type branch here
 ```
 
 `ctx` shape: `{ contactId, contactName, contactEmail }` — read from `data-*` attributes on the `.eq-card-action` element.
@@ -138,13 +142,9 @@ No `hw_lead_substatus` writes for this handler.
 
 ## Existing Handler Types Reference
 
-### `add_design_visit_to_calendar`
-Opens `ScheduleVisitModal` with `visitType` locked to `'design'`. Writes directly to Google Calendar via `POST /api/events` (tags event with `moContactId`/`moVisitType` extended properties). Optionally sends a `visit_confirmation` email.
-Config keys: `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars).
-
 ### `schedule_visit`
-Opens `ScheduleVisitModal` with a visit-type selector. Writes directly to Google Calendar via `POST /api/events`. Optionally sends a `visit_confirmation` email.
-Config keys: `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars).
+Opens `ScheduleVisitModal`. The `visitType` config key is **required** (one of `design`, `survey`, `other`) and locks the type shown in the modal. Writes directly to Google Calendar via `POST /api/events`. Optionally sends a `visit_confirmation` email.
+Config keys: `visitType` (required), `defaultDurationMin` (5–1440), `defaultTitle` (≤120 chars).
 
 ### `design_visit_followup`
 Opens `DesignVisitFollowupModal` — a three-path hub for contacts sitting at `DESIGN_INVITED`.
@@ -275,12 +275,11 @@ Add four new sub-sections to the Card Action Handlers tab in `admin.html`:
 
 ### Client-Side Dispatch
 
-Add to `dispatchCardActionHandler` in `public/card-action-handlers.js`:
-```js
-if (handler.type === 'start_design_visit') return openDesignVisitWizard(handler, ctx);
+Add to `CardActionModalsHost.tsx` switch:
+```tsx
+case 'start_design_visit':
+  return <DesignVisitWizard handler={handler} ctx={ctx} ... />;
 ```
-
-`openDesignVisitWizard(handler, ctx)` renders the multi-step wizard in a full-screen overlay (not the small `.cah-modal`) and manages step state internally. On submit it calls `POST /api/design-visits`. The public design-visit page lives at `public/design-visit.html`.
 
 ---
 
@@ -288,21 +287,21 @@ if (handler.type === 'start_design_visit') return openDesignVisitWizard(handler,
 
 Follow these steps in order when implementing a new handler type:
 
-1. **Register the type** — Add the snake_case type string to `CARD_ACTION_HANDLER_TYPES` (Set) in `server.js`.
+1. **Register the type** — Add a validator function to `CARD_ACTION_HANDLER_CONFIG_VALIDATORS` in `server.js`. The type is automatically derived from the keys of this map.
 
-2. **Add config validation** — Add a branch to `_validateHandlerConfig` in `server.js`. Strip unknown keys, validate ranges/lengths, return `{ value }` on success or `{ error }` on failure.
+2. **Add config validation** — In the validator function: strip unknown keys, validate ranges/lengths, return `{ value }` on success or `{ error }` on failure.
 
-3. **Register in admin UI labels** — Add the type to `HANDLER_TYPE_LABELS` and `HANDLER_TYPE_DESCRIPTIONS` objects in `public/admin.html`. These drive the type `<select>` and the in-row summary card.
+3. **Register in React meta** — Add the type to `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, and `HANDLER_EMAIL_TEMPLATES` in `src/react/utils/handlerMeta.ts`.
 
-4. **Add any config UI** — If the type needs special fields (beyond the generic JSON textarea), add a dedicated block in `openHandlerEditor` in `admin.html`, following the `show_message` pattern (toggle visibility based on selected type).
+4. **Add config block** — If the type needs special fields (beyond the generic JSON textarea), add a component in `HandlerConfigBlocks.tsx` and wire it into `ActionHandlersPage.tsx` (add to or remove from `NO_CONFIG_HANDLER_TYPES`).
 
-5. **Add server execute route(s)** — Create `POST /api/card-actions/<action-name>` (or equivalent). Guard with `isAuthenticated`, appropriate `requirePrivilege`, and a rate-limiter. Follow the pattern in the existing `phone-call-summary` route.
+5. **Add server execute route(s)** — Create `POST /api/card-actions/<action-name>` (or equivalent). Guard with `isAuthenticated`, appropriate `requirePrivilege`, and a rate-limiter.
 
-6. **Add client dispatch branch** — Add a branch to `dispatchCardActionHandler` in `public/card-action-handlers.js` and implement the modal/wizard function in the same IIFE.
+6. **Add React modal and dispatch** — Add the modal component and a `case` in `CardActionModalsHost.tsx`.
 
-7. **Create any DB tables** — Add `ensureXxxTables()` function and call it from `server.js` startup alongside existing `ensure*` calls.
+7. **Create any DB tables** — Add `ensureXxxTables()` function and call it from `server.js` startup.
 
-8. **Fire BroadcastChannel on admin mutations** — After any admin catalogue mutation, emit `new BroadcastChannel('<type>_changed').postMessage({ ts: Date.now() })`. Pages that need fresh catalogue data listen for this channel.
+8. **Fire BroadcastChannel on admin mutations** — After any admin catalogue mutation, emit `new BroadcastChannel('<type>_changed').postMessage({ ts: Date.now() })`.
 
 ---
 

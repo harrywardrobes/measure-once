@@ -34,8 +34,6 @@ import { STAGE_COLORS } from '../../theme';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 
 import {
-  DeliveryWindowConfig,
-  InstallationSlotConfig,
   ScheduleVisitConfig,
   ShowMessageConfig,
   StartDesignVisitConfig,
@@ -43,8 +41,6 @@ import {
   KNOWN_STATUS_KEY_FIELDS,
 } from './HandlerConfigBlocks';
 import type {
-  DeliveryWindowConfigValue,
-  InstallationSlotConfigValue,
   ScheduleVisitConfigValue,
   ShowMessageConfigValue,
   StartDesignVisitConfigValue,
@@ -57,7 +53,6 @@ import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GR
 
 
 export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
-  'add_design_visit_to_calendar',
   'summarise_phone_call',
   'upload_photos_and_info',
   'review_customer_photos',
@@ -67,19 +62,10 @@ export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
-  add_design_visit_to_calendar:
-    'Clicking the action on a Sales/Survey card opens a modal asking for ' +
-    'visit date, time, duration, title and notes.\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google ' +
-    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
-    'No separate CRM visit row is created. No email is sent by this app — ' +
-    'Google Calendar may email invitees if attendees are added.\n' +
-    '• No HubSpot record is changed by this action.',
   schedule_visit:
-    'Generic version of "Add design visit to calendar" — works for any visit ' +
-    'type (survey, installation, remedial, workshop, etc.).\n' +
-    '• Clicking the action on a card opens a MUI DateTimePicker modal asking ' +
+    'Clicking the action on a card opens a MUI DateTimePicker modal asking ' +
     'for date, time, duration, title, location, and notes.\n' +
+    '• Choose the visit type (Design visit, Survey, or Other) in the config below.\n' +
     '• On submit, an event is created on the shared "Measure Once" Google ' +
     'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
     'No separate CRM visit row is created.\n' +
@@ -107,18 +93,6 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• Step 2 — Rooms: add/remove rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
     '• Step 3 — Review: read-only summary before submission.\n' +
     '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submitted status, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
-  schedule_delivery_window:
-    'Clicking the action on a card opens a modal for scheduling a delivery window with a start and end date/time.\n' +
-    '• The operator picks a window start and window end (e.g. "8 AM – 1 PM on 12 June").\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google Calendar (POST /api/events) — the single source of truth for scheduling. No separate CRM visit row is created.\n' +
-    '• No HubSpot record is changed by this action.\n' +
-    'Config keys: defaultTitle (≤120 chars).',
-  schedule_installation_slot:
-    'Clicking the action on a card opens a modal for scheduling a single installation slot with a start time and duration.\n' +
-    '• The operator picks a start date/time and a duration in minutes (default 240 min / 4 hours).\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google Calendar (POST /api/events) — the single source of truth for scheduling. No separate CRM visit row is created.\n' +
-    '• No HubSpot record is changed by this action.\n' +
-    'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars).',
   upload_photos_and_info:
     'Clicking the action on a card opens a confirmation modal showing the customer\'s name and email.\n' +
     '• On confirmation, an email is sent to the customer with a unique, time-limited link to a public form.\n' +
@@ -359,7 +333,7 @@ function HandlerEditorModal({
   onSaved,
 }: HandlerEditorModalProps) {
   const initConfig = existing?.config ?? {};
-  const initType   = existing?.type   ?? 'add_design_visit_to_calendar';
+  const initType   = existing?.type   ?? 'schedule_visit';
 
   const [handlerType,   setHandlerType]   = useState(initType);
   const [actionName,    setActionName]    = useState(String(initConfig.action_name ?? ''));
@@ -378,13 +352,6 @@ function HandlerEditorModal({
     intermediateLeadStatus: String(initConfig.intermediateLeadStatus ?? ''),
     submittedLeadStatus:    String(initConfig.submittedLeadStatus    ?? ''),
     termsAndConditions:     String(initConfig.termsAndConditions     ?? ''),
-  });
-  const [dwVal,   setDwVal]   = useState<DeliveryWindowConfigValue>({
-    defaultTitle:        String(initConfig.defaultTitle ?? ''),
-  });
-  const [isVal,   setIsVal]   = useState<InstallationSlotConfigValue>({
-    defaultDurationMin:  initConfig.defaultDurationMin != null ? Number(initConfig.defaultDurationMin) : 240,
-    defaultTitle:        String(initConfig.defaultTitle ?? ''),
   });
   const [jsonCfg,      setJsonCfg]      = useState(JSON.stringify(initConfig, null, 2));
   const [editError,    setEditError]    = useState('');
@@ -409,10 +376,8 @@ function HandlerEditorModal({
   const showSv  = handlerType === 'schedule_visit';
   const showMsg = handlerType === 'show_message';
   const showSdv = handlerType === 'start_design_visit';
-  const showDw  = handlerType === 'schedule_delivery_window';
-  const showIs  = handlerType === 'schedule_installation_slot';
   const showNoConfig = NO_CONFIG_HANDLER_TYPES.has(handlerType);
-  const showJson = !(showSv || showMsg || showSdv || showDw || showIs || showNoConfig);
+  const showJson = !(showSv || showMsg || showSdv || showNoConfig);
 
   const sdvInvalidIntermediate = showSdv
     && !isLeadStatusKeyValid(sdvVal.intermediateLeadStatus, sdvLeadStatuses);
@@ -475,20 +440,6 @@ function HandlerEditorModal({
       if (sdvVal.intermediateLeadStatus) cfg.intermediateLeadStatus = sdvVal.intermediateLeadStatus;
       if (sdvVal.submittedLeadStatus)    cfg.submittedLeadStatus    = sdvVal.submittedLeadStatus;
       if (sdvVal.termsAndConditions)     cfg.termsAndConditions     = sdvVal.termsAndConditions;
-
-    } else if (handlerType === 'schedule_delivery_window') {
-      cfg = {};
-      if (dwVal.defaultTitle.trim()) cfg.defaultTitle = dwVal.defaultTitle.trim();
-
-    } else if (handlerType === 'schedule_installation_slot') {
-      const dur = isVal.defaultDurationMin;
-      const n   = dur === '' ? NaN : Number(dur);
-      if (dur !== '' && (isNaN(n) || n < 5 || n > 1440)) {
-        setEditError('Default duration must be between 5 and 1440 minutes.'); return null;
-      }
-      cfg = {};
-      if (dur !== '' && !isNaN(n)) cfg.defaultDurationMin = n;
-      if (isVal.defaultTitle.trim()) cfg.defaultTitle = isVal.defaultTitle.trim();
 
     } else {
       const txt = jsonCfg.trim() || '{}';
@@ -636,20 +587,6 @@ function HandlerEditorModal({
                 onChange={setSdvVal}
               />
             )}
-            {showDw && (
-              <DeliveryWindowConfig
-                defaultTitle={dwVal.defaultTitle}
-                onChange={setDwVal}
-              />
-            )}
-            {showIs && (
-              <InstallationSlotConfig
-                defaultDurationMin={isVal.defaultDurationMin}
-                defaultTitle={isVal.defaultTitle}
-                onChange={setIsVal}
-              />
-            )}
-
             {/* Placeholder for handler types that have no configurable settings */}
             {showNoConfig && (
               <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>

@@ -2,22 +2,10 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
-  'seed schedule_installation_slot handler',
-  'seed schedule_delivery_window handler',
   'seed schedule_visit handler',
-  '[IS-PAST]    past-confirm dialog appears',
-  '[IS-BACK]    "Go back" dismisses dialog',
-  '[IS-PROCEED] "Schedule anyway" fires POST',
-  '[DW-PAST]    past-confirm dialog appears',
-  '[DW-BACK]    "Go back" dismisses dialog',
-  '[DW-PROCEED] "Schedule anyway" fires POST',
   '[VCM-PAST]    past-confirm dialog appears',
   '[VCM-BACK]    "Go back" dismisses dialog',
   '[VCM-PROCEED] "Schedule anyway" fires POST',
-  '[WARN-IS] edit button appears for near-future IS visit',
-  '[WARN-IS] 15-minute warning Alert appears in InstallationSlotModal edit mode',
-  '[WARN-DW] edit button appears for near-future DW visit',
-  '[WARN-DW] 15-minute warning Alert appears in DeliveryWindowModal edit mode',
   '[WARN-VCM] modal opens with DateTimePicker',
   '[WARN-VCM] 15-minute warning Alert appears in ScheduleVisitModal after DateTimePicker update',
 ];
@@ -25,34 +13,19 @@ const PROBE_LABELS = [
 // test/scheduling-past-time-guard/run.js
 //
 // Covers the past-time confirmation dialog and 15-minute start-time warning
-// introduced in task #1615 for InstallationSlotModal and DeliveryWindowModal,
-// and extended to cover ScheduleVisitModal (schedule_visit handler type).
+// for ScheduleVisitModal (schedule_visit handler type).
 //
 // Probes:
-//   [IS-PAST]    InstallationSlotModal: submitting with a past startDt opens
-//                the "Schedule in the past?" confirmation dialog.
-//   [IS-BACK]    Clicking "Go back" dismisses the dialog; the scheduling form
-//                stays open.
-//   [IS-PROCEED] Clicking "Schedule anyway" fires POST /api/visits and the
-//                modal closes.
-//   [DW-PAST]    DeliveryWindowModal: submitting with a past start time opens
-//                the same confirmation dialog.
-//   [DW-BACK]    "Go back" works for the delivery window modal.
-//   [DW-PROCEED] "Schedule anyway" fires POST /api/visits for delivery windows.
 //   [VCM-PAST]   ScheduleVisitModal: submitting with a past startDt opens the
 //                "Schedule in the past?" confirmation dialog.
 //   [VCM-BACK]   Clicking "Go back" dismisses the dialog; the scheduling form
 //                stays open.
 //   [VCM-PROCEED] Clicking "Schedule anyway" fires POST /api/visits and the
 //                modal closes.
-//   [WARN-IS]    The 15-minute warning Alert appears in InstallationSlotModal
-//                edit mode when startAt is within 15 minutes.
-//   [WARN-DW]    The 15-minute warning Alert appears in DeliveryWindowModal
-//                edit mode when start is within 15 minutes.
 //   [WARN-VCM]   The 15-minute warning Alert appears in ScheduleVisitModal
 //                when the DateTimePicker is updated to a near-future time.
 //
-// Strategy for IS/DW/VCM past-time probes:
+// Strategy for VCM past-time probes:
 //   Navigate to /customers (a real, authenticated page that loads main.js).
 //   main.js mounts CardActionModalsHost on every page via
 //   initCardActionModalsHost(); that component registers _opener via a
@@ -63,14 +36,6 @@ const PROBE_LABELS = [
 //   return a time 100 h in the future; clicking Submit triggers handleSubmit
 //   which calls dayjs() and finds startDt < dayjs() — the past-confirm dialog
 //   appears.
-//
-// Strategy for WARN-IS/WARN-DW probes:
-//   Navigate to /customers/:contactId with request interception active.
-//   Mock /api/contacts/:id and /api/visits to inject a visit whose startAt is
-//   10 minutes in the future. The CustomerDetailPage renders
-//   UpcomingVisitsSection; clicking the edit button opens the modal in edit
-//   mode, which sets startDt = visit.startAt. The useEffect fires immediately
-//   and sets startTimeWarning = true (minutesUntilStart = 10 < 15).
 //
 // Strategy for WARN-VCM probe:
 //   ScheduleVisitModal has no edit mode via the customer-detail flow, so the
@@ -109,8 +74,6 @@ require('dotenv').config();
 const { pollUntil, pollFn } = require('../helpers/poll');
 
 // ── Fixture constants ──────────────────────────────────────────────────────────
-const HANDLER_NAME_IS  = 'PrivTest scheduling-past-time installation handler';
-const HANDLER_NAME_DW  = 'PrivTest scheduling-past-time delivery handler';
 const HANDLER_NAME_VCM = 'PrivTest scheduling-past-time visit calendar handler';
 
 // Numeric ID required by customer-detail bootstrap (validates /^\d+$/)
@@ -118,12 +81,7 @@ const FAKE_CONTACT_ID = '989800001641';
 
 // Privtest-prefixed so purgeFixtures can scope DELETEs on visits by
 // customer_id, preventing stale rows from accumulating on a shared database
-// across runs. Visits created via POST /api/visits store the user's integer
-// database PK (req.user.claims.sub) as created_by — not an email — so a
-// `created_by LIKE 'privtest-%'` guard would match nothing. The unique
-// customer_id strings below are the correct and sufficient scope predicate.
-const FAKE_CONTACT_ID_IS  = 'privtest-sptg-is-001';
-const FAKE_CONTACT_ID_DW  = 'privtest-sptg-dw-001';
+// across runs.
 const FAKE_CONTACT_ID_VCM = 'privtest-sptg-vcm-001';
 
 const REPORT_PATH = path.join(
@@ -173,12 +131,10 @@ function writeReport(runId) {
     `## Coverage`,
     ``,
     `Tests the past-time confirmation dialog and 15-minute warning in`,
-    `InstallationSlotModal, DeliveryWindowModal, and ScheduleVisitModal.`,
+    `ScheduleVisitModal (schedule_visit handler type).`,
     ``,
     `## Relevant files`,
     ``,
-    `- \`src/react/components/modals/InstallationSlotModal.tsx\``,
-    `- \`src/react/components/modals/DeliveryWindowModal.tsx\``,
     `- \`src/react/components/modals/ScheduleVisitModal.tsx\``,
   ].join('\n');
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
@@ -247,14 +203,14 @@ async function restoreDateMock(page) {
 async function purgeFixtures(pool) {
   try {
     await pool.query(
-      `DELETE FROM card_action_handlers WHERE name IN ($1, $2, $3)`,
-      [HANDLER_NAME_IS, HANDLER_NAME_DW, HANDLER_NAME_VCM],
+      `DELETE FROM card_action_handlers WHERE name = $1`,
+      [HANDLER_NAME_VCM],
     );
   } catch (_) {}
   try {
     await pool.query(
-      `DELETE FROM visits WHERE customer_id IN ($1, $2, $3)`,
-      [FAKE_CONTACT_ID_IS, FAKE_CONTACT_ID_DW, FAKE_CONTACT_ID_VCM],
+      `DELETE FROM visits WHERE customer_id = $1`,
+      [FAKE_CONTACT_ID_VCM],
     );
   } catch (_) {}
 }
@@ -345,34 +301,6 @@ async function main() {
   const adminClient = await login(users.admin.email, PASSWORD);
 
   // ── Seed card-action handlers ──────────────────────────────────────────────
-  const isHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
-    name: HANDLER_NAME_IS,
-    type: 'schedule_installation_slot',
-    config: { defaultDurationMin: 240 },
-    bindings: [],
-  });
-  const isHandlerId = isHandlerRes.json?.id;
-  record(
-    'seed schedule_installation_slot handler',
-    'status=201 with numeric id',
-    `status=${isHandlerRes.status} id=${isHandlerId}`,
-    isHandlerRes.status === 201 && Number.isInteger(isHandlerId),
-  );
-
-  const dwHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
-    name: HANDLER_NAME_DW,
-    type: 'schedule_delivery_window',
-    config: {},
-    bindings: [],
-  });
-  const dwHandlerId = dwHandlerRes.json?.id;
-  record(
-    'seed schedule_delivery_window handler',
-    'status=201 with numeric id',
-    `status=${dwHandlerRes.status} id=${dwHandlerId}`,
-    dwHandlerRes.status === 201 && Number.isInteger(dwHandlerId),
-  );
-
   const vcmHandlerRes = await adminClient.post('/api/admin/card-action-handlers', {
     name: HANDLER_NAME_VCM,
     type: 'schedule_visit',
@@ -387,7 +315,7 @@ async function main() {
     vcmHandlerRes.status === 201 && Number.isInteger(vcmHandlerId),
   );
 
-  if (!isHandlerId || !dwHandlerId || !vcmHandlerId) {
+  if (!vcmHandlerId) {
     console.error('  Handler seeding failed — skipping Puppeteer probes.');
     await cleanupAndExit(1);
     return;
@@ -411,284 +339,6 @@ async function main() {
   }
 
   try {
-    // ── [IS-PAST / IS-BACK / IS-PROCEED] InstallationSlotModal past-time guard
-
-    console.log('\n  [IS] InstallationSlotModal past-time guard');
-    const isPage = await browser.newPage();
-    isPage.on('pageerror', () => {});
-    isPage.on('console',   () => {});
-    await isPage.setCacheEnabled(false);
-    await injectSession(isPage, adminClient.cookie);
-    // Navigate to /customers — a real authenticated route that loads main.js.
-    // main.js calls initCardActionModalsHost() on DOMContentLoaded which mounts
-    // CardActionModalsHost; that component registers _opener (the backing fn for
-    // window.openCardActionModal) in a useEffect shortly after first paint.
-    await isPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-
-    // Retry opening the modal until CardActionModalsHost has registered its
-    // opener and the InstallationSlotModal dialog appears.
-    const isHandlerObj = {
-      id:       isHandlerId,
-      type:     'schedule_installation_slot',
-      config:   { defaultDurationMin: 240 },
-      bindings: [],
-    };
-    const isCtxObj = {
-      contactId:    FAKE_CONTACT_ID_IS,
-      contactName:  'PrivTest IS Contact',
-      contactEmail: 'is@privtest.local',
-    };
-    const isModalOpened = await pollPage(isPage, (arg) => {
-      if (typeof window.openCardActionModal === 'function') {
-        window.openCardActionModal(arg.handler, arg.ctx);
-      }
-      const m = document.querySelector('[role=dialog]');
-      if (!m) return null;
-      return {
-        hasPrimary: !!m.querySelector('[data-testid=cah-primary]'),
-        hasStart:   !!m.querySelector('input#cah-is-start'),
-      };
-    }, { handler: isHandlerObj, ctx: isCtxObj }, 10000, 300);
-
-    record(
-      '[IS] modal opens with DateTimePicker and Schedule button',
-      'dialog with #cah-is-start and [data-testid=cah-primary]',
-      `got=${JSON.stringify(isModalOpened)}`,
-      !!isModalOpened && isModalOpened.hasPrimary && isModalOpened.hasStart,
-    );
-
-    if (isModalOpened) {
-      // Mock Date to far future AFTER the modal has mounted (so initialStart
-      // was set with the real current time). dayjs() in handleSubmit will now
-      // return farFuture > startDt, triggering the past-confirm dialog.
-      const farFuture = Date.now() + 100 * 3600 * 1000; // realNow + 100 h
-      await applyDateMock(isPage, farFuture);
-
-      // [IS-PAST] Click Schedule → past-confirm dialog should appear.
-      await isPage.evaluate(() => document.querySelector('[data-testid=cah-primary]').click());
-      const isPastDialog = await pollPage(isPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
-        if (!past) return null;
-        return {
-          hasTitle:    past.textContent.includes('Schedule in the past?'),
-          hasBody:     past.textContent.includes('already passed'),
-          hasGoBack:   !![...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back'),
-          hasSchedule: !!past.querySelector('[data-testid=cah-past-confirm]'),
-        };
-      }, null, 6000);
-
-      record(
-        '[IS-PAST] past-confirm dialog appears when submitting with past startDt',
-        'dialog with "Schedule in the past?" + "Go back" + "Schedule anyway"',
-        `got=${JSON.stringify(isPastDialog)}`,
-        !!isPastDialog && isPastDialog.hasTitle && isPastDialog.hasGoBack && isPastDialog.hasSchedule,
-      );
-
-      // [IS-BACK] Click "Go back" → dialog closes, scheduling form still visible.
-      await isPage.evaluate(() => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
-        const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
-        if (btn) btn.click();
-      });
-      const isAfterGoBack = await pollPage(isPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const pastGone   = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
-        const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
-        if (!pastGone) return null;
-        return { pastGone, formStillOpen };
-      }, null, 5000);
-      record(
-        '[IS-BACK] "Go back" dismisses dialog; scheduling form stays open',
-        'past-confirm gone, primary button still present',
-        `got=${JSON.stringify(isAfterGoBack)}`,
-        !!isAfterGoBack && isAfterGoBack.pastGone && isAfterGoBack.formStillOpen,
-      );
-
-      // [IS-PROCEED] "Schedule anyway" proceeds to POST /api/visits.
-      const isRequests = [];
-      const isReqListener = (req) => {
-        const u = req.url();
-        if (u.includes('/api/visits') || u.includes('/api/events')) {
-          isRequests.push({ url: u, method: req.method() });
-        }
-      };
-      isPage.on('request', isReqListener);
-
-      // Click Submit again → past-confirm dialog opens.
-      await isPage.evaluate(() => document.querySelector('[data-testid=cah-primary]')?.click());
-      const isPastDialog2 = await pollPage(isPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        return dialogs.some(d => d.textContent.includes('Schedule in the past?')) || null;
-      }, null, 5000);
-
-      if (isPastDialog2) {
-        // Click "Schedule anyway".
-        await isPage.evaluate(() => {
-          const btn = document.querySelector('[data-testid=cah-past-confirm]');
-          if (btn) btn.click();
-        });
-        // Wait for modal to close or up to 6 s.
-        await pollPage(
-          isPage,
-          () => !document.querySelector('[data-testid=cah-primary]') || null,
-          null,
-          6000,
-        );
-      }
-      isPage.off('request', isReqListener);
-
-      const isVisitReq = isRequests.find(r => /\/api\/visits(?:$|\?)/.test(r.url) && r.method === 'POST');
-      record(
-        '[IS-PROCEED] "Schedule anyway" fires POST /api/visits',
-        'one POST to /api/visits',
-        `requests=${JSON.stringify(isRequests)}`,
-        !!isVisitReq,
-      );
-
-      await restoreDateMock(isPage);
-    } else {
-      skip('[IS-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
-      skip('[IS-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
-      skip('[IS-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
-    }
-
-    await isPage.close();
-
-    // ── [DW-PAST / DW-BACK / DW-PROCEED] DeliveryWindowModal past-time guard
-
-    console.log('\n  [DW] DeliveryWindowModal past-time guard');
-    const dwPage = await browser.newPage();
-    dwPage.on('pageerror', () => {});
-    dwPage.on('console',   () => {});
-    await dwPage.setCacheEnabled(false);
-    await injectSession(dwPage, adminClient.cookie);
-    await dwPage.goto(`${BASE}/customers`, { waitUntil: 'domcontentloaded', timeout: 25000 });
-
-    const dwHandlerObj = {
-      id:       dwHandlerId,
-      type:     'schedule_delivery_window',
-      config:   {},
-      bindings: [],
-    };
-    const dwCtxObj = {
-      contactId:    FAKE_CONTACT_ID_DW,
-      contactName:  'PrivTest DW Contact',
-      contactEmail: 'dw@privtest.local',
-    };
-    const dwModalOpened = await pollPage(dwPage, (arg) => {
-      if (typeof window.openCardActionModal === 'function') {
-        window.openCardActionModal(arg.handler, arg.ctx);
-      }
-      const m = document.querySelector('[role=dialog]');
-      if (!m) return null;
-      return {
-        hasPrimary: !!m.querySelector('[data-testid=cah-primary]'),
-        hasTitle:   !!m.querySelector('input#cah-dw-title'),
-      };
-    }, { handler: dwHandlerObj, ctx: dwCtxObj }, 10000, 300);
-
-    record(
-      '[DW] modal opens with DateTimeRangePicker and Schedule button',
-      'dialog with #cah-dw-title and [data-testid=cah-primary]',
-      `got=${JSON.stringify(dwModalOpened)}`,
-      !!dwModalOpened && dwModalOpened.hasPrimary && dwModalOpened.hasTitle,
-    );
-
-    if (dwModalOpened) {
-      const farFutureDw = Date.now() + 100 * 3600 * 1000;
-      await applyDateMock(dwPage, farFutureDw);
-
-      // [DW-PAST] Submit → past-confirm dialog.
-      await dwPage.evaluate(() => document.querySelector('[data-testid=cah-primary]').click());
-      const dwPastDialog = await pollPage(dwPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
-        if (!past) return null;
-        return {
-          hasTitle:    past.textContent.includes('Schedule in the past?'),
-          hasBody:     past.textContent.includes('already passed'),
-          hasGoBack:   !!([...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back')),
-          hasSchedule: !!past.querySelector('[data-testid=cah-past-confirm]'),
-        };
-      }, null, 6000);
-
-      record(
-        '[DW-PAST] past-confirm dialog appears when submitting with past start',
-        'dialog with "Schedule in the past?" + "Go back" + "Schedule anyway"',
-        `got=${JSON.stringify(dwPastDialog)}`,
-        !!dwPastDialog && dwPastDialog.hasTitle && dwPastDialog.hasGoBack && dwPastDialog.hasSchedule,
-      );
-
-      // [DW-BACK] "Go back" dismisses dialog, form stays open.
-      await dwPage.evaluate(() => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const past = dialogs.find(d => d.textContent.includes('Schedule in the past?'));
-        const btn = past && [...past.querySelectorAll('button')].find(b => b.textContent.trim() === 'Go back');
-        if (btn) btn.click();
-      });
-      const dwAfterGoBack = await pollPage(dwPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        const pastGone      = !dialogs.some(d => d.textContent.includes('Schedule in the past?'));
-        const formStillOpen = dialogs.some(d => !!d.querySelector('[data-testid=cah-primary]'));
-        if (!pastGone) return null;
-        return { pastGone, formStillOpen };
-      }, null, 5000);
-      record(
-        '[DW-BACK] "Go back" dismisses dialog; scheduling form stays open',
-        'past-confirm gone, primary button still present',
-        `got=${JSON.stringify(dwAfterGoBack)}`,
-        !!dwAfterGoBack && dwAfterGoBack.pastGone && dwAfterGoBack.formStillOpen,
-      );
-
-      // [DW-PROCEED] "Schedule anyway" → POST /api/visits.
-      const dwRequests = [];
-      const dwReqListener = (req) => {
-        const u = req.url();
-        if (u.includes('/api/visits') || u.includes('/api/events')) {
-          dwRequests.push({ url: u, method: req.method() });
-        }
-      };
-      dwPage.on('request', dwReqListener);
-
-      await dwPage.evaluate(() => document.querySelector('[data-testid=cah-primary]')?.click());
-      const dwPastDialog2 = await pollPage(dwPage, () => {
-        const dialogs = [...document.querySelectorAll('[role=dialog]')];
-        return dialogs.some(d => d.textContent.includes('Schedule in the past?')) || null;
-      }, null, 5000);
-
-      if (dwPastDialog2) {
-        await dwPage.evaluate(() => {
-          const btn = document.querySelector('[data-testid=cah-past-confirm]');
-          if (btn) btn.click();
-        });
-        await pollPage(
-          dwPage,
-          () => !document.querySelector('[data-testid=cah-primary]') || null,
-          null,
-          6000,
-        );
-      }
-      dwPage.off('request', dwReqListener);
-
-      const dwVisitReq = dwRequests.find(r => /\/api\/visits(?:$|\?)/.test(r.url) && r.method === 'POST');
-      record(
-        '[DW-PROCEED] "Schedule anyway" fires POST /api/visits',
-        'one POST to /api/visits',
-        `requests=${JSON.stringify(dwRequests)}`,
-        !!dwVisitReq,
-      );
-
-      await restoreDateMock(dwPage);
-    } else {
-      skip('[DW-PAST]    past-confirm dialog appears', 'dialog present', 'modal did not open — skipped');
-      skip('[DW-BACK]    "Go back" dismisses dialog',  'dialog gone',    'skipped');
-      skip('[DW-PROCEED] "Schedule anyway" fires POST', 'POST /api/visits', 'skipped');
-    }
-
-    await dwPage.close();
-
     // ── [VCM-PAST / VCM-BACK / VCM-PROCEED] ScheduleVisitModal past-time guard
 
     console.log('\n  [VCM] ScheduleVisitModal past-time guard');
@@ -821,129 +471,6 @@ async function main() {
     }
 
     await vcmPage.close();
-
-    // ── [WARN-IS / WARN-DW] 15-minute warning via edit mode ───────────────────
-    //
-    // Navigate to /customers/:FAKE_CONTACT_ID with request interception.
-    // Mock /api/contacts/:id to return a fake contact and /api/visits?... to
-    // return one visit per type with startAt = now + 10 minutes so the edit
-    // modal opens with startDt within the 15-minute threshold.
-
-    console.log('\n  [WARN] 15-minute warning via edit mode');
-
-    const now = Date.now();
-    const nearStart  = new Date(now + 10 * 60 * 1000).toISOString(); // +10 min
-    const nearEnd    = new Date(now + 70 * 60 * 1000).toISOString(); // +70 min
-
-    const mockContact = {
-      id: FAKE_CONTACT_ID,
-      properties: {
-        firstname: 'PrivTest',
-        lastname:  'WarnContact',
-        email:     'warncontact@privtest.local',
-      },
-    };
-
-    // Run WARN-IS first (installation), then WARN-DW (delivery) on same page.
-    for (const warnType of ['installation', 'delivery']) {
-      const isInstall = warnType === 'installation';
-      const visitId   = isInstall ? 88881 : 88882;
-      const mockVisit = {
-        id:           visitId,
-        type:         warnType,
-        title:        `PrivTest ${warnType} near-future`,
-        startAt:      nearStart,
-        endAt:        nearEnd,
-        customerId:   FAKE_CONTACT_ID,
-        customerName: 'PrivTest WarnContact',
-      };
-
-      const warnPage = await browser.newPage();
-      warnPage.on('pageerror', () => {});
-      warnPage.on('console',   () => {});
-      await warnPage.setCacheEnabled(false);
-      await injectSession(warnPage, adminClient.cookie);
-
-      // Request interception: mock contact + visits APIs; pass others through.
-      await warnPage.setRequestInterception(true);
-      warnPage.on('request', async (req) => {
-        const u = req.url();
-        const qs = u.split('?')[0];
-        if (qs.endsWith(`/api/contacts/${FAKE_CONTACT_ID}`) && !u.includes('/localdata') && !u.includes('/tasks')) {
-          return req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(mockContact) });
-        }
-        if (u.includes('/api/visits?from=')) {
-          return req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([mockVisit]) });
-        }
-        if (u.includes(`/api/contacts/${FAKE_CONTACT_ID}/localdata`)) {
-          return req.respond({ status: 404, body: 'Not Found' });
-        }
-        if (u.includes(`/api/contacts/${FAKE_CONTACT_ID}/tasks`)) {
-          return req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ results: [] }) });
-        }
-        if (u.includes('/api/design-visits?contactId=')) {
-          return req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-        }
-        if (qs.endsWith('/api/lead-statuses')) {
-          return req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
-        }
-        // All other requests pass through (auth, react bundle, etc.)
-        return req.continue();
-      });
-
-      await warnPage.goto(`${BASE}/customers/${FAKE_CONTACT_ID}`, {
-        waitUntil: 'domcontentloaded',
-        timeout:   25000,
-      });
-
-      // Wait for the UpcomingVisitsSection to render the edit button for our visit.
-      const editTestId = `edit-visit-${visitId}`;
-      const editBtnFound = await pollPage(warnPage, (tid) => {
-        const btn = document.querySelector(`[data-testid="${tid}"]`);
-        return btn ? true : null;
-      }, editTestId, 12000);
-
-      if (!editBtnFound) {
-        record(
-          `[WARN-${isInstall ? 'IS' : 'DW'}] edit button appears for near-future ${warnType} visit`,
-          `[data-testid="${editTestId}"] present`,
-          'not found — edit button did not appear',
-          false,
-          'CustomerDetailPage may not have rendered UpcomingVisitsSection in time.',
-        );
-        await warnPage.close();
-        continue;
-      }
-
-      // Click the edit button.
-      await warnPage.evaluate((tid) => {
-        document.querySelector(`[data-testid="${tid}"]`)?.click();
-      }, editTestId);
-
-      // The modal opens in edit mode; the useEffect fires immediately with
-      // startDt = nearStart (10 min from now) so minutesUntilStart ≈ 10 < 15.
-      // Assert the warning Alert is visible.
-      const warnAlert = await pollPage(warnPage, () => {
-        // MUI Alert renders as a div[role=alert] or with class MuiAlert-root.
-        // The modals use <Alert severity="warning"> which adds role="alert".
-        const alerts = [...document.querySelectorAll('[role=alert]')];
-        const warn = alerts.find(a =>
-          a.textContent.includes('less than 15 minutes') ||
-          a.textContent.includes('already passed')
-        );
-        if (!warn) return null;
-        return { text: warn.textContent.trim().slice(0, 120) };
-      }, null, 8000);
-
-      record(
-        `[WARN-${isInstall ? 'IS' : 'DW'}] 15-minute warning Alert appears in ${isInstall ? 'InstallationSlotModal' : 'DeliveryWindowModal'} edit mode`,
-        'Alert with "less than 15 minutes" or "already passed" text',
-        warnAlert ? `text="${warnAlert.text}"` : 'not found',
-        !!warnAlert,
-      );
-
-      await warnPage.close();
-    }
 
     // ── [WARN-VCM] 15-minute warning in ScheduleVisitModal via DateTimePicker ──
     //

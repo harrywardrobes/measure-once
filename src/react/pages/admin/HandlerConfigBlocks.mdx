@@ -4,8 +4,6 @@ import * as OverviewStories from '../../components/ActionHandlerConfigBlocks.sto
 import * as ScheduleVisitStories from './ScheduleVisitConfig.stories';
 import * as ShowMessageStories from './ShowMessageConfig.stories';
 import * as StartDesignVisitStories from './StartDesignVisitConfig.stories';
-import * as DeliveryWindowStories from './DeliveryWindowConfig.stories';
-import * as InstallationSlotStories from './InstallationSlotConfig.stories';
 
 <Meta title="Features/ActionHandlerConfigBlocks/Guide" />
 
@@ -17,7 +15,7 @@ Each block is rendered when an admin selects a particular handler type from the 
 dropdown, and it lets them configure the behaviour that fires when an operator clicks the
 corresponding card-action strip on the customer pipeline board.
 
-There are five handler types. Each maps to its own config block component in
+There are three handler types with config blocks. Each maps to its own config block component in
 `src/react/pages/admin/HandlerConfigBlocks.tsx`.
 
 ---
@@ -26,14 +24,12 @@ There are five handler types. Each maps to its own config block component in
 
 | Handler type | Component | Config keys | Side effects when clicked |
 |---|---|---|---|
-| **Schedule visit** | `ScheduleVisitConfig` | `visitType`, `defaultDurationMin`\*† | Opens the scheduling modal pre-set to the chosen visit type and duration |
+| **Schedule visit** | `ScheduleVisitConfig` | `visitType`†, `defaultDurationMin`\* | Opens the scheduling modal pre-set to the chosen visit type and duration |
 | **Show message** | `ShowMessageConfig` | `title`\*, `message`† | Displays a read-only popup — no API call, no status change |
-| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`†, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\* | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
-| **Schedule delivery window** | `DeliveryWindowConfig` | `defaultTitle`\* | Opens the delivery-window picker modal |
-| **Schedule installation slot** | `InstallationSlotConfig` | `defaultDurationMin`\*†, `defaultTitle`\* | Opens the installation-slot picker modal pre-filled with the saved duration |
+| **Start design visit wizard** | `StartDesignVisitConfig` | `defaultDurationMin`\*, `intermediateLeadStatus`\*, `submittedLeadStatus`\*, `termsAndConditions`\* | Opens the multi-step design visit wizard; sets lead status on open and again on submit (see two-phase flow below) |
 
 \* Optional field — the block still saves and works if this value is left blank.  
-† Validated field — `defaultDurationMin` must be a whole number between 5 and 1440 (minutes) when provided; `message` is required and cannot be left blank.
+† Required field — `visitType` must be one of `design`, `survey`, or `other`; `message` cannot be left blank.
 
 ---
 
@@ -58,7 +54,7 @@ pipeline conventions.
 
 ---
 
-## All five blocks — side by side
+## All three blocks — side by side
 
 <Canvas of={OverviewStories.AllBlocksSideBySide} />
 
@@ -66,8 +62,8 @@ pipeline conventions.
 
 ## ScheduleVisit
 
-Lets the admin choose the visit type (Survey, Installation, Remedial, Workshop, Design
-visit, or Other) and an optional default duration in minutes (5–1440).
+Lets the admin choose the visit type (Design visit, Survey, or Other — required) and an
+optional default duration in minutes (5–1440).
 
 <Canvas of={ScheduleVisitStories.Blank} />
 <Canvas of={ScheduleVisitStories.Prefilled} />
@@ -115,31 +111,3 @@ Terms & Conditions text (≤4000 chars, shown to the customer on the sign-off pa
 The story below shows the inline error state that appears when the field holds an out-of-range value.
 
 <Canvas of={StartDesignVisitStories.DurationValidationError} />
-
----
-
-## DeliveryWindow
-
-Opens a date/time range picker so the operator can record when a delivery is expected.
-Config is minimal: an optional default event title (≤120 chars).
-
-<Canvas of={DeliveryWindowStories.Blank} />
-<Canvas of={DeliveryWindowStories.Prefilled} />
-
----
-
-## InstallationSlot
-
-Similar to DeliveryWindow but designed for booking an installation. The operator picks a
-start time; the saved default duration is pre-filled in the picker. Config keys: optional
-default duration (5–1440 min) and optional default title (≤120 chars).
-
-<Canvas of={InstallationSlotStories.Blank} />
-<Canvas of={InstallationSlotStories.Prefilled} />
-
-### Validation & edge cases
-
-`defaultDurationMin` is validated on save — it must be a whole number between 5 and 1440.
-The story below shows the inline error state for an out-of-range value.
-
-<Canvas of={InstallationSlotStories.DurationValidationError} />

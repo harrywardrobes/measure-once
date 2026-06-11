@@ -129,12 +129,11 @@ function surfaceConflict(entry: QueueEntry): void {
  * After a successful replay of any queued write, broadcast the resulting
  * lead-status change so any open Projects board tabs update without a manual
  * refresh. Fired whenever the response body carries `hs_lead_status` —
- * covers arrange-visit/outcome, delivery-window edits, installation-slot
- * edits, and any future modal that changes lead status.
+ * covers arrange-visit/outcome and any future modal that changes lead status.
  *
  * The contact ID is read from `body.contactId` (ArrangeVisitModal) or
- * `body.customerId` (DeliveryWindowModal / InstallationSlotModal /
- * GenericVisitEditModal), both of which hold the HubSpot contact ID.
+ * `body.customerId` (GenericVisitEditModal), both of which hold the HubSpot
+ * contact ID.
  */
 function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void {
   const d = data as { hs_lead_status?: string } | null | undefined;

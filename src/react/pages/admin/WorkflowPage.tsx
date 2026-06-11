@@ -53,8 +53,7 @@ import { DEMO_CONTACT } from '../../components/modals/demoData';
 import { MessagePopupModal } from '../../components/modals/MessagePopupModal';
 import { ScheduleVisitModal } from '../../components/modals/ScheduleVisitModal';
 import { PhoneSummaryModal } from '../../components/modals/PhoneSummaryModal';
-import { DeliveryWindowModal } from '../../components/modals/DeliveryWindowModal';
-import { InstallationSlotModal } from '../../components/modals/InstallationSlotModal';
+
 import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
 import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
 import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
@@ -894,16 +893,10 @@ function WorkflowDemoModalHost({
   switch (handler.type) {
     case 'show_message':
       return <MessagePopupModal handler={handler} {...common} />;
-    case 'add_design_visit_to_calendar':
-      return <ScheduleVisitModal handler={handler} ctx={DEMO_CTX} visitType="design" {...common} />;
     case 'schedule_visit':
-      return <ScheduleVisitModal handler={handler} ctx={DEMO_CTX} {...common} />;
+      return <ScheduleVisitModal handler={handler} ctx={DEMO_CTX} visitType={handler.config.visitType as string | undefined} {...common} />;
     case 'summarise_phone_call':
       return <PhoneSummaryModal handler={handler} ctx={DEMO_CTX} {...common} />;
-    case 'schedule_delivery_window':
-      return <DeliveryWindowModal handler={handler} ctx={DEMO_CTX} {...common} />;
-    case 'schedule_installation_slot':
-      return <InstallationSlotModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'upload_photos_and_info':
       return <UploadPhotosModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'arrange_visit':

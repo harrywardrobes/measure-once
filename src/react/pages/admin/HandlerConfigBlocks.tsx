@@ -69,11 +69,8 @@ function ConfigLabel({ children }: { children: React.ReactNode }) {
 // ── ScheduleVisitConfig ────────────────────────────────────────────────────────
 
 export type VisitType =
-  | 'survey'
-  | 'installation'
-  | 'remedial'
-  | 'workshop'
   | 'design'
+  | 'survey'
   | 'other';
 
 export interface ScheduleVisitConfigValue {
@@ -88,7 +85,7 @@ export interface ScheduleVisitConfigProps {
 }
 
 export function ScheduleVisitConfig({
-  defaultVisitType = 'survey',
+  defaultVisitType = 'design',
   defaultDurationMin: initialDur = 60,
   onChange,
 }: ScheduleVisitConfigProps) {
@@ -106,12 +103,9 @@ export function ScheduleVisitConfig({
   };
 
   const VISIT_TYPES: { value: VisitType; label: string }[] = [
-    { value: 'survey',       label: 'Survey' },
-    { value: 'installation', label: 'Installation' },
-    { value: 'remedial',     label: 'Remedial' },
-    { value: 'workshop',     label: 'Workshop' },
-    { value: 'design',       label: 'Design visit' },
-    { value: 'other',        label: 'Other' },
+    { value: 'design', label: 'Design visit' },
+    { value: 'survey', label: 'Survey' },
+    { value: 'other',  label: 'Other' },
   ];
 
   return (
@@ -398,110 +392,3 @@ export function StartDesignVisitConfig({
   );
 }
 
-// ── DeliveryWindowConfig ───────────────────────────────────────────────────────
-
-export interface DeliveryWindowConfigValue {
-  defaultTitle: string;
-}
-
-export interface DeliveryWindowConfigProps {
-  defaultTitle?: string;
-  onChange?: (value: DeliveryWindowConfigValue) => void;
-}
-
-export function DeliveryWindowConfig({
-  defaultTitle: initialTitle = '',
-  onChange,
-}: DeliveryWindowConfigProps) {
-  const [title, setTitle] = useState(initialTitle);
-
-  const notify = (t: string) => onChange?.({ defaultTitle: t });
-
-  return (
-    <Stack spacing={1.5}>
-      <Box>
-        <ConfigLabel>
-          Default title{' '}
-          <span style={{ fontWeight: 400 }}>(optional, ≤120 chars)</span>
-        </ConfigLabel>
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="e.g. Delivery window"
-          value={title}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
-          onChange={e => { setTitle(e.target.value); notify(e.target.value); }}
-        />
-      </Box>
-    </Stack>
-  );
-}
-
-// ── InstallationSlotConfig ─────────────────────────────────────────────────────
-
-export interface InstallationSlotConfigValue {
-  defaultDurationMin: number | '';
-  defaultTitle: string;
-}
-
-export interface InstallationSlotConfigProps {
-  defaultDurationMin?: number | '';
-  defaultTitle?: string;
-  onChange?: (value: InstallationSlotConfigValue) => void;
-}
-
-export function InstallationSlotConfig({
-  defaultDurationMin: initialDur = 240,
-  defaultTitle: initialTitle = '',
-  onChange,
-}: InstallationSlotConfigProps) {
-  const [dur,   setDur]   = useState<number | ''>(initialDur);
-  const [title, setTitle] = useState(initialTitle);
-
-  const durNum   = dur === '' ? NaN : Number(dur);
-  const durError =
-    dur !== '' && (isNaN(durNum) || durNum < 5 || durNum > 1440)
-      ? 'Must be between 5 and 1440 minutes.'
-      : '';
-
-  const notify = (d: number | '', t: string) =>
-    onChange?.({ defaultDurationMin: d, defaultTitle: t });
-
-  return (
-    <Stack spacing={1.5}>
-      <Box>
-        <ConfigLabel>
-          Default duration (min){' '}
-          <span style={{ fontWeight: 400 }}>(optional, 5–1440)</span>
-        </ConfigLabel>
-        <TextField
-          size="small"
-          type="number"
-          value={dur}
-          error={!!durError}
-          helperText={durError || undefined}
-          slotProps={{ htmlInput: { min: 5, max: 1440, step: 5 } }}
-          onChange={e => {
-            const d: number | '' = e.target.value === '' ? '' : Number(e.target.value);
-            setDur(d);
-            notify(d, title);
-          }}
-        />
-      </Box>
-      <Box>
-        <ConfigLabel>
-          Default title{' '}
-          <span style={{ fontWeight: 400 }}>(optional, ≤120 chars)</span>
-        </ConfigLabel>
-        <TextField
-          size="small"
-          fullWidth
-          placeholder="e.g. Installation"
-          value={title}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
-          onChange={e => { setTitle(e.target.value); notify(dur, e.target.value); }}
-        />
-      </Box>
-    </Stack>
-  );
-}

@@ -5249,10 +5249,9 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
 // ── Card action handlers ─────────────────────────────────────────────────────
 // Admins can attach an interactive "handler" to a card action label. Built-in
 // handler types:
-//   • add_design_visit_to_calendar — click opens a date/time picker; on submit
-//     a Google Calendar event is created via POST /api/events.
-//   • schedule_visit — generic version of the above; visit type (survey,
-//     installation, remedial, workshop, etc.) is set via config.visitType.
+//   • schedule_visit — click opens a date/time picker; on submit a Google
+//     Calendar event is created via POST /api/events. Visit type (design,
+//     survey, or other) is required via config.visitType.
 //   • summarise_phone_call — click opens a textarea modal; on submit a HubSpot
 //     note is created against the active contact, then the UI offers to draft
 //     a follow-up email.
@@ -5263,32 +5262,13 @@ app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, r
 // the keys of this map, so adding a new handler type here automatically adds
 // it to CARD_ACTION_HANDLER_TYPES — the two cannot drift out of sync.
 const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
-  add_design_visit_to_calendar(cfg) {
-    const out = {};
-    if (cfg.defaultDurationMin !== undefined) {
-      const n = parseInt(cfg.defaultDurationMin, 10);
-      if (!Number.isInteger(n) || n < 5 || n > 24 * 60) {
-        return { error: 'defaultDurationMin must be 5–1440.' };
-      }
-      out.defaultDurationMin = n;
-    }
-    if (cfg.defaultTitle !== undefined) {
-      const v = String(cfg.defaultTitle || '');
-      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
-      out.defaultTitle = v;
-    }
-    return { value: out };
-  },
   schedule_visit(cfg) {
-    const VALID_VISIT_TYPES = ['design', 'survey', 'installation', 'remedial', 'workshop', 'other'];
-    const out = {};
-    if (cfg.visitType !== undefined) {
-      const v = String(cfg.visitType || '').toLowerCase();
-      if (!VALID_VISIT_TYPES.includes(v)) {
-        return { error: `visitType must be one of: ${VALID_VISIT_TYPES.join(', ')}.` };
-      }
-      out.visitType = v;
+    const VALID_VISIT_TYPES = ['design', 'survey', 'other'];
+    const vt = String(cfg.visitType || '').toLowerCase();
+    if (!VALID_VISIT_TYPES.includes(vt)) {
+      return { error: `visitType is required and must be one of: ${VALID_VISIT_TYPES.join(', ')}.` };
     }
+    const out = { visitType: vt };
     if (cfg.defaultDurationMin !== undefined) {
       const n = parseInt(cfg.defaultDurationMin, 10);
       if (!Number.isInteger(n) || n < 5 || n > 24 * 60) {
@@ -5348,31 +5328,6 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
       const v = String(cfg.termsAndConditions || '');
       if (v.length > 4000) return { error: 'termsAndConditions must be 4000 characters or fewer.' };
       out.termsAndConditions = v;
-    }
-    return { value: out };
-  },
-  schedule_delivery_window(cfg) {
-    const out = {};
-    if (cfg.defaultTitle !== undefined) {
-      const v = String(cfg.defaultTitle || '');
-      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
-      out.defaultTitle = v;
-    }
-    return { value: out };
-  },
-  schedule_installation_slot(cfg) {
-    const out = {};
-    if (cfg.defaultDurationMin !== undefined) {
-      const n = parseInt(cfg.defaultDurationMin, 10);
-      if (!Number.isInteger(n) || n < 5 || n > 1440) {
-        return { error: 'defaultDurationMin must be 5–1440.' };
-      }
-      out.defaultDurationMin = n;
-    }
-    if (cfg.defaultTitle !== undefined) {
-      const v = String(cfg.defaultTitle || '');
-      if (v.length > 120) return { error: 'defaultTitle must be 120 characters or fewer.' };
-      out.defaultTitle = v;
     }
     return { value: out };
   },

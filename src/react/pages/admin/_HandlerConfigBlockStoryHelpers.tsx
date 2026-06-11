@@ -13,16 +13,13 @@ import { NO_CONFIG_HANDLER_TYPES } from './ActionHandlersPage';
 export { NO_CONFIG_HANDLER_TYPES };
 
 export const HANDLER_TYPES = [
-  { value: 'add_design_visit_to_calendar',  label: 'Add design visit to calendar' },
-  { value: 'contact_customer',              label: 'Contact customer (call / email / WhatsApp)' },
-  { value: 'start_design_visit',            label: 'Start design visit wizard' },
-  { value: 'upload_photos_and_info',        label: 'Upload photos & info' },
-  { value: 'review_customer_photos',        label: 'Review customer photos' },
-  { value: 'schedule_visit',               label: 'Schedule visit (hidden from UI)' },
-  { value: 'schedule_delivery_window',     label: 'Schedule delivery window (hidden from UI)' },
-  { value: 'schedule_installation_slot',   label: 'Schedule installation slot (hidden from UI)' },
-  { value: 'summarise_phone_call',         label: 'Summarise phone call (hidden from UI)' },
-  { value: 'show_message',                 label: 'Show message (hidden from UI)' },
+  { value: 'schedule_visit',        label: 'Schedule visit' },
+  { value: 'contact_customer',      label: 'Contact customer (call / email / WhatsApp)' },
+  { value: 'start_design_visit',    label: 'Start design visit wizard' },
+  { value: 'upload_photos_and_info', label: 'Upload photos & info' },
+  { value: 'review_customer_photos', label: 'Review customer photos' },
+  { value: 'summarise_phone_call',  label: 'Summarise phone call (hidden from UI)' },
+  { value: 'show_message',          label: 'Show message (hidden from UI)' },
 ];
 
 export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [
@@ -36,9 +33,8 @@ export const FIXTURE_LEAD_STATUSES: LeadStatusOption[] = [
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   schedule_visit:
-    'Generic visit scheduler — works for any visit type (survey, installation, ' +
-    'remedial, workshop, etc.).\n' +
-    '• Clicking the action on a card opens a DateTimePicker modal.\n' +
+    'Clicking the action on a card opens a DateTimePicker modal.\n' +
+    '• Choose the visit type (Design visit, Survey, or Other) in the config.\n' +
     '• On submit, an event is created on the shared "Measure Once" Google ' +
     'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
     'No separate CRM visit row is created.\n' +
@@ -58,20 +54,6 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• On submit: creates a design_visits DB record, updates HubSpot lead ' +
     'status, creates a HubSpot note, attempts a QuickBooks Estimate, emails ' +
     'the customer a sign-off link.',
-  schedule_delivery_window:
-    'Clicking the action on a card opens a modal for scheduling a delivery ' +
-    'window with a start and end date/time.\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google ' +
-    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
-    'No separate CRM visit row is created.\n' +
-    'Config keys: defaultTitle (≤120 chars).',
-  schedule_installation_slot:
-    'Clicking the action on a card opens a modal for scheduling a single ' +
-    'installation slot with a start time and duration.\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google ' +
-    'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
-    'No separate CRM visit row is created.\n' +
-    'Config keys: defaultDurationMin (5–1440), defaultTitle (≤120 chars).',
 };
 
 interface ModalChromeProps {

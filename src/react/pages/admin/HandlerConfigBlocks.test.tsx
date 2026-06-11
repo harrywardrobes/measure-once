@@ -5,8 +5,6 @@ import {
   ScheduleVisitConfig,
   ShowMessageConfig,
   StartDesignVisitConfig,
-  DeliveryWindowConfig,
-  InstallationSlotConfig
 } from './HandlerConfigBlocks';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -35,13 +33,13 @@ describe('ScheduleVisitConfig', () => {
   it('renders with supplied initial props', () => {
     const { container } = render(
       <ScheduleVisitConfig
-        defaultVisitType="installation"
+        defaultVisitType="other"
         defaultDurationMin={120}
       />,
     );
     expect(getDurationInput(container).value).toBe('120');
-    // Supplied visitType 'installation' should be visible in the combobox
-    expect(screen.getByRole('combobox')).toHaveTextContent('Installation');
+    // Supplied visitType 'other' should be visible in the combobox
+    expect(screen.getByRole('combobox')).toHaveTextContent('Other');
   });
 
   it('calls onChange with correct shape when duration changes', () => {
@@ -329,113 +327,3 @@ describe('StartDesignVisitConfig', () => {
   });
 });
 
-// ── DeliveryWindowConfig ─────────────────────────────────────────────────────
-
-describe('DeliveryWindowConfig', () => {
-  it('renders with default (empty title)', () => {
-    render(<DeliveryWindowConfig />);
-    const input = screen.getByRole('textbox');
-    expect(input).toHaveValue('');
-  });
-
-  it('renders with supplied initial props', () => {
-    render(
-      <DeliveryWindowConfig
-        defaultTitle="Delivery"
-      />,
-    );
-    expect(screen.getByRole('textbox')).toHaveValue('Delivery');
-  });
-
-  it('calls onChange with correct shape when title changes', () => {
-    const onChange = vi.fn();
-    render(<DeliveryWindowConfig defaultTitle="" onChange={onChange} />);
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Window' } });
-    expect(onChange).toHaveBeenCalledWith({ defaultTitle: 'Window' });
-  });
-
-  it('includes placeholder text on the title field', () => {
-    render(<DeliveryWindowConfig />);
-    expect(screen.getByPlaceholderText(/Delivery window/i)).toBeInTheDocument();
-  });
-});
-
-// ── InstallationSlotConfig ───────────────────────────────────────────────────
-
-describe('InstallationSlotConfig', () => {
-  it('renders with default props (240 min, empty title)', () => {
-    const { container } = render(<InstallationSlotConfig />);
-    expect(getDurationInput(container).value).toBe('240');
-    const textInputs = screen.getAllByRole('textbox');
-    expect(textInputs).toHaveLength(1);
-    expect(textInputs[0]).toHaveValue('');
-  });
-
-  it('renders with supplied initial props', () => {
-    const { container } = render(
-      <InstallationSlotConfig
-        defaultDurationMin={480}
-        defaultTitle="Full day install"
-      />,
-    );
-    expect(getDurationInput(container).value).toBe('480');
-    expect(screen.getByRole('textbox')).toHaveValue('Full day install');
-  });
-
-  it('calls onChange with correct shape when duration changes', () => {
-    const onChange = vi.fn();
-    const { container } = render(
-      <InstallationSlotConfig defaultDurationMin={240} onChange={onChange} />,
-    );
-    fireEvent.change(getDurationInput(container), { target: { value: '480' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultDurationMin: 480 }),
-    );
-  });
-
-  it('calls onChange with correct shape when title changes', () => {
-    const onChange = vi.fn();
-    render(
-      <InstallationSlotConfig defaultTitle="" onChange={onChange} />,
-    );
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Install day' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultTitle: 'Install day' }),
-    );
-  });
-
-  it('shows duration error for value below 5', () => {
-    const { container } = render(<InstallationSlotConfig />);
-    fireEvent.change(getDurationInput(container), { target: { value: '1' } });
-    expect(screen.getByText(/Must be between 5 and 1440 minutes/i)).toBeInTheDocument();
-  });
-
-  it('shows duration error for value above 1440', () => {
-    const { container } = render(<InstallationSlotConfig />);
-    fireEvent.change(getDurationInput(container), { target: { value: '1441' } });
-    expect(screen.getByText(/Must be between 5 and 1440 minutes/i)).toBeInTheDocument();
-  });
-
-  it('does not show duration error when field is empty (optional)', () => {
-    const { container } = render(<InstallationSlotConfig />);
-    fireEvent.change(getDurationInput(container), { target: { value: '' } });
-    expect(screen.queryByText(/Must be between 5 and 1440 minutes/i)).toBeNull();
-  });
-
-  it('does not show duration error for valid boundary value (5)', () => {
-    const { container } = render(<InstallationSlotConfig />);
-    fireEvent.change(getDurationInput(container), { target: { value: '5' } });
-    expect(screen.queryByText(/Must be between 5 and 1440 minutes/i)).toBeNull();
-  });
-
-  it('calls onChange with empty string duration when field cleared', () => {
-    const onChange = vi.fn();
-    const { container } = render(
-      <InstallationSlotConfig defaultDurationMin={240} onChange={onChange} />,
-    );
-    fireEvent.change(getDurationInput(container), { target: { value: '' } });
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultDurationMin: '' }),
-    );
-  });
-});

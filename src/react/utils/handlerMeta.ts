@@ -44,10 +44,6 @@ export interface HandlerComponentMeta {
 }
 
 export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
-  add_design_visit_to_calendar: {
-    steps: '1 step — date, time, duration, title, notes',
-    hubspot: 'No HubSpot record changed',
-  },
   schedule_visit: {
     steps: '1 step — date, time, duration, title, location, notes',
     hubspot: 'No HubSpot record changed',
@@ -63,14 +59,6 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
   start_design_visit: {
     steps: '3 steps — visit details → rooms → review',
     hubspot: 'Sets lead status to in-progress on open; to configured submitted status on submit',
-  },
-  schedule_delivery_window: {
-    steps: '1 step — window start and end date/time',
-    hubspot: 'No HubSpot record changed',
-  },
-  schedule_installation_slot: {
-    steps: '1 step — start time and duration',
-    hubspot: 'No HubSpot record changed',
   },
   upload_photos_and_info: {
     steps: '1 step — confirmation → emails customer a unique form link',
@@ -99,13 +87,10 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
 };
 
 export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
-  add_design_visit_to_calendar: 'Add design visit to calendar',
   schedule_visit:               'Schedule visit',
   summarise_phone_call:         'Summarise phone call',
   show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
-  schedule_delivery_window:     'Schedule delivery window',
-  schedule_installation_slot:   'Schedule installation slot',
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
   arrange_visit:                'Arrange visit',
@@ -125,12 +110,9 @@ export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   arrange_visit:                ['arrange_visit_no_answer'],
   contact_customer:             [],
   start_design_visit:           [],
-  add_design_visit_to_calendar: ['visit_confirmation'],
   schedule_visit:               ['visit_confirmation'],
   summarise_phone_call:         [],
   show_message:                 [],
-  schedule_delivery_window:     [],
-  schedule_installation_slot:   [],
   design_visit_followup:        ['visit_invite', 'visit_confirmation'],
   open_deal:                    ['open_deal_deposit_invoice_sent', 'open_deal_declined_thank_you'],
 };
@@ -140,21 +122,9 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
     component: 'MessagePopupModal',
     filePath:  'src/react/components/modals/MessagePopupModal.tsx',
   },
-  add_design_visit_to_calendar: {
-    component: 'ScheduleVisitModal',
-    filePath:  'src/react/components/modals/ScheduleVisitModal.tsx',
-  },
   schedule_visit: {
     component: 'ScheduleVisitModal',
     filePath:  'src/react/components/modals/ScheduleVisitModal.tsx',
-  },
-  schedule_delivery_window: {
-    component: 'DeliveryWindowModal',
-    filePath:  'src/react/components/modals/DeliveryWindowModal.tsx',
-  },
-  schedule_installation_slot: {
-    component: 'InstallationSlotModal',
-    filePath:  'src/react/components/modals/InstallationSlotModal.tsx',
   },
   summarise_phone_call: {
     component: 'PhoneSummaryModal',

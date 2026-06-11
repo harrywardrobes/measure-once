@@ -2,8 +2,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DesignVisitWizard } from './DesignVisitWizard';
 import { MessagePopupModal } from './modals/MessagePopupModal';
 import { ScheduleVisitModal } from './modals/ScheduleVisitModal';
-import { DeliveryWindowModal } from './modals/DeliveryWindowModal';
-import { InstallationSlotModal } from './modals/InstallationSlotModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
 import { ArrangeVisitModal } from './modals/ArrangeVisitModal';
@@ -29,10 +27,7 @@ import type { ExistingVisit } from './DesignVisitWizard';
 type ModalState =
   | { type: 'none' }
   | { type: 'show_message';                  handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'add_design_visit_to_calendar';  handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'schedule_visit';                handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'schedule_delivery_window';      handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'schedule_installation_slot';    handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'summarise_phone_call';          handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'start_design_visit';            handler: CardActionHandlerData; ctx: CardActionContext; existingVisit?: ExistingVisit | null }
   | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
@@ -57,17 +52,8 @@ export function CardActionModalsHost() {
         case 'show_message':
           setModal({ type: 'show_message', handler, ctx });
           break;
-        case 'add_design_visit_to_calendar':
-          setModal({ type: 'add_design_visit_to_calendar', handler, ctx });
-          break;
         case 'schedule_visit':
           setModal({ type: 'schedule_visit', handler, ctx });
-          break;
-        case 'schedule_delivery_window':
-          setModal({ type: 'schedule_delivery_window', handler, ctx });
-          break;
-        case 'schedule_installation_slot':
-          setModal({ type: 'schedule_installation_slot', handler, ctx });
           break;
         case 'summarise_phone_call':
           setModal({ type: 'summarise_phone_call', handler, ctx });
@@ -120,28 +106,14 @@ export function CardActionModalsHost() {
       {modal.type === 'show_message' && (
         <MessagePopupModal handler={modal.handler} open onClose={close} />
       )}
-      {modal.type === 'add_design_visit_to_calendar' && (
-        <ScheduleVisitModal
-          handler={modal.handler}
-          ctx={modal.ctx}
-          visitType="design"
-          open
-          onClose={close}
-        />
-      )}
       {modal.type === 'schedule_visit' && (
         <ScheduleVisitModal
           handler={modal.handler}
           ctx={modal.ctx}
+          visitType={modal.handler.config?.visitType as string | undefined}
           open
           onClose={close}
         />
-      )}
-      {modal.type === 'schedule_delivery_window' && (
-        <DeliveryWindowModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
-      )}
-      {modal.type === 'schedule_installation_slot' && (
-        <InstallationSlotModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
       {modal.type === 'summarise_phone_call' && (
         <PhoneSummaryModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />

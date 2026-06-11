@@ -48,13 +48,9 @@ import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
 const VISIT_TYPES = [
-  { value: 'design',       label: 'Design visit' },
-  { value: 'survey',       label: 'Survey' },
-  { value: 'installation', label: 'Installation' },
-  { value: 'remedial',     label: 'Remedial visit' },
-  { value: 'delivery',     label: 'Delivery' },
-  { value: 'workshop',     label: 'Workshop' },
-  { value: 'other',        label: 'Other' },
+  { value: 'design', label: 'Design visit' },
+  { value: 'survey', label: 'Survey' },
+  { value: 'other',  label: 'Other' },
 ];
 
 function visitTypeLabel(t: string): string {

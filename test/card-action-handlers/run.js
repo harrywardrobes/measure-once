@@ -25,7 +25,7 @@ const PROBE_LABELS = [
 //       `card_action_handlers_changed` BroadcastChannel fires → another open
 //       Sales tab refreshes its in-page handler lookup.
 //   (B) Clicking a bound `.eq-card-action` strip opens the correct modal
-//       (MUI DateTimePicker for add_design_visit_to_calendar, textarea
+//       (MUI DateTimePicker for schedule_visit, textarea
 //       for summarise_phone_call) and submitting the form posts to the
 //       expected backend route.
 //   (C) Substatus binding wins over a label binding when both exist for the
@@ -152,7 +152,7 @@ const { clickMuiSelect } = require('../helpers/mui-select');
 // ── fixtures ──────────────────────────────────────────────────────────────────
 // Use lowercase letters/digits/underscores only — these are what the server-side
 // label-binding validator (_validateHandlerBinding) accepts for status_key.
-const LBL_KEY_DV       = 'privtest_cah_dv';       // bound to add_design_visit_to_calendar
+const LBL_KEY_DV       = 'privtest_cah_dv';       // bound to schedule_visit
 const LBL_KEY_SV       = 'privtest_cah_sv';        // bound to schedule_visit (survey type)
 const LBL_KEY_PC       = 'privtest_cah_pc';        // bound to summarise_phone_call
 const LBL_KEY_OVR      = 'privtest_cah_ovr';       // (sales, this) -> handler A (label binding)
@@ -572,7 +572,7 @@ async function main() {
   // /api/admin/card-action-handlers and asserts a 400 with a non-empty error
   // string.  This section is pure REST — no browser required.
   //
-  // Handler-config probes (add_design_visit_to_calendar):
+  // Handler-config probes (schedule_visit):
   //   NEG-01  defaultDurationMin below minimum (4)
   //   NEG-02  defaultDurationMin above maximum (1441)
   //   NEG-03  defaultDurationMin is not a number
@@ -641,8 +641,8 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: { defaultDurationMin: 4 },
+      type: 'schedule_visit',
+      config: { visitType: 'design', defaultDurationMin: 4 },
       bindings: [],
     });
     assertBadRequest('NEG-01: defaultDurationMin < 5 rejected', r, 'defaultDurationMin');
@@ -652,8 +652,8 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: { defaultDurationMin: 1441 },
+      type: 'schedule_visit',
+      config: { visitType: 'design', defaultDurationMin: 1441 },
       bindings: [],
     });
     assertBadRequest('NEG-02: defaultDurationMin > 1440 rejected', r, 'defaultDurationMin');
@@ -663,8 +663,8 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: { defaultDurationMin: 'banana' },
+      type: 'schedule_visit',
+      config: { visitType: 'design', defaultDurationMin: 'banana' },
       bindings: [],
     });
     assertBadRequest('NEG-03: defaultDurationMin non-numeric rejected', r, 'defaultDurationMin');
@@ -674,7 +674,7 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
+      type: 'schedule_visit',
       config: [1, 2, 3],
       bindings: [],
     });
@@ -685,7 +685,7 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
+      type: 'schedule_visit',
       config: { pad: 'x'.repeat(5000) },
       bindings: [],
     });
@@ -696,8 +696,8 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: { defaultTitle: 'A'.repeat(121) },
+      type: 'schedule_visit',
+      config: { visitType: 'design', defaultTitle: 'A'.repeat(121) },
       bindings: [],
     });
     assertBadRequest('NEG-06: defaultTitle > 120 chars rejected', r, 'defaultTitle');
@@ -795,8 +795,8 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: {},
+      type: 'schedule_visit',
+      config: { visitType: 'design' },
       bindings: [{ substatus_id: 0 }],
     });
     assertBadRequest('NEG-15: substatus_id = 0 rejected', r, 'substatus_id');
@@ -806,20 +806,20 @@ async function main() {
   {
     const r = await adminClient.post('/api/admin/card-action-handlers', {
       name: '',
-      type: 'add_design_visit_to_calendar',
-      config: {},
+      type: 'schedule_visit',
+      config: { visitType: 'design' },
       bindings: [{ substatus_id: 'not-a-number' }],
     });
     assertBadRequest('NEG-16: substatus_id non-numeric string rejected', r, 'substatus_id');
   }
 
   // NEG-17: PATCH with defaultDurationMin < 5
-  // Scaffold: create a valid DV handler to patch against.
+  // Scaffold: create a valid schedule_visit handler to patch against.
   {
     const scaffoldRes = await adminClient.post('/api/admin/card-action-handlers', {
       name: 'privtest-neg17-scaffold',
-      type: 'add_design_visit_to_calendar',
-      config: { defaultDurationMin: 60 },
+      type: 'schedule_visit',
+      config: { visitType: 'design', defaultDurationMin: 60 },
       bindings: [],
     });
     const scaffoldId = scaffoldRes.json?.id;
@@ -1309,8 +1309,9 @@ async function main() {
     // admin.html's save flow does).
     const createDvRes = await adminClient.post('/api/admin/card-action-handlers', {
       name: HANDLER_NAME_DV,
-      type: 'add_design_visit_to_calendar',
+      type: 'schedule_visit',
       config: {
+        visitType:          'design',
         defaultDurationMin: 60,
         defaultTitle:       'PrivTest visit title',
       },
@@ -1355,7 +1356,7 @@ async function main() {
       'BroadcastChannel triggers salesTab to refresh its handler lookup',
       `cardActionHandlerFor('sales', '${LBL_KEY_DV}') returns the new handler`,
       `got=${JSON.stringify(afterBc)}`,
-      !!afterBc && afterBc.id === dvHandlerId && afterBc.type === 'add_design_visit_to_calendar',
+      !!afterBc && afterBc.id === dvHandlerId && afterBc.type === 'schedule_visit',
     );
 
     await adminTab.close();
@@ -1375,7 +1376,7 @@ async function main() {
       div.className = 'eq-card-action';
       div.id = '__cah-test-card-dv';
       div.setAttribute('data-card-action-handler-id',    handlerId);
-      div.setAttribute('data-card-action-handler-type',  'add_design_visit_to_calendar');
+      div.setAttribute('data-card-action-handler-type',  'schedule_visit');
       div.setAttribute('data-card-action-contact-id',    id);
       div.setAttribute('data-card-action-contact-name',  name);
       div.setAttribute('data-card-action-contact-email', email);
@@ -1661,8 +1662,8 @@ async function main() {
 
     const createLblRes = await adminClient.post('/api/admin/card-action-handlers', {
       name: HANDLER_NAME_LBL,
-      type: 'add_design_visit_to_calendar',
-      config: {},
+      type: 'schedule_visit',
+      config: { visitType: 'design' },
       bindings: [{ stage_key: 'sales', status_key: LBL_KEY_OVR }],
     });
     const createSubRes = await adminClient.post('/api/admin/card-action-handlers', {
@@ -1794,8 +1795,8 @@ async function main() {
     // Create handler A via API — this also creates the binding normally.
     const createConflictARes = await adminClient.post('/api/admin/card-action-handlers', {
       name:     HANDLER_NAME_CONFLICT_A,
-      type:     'add_design_visit_to_calendar',
-      config:   {},
+      type:     'schedule_visit',
+      config:   { visitType: 'design' },
       bindings: [{ stage_key: 'sales', status_key: LBL_KEY_CONFLICT }],
     });
     record(
@@ -4858,7 +4859,7 @@ async function writeReport(runId, findings) {
     '  - NEG-28: PATCH with `stage_key=__global__` and non-empty `status_key` → 400.',
     '  - NEG-29: PUT `stage-action-labels` with `stage_key=__global__` and empty `status_key` → 200 (accepted).',
     '  - NEG-30: PUT `stage-action-labels` with `stage_key=__global__` and non-empty `status_key` → 400.',
-    '  Both handler types (`add_design_visit_to_calendar`, `summarise_phone_call`)',
+    '  Both handler types (`schedule_visit`, `summarise_phone_call`)',
     '  and both binding shapes (label and substatus) are exercised.',
     '- **(A) BroadcastChannel cross-tab refresh**: a second same-browser tab',
     '  posts `card_action_handlers_changed`; the Sales-tab listener re-fetches',

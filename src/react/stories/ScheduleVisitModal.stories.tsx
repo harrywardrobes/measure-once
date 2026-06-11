@@ -28,7 +28,7 @@ export const LockedTypeDesign: Story = {
   args: {
     visitType:      'design',
     contactAddress: '14 Oak Street, London, SW1A 1AA',
-    handler:        { id: 1, type: 'add_design_visit_to_calendar', config: { defaultDurationMin: 90 }, bindings: [] },
+    handler:        { id: 1, type: 'schedule_visit', config: { visitType: 'design', defaultDurationMin: 90 }, bindings: [] },
   },
 };
 
@@ -37,12 +37,20 @@ export const LockedTypeSurvey: Story = {
   args: {
     visitType:      'survey',
     contactAddress: '22 Elm Avenue, Manchester, M1 2AB',
-    handler:        { id: 2, type: 'schedule_visit', config: {}, bindings: [] },
+    handler:        { id: 2, type: 'schedule_visit', config: { visitType: 'survey' }, bindings: [] },
+  },
+};
+
+export const LockedTypeOther: Story = {
+  name: 'Locked visit type — other',
+  args: {
+    visitType: 'other',
+    handler:   { id: 3, type: 'schedule_visit', config: { visitType: 'other' }, bindings: [] },
   },
 };
 
 export const FreeTypeSelector: Story = {
-  name: 'Free visit-type selector (no lock)',
+  name: 'Free visit-type selector (direct booking, no handler)',
   args: {
     contactAddress: '7 Birch Road, Bristol, BS1 3CD',
   },
@@ -53,7 +61,7 @@ export const WithEmailToggleExpanded: Story = {
   args: {
     visitType:      'design',
     contactAddress: '14 Oak Street, London, SW1A 1AA',
-    handler:        { id: 1, type: 'add_design_visit_to_calendar', config: {}, bindings: [] },
+    handler:        { id: 1, type: 'schedule_visit', config: { visitType: 'design' }, bindings: [] },
   },
   decorators: [
     (Story) => {
