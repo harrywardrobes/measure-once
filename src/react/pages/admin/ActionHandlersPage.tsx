@@ -63,6 +63,7 @@ export const NO_CONFIG_HANDLER_TYPES: ReadonlySet<string> = new Set([
   'review_customer_photos',
   'arrange_visit',
   'contact_customer',
+  'open_deal',
 ]);
 
 const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
@@ -150,6 +151,13 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '  – Not proceeding: updates HubSpot lead status to NOT_SUITABLE immediately.\n' +
     '• Draft persistence: modal position is saved to sessionStorage per contact so a page refresh restores the current step.\n' +
     'Optional config keys: defaultDurationMin (5–1440, default 60), defaultTitle (≤120 chars).',
+  open_deal:
+    'Clicking the action on a card opens a hub for managing a deal that has reached the OPEN_DEAL status.\n' +
+    '• Three paths:\n' +
+    '  – Request amendments: customer has requested changes — allows logging the amendment request. HubSpot lead status stays OPEN_DEAL.\n' +
+    '  – Accept deal: a 3-step wizard collects acceptance details, sends a deposit invoice email, and sets HubSpot lead status to DEPOSIT_INVOICE.\n' +
+    '  – Decline deal: a 2-step flow confirms the decline, sends a thank-you email, and sets HubSpot lead status to DECLINED_DEAL.\n' +
+    '• Contact info and QuickBooks estimate data are fetched at open time — no config keys required.',
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
