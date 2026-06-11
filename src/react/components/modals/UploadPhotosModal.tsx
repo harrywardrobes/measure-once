@@ -32,8 +32,8 @@ interface LinkStatus {
 }
 
 interface GeneratedLink {
-  formLink: string;
-  token: string;
+  formLink?: string;
+  token?: string;
   expiresAt: string;
   isResend?: boolean;
 }
@@ -220,7 +220,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
   }
 
   const handleCopyAndClose = useCallback(() => {
-    if (!generatedLink) return;
+    if (!generatedLink?.formLink) return;
     navigator.clipboard.writeText(generatedLink.formLink).catch(() => {
       // Clipboard write failed — close anyway
     }).finally(() => {
@@ -319,7 +319,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
             <strong>{ctx.contactEmail || ctx.contactName || 'the customer'}</strong>.
             They'll receive a link to fill in their details and upload photos of their space.
           </Typography>
-          {generatedLink && (
+          {generatedLink?.formLink && (
             <Stack spacing={0.5}>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Link (still copyable):
@@ -353,18 +353,20 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
           ))}
         </Stack>
 
-        <Stack spacing={0.5}>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Customer link — copy to share manually:
-          </Typography>
-          {linkError ? (
-            <Typography variant="caption" color="error">
-              Could not generate link: {linkError}
+        {generatedLink?.formLink && (
+          <Stack spacing={0.5}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Customer link — copy to share manually:
             </Typography>
-          ) : generatedLink ? (
-            <CopyLinkField url={generatedLink.formLink} />
-          ) : null}
-        </Stack>
+            {linkError ? (
+              <Typography variant="caption" color="error">
+                Could not generate link: {linkError}
+              </Typography>
+            ) : (
+              <CopyLinkField url={generatedLink.formLink} />
+            )}
+          </Stack>
+        )}
 
         {error && (
           <Typography variant="caption" color="error">{error}</Typography>
@@ -430,7 +432,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose }: Pro
     return (
       <>
         <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
-        {generatedLink && !linkError && (
+        {generatedLink?.formLink && !linkError && (
           <Button
             onClick={handleCopyAndClose}
             disabled={submitting || copyAndClosing}

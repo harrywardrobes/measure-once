@@ -11,6 +11,7 @@ const nodemailer = require('nodemailer');
 const axios      = require('axios').create({ timeout: 12000 });
 const path       = require('path');
 const fs         = require('fs');
+const os         = require('os');
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
@@ -326,9 +327,19 @@ async function fetchContactFromHubSpot(contactId) {
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file (client compresses to ≤1.5 MB before upload)
 const MAX_PHOTO_FILES = 15;
+// Maximum total files that may be uploaded across all batches for a single token.
+// Prevents storage exhaustion from repeated uploads against one bearer link.
+const MAX_TOTAL_UPLOADS_PER_TOKEN = 50;
 
+// Write upload data to disk (OS temp dir) rather than buffering in Node's heap.
+// This eliminates the up-to-225 MB per-request RAM spike that memoryStorage()
+// would cause, and lets us stream directly to object storage via uploadFromFilename.
 const _photoUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+    filename: (_req, _file, cb) =>
+      cb(null, `ci-upload-${crypto.randomBytes(16).toString('hex')}`),
+  }),
   limits: { fileSize: MAX_PHOTO_BYTES, files: MAX_PHOTO_FILES },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME.has(file.mimetype.toLowerCase())) cb(null, true);
@@ -346,7 +357,11 @@ function _friendlyStorageError(err) {
   return err;
 }
 
-async function uploadPhotoBufferToStorage(buffer, mimeType) {
+// Upload a photo from a local temp file path directly to object storage.
+// Using uploadFromFilename avoids loading the full file into Node's heap —
+// the client streams from disk. The temp file is the caller's responsibility
+// to delete after this function returns (whether it succeeds or throws).
+async function uploadPhotoFileToStorage(filePath, mimeType) {
   const { Client } = require('@replit/object-storage');
   let client;
   try {
@@ -358,14 +373,10 @@ async function uploadPhotoBufferToStorage(buffer, mimeType) {
   const ext = extMap[mimeType.toLowerCase()] || 'jpg';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `customer-info-photos/${id}.${ext}`;
-  let res;
   try {
-    res = await client.uploadFromBytes(name, buffer, { compress: false });
+    await client.uploadFromFilename(name, filePath);
   } catch (e) {
     throw _friendlyStorageError(e);
-  }
-  if (res && res.ok === false) {
-    throw _friendlyStorageError(new Error('Object storage upload failed: ' + (res.error?.message || 'unknown')));
   }
   return `obj:ci_${id}.${ext}`;
 }
@@ -444,6 +455,35 @@ function checkIpResendLimit(ip) {
   if (hits.length >= max) return false;
   hits.push(now);
   _resendIpLog.set(ip, hits);
+  return true;
+}
+
+// ── In-memory rate limiters for the public photo upload endpoint ───────────────
+// Per-IP: max 10 upload requests per IP per 10 minutes (broad abuse shield).
+// Per-token: max 5 upload requests per token per 10 minutes (per-link cap).
+// Both are checked before multer writes any bytes, providing defense-in-depth.
+const _uploadIpLog    = new Map();
+const _uploadTokenLog = new Map();
+
+function checkUploadIpRateLimit(ip) {
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const max = 10;
+  const hits = (_uploadIpLog.get(ip) || []).filter(t => now - t < windowMs);
+  if (hits.length >= max) return false;
+  hits.push(now);
+  _uploadIpLog.set(ip, hits);
+  return true;
+}
+
+function checkTokenUploadRateLimit(tokenHash) {
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const max = 5;
+  const hits = (_uploadTokenLog.get(tokenHash) || []).filter(t => now - t < windowMs);
+  if (hits.length >= max) return false;
+  hits.push(now);
+  _uploadTokenLog.set(tokenHash, hits);
   return true;
 }
 
@@ -569,7 +609,26 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
       genClient.release();
     }
 
-    res.status(201).json({ formLink, expiresAt: expiresAt.toISOString(), token: rawToken, isResend });
+    // Only managers and admins may receive the raw bearer URL in the response.
+    // Members can still trigger the send flow via POST /api/card-actions/upload-photos-and-info
+    // (which uses the pre-generated token internally), but they must not be able
+    // to copy the link and impersonate the customer on the public form.
+    const userId = req.user?.claims?.sub;
+    let canReceiveLink = false;
+    try {
+      const privR = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+      const level = privR.rows[0]?.privilege_level || 'member';
+      canReceiveLink = level === 'manager' || level === 'admin';
+    } catch {
+      // Default to not exposing the bearer link if the privilege lookup fails.
+    }
+
+    const responseBody = { expiresAt: expiresAt.toISOString(), isResend };
+    if (canReceiveLink) {
+      responseBody.formLink = formLink;
+      responseBody.token = rawToken;
+    }
+    res.status(201).json(responseBody);
   }
 );
 
@@ -957,11 +1016,18 @@ router.post('/api/customer-info/:token/resend-expired', express.json({ limit: '4
   res.json({ ok: true, maskedEmail: row.masked_email || '' });
 });
 
+// Helper: delete a list of temp file paths left by diskStorage, ignoring errors.
+async function _deleteTempFiles(paths) {
+  for (const p of paths) {
+    try { await fs.promises.unlink(p); } catch { /* ignore */ }
+  }
+}
+
 // Public: upload photos (before form submission)
 // POST /api/customer-info/:token/photos
 router.post('/api/customer-info/:token/photos',
   async (req, res, next) => {
-    // Validate token before accepting upload bytes
+    // Validate token first — before accepting any upload bytes (even to disk).
     const row = await lookupToken(req.params.token);
     if (!row) return res.status(404).json({ error: 'Link not found.' });
     if (new Date(row.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired.' });
@@ -969,19 +1035,67 @@ router.post('/api/customer-info/:token/photos',
     req._cisRow = row;
     next();
   },
+  async (req, res, next) => {
+    // IP rate limit: max 10 upload requests per IP per 10 minutes.
+    if (!checkUploadIpRateLimit(req.ip)) {
+      return res.status(429).json({ error: 'Too many photo uploads — please wait a few minutes before uploading more.' });
+    }
+    // Per-token rate limit: max 5 upload requests per token per 10 minutes.
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    if (!checkTokenUploadRateLimit(tokenHash)) {
+      return res.status(429).json({ error: 'Too many photo uploads — please wait a few minutes before uploading more.' });
+    }
+    // Pre-check: reject early when the token is already at capacity so multer
+    // never writes unnecessary temp files to disk.
+    if ((req._cisRow.photo_upload_count || 0) >= MAX_TOTAL_UPLOADS_PER_TOKEN) {
+      return res.status(429).json({ error: 'Photo upload limit reached for this link. Please contact us if you need to add more photos.' });
+    }
+    req._ciTokenHash = tokenHash;
+    next();
+  },
+  // multer writes each file to the OS temp dir on disk — no heap buffering.
   _photoUpload.array('photos', MAX_PHOTO_FILES),
   async (req, res) => {
     const files = req.files || [];
+    const tempPaths = files.map(f => f.path);
+
     if (!files.length) {
       return res.status(400).json({ error: 'No files uploaded.' });
     }
+
+    // Atomically claim quota slots before uploading to object storage.
+    // The conditional WHERE clause ensures concurrent requests cannot together
+    // push the total past MAX_TOTAL_UPLOADS_PER_TOKEN — PostgreSQL's row-level
+    // lock on the UPDATE guarantees this is race-free.
+    let quotaResult;
+    try {
+      quotaResult = await pool.query(
+        `UPDATE customer_info_submissions
+         SET photo_upload_count = photo_upload_count + $1
+         WHERE id = $2 AND photo_upload_count + $1 <= $3
+         RETURNING photo_upload_count`,
+        [files.length, req._cisRow.id, MAX_TOTAL_UPLOADS_PER_TOKEN]
+      );
+    } catch (err) {
+      await _deleteTempFiles(tempPaths);
+      logger.error({ err: err.message }, '[customer-info] Quota claim failed:');
+      return res.status(500).json({ error: 'Could not process upload. Please try again.' });
+    }
+    if (quotaResult.rowCount === 0) {
+      await _deleteTempFiles(tempPaths);
+      return res.status(429).json({ error: 'Photo upload limit reached for this link. Please contact us if you need to add more photos.' });
+    }
+
+    // Upload each file from disk to object storage via uploadFromFilename
+    // (streams from disk — no heap buffering).
     const keys = [];
     for (const file of files) {
       try {
-        const key = await uploadPhotoBufferToStorage(file.buffer, file.mimetype);
+        const key = await uploadPhotoFileToStorage(file.path, file.mimetype);
         keys.push(key);
       } catch (err) {
         logger.error({ err: err.message }, '[customer-info] Photo upload failed:');
+        await _deleteTempFiles(tempPaths);
         const isStorageConfigErr = /bucket|object storage/i.test(err.message);
         const userMsg = isStorageConfigErr
           ? 'Photo uploads are temporarily unavailable. Please contact us and we\'ll be in touch to collect your photos another way.'
@@ -989,6 +1103,10 @@ router.post('/api/customer-info/:token/photos',
         return res.status(500).json({ error: userMsg });
       }
     }
+
+    // Always clean up all temp files before responding.
+    await _deleteTempFiles(tempPaths);
+
     res.json({ ok: true, keys });
   }
 );
