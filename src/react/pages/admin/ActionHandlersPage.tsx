@@ -152,7 +152,7 @@ interface ConflictData { total: number; conflicts: ConflictItem[]; }
 interface ActionSlot {
   kind: 'ls';
   stage_key?: string; status_key?: string;
-  label: string; rowLabel: string;
+  label: string; rowLabel?: string;
   hasLabel?: boolean;
 }
 interface ActionGroup { ls: { key: string; label: string; isNullRow: boolean }; slots: ActionSlot[]; }
@@ -237,8 +237,6 @@ function _buildActionSlotGroups(): ActionStage[] {
 
   const processLs = (ls: LeadStatus, stageKey: string) => {
     const lsKeyLower = String(ls.key || '').toLowerCase();
-    const groups: ActionGroup[] = [];
-    const slots: ActionSlot[]   = [];
 
     const dflt = labelsByKey.get(`${stageKey}|${lsKeyLower}`) || '';
     const hasHandler = _handlersRef.current.some(h =>
@@ -248,10 +246,12 @@ function _buildActionSlotGroups(): ActionStage[] {
       ),
     );
 
-    slots.push({ kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, rowLabel: 'Default action', hasLabel: !!dflt });
+    if (!hasHandler) return [];
 
-    groups.push({ ls: { key: ls.key, label: ls.label, isNullRow: !!ls.is_null_row }, slots });
-    return groups;
+    const slots: ActionSlot[] = [
+      { kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, hasLabel: !!dflt },
+    ];
+    return [{ ls: { key: ls.key, label: ls.label, isNullRow: !!ls.is_null_row }, slots }];
   };
 
   // Global null slot (stage_key='__global__', status_key='').
@@ -265,13 +265,13 @@ function _buildActionSlotGroups(): ActionStage[] {
       (b.status_key || '') === '',
     ),
   );
-  const globalStage: ActionStage | null = (globalLabel || hasGlobalHandler) ? {
+  const globalStage: ActionStage | null = hasGlobalHandler ? {
     stage: { key: '__global__', label: 'No lead status' },
     groups: [{
       ls: { key: '__GLOBAL_NULL__', label: '', isNullRow: false },
       slots: [{
         kind: 'ls', stage_key: '__global__', status_key: '',
-        label: globalLabelDisplay, rowLabel: 'Default action',
+        label: globalLabelDisplay,
         hasLabel: !!globalLabel,
       }],
     }],

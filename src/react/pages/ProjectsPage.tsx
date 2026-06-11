@@ -724,61 +724,59 @@ function ProjectCard({
         })}
       </Box>
 
-      {/* Action strip — rendered when either a handler is configured for this card's
-          stage/lead-status/substatus, OR a label-only row is set for the stage in
-          Card Actions. When a handler is present, clicking fires it; when handler is
-          start_design_visit and a draft visit exists, the strip doubles as "Continue
-          designing". A label-only strip (no handler) is non-interactive and shows no
-          chevron. */}
-      {(!!handler || !!actionLabel) && (
-        <Box
-          role={handler ? 'button' : undefined}
-          tabIndex={handler ? -1 : undefined}
-          title={handler ? (actionLabel || 'Run action') : undefined}
-          onClick={handler ? handleActionClick : undefined}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            px: '14px',
-            py: '9px',
-            bgcolor: actionTint,
-            borderTop: `1px solid ${BRAND_COLORS.stone}`,
-            cursor: handler ? (dispatchingAction ? 'wait' : 'pointer') : 'default',
-            opacity: dispatchingAction ? 0.7 : 1,
-            transition: 'opacity 0.15s, filter 0.12s',
-            '&:hover': (handler && !dispatchingAction) ? { filter: 'brightness(0.96)' } : undefined,
-          }}
-        >
-          <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
-            {dispatchingAction ? 'Opening…' : (
-              <>
-                {activityCounter && (
-                  <Tooltip
-                    title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
-                    arrow
-                    placement="bottom"
-                    enterDelay={200}
+      {/* Action strip — always rendered. When a handler is bound to this card's
+          stage/lead-status the strip is interactive, shows the action label and
+          chevron, and fires the handler on click (start_design_visit with a draft
+          doubles as "Continue designing"). When no handler is configured the strip
+          renders as a neutral grey placeholder (non-interactive, no label, no
+          chevron) so the card layout remains consistent. */}
+      <Box
+        role={handler ? 'button' : undefined}
+        tabIndex={handler ? -1 : undefined}
+        title={handler ? (actionLabel || 'Run action') : undefined}
+        onClick={handler ? handleActionClick : undefined}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          px: '14px',
+          py: '9px',
+          bgcolor: handler ? actionTint : BRAND_COLORS.stone,
+          borderTop: `1px solid ${BRAND_COLORS.stone}`,
+          cursor: handler ? (dispatchingAction ? 'wait' : 'pointer') : 'default',
+          opacity: dispatchingAction ? 0.7 : 1,
+          transition: 'opacity 0.15s, filter 0.12s',
+          '&:hover': (handler && !dispatchingAction) ? { filter: 'brightness(0.96)' } : undefined,
+        }}
+      >
+        <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
+          {handler && (dispatchingAction ? 'Opening…' : (
+            <>
+              {activityCounter && (
+                <Tooltip
+                  title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
+                  arrow
+                  placement="bottom"
+                  enterDelay={200}
+                >
+                  <Box
+                    component="span"
+                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
                   >
-                    <Box
-                      component="span"
-                      sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
-                    >
-                      {activityCounter} ·
-                    </Box>
-                  </Tooltip>
-                )}
-                {actionLabel}
-              </>
-            )}
-          </Typography>
-          {handler && (dispatchingAction ? (
-            <CircularProgress size={12} sx={{ color: actionTextColor }} />
-          ) : (
-            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+                    {activityCounter} ·
+                  </Box>
+                </Tooltip>
+              )}
+              {actionLabel}
+            </>
           ))}
-        </Box>
-      )}
+        </Typography>
+        {handler && (dispatchingAction ? (
+          <CircularProgress size={12} sx={{ color: actionTextColor }} />
+        ) : (
+          <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+        ))}
+      </Box>
 
       {/* Invoice badge */}
       <InvoiceBadge contact={contact} qb={qb} onOpen={onOpenInvoice} />
