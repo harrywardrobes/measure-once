@@ -28,6 +28,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -154,6 +155,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     loading: boolean;
     error: boolean;
   }>({ subject: '', bodyText: '', html: '', loading: false, error: false });
+  const [declineEmailRefreshCount, setDeclineEmailRefreshCount] = useState(0);
 
   // Email preview state (accept confirm step)
   const [depositEmailPreview, setDepositEmailPreview] = useState<{ subject: string; html: string; text: string } | null>(null);
@@ -186,7 +188,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     saveDraft({ step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou });
   }, [step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch live decline email preview when the step becomes visible
+  // Fetch live decline email preview when the step becomes visible (or refresh is triggered)
   useEffect(() => {
     if (step !== 'decline_email') return;
     let cancelled = false;
@@ -205,7 +207,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: false, error: true });
       });
     return () => { cancelled = true; };
-  }, [step, contactData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, contactData, declineEmailRefreshCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load data on open ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -837,9 +839,26 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
           Would you like to send the customer a brief thank-you email?
         </Typography>
         <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-            Email the customer will receive:
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
+            <Typography variant="caption" color="text.secondary">
+              Email the customer will receive:
+            </Typography>
+            <Tooltip title="Refresh preview">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={emailLoading}
+                  onClick={() => setDeclineEmailRefreshCount(c => c + 1)}
+                  sx={{ ml: 0.5, p: 0.25 }}
+                  aria-label="Refresh email preview"
+                >
+                  {emailLoading
+                    ? <CircularProgress size={13} />
+                    : <RefreshIcon sx={{ fontSize: 15 }} />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
           {emailLoading && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', py: 1 }}>
               <CircularProgress size={14} />
