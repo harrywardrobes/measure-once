@@ -410,11 +410,11 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
 function DepositInvoiceBadge({
   depositInvoiceId,
   depositInvoiceDocNum,
-  paid,
+  paymentState,
 }: {
   depositInvoiceId: string;
   depositInvoiceDocNum: string | null;
-  paid?: boolean | null;
+  paymentState?: 'paid' | 'partial' | 'unpaid' | null;
 }) {
   const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -423,13 +423,14 @@ function DepositInvoiceBadge({
     window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
   };
   const title =
-    paid === true  ? 'Deposit paid — view invoice' :
-    paid === false ? 'Deposit outstanding — view invoice' :
-                    'View deposit invoice';
+    paymentState === 'paid'    ? 'Deposit paid — view invoice' :
+    paymentState === 'partial' ? 'Deposit partially paid — view invoice' :
+    paymentState === 'unpaid'  ? 'Deposit unpaid — view invoice' :
+                                 'View deposit invoice';
   const colors =
-    paid === true  ? { borderColor: STATUS_COLORS.success.border,  bgcolor: STATUS_COLORS.success.bg,      color: STATUS_COLORS.success.text,  hoverBg: STATUS_COLORS.successLight.bg  } :
-    paid === false ? { borderColor: STATUS_COLORS.warning.border,  bgcolor: STATUS_COLORS.warning.bg,      color: STATUS_COLORS.warning.text,  hoverBg: STATUS_COLORS.warningLight.bg  } :
-                     null;
+    paymentState === 'paid'    ? { borderColor: STATUS_COLORS.success.border, bgcolor: STATUS_COLORS.success.bg, color: STATUS_COLORS.success.text, hoverBg: STATUS_COLORS.successLight.bg } :
+    paymentState === 'partial' ? { borderColor: STATUS_COLORS.warning.border, bgcolor: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text, hoverBg: STATUS_COLORS.warningLight.bg } :
+                                 { borderColor: STATUS_COLORS.neutral.bg,     bgcolor: STATUS_COLORS.neutral.bg, color: STATUS_COLORS.neutral.text, hoverBg: STATUS_COLORS.neutral.bg     };
   return (
     <Box
       component="button"
@@ -439,9 +440,9 @@ function DepositInvoiceBadge({
       sx={{
         appearance: 'none',
         border: '1px solid',
-        borderColor: colors ? colors.borderColor : 'primary.main',
-        bgcolor: colors ? colors.bgcolor : 'primary.50',
-        color: colors ? colors.color : 'primary.dark',
+        borderColor: colors.borderColor,
+        bgcolor: colors.bgcolor,
+        color: colors.color,
         px: 1,
         py: 0.25,
         borderRadius: 1,
@@ -449,7 +450,7 @@ function DepositInvoiceBadge({
         fontWeight: 600,
         cursor: 'pointer',
         lineHeight: 1.4,
-        '&:hover': { bgcolor: colors ? colors.hoverBg : 'primary.100' },
+        '&:hover': { bgcolor: colors.hoverBg },
       }}
     >
       {label}
@@ -553,7 +554,7 @@ function CustomerCard({
   resolveActionLabel,
   draftVisitId,
   depositInvoice,
-  depositInvoicePaid,
+  depositInvoicePaymentState,
   syncStatus,
   syncFailedIds,
   lastAttempt,
@@ -577,11 +578,12 @@ function CustomerCard({
   draftVisitId?: number | string | null;
   depositInvoice?: { id: string; docNum: string | null } | null;
   /**
-   * Whether the deposit invoice has been paid, derived from the QB invoices
-   * store. `true` = paid, `false` = outstanding, `null` = unknown (QB not
-   * connected, not yet loaded, or invoice not found in the list).
+   * Payment state of the deposit invoice derived from the QB invoices store.
+   * `'paid'` = fully paid, `'partial'` = partially paid, `'unpaid'` = no
+   * payment received, `null` = unknown (QB not connected, not yet loaded, or
+   * invoice not found in the QB list).
    */
-  depositInvoicePaid?: boolean | null;
+  depositInvoicePaymentState?: 'paid' | 'partial' | 'unpaid' | null;
   /**
    * Offline-queue status for this contact's pending status/archive edits, or
    * null when nothing is queued. Drives the per-card "Pending sync" /
@@ -738,7 +740,7 @@ function CustomerCard({
               <DepositInvoiceBadge
                 depositInvoiceId={depositInvoice.id}
                 depositInvoiceDocNum={depositInvoice.docNum}
-                paid={depositInvoicePaid}
+                paymentState={depositInvoicePaymentState}
               />
             )}
           </Box>
@@ -1635,13 +1637,17 @@ export function CustomersPage(): React.ReactElement {
                   resolveActionLabel={resolveActionLabel}
                   draftVisitId={draftVisitIds[contact.id] ?? null}
                   depositInvoice={depositInvoiceMap[contact.id] ?? null}
-                  depositInvoicePaid={(() => {
+                  depositInvoicePaymentState={(() => {
                     if (!qbLoaded) return null;
                     const di = depositInvoiceMap[contact.id];
                     if (!di) return null;
                     const inv = qbInvoicesById.get(di.id);
                     if (!inv) return null;
-                    return (inv.balance ?? 0) <= 0;
+                    const balance = Number(inv.balance ?? 0);
+                    const total   = Number(inv.totalAmt ?? 0);
+                    if (balance <= 0) return 'paid';
+                    if (total > 0 && balance < total) return 'partial';
+                    return 'unpaid';
                   })()}
                   syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
                   syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
