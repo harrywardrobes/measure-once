@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_PRIORITY_FIRST } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -162,6 +162,16 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'name-desc', label: 'Name Z–A' },
 ];
 
+function readPriorityFirst(): boolean {
+  try {
+    const v = localStorage.getItem(CUSTOMERS_PRIORITY_FIRST);
+    if (v === null) return true;
+    return v !== '0';
+  } catch {
+    return true;
+  }
+}
+
 function readUrlState() {
   const p = new URLSearchParams(location.search);
   return {
@@ -171,6 +181,7 @@ function readUrlState() {
     q: p.get('q') || '',
     stage: p.get('stage') || '',
     archived: p.get('archived') === '1',
+    priorityFirst: p.has('priorityFirst') ? p.get('priorityFirst') !== '0' : readPriorityFirst(),
   };
 }
 
@@ -181,6 +192,7 @@ function writeUrlState(s: {
   q: string;
   stage: string;
   archived: boolean;
+  priorityFirst: boolean;
 }) {
   const qs = new URLSearchParams();
   if (s.page > 1) qs.set('page', String(s.page));
@@ -189,6 +201,7 @@ function writeUrlState(s: {
   if (s.q) qs.set('q', s.q);
   if (s.stage) qs.set('stage', s.stage);
   if (s.archived) qs.set('archived', '1');
+  if (!s.priorityFirst) qs.set('priorityFirst', '0');
   const str = qs.toString();
   history.replaceState(null, '', str ? '?' + str : location.pathname);
 }
@@ -900,6 +913,7 @@ export function CustomersPage(): React.ReactElement {
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
   const [showExcluded, setShowExcluded] = React.useState(false);
+  const [priorityFirst, setPriorityFirst] = React.useState<boolean>(initial.priorityFirst);
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
@@ -1029,7 +1043,7 @@ export function CustomersPage(): React.ReactElement {
     setPage,
     patchContact,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize },
+    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize, priorityFirst },
     { onFetchSuccess: scheduleCounts },
   );
 
@@ -1183,6 +1197,15 @@ export function CustomersPage(): React.ReactElement {
     return () => clearTimeout(h);
   }, [searchInput]);
 
+  // Persist priorityFirst to localStorage when it changes.
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(CUSTOMERS_PRIORITY_FIRST, priorityFirst ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [priorityFirst]);
+
   // Reflect filter changes in the URL.
   React.useEffect(() => {
     writeUrlState({
@@ -1192,8 +1215,9 @@ export function CustomersPage(): React.ReactElement {
       q: search,
       stage: stageFilter,
       archived: showArchived,
+      priorityFirst,
     });
-  }, [page, leadStatus, sortBy, search, stageFilter, showArchived]);
+  }, [page, leadStatus, sortBy, search, stageFilter, showArchived, priorityFirst]);
 
   // Load lead statuses + counts on mount, then re-populate
   // the native select once the DOM element has been mounted.
@@ -1623,6 +1647,23 @@ export function CustomersPage(): React.ReactElement {
               }}
             />
           </Stack>
+
+          {!leadStatus && (
+            <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
+              <Tooltip
+                title="Pin contacts with no lead status to the top of the list"
+                arrow
+                enterDelay={400}
+              >
+                <Typography variant="body2" sx={{ cursor: 'default' }}>Priority first</Typography>
+              </Tooltip>
+              <Toggle
+                checked={priorityFirst}
+                title="Pin no-status contacts to top"
+                onChange={(next) => setPriorityFirst(next)}
+              />
+            </Stack>
+          )}
         </Stack>
 
         {error ? <Alert severity="error">{error}</Alert> : null}

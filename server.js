@@ -1499,7 +1499,18 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       });
     }
 
-    contacts = [...contacts].sort(comparator);
+    const priorityFirst = req.query.priorityFirst === '1';
+    const effectiveComparator =
+      priorityFirst && !leadStatus
+        ? (a, b) => {
+            const aNull = !a.properties?.hs_lead_status;
+            const bNull = !b.properties?.hs_lead_status;
+            if (aNull && !bNull) return -1;
+            if (!aNull && bNull) return 1;
+            return comparator(a, b);
+          }
+        : comparator;
+    contacts = [...contacts].sort(effectiveComparator);
 
     const total      = contacts.length;
     const totalPages = Math.max(1, Math.ceil(total / limit));

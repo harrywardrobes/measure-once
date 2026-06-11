@@ -41,6 +41,12 @@ export type UsePaginatedContactsParams = {
   refreshNonce?: number;
   staleAfterDays?: number;
   pageSize?: number;
+  /**
+   * When true (the default), contacts with no lead status are pinned to the
+   * top of the list ahead of the active sort order, unless a specific lead
+   * status filter is already applied (in which case pinning has no effect).
+   */
+  priorityFirst?: boolean;
 };
 
 export type UsePaginatedContactsResult = {
@@ -83,6 +89,7 @@ type OfflineFilterParams = {
   excludedStatusKeys?: Set<string>;
   page: number;
   limit: number;
+  priorityFirst?: boolean;
 };
 
 function offlineComparator(sort: string): (a: PaginatedContact, b: PaginatedContact) => number {
@@ -125,7 +132,7 @@ export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
   params: OfflineFilterParams,
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
-  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, limit } = params;
+  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, limit, priorityFirst } = params;
   let list = cached;
 
   // Mirror the server-side excluded_from_sales filter: hide excluded contacts
@@ -170,7 +177,18 @@ export function filterSortPaginateCachedContacts(
     });
   }
 
-  list = [...list].sort(offlineComparator(sortBy));
+  const baseComparator = offlineComparator(sortBy);
+  const effectiveComparator =
+    priorityFirst && !leadStatus
+      ? (a: PaginatedContact, b: PaginatedContact): number => {
+          const aNull = !a.properties?.hs_lead_status;
+          const bNull = !b.properties?.hs_lead_status;
+          if (aNull && !bNull) return -1;
+          if (!aNull && bNull) return 1;
+          return baseComparator(a, b);
+        }
+      : baseComparator;
+  list = [...list].sort(effectiveComparator);
 
   const total = list.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -193,7 +211,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize } = params;
+  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -205,7 +223,7 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize });
+  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
     prevFiltersRef.current.stage !== stage ||
@@ -215,10 +233,11 @@ export function usePaginatedContacts(
     prevFiltersRef.current.showExcluded !== showExcluded ||
     prevFiltersRef.current.refreshNonce !== refreshNonce ||
     prevFiltersRef.current.staleAfterDays !== staleAfterDays ||
-    prevFiltersRef.current.pageSize !== pageSize;
+    prevFiltersRef.current.pageSize !== pageSize ||
+    prevFiltersRef.current.priorityFirst !== priorityFirst;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize };
+    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the
@@ -287,6 +306,7 @@ export function usePaginatedContacts(
     if (showArchived) qs.set('archived', '1');
     if (showExcluded) qs.set('includeExcluded', '1');
     if (staleAfterDays !== undefined) qs.set('staleAfterDays', String(staleAfterDays));
+    if (priorityFirst) qs.set('priorityFirst', '1');
 
     (async () => {
       try {
@@ -345,6 +365,7 @@ export function usePaginatedContacts(
               excludedStatusKeys,
               page: effectivePage,
               limit,
+              priorityFirst,
             });
           setContacts(results);
           setTotal(filteredTotal);
@@ -378,7 +399,7 @@ export function usePaginatedContacts(
     return () => {
       cancelled = true;
     };
-  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst]);
 
   const patchContact = React.useCallback(
     (contactId: string, props: Record<string, string | undefined>) => {
