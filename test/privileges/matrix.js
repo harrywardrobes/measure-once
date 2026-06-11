@@ -78,7 +78,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/contacts-substatus-counts?leadStatus=OPEN_DEAL', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/lead-statuses',              level: 'auth' },
   { method: 'GET',    path: '/api/stage-action-labels',        level: 'auth' },
-  { method: 'GET',    path: '/api/lead-substatuses',           level: 'auth' },
   { method: 'GET',    path: '/api/search-settings',            level: 'auth' },
   { method: 'GET',    path: '/api/whatsapp/config',            level: 'auth' },
   // Ideas board (no per-route gate; relies on the global isAuthenticated mount).
@@ -243,9 +242,6 @@ const ROUTES = [
   // Admin-only read endpoints elsewhere in server.js. These rows exist so the
   // matrix records a member→403 (and viewer→403) cell for each — closing the
   // PRIV-00-style gap that surfaced on /api/admin/card-action-handlers.
-  { method: 'GET',    path: '/api/admin/substatus-clear-failures',            level: 'admin' },
-  { method: 'POST',   path: '/api/admin/substatus-clear-failures/retry',       level: 'admin', body: {} },
-  { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-statuses',                        level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-statuses/__noop__/usage',          level: 'admin' },
   { method: 'GET',    path: '/api/admin/lead-status-health',                   level: 'admin' },
@@ -255,7 +251,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot/dev-mode',                     level: 'admin', body: { devMode: false } },
   { method: 'GET',    path: '/api/admin/server-env',                           level: 'admin' },
-  { method: 'GET',    path: '/api/admin/lead-substatuses',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/search-settings',                      level: 'admin' },
   { method: 'PUT',    path: '/api/admin/search-settings',                      level: 'admin', body: {} },
 
@@ -267,13 +262,6 @@ const ROUTES = [
   { method: 'DELETE', path: '/api/admin/lead-statuses/__noop__',               level: 'admin' },
   { method: 'PUT',    path: '/api/admin/stage-action-labels',                  level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/stage-action-labels/__noop__/__noop__', level: 'admin' },
-  { method: 'POST',   path: '/api/admin/lead-substatuses',                     level: 'admin', body: {} },
-  { method: 'PATCH',  path: '/api/admin/lead-substatuses/0',                   level: 'admin', body: {} },
-  { method: 'DELETE', path: '/api/admin/lead-substatuses/0',                   level: 'admin' },
-  { method: 'POST',   path: '/api/admin/lead-substatuses/sync-hubspot',        level: 'admin' },
-  { method: 'GET',    path: '/api/admin/substatus-clear-failures',             level: 'admin' },
-  { method: 'POST',   path: '/api/admin/substatus-clear-failures/retry',       level: 'admin', body: {} },
-  { method: 'DELETE', path: '/api/admin/substatus-clear-failures/0',           level: 'admin' },
   { method: 'GET',    path: '/api/admin/pending-count',                        level: 'admin' },
 
   // WhatsApp routes — admin-only but live outside the /api/admin/* prefix,
