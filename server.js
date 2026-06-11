@@ -21,7 +21,7 @@ const {
 const quickbooksRoutes = require('./quickbooks');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
-const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties } = require('./design-visits');
+const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties, ensureStartDesignVisitHandlerBindings } = require('./design-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
@@ -6711,6 +6711,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Hardcoded lead status key check failed'); }
     try { await ensureContactCustomerHandlerBindings(); }
     catch (e) { logger.error({ err: e }, '  Contact customer handler binding setup failed'); }
+    try { await ensureStartDesignVisitHandlerBindings(); }
+    catch (e) { logger.error({ err: e }, '  Start design visit handler binding setup failed'); }
     try { await seedStageActionLabelsDefaults(); }
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }

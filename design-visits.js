@@ -2245,4 +2245,55 @@ router.get('/api/design-visit-images/:key', async (req, res) => {
   }
 });
 
-module.exports = { router: router, setPatchContactProperties };
+// ── Seed start_design_visit handler + DESIGN_VISIT stage bindings ─────────────
+// Ensures a start_design_visit handler row exists and bindings for the four
+// DESIGN_VISIT stage statuses:
+//   (designvisit, 'design_scheduled')   → "Start Design Visit Wizard"
+//   (designvisit, 'design_in_progress') → (same handler, in-progress visits)
+//   (designvisit, 'design_sent')        → (same handler, sent visits)
+//   (designvisit, 'design_accepted')    → (same handler, accepted visits)
+// Uses WHERE NOT EXISTS so admin-configured overrides are never clobbered.
+// Idempotent — safe to call on every boot.
+async function ensureStartDesignVisitHandlerBindings() {
+  // Step 1: ensure a start_design_visit handler exists.
+  let handlerId;
+  const existing = await pool.query(
+    `SELECT id FROM card_action_handlers WHERE type = 'start_design_visit' ORDER BY id LIMIT 1`
+  );
+  if (existing.rows.length) {
+    handlerId = existing.rows[0].id;
+  } else {
+    const ins = await pool.query(
+      `INSERT INTO card_action_handlers (name, type, config)
+       VALUES ('Start Design Visit Wizard', 'start_design_visit', '{}')
+       RETURNING id`
+    );
+    handlerId = ins.rows[0].id;
+  }
+
+  // Step 2: ensure bindings for each DESIGN_VISIT stage status.
+  // WHERE NOT EXISTS prevents duplicate rows (no unique constraint on the
+  // table) and preserves any binding an admin has manually configured.
+  const bindings = [
+    { stage_key: 'designvisit', status_key: 'design_scheduled' },
+    { stage_key: 'designvisit', status_key: 'design_in_progress' },
+    { stage_key: 'designvisit', status_key: 'design_sent' },
+    { stage_key: 'designvisit', status_key: 'design_accepted' },
+  ];
+  for (const b of bindings) {
+    await pool.query(
+      `INSERT INTO card_action_handler_bindings (handler_id, stage_key, status_key)
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (
+         SELECT 1 FROM card_action_handler_bindings
+         WHERE stage_key IS NOT DISTINCT FROM $2
+           AND status_key IS NOT DISTINCT FROM $3
+       )`,
+      [handlerId, b.stage_key, b.status_key]
+    );
+  }
+
+  logger.info('[card-action-seeds] start_design_visit handler and bindings ensured.');
+}
+
+module.exports = { router: router, setPatchContactProperties, ensureStartDesignVisitHandlerBindings };
