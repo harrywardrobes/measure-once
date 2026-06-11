@@ -1,8 +1,8 @@
 'use strict';
 // test/dev-mode-bc-sync/run.js
 //
-// Regression guard for the `dev_mode_changed` BroadcastChannel wiring added
-// in task #1837.  The full production code path is exercised:
+// Regression guard for the `dev_mode_changed` BroadcastChannel wiring.
+// The full production code path is exercised:
 //
 //   Admin tab  →  DevEnvironmentPage toggle Switch
 //            →  POST /api/admin/hubspot/dev-mode

@@ -10,7 +10,7 @@
 //      with the middleware chain actually applied at the registration site
 //      (`requireAdmin` / `requireManagerOrAdmin` / `requirePrivilege('member'
 //      | 'manager')` / global `isAuthenticated`). This catches the drift
-//      gap called out in task #706: a sensitive admin route registered under
+//      gap: a sensitive admin route registered under
 //      a non-`/api/admin/*` prefix (the WhatsApp routes were the trigger)
 //      whose matrix row accidentally says `level: 'auth'` instead of
 //      `'admin'`. Without this check the matrix run still passes because

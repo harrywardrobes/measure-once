@@ -4,7 +4,7 @@ const { makeSkip } = require('../helpers/report');
 //
 // End-to-end live test for the Design Visit Handle image-upload flow.
 //
-// Covers (per task #687):
+// Covers:
 //   (S) Success path — open the Add Handle modal, fill Name + Style, attach a
 //       small PNG to #dvie-img-file, click Save:
 //        • POST /api/admin/design-visit-handles creates the handle row.

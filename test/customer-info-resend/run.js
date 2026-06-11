@@ -12,7 +12,7 @@ const PROBE_LABELS = [
 // test/customer-info-resend/run.js
 //
 // Integration test for the POST /api/customer-info/:token/resend-expired
-// endpoint added in task #1911.  Boots a disposable Express server against an
+// endpoint.  Boots a disposable Express server against an
 // isolated test database and exercises the full self-serve resend flow:
 //
 //   (A) Expired token — GET returns 410 with status:"expired" and maskedEmail

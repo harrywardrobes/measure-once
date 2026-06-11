@@ -2,7 +2,7 @@
 const { makeSkip3 } = require('../helpers/report');
 // test/skipped-photo-warning/run.js
 //
-// Regression guard for the skipped-photo warning alert added in task #1905.
+// Regression guard for the skipped-photo warning alert in CustomerInfoSubmissionsRail.
 //
 // When photos are too large to attach to the admin notification email, the
 // server stores email_skipped_count on the submission row.  The
@@ -337,7 +337,7 @@ async function writeReport(runId) {
     '- **[SKP-D] Anchor href — plural**: `email_skipped_count: 2`. The `<a>` element',
     '  inside the warning Alert (identified by `data-testid="skipped-photo-link"`) must',
     '  have an `href` equal to the first entry in `photoUrls`. Regression guard for the',
-    '  "still viewable here" anchor added in task #1946.',
+    '  "still viewable here" anchor in CustomerInfoSubmissionsRail.',
     '- **[SKP-D] Anchor href — singular**: Same check for `email_skipped_count: 1`.',
     '- **[SKP-E] Click + photo visibility**: `email_skipped_count: 2`. Clicks the',
     '  `[data-testid="skipped-photo-link"]` anchor inside the Alert, then asserts that',

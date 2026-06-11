@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 // test/settings-tab-load/run.js
 //
-// Regression guard for the race condition fixed in task #1110.
+// Regression guard for the waitForElement() race condition in loadHubspotStatus / loadLeadStatusesAdmin.
 // waitForElement() in loadHubspotStatus / loadLeadStatusesAdmin replaces the
 // early-return null checks that caused the badge to stay "Checking…" when the
 // Settings tab was first opened before the React island had mounted the DOM.
@@ -137,11 +137,11 @@ function writeReport(runId, findings) {
     '- **[ST-A] HubSpot badge text**: Opens the Settings tab while intercepting',
     '  `GET /api/hubspot/status` to return `{ connected: true }`. Polls until',
     '  `#hubspot-status-badge` text is "Connected" (not "Checking…"). Regression',
-    '  guard for the `waitForElement` fix in `loadHubspotStatus` (task #1110).',
+    '  guard for the `waitForElement` fix in `loadHubspotStatus`.',
     '- **[ST-B] Lead statuses table**: Intercepts `GET /api/admin/lead-statuses`',
     '  to return a one-row fixture. Polls until `#lead-statuses-table-wrap`',
     '  contains a `<table>` element. Guards the `waitForElement` fix in',
-    '  `loadLeadStatusesAdmin` (task #1110).',
+    '  `loadLeadStatusesAdmin`.',
     '- **[runtime errors]**: Asserts no `pageerror` or `console.error` events',
     '  occur during the tab load.',
     '',

@@ -235,8 +235,8 @@ async function main() {
     // Navigate to /survey — it loads workflow-core.js which owns the
     // _pendingOpenLeadsStale variable, the visibilitychange handler, and the
     // window.__setTestPendingOpenLeadsStale hook.
-    // Note: the projects page was migrated to a self-contained React island in
-    // task #1359 and no longer loads workflow-core.js.  The survey page
+    // Note: the projects page was migrated to a self-contained React island and
+    // no longer loads workflow-core.js.  The survey page
     // overrides the open-leads loader with loadAllContacts, so /api/open-leads
     // is not fetched during bootstrap.  We therefore use the test hook to set
     // _pendingOpenLeadsStale directly, and verify the visibilitychange handler

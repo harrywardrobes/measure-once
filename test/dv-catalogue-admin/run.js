@@ -22,7 +22,7 @@ const PROBE_LABELS = [
 // the privileges harness, drives the UI with Puppeteer, writes a markdown
 // report to test-results/dv-catalogue-admin.md.
 //
-// Covers (per task #668 + #688):
+// Covers:
 //   (API)    Pre-checks — GET /api/admin/design-visit-handles,
 //            /api/admin/design-visit-furniture-ranges and
 //            /api/admin/design-visit-door-styles respond for admin.

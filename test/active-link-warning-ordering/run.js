@@ -3,10 +3,10 @@ const { makeSkip3 } = require('../helpers/report');
 // test/active-link-warning-ordering/run.js
 //
 // Regression guard for the "confirm before expiring an active link" ordering
-// added in task #1970.
+// added to UploadPhotosModal.tsx.
 //
-// Before task #1970 the modal called POST generate-link immediately on open,
-// which expired the customer's existing active link without warning. task #1970
+// Before the fix the modal called POST generate-link immediately on open,
+// which expired the customer's existing active link without warning. The fix
 // added a confirmation step: when GET link-status returns hasActiveLink=true the
 // modal pauses in a 'confirming' phase and only calls generate-link AFTER the
 // staff member clicks "Send new link anyway".

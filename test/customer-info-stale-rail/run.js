@@ -4,7 +4,7 @@ const { makeSkip } = require('../helpers/report');
 //
 // End-to-end test verifying that CustomerInfoSubmissionsRail re-fetches and
 // re-renders after the UploadPhotosModal dispatches the
-// `customer-info-link-generated` CustomEvent (introduced in task #2010).
+// `customer-info-link-generated` CustomEvent.
 //
 // Without the window event listener wiring the rail would remain stale after a
 // new upload link is generated — this test is the regression guard for that
@@ -412,7 +412,7 @@ function writeReport(runId) {
     '- **(A2) Initial render**: The rail displays the initial active-pending submission card.',
     '- **(B) Re-fetch on event**: Dispatching `customer-info-link-generated` on `window`',
     '  (with the matching contactId) causes the rail to call the API a second time.',
-    '  This guards the `window.addEventListener` wiring added in task #2010.',
+    '  This guards the `window.addEventListener` wiring for the `customer-info-link-generated` event.',
     '- **(C) Re-render with updated data**: After the second fetch the rail displays',
     '  the newly generated card (ROW_GENERATED, `id=2`) alongside the original card,',
     '  confirming that the component state was updated from the new response.',

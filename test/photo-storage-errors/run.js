@@ -1,7 +1,7 @@
 'use strict';
 // test/photo-storage-errors/run.js
 //
-// Regression guard for Task #1902 and Task #1917:
+// Regression guard for Object Storage error handling:
 //   - Upload routes must return friendly errors when Object Storage is broken.
 //   - Delete and download routes must apply the same guard and never leak raw
 //     SDK internals to callers.

@@ -12,7 +12,7 @@ const PROBE_LABELS = [
 
 // test/photos-received-badge/run.js
 //
-// Regression guard for the PhotosReceivedBadge component extracted in task #1770.
+// Regression guard for the PhotosReceivedBadge component in CustomersPage.tsx.
 //
 // Probes:
 //   (PR-A) Badge IS shown on a Projects board card when hs_lead_status is

@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/new-customer-counts-retry/run.js
 //
 // Focused integration test for the retry logic inside the `onCreated` callback
-// of CustomersPage.tsx (task #840 / task #850).
+// of CustomersPage.tsx.
 //
 // The `attemptCreatedCounts` helper fires immediately after a new customer is
 // created, retrying `loadLeadStatusCounts` up to MAX_CREATED_RETRIES=2 times

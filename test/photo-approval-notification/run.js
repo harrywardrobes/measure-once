@@ -1,8 +1,8 @@
 'use strict';
 // test/photo-approval-notification/run.js
 //
-// Regression test for task #1606 (richer audit log details in
-// approve_profile_photo / reject_profile_photo entries).
+// Regression test for richer audit log details in
+// approve_profile_photo / reject_profile_photo entries.
 //
 // Guards against regressions where:
 //  - the notification status is dropped from the audit log `details` column,

@@ -1,7 +1,7 @@
 'use strict';
 // test/sign-off-stale-link/run.js
 //
-// End-to-end live test for the "superseded" sign-off path (task #715/#726).
+// End-to-end live test for the "superseded" sign-off path.
 //
 // A design-visit sign-off link must stop working (without leaking data) after
 // the designer has re-opened the visit (PUT /api/design-visits/:id) or re-run

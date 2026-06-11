@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 // test/active-projects-hubspot-outage/run.js
 //
-// Regression guard for the Active Projects error branch added in task #1797.
+// Regression guard for the Active Projects error branch in CustomersPage.tsx.
 //
 // Covers:
 //   [AP-A] /api/contacts-all returns 502 →

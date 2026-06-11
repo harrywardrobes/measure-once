@@ -9,8 +9,7 @@ const PROBE_LABELS = [
 
 // test/masked-email-backfill/run.js
 //
-// Integration test for the backfillMaskedEmails() function in customer-info.js
-// (task #1915 / regression guard task #1942).
+// Integration test for the backfillMaskedEmails() function in customer-info.js.
 //
 // Seeds customer_info_submissions rows with three scenarios and asserts the
 // backfill produces the correct outcome for each:

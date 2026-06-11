@@ -2295,7 +2295,7 @@ async function writeReport(runId, findings) {
     '  Asserts the card chip updates to the new label and the prior label is absent.',
     '  Exercises the `document.addEventListener("visibilitychange", onVisibility)`',
     '  → `loadLeadSubstatuses()` → `store.subsVersion++` → `substatusMap` recompute',
-    '  path — the regression guard introduced in task #1923.',
+    '  path — the regression guard for the visibilitychange-triggered substatus reload.',
     '- **(M) blank-filter race guard — BC fires before initial fetch completes**:',
     '  opens a fresh Customers tab with Puppeteer request interception enabled.',
     '  Holds `GET /api/lead-statuses` in-flight so `store.loaded` stays `false`',

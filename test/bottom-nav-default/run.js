@@ -9,7 +9,7 @@ const DEF_UI_PROBE_LABELS = [
 
 // test/bottom-nav-default/run.js
 //
-// Regression guard for task #1892: the admin-configured __default__ nav layout
+// Regression guard: the admin-configured __default__ nav layout
 // must reach a user who has no job_role assigned.
 //
 // Covers:

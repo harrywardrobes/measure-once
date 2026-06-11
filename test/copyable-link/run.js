@@ -2,8 +2,8 @@
 const { makeSkip3 } = require('../helpers/report');
 // test/copyable-link/run.js
 //
-// Regression guard for the generate-on-open copyable-link flow added in
-// task #1924 to UploadPhotosModal.tsx.
+// Regression guard for the generate-on-open copyable-link flow in
+// UploadPhotosModal.tsx.
 //
 // When the modal opens it immediately POSTs to generate-link to create a
 // secure token, then displays the resulting URL in a read-only TextField so

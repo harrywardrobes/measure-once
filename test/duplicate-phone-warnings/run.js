@@ -30,8 +30,7 @@ const PROBE_LABELS = [
 
 // test/duplicate-phone-warnings/run.js
 //
-// End-to-end live test for the duplicate-phone inline warnings added in
-// task #774:
+// End-to-end live test for the duplicate-phone inline warnings.
 //
 //   (TEAM) src/react/pages/admin/AdminTeamPage.tsx — typing a phone number
 //          into the "Add team member" Mobile or Emergency-contact field
@@ -362,7 +361,7 @@ async function main() {
   // carries the duplicated phone — the test then types the same phone into
   // a contact-row input on the Add-Company modal and asserts the per-slot
   // notice fires (i.e. the warning fires across contact rows of different
-  // companies, matching task #774's stated scope).
+  // companies, matching the stated scope of the duplicate-phone warning feature).
   const TRADE_A_CONTACT = 'PrivTest Contact A';
   const TRADE_B_CONTACT = 'PrivTest Contact B';
   const seedTrade = async (name, contactName, contactPhone) => {

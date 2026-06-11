@@ -14,7 +14,7 @@ const PROBE_LABELS = [
 
 // test/invoice-bc-sync/run.js
 //
-// Puppeteer probe for task #1760: when an admin saves an invoice in
+// Puppeteer probe: when an admin saves an invoice in
 // InvoiceDetailDrawer (via the "Save changes" button), the drawer posts a
 // { type: 'invoice-saved' } message on the 'mo_invoices' BroadcastChannel.
 // Both InvoicesSection (customer-detail) and StandaloneInvoicesPage subscribe

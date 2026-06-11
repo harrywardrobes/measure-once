@@ -3,11 +3,11 @@ const { makeSkip } = require('../helpers/report');
 // test/design-visit/run.js
 //
 // End-to-end live test for the design-visit wizard and sign-off flow
-// (task #635).  Mirrors the pattern in test/card-action-handlers/run.js:
+// Mirrors the pattern in test/card-action-handlers/run.js:
 // boot a disposable server with the privileges harness, drive the wizard
 // with Puppeteer, write a markdown report to test-results/design-visit.md.
 //
-// Covers (per task #635):
+// Covers:
 //   (CRUD)  Admin catalogue CRUD for handles, furniture ranges, door styles
 //           and terms-conditions versions.
 //   (WIZ)   Wizard dispatch from clicking a bound `.eq-card-action` strip:

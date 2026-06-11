@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 // test/invoice-hash-restore/run.js
 //
-// Puppeteer probe for task #1387: when the Customer Detail page is loaded
+// Puppeteer probe: when the Customer Detail page is loaded
 // with a URL hash of the form `#inv-{id}` and that invoice id is in the
 // contact's matched invoice list, the InvoiceDetailDrawer should open
 // automatically on mount.

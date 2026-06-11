@@ -9,7 +9,7 @@ const UI_PROBE_LABELS = [
 
 // test/nav-role-config/run.js
 //
-// End-to-end test for the nav role configuration admin API (task #968).
+// End-to-end test for the nav role configuration admin API.
 //
 // Covers:
 //   [API-DEFAULT]            GET /api/nav-role-config returns __default__ keys for a

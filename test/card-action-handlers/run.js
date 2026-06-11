@@ -20,7 +20,7 @@ const PROBE_LABELS = [
 // privileges harness, drive the UI with Puppeteer, write a markdown report to
 // test-results/card-action-handlers.md.
 //
-// Covers (per task #587):
+// Covers:
 //   (A) Admin creates a handler in admin.html → the
 //       `card_action_handlers_changed` BroadcastChannel fires → another open
 //       Sales tab refreshes its in-page handler lookup.
@@ -39,7 +39,7 @@ const PROBE_LABELS = [
 //       duplicate is removed.
 //       D.modal-1: the resolver is a MuiDialog-root element whose visible
 //       DialogTitle reads "Fix conflicting handlers" (guards the React Dialog
-//       migration from task #1673).
+//       migration from the old DOM-appended modal).
 //   (E) action_name field: a handler seeded with config.action_name =
 //       'send_quote' shows the badge in the admin table (E.1), causes
 //       cardActionHandlerAttrs() to emit data-card-action-name="send_quote"
@@ -168,27 +168,27 @@ const LBL_KEY_NAMING      = 'privtest_cah_naming';   // status_key for the edito
 // (H) intermediateLeadStatus on wizard open
 const LBL_KEY_ILS         = 'privtest_cah_ils';      // status_key for the intermediateLeadStatus probe
 const INTERMEDIATE_LS     = 'PRIVTEST_INPROGRESS';   // value sent on PATCH /api/contacts/:id when wizard opens
-// (I) fallback slot visibility — regression guard for task #1722
+// (I) fallback slot visibility — regression guard
 // Uppercase because it must match lead_status_config.key exactly for the FK on lead_substatuses.
 const LBL_KEY_FALLBACK_STATUS = 'PRIVTEST_CAH_FALLBACK'; // lead_status_config.key + substatus status_key
-// (L) sub-status slot row rendering — regression guard for task #1731
+// (L) sub-status slot row rendering — regression guard
 const LBL_KEY_SUB_ROW         = 'PRIVTEST_CAH_SUB_ROW';  // lead_status_config.key for sub-status slot row probe
-// (N) bound-handler warning on label clear — regression guard for task #1741
+// (N) bound-handler warning on label clear — regression guard
 const LBL_KEY_CLEAR_WARN       = 'PRIVTEST_CAH_CLEAR_WARN';  // lead_status_config.key (uppercase)
 const LBL_KEY_CLEAR_WARN_LOWER = 'privtest_cah_clear_warn';  // binding status_key (lowercase)
 const HANDLER_NAME_CLEAR_WARN  = 'PrivTest clear-warn handler';
 const CLEAR_WARN_STATUS_LABEL  = 'PrivTest ClearWarn Status';
 const CLEAR_WARN_LABEL         = 'PrivTest Book Appointment';
-// (O) sub-status delete bound-handler warning — regression guard for task #1740
+// (O) sub-status delete bound-handler warning — regression guard
 const LBL_KEY_DEL_WARN        = 'PRIVTEST_CAH_DEL_WARN'; // lead_status_config.key for probe (O)
-// (P) stale lead-status warning in handler editor — regression guard for task #1761
+// (P) stale lead-status warning in handler editor — regression guard
 const LBL_KEY_STALE_SLOT    = 'PRIVTEST_CAH_STALE'; // lead_status_config.key for the slot (uppercase)
 const LBL_KEY_STALE_BINDING = 'privtest_cah_stale'; // binding status_key (lowercase)
 const STALE_INTER_LS        = 'privtest_stale_inter_nonexistent'; // intermediateLeadStatus that no longer exists
 const STALE_SUB_LS          = 'privtest_stale_sub_nonexistent';   // submittedLeadStatus that no longer exists
 const HANDLER_NAME_STALE    = 'PrivTest stale-status handler';
 const HANDLER_NAME_STALE_SUB = 'PrivTest stale-sub handler';
-// (Q) startup seeding — ensureSubstatusHandlerBindings — regression guard for task #1818
+// (Q) startup seeding — ensureSubstatusHandlerBindings — regression guard
 // uppercase because lead_status_config.key is always stored uppercase
 const LBL_KEY_STARTUP            = 'PRIVTEST_CAH_STARTUP';
 // (R) handler-bound indicator — opacity on Default handler type selector
@@ -201,7 +201,7 @@ const SUB_STARTUP_PREBOUND_K     = 'PRIVTEST_Q_PREBOUND';
 const HANDLER_NAME_Q_PRE         = 'PrivTest Q pre-existing handler';
 // third substatus: key present in SUBSTATUS_HANDLER_MAP → should resolve to review_customer_photos
 const SUB_STARTUP_MAPPED_K       = 'AWPH_RECEIVED';
-// (R) default_handler_type column — regression guard for task #1825
+// (R) default_handler_type column — regression guard
 // Separate status_key so Q and R fixtures never collide in the same substatus group.
 const LBL_KEY_DEFAULT_TYPE       = 'PRIVTEST_CAH_DEFTYPE';
 // R.1: has default_handler_type = 'start_design_visit' → binding type must match
@@ -2022,7 +2022,7 @@ async function main() {
     // (D.modal-1) The conflict resolver must be a MUI React Dialog
     // (.MuiDialog-root) whose visible DialogTitle reads exactly
     // "Fix conflicting handlers".  This guards the migration from the
-    // old DOM-appended modal to a React Dialog (task #1673): if anyone
+    // old DOM-appended modal to a React Dialog: if anyone
     // accidentally reverts to a plain DOM modal, or changes the title
     // text, this probe will fail.
     const muiDialogState = await pollPage(
@@ -2466,7 +2466,7 @@ async function main() {
     // ── (F) action_name snake_case enforcement in the editor modal ────────────
     //
     // Drives the admin "Add action" modal via openHandlerEditor() and asserts
-    // both client-side validation paths added in task #623:
+    // both client-side validation paths for action_name snake_case enforcement:
     //   (F.1) Invalid value ("Send Quote") + blur → #cah-action-name-err
     //         becomes visible; clicking #cah-save leaves the modal open with
     //         a non-empty #cah-edit-err message and does not create a handler
@@ -2700,7 +2700,7 @@ async function main() {
 
     // ── (G) DV catalogue arrow-reordering ────────────────────────────────────
     //
-    // Exercises the moveDvItem path added in task #666 across all three
+    // Exercises the moveDvItem path across all three
     // catalogues (handles, furniture ranges, door styles).  For each type:
     //   - Seeds 3 rows with distinct sort_order values via the admin REST API.
     //   - Opens a fresh admin tab on the Design visit panel.
@@ -2975,15 +2975,15 @@ async function main() {
 
     // ── (I) Fallback slot visibility ──────────────────────────────────────────
     //
-    // Updated for task #1734: slots with no action label AND no bound handler
-    // are now hidden entirely.  The old `lsSubs.length > 0` clause (task #1722)
+    // Slots with no action label AND no bound handler are now hidden entirely.
+    // The old `lsSubs.length > 0` clause
     // has been removed from _buildActionSlotGroups() — a lead status with only
     // un-labelled sub-statuses and no handler must NOT appear in the slot list.
     //
     // Probe (I): assert the "Default action" slot is ABSENT for a lead status
     // that has sub-statuses (with empty action_label) but no stage-action label
     // and no bound handler.
-    console.log('\n  [I] No-label/no-handler slot is hidden (task #1734)');
+    console.log('\n  [I] No-label/no-handler slot is hidden');
 
     // Seed the lead_status_config row.
     const FALLBACK_STATUS_LABEL = 'PrivTest Fallback Slot';
@@ -4910,7 +4910,7 @@ async function writeReport(runId, findings) {
     '    asserting it equals `"Send Quote"`.  Because `LBL_KEY_ANAME` is a',
     '    synthetic key absent from the workflow config, `nextActionLabel()`',
     '    returns empty — proving `_cahName` wins over the fallback.',
-    '- **(G) DV catalogue arrow-reordering** (task #669): for each of the',
+    '- **(G) DV catalogue arrow-reordering**: for each of the',
     '  three catalogues (handles, furniture ranges, door styles) the harness',
     '  seeds 3 rows with `sort_order` 10/20/30, opens a fresh admin tab on',
     '  the Design visit panel, and asserts:',
@@ -4928,7 +4928,7 @@ async function writeReport(runId, findings) {
     '    sender\'s context).',
     '  - A follow-up GET on the catalogue endpoint confirms the swapped',
     '    `sort_order` values were persisted server-side.',
-    '- **(H) intermediateLeadStatus PATCH on wizard open** (task #652): a',
+    '- **(H) intermediateLeadStatus PATCH on wizard open**: a',
     '  `start_design_visit` handler with `config.intermediateLeadStatus` is',
     '  seeded and bound to `(sales, LBL_KEY_ILS)`.  An injected',
     '  `.eq-card-action` strip is clicked; the test asserts (H.1) a PATCH to',
@@ -4937,7 +4937,7 @@ async function writeReport(runId, findings) {
     '  still opens even though the PATCH naturally returns 503 in this harness',
     '  (HUBSPOT_TOKEN stripped → `requireHubspotToken` rejects).  This exercises',
     '  the `.catch` / non-ok branch in `public/card-action-handlers.js` 388–395.',
-    '- **(I) No-label/no-handler slot is hidden** (task #1734): a lead status',
+    '- **(I) No-label/no-handler slot is hidden**: a lead status',
     '  row (stage=SALES) is seeded in `lead_status_config` together with one',
     '  `lead_substatuses` row whose `action_label` is empty — no stage-action',
     '  label entry and no bound handler.  A fresh admin tab switches to the',
@@ -4945,15 +4945,15 @@ async function writeReport(runId, findings) {
     '  ABSENT from `#card-action-handlers-wrap`.  Guards the tightened',
     '  `if (dflt || hasHandler)` guard in `_buildActionSlotGroups()` against',
     '  regression (the old `lsSubs.length > 0` clause was intentionally removed',
-    '  by task #1734 so that slots with no label and no handler stay hidden).',
-    '- **(J) Bound-but-unlabelled slot shows warning chip** (task #1734): a',
+    '  so that slots with no label and no handler stay hidden).',
+    '- **(J) Bound-but-unlabelled slot shows warning chip**: a',
     '  handler is POSTed and bound to the same status (which has no stage-action',
     '  label).  The probe reloads the panel in the same tab and polls until a',
     '  `[data-testid="no-label-warning"]` chip is visible inside the group for',
     '  that status.  Confirms the warning path in `ActionHandlersPage.tsx` fires',
     '  when `slot.hasLabel === false && handler !== null`.  The handler is',
     '  deleted as part of cleanup.',
-    '- **(K) Orphan-binding cleanup on lead-status delete** (task #1736):',
+    '- **(K) Orphan-binding cleanup on lead-status delete**:',
     '  pure-API probes that verify the route-level DELETE cleanup added to',
     '  `DELETE /api/admin/lead-statuses/:key`. `lead_status_config.key` is',
     '  stored uppercase (POST route forces `.toUpperCase()`); bindings store',
@@ -4972,7 +4972,7 @@ async function writeReport(runId, findings) {
     '    handler survives an unrelated lead-status delete, confirming the',
     '    `status_key <> \'\'` guard in the cleanup query prevents accidental',
     '    removal of stage-wide default bindings.',
-    '- **(L) Sub-status slot rows render for labelled sub-statuses** (task #1731):',
+    '- **(L) Sub-status slot rows render for labelled sub-statuses**:',
     '  a fresh `lead_status_config` row (stage=SALES) is seeded together with a',
     '  `lead_substatuses` row whose `action_label` is non-empty ("Book measurement")',
     '  and whose `label` is "Confirmed".  A fresh admin tab switches to the Action',
@@ -4983,7 +4983,7 @@ async function writeReport(runId, findings) {
     '    sub-status label, confirming the "Sub-status · <label>" rowLabel pattern.',
     '  Guards `ActionHandlersPage.tsx` lines 232-239 against a regression that',
     '  hides or skips sub-status slot rows.',
-    '- **(M) Blank-action_label sub-status produces no slot row** (task #1742):',
+    '- **(M) Blank-action_label sub-status produces no slot row**:',
     '  slot-level negative guard complementing probe (I).  Uses the same',
     '  `LBL_KEY_FALLBACK_STATUS` fixture (no stage-action label, one',
     '  `lead_substatuses` row with `action_label = \'\'`, no bound handler).',
@@ -4995,7 +4995,7 @@ async function writeReport(runId, findings) {
     '  Guards the `if (!action) continue` guard in `ActionHandlersPage.tsx`',
     '  line 243 against a regression that would accidentally render a slot row',
     '  for a sub-status whose `action_label` is blank.',
-    '- **(N) Bound-handler warning on label clear** (task #1741): guards the',
+    '- **(N) Bound-handler warning on label clear**: guards the',
     '  `saveAllCardActionLabels` confirmation-dialog path in `CardActionsPage.tsx`',
     '  that blocks silent handler orphaning when a label input is cleared while a',
     '  handler is still bound to the slot.  A fresh `lead_status_config` row',
@@ -5014,7 +5014,7 @@ async function writeReport(runId, findings) {
     '  - **N.clear** Calling save a second time and clicking "Clear label anyway"',
     '    fires ≥1 PUT to `/api/admin/stage-action-labels`, confirming the save',
     '    proceeds after confirmation.',
-    '- **(O) Sub-status delete bound-handler warning** (task #1740): a',
+    '- **(O) Sub-status delete bound-handler warning**: a',
     '  `lead_status_config` row (stage=SALES) is seeded together with two',
     '  `lead_substatuses` rows — one with a `card_action_handler_bindings` row',
     '  pointing at it via `substatus_id` (bound), and one with no binding (free).',
@@ -5034,7 +5034,7 @@ async function writeReport(runId, findings) {
     '  Guards the `deleteCardActionSubstatus` callback in `CardActionsPage.tsx`',
     '  against regressions that skip the `confirmDeleteSub` dialog or fail to',
     '  delete when the user confirms.',
-    '- **(P) Stale lead-status warning in the handler editor** (task #1761): a',
+    '- **(P) Stale lead-status warning in the handler editor**: a',
     '  `start_design_visit` handler is seeded whose `config.intermediateLeadStatus`',
     '  references a key that does not exist in `lead_status_config` (making it',
     '  "stale").  The handler is bound to a labelled slot so the group appears in',
@@ -5074,7 +5074,7 @@ async function writeReport(runId, findings) {
     '    absent when there is no binding.',
     '  Guards the `hasBinding` branch in `CardActionsPage.tsx` against a',
     '  refactor that silently removes the dimming logic.',
-    '- **(Q) Startup seeding — `ensureSubstatusHandlerBindings`** (task #1818):',
+    '- **(Q) Startup seeding — `ensureSubstatusHandlerBindings`**:',
     '  pure-API + DB probe (no browser) that verifies the startup routine in',
     '  `photo-reviews.js` correctly auto-binds and correctly skips on restart.',
     '  Three `lead_substatuses` rows are seeded while the original server is running:',
@@ -5098,7 +5098,7 @@ async function writeReport(runId, findings) {
     '    the `AWPH_RECEIVED` key — not the `show_message` fallback.  Covers the',
     '    map-lookup branch of `ensureSubstatusHandlerBindings` that was previously',
     '    untested.',
-    '- **(R) `default_handler_type` column** (task #1825): pure-API + DB probe',
+    '- **(R) `default_handler_type` column**: pure-API + DB probe',
     '  (no browser) that verifies the admin-configured `default_handler_type`',
     '  column on `lead_substatuses` is correctly consumed by',
     '  `ensureSubstatusHandlerBindings` at startup.  Two `lead_substatuses` rows',

@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/design-visit-list/run.js
 //
 // End-to-end live test for the per-contact "Design visits" section on the
-// customer-detail page (task #683). Mirrors the pattern used by
+// customer-detail page. Mirrors the pattern used by
 // test/design-visit/run.js and test/lead-status-sync/customer-detail.js:
 // boot a disposable server with the privileges harness, drive the UI with
 // Puppeteer, write a markdown report to test-results/design-visit-list.md,

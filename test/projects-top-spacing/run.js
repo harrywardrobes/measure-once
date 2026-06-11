@@ -8,7 +8,7 @@ const PROBE_LABELS = [
 
 // test/projects-top-spacing/run.js
 //
-// Regression test for the Projects page top-spacing fix (task #1879).
+// Regression test for the Projects page top-spacing fix.
 //
 // Covers:
 //   [PTS-A] At least 16 px (pt: 2 equivalent) of vertical space exists between

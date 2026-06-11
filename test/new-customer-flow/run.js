@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/new-customer-flow/run.js
 //
 // End-to-end live test for the "New customer" entry point on /customers
-// (added in task #754). Mirrors the test/design-visit-list/run.js pattern:
+// Mirrors the test/design-visit-list/run.js pattern:
 // boot a disposable server with the privileges harness, drive the UI with
 // Puppeteer, write a markdown report, and exit non-zero on failure.
 //

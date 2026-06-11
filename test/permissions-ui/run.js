@@ -16,7 +16,7 @@ const PROBE_LABELS = [
 // Covers:
 //   [ICON-DELETE]  The "Remove role" icon button inside the Job Roles card
 //                  renders the MUI Delete icon (trash-can) SVG path, not the
-//                  MUI Close icon (✕) path.  Regression guard for task #963
+//                  MUI Close icon (✕) path.  Regression guard
 //                  where a copy-paste error caused CloseIcon to be rendered.
 //   [ICON-NOT-CLOSE]  Negative assertion: none of the "Remove role" buttons
 //                     contain the Close icon path.
@@ -119,7 +119,7 @@ function writeReport(runId, findings) {
     '  Job Roles list to render at least one role row, then reads the SVG',
     '  `<path d="…">` from every `[title="Remove role"]` icon button.',
     '  Asserts every path matches the MUI Delete icon (trash-can) path,',
-    '  not the MUI Close icon (✕) path.  Regression guard for task #963.',
+    '  not the MUI Close icon (✕) path.  Regression guard for accidental icon mismatch.',
     '- **(ICON-NOT-CLOSE)** Negative check: none of the Delete-button paths',
     '  equal the MUI Close icon path.',
     '- **(ICON-TUNE)** Reads the SVG path from every `[title="Edit navigation',

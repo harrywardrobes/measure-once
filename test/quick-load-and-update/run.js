@@ -102,7 +102,7 @@ function writeReport() {
     '',
     '- **(A) In-memory path**: when `state.selectedContactId === contactId` the function',
     '  must still call `POST /api/contacts/:id/localdata` so the change persists.',
-    '  Regression guard for the missing-return-path bug fixed in task #1289.',
+    '  Regression guard for the missing-return-path bug fix in localdata persistence.',
     '',
     '- **(B) Network path**: when `state.selectedContactId !== contactId` the function',
     '  must call `GET` then `POST`. Existing behaviour, included as a regression guard.',

@@ -3,7 +3,7 @@ const { makeSkip3 } = require('../helpers/report');
 // test/upload-photos-copyable-link/run.js
 //
 // Regression guard for the "Copy & close" button in UploadPhotosModal.
-// Task #1929 added the button; this suite ensures a future refactor cannot
+// This suite ensures a future refactor cannot
 // silently remove it or break its close-after-copy behaviour.
 //
 // Probes:

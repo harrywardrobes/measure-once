@@ -10,8 +10,8 @@ const PROBE_LABELS = [
 
 // test/project-contacts-dev-mode/run.js
 //
-// Regression guard for the dev-mode filtering added to /api/project-contacts
-// in task #1883.  Verifies:
+// Regression guard for the dev-mode contact filtering in /api/project-contacts.
+// Verifies:
 //
 //   [A] Dev mode OFF: GET /api/project-contacts returns all contacts —
 //       both the hw_test_user=true contact and the normal contact.

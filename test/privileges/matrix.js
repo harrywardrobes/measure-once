@@ -305,7 +305,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/terms-conditions/versions',            level: 'admin' },
   { method: 'POST',   path: '/api/admin/terms-conditions/versions',            level: 'admin', body: {} },
 
-  // ── HubSpot webhook (task #1449) ──────────────────────────────────────────
+  // ── HubSpot webhook ───────────────────────────────────────────────────────
   // The receiver is public (HubSpot POSTs without a session; gated by HMAC).
   { method: 'POST',   path: '/api/hubspot/webhook',                            level: 'public', body: [] },
   // SSE push endpoint — authenticated so only logged-in tabs receive events.

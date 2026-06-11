@@ -8,7 +8,7 @@ const { makeSkip } = require('../helpers/report');
 // autofill via the native HTMLInputElement value setter + a bubbling 'input'
 // event, which bypasses React's synthetic onChange tracking and is the exact
 // vector that caused a NaN crash in StrengthMeter before the defensive
-// score-clamping fix (task #870 / task #1153).
+// score-clamping fix in StrengthMeter.
 //
 // The set-password page renders the same StrengthMeter component as the
 // change-password dialog (src/react/utils/passwordStrength.tsx).  When

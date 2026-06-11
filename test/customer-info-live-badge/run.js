@@ -9,8 +9,7 @@ const PROBE_LABELS = [
 
 // test/customer-info-live-badge/run.js
 //
-// Regression guard for the SSE → re-fetch → "Photos received" badge flow
-// (task #1754 / task #1771).
+// Regression guard for the SSE → re-fetch → "Photos received" badge flow.
 //
 // Three probes:
 //

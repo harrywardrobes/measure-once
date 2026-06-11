@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 // test/change-password/run.js
 //
-// End-to-end test for the Change Password dialog on /profile (task #852).
+// End-to-end test for the Change Password dialog on /profile.
 // Mirrors the pattern in test/new-customer-flow/run.js: boot a disposable
 // server with the privileges harness, drive the UI with Puppeteer, write a
 // markdown report to test-results/change-password.md, exit non-zero on failure.
@@ -24,7 +24,7 @@ const { makeSkip } = require('../helpers/report');
 //   [UI.2]  clicking "Change password" button → dialog becomes visible with 3
 //           fields and Submit/Cancel buttons
 //   [UI-zxcvbn] typing into "New password" triggers the strength meter (or at
-//           least does not crash the panel) — regression guard for task #870
+//           least does not crash the panel) — regression guard for zxcvbn crash on autofill
 //   [UI-autofill] simulating browser autofill via native value setter +
 //           input event (bypassing React's onChange) — strength meter stays
 //           visible and no NaN/LinearProgress errors are emitted
@@ -630,7 +630,7 @@ async function main() {
             }
 
             // UI-zxcvbn — type into "New password" → strength meter or graceful catch
-            // Regression guard for task #870: the panel must not crash when zxcvbn
+            // Regression guard for the zxcvbn crash fix: the panel must not crash when zxcvbn
             // throws internally. Uses Tab navigation (keyboard-only) to avoid
             // coordinate-based clicks that could land on the MUI backdrop.
             if (dialogVisible) {

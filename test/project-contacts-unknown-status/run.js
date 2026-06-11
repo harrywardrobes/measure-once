@@ -2,7 +2,7 @@
 const { makeSkip3 } = require('../helpers/report');
 // test/project-contacts-unknown-status/run.js
 //
-// Regression guard for the "orphan-check" logic added in task #1653.
+// Regression guard for the "orphan-check" logic in /api/project-contacts.
 // Verifies that contacts with room data (measure_once_rooms) but an absent or
 // unconfigured HubSpot lead status appear in /api/project-contacts with
 // _statusUnknown: true, and are NOT silently dropped from the Projects board.

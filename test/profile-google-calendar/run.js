@@ -18,7 +18,7 @@ const PROBE_LABELS = [
 
 // test/profile-google-calendar/run.js
 //
-// End-to-end test for the GoogleCalendarCard on /profile (task #1171).
+// End-to-end test for the GoogleCalendarCard on /profile.
 // Boots a disposable test server, drives the profile page with Puppeteer,
 // intercepts /api/google/status and /auth/logout-google via evaluateOnNewDocument,
 // and asserts the correct UI states.

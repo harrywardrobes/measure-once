@@ -1,7 +1,7 @@
 'use strict';
 // test/skipped-photo-dashboard-link/run.js
 //
-// Regression guard for task #1913: when photos are skipped (too large / not
+// Regression guard: when photos are skipped (too large / not
 // found in object storage), sendAdminNotificationEmail must include a
 // clickable dashboard link so admins can still view the photos.
 //

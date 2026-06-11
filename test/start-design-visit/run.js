@@ -7,7 +7,7 @@ const { makeSkip } = require('../helpers/report');
 // server with the privileges harness, drive the API and UI with Puppeteer,
 // write a markdown report to test-results/start-design-visit.md.
 //
-// Covers (per task #630):
+// Covers:
 //   (API) Pre-checks — catalogue endpoints respond for admin; 401 when unauth.
 //   (A)   Wizard submit — POST /api/design-visits with a seeded contact; DB
 //         rows confirmed in design_visits, design_visit_rooms, and

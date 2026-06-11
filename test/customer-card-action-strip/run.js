@@ -3,8 +3,8 @@ const { makeSkip } = require('../helpers/report');
 // test/customer-card-action-strip/run.js
 //
 // End-to-end test verifying that the action-label strip renders correctly on
-// customer cards in CustomersPage.tsx (task #1891), and that the QB invoice
-// drawer opens correctly when the invoice badge is clicked (task #1933).
+// customer cards in CustomersPage.tsx, and that the QB invoice
+// drawer opens correctly when the invoice badge is clicked.
 //
 // The test fully stubs the customers-page API calls via evaluateOnNewDocument
 // fetch interception so no HubSpot token or real data is required.
@@ -23,7 +23,7 @@ const { makeSkip } = require('../helpers/report');
 //       connected and invoices are returned for a contact, clicking the red
 //       invoice badge on the card opens the drawer
 //       (data-testid="invoice-detail-drawer" present + open). Regression guard
-//       for the accidental deletion of handleOpenInvoice (task #1920).
+//       for the accidental deletion of handleOpenInvoice.
 //   (F) UploadPhotosModal check-error phase: when the link-status fetch fails,
 //       the button with data-testid="cah-proceed-anyway" reads "Generate
 //       anyway", not "Send anyway". Regression guard for accidental label

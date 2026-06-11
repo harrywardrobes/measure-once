@@ -9,8 +9,8 @@ const PROBE_LABELS = [
 
 // test/active-link-expires/run.js
 //
-// Regression guard for the "expire stale links on send" logic added in
-// task #1968.  Ensures that when POST /api/card-actions/upload-photos-and-info
+// Regression guard for the "expire stale links on send" logic.
+// Ensures that when POST /api/card-actions/upload-photos-and-info
 // is called twice for the same contact, the older active link is expired and
 // only one active link survives.
 //

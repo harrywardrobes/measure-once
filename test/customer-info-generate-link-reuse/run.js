@@ -10,7 +10,7 @@ const PROBE_LABELS = [
 // test/customer-info-generate-link-reuse/run.js
 //
 // Integration test verifying that the generate-link endpoint reuses the
-// existing active row rather than inserting a new one (task #1956 / #1961).
+// existing active row rather than inserting a new one.
 //
 // Probes:
 //   (A) Fresh contact — first call inserts exactly one row.

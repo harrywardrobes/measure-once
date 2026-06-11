@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/visit-edit-cancel/run.js
 //
 // End-to-end test for the edit and cancel actions on delivery/installation
-// visit cards in the customer-detail page (task #1603 / #1623).
+// visit cards in the customer-detail page.
 //
 // Covers:
 //   (API) PATCH /api/visits/:id updates the row and returns the updated visit.

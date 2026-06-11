@@ -764,7 +764,7 @@ async function runUiSmoke({ users, runId, clients }) {
 
     // ── Mobile pagination overflow regression ───────────────────────────────
     // Regression guard: the pagination bar must not overflow its container at
-    // 360 px viewport width (responsive rules added in task #429).
+    // 360 px viewport width.
     // Steps:
     //   1. Open /customers at 360 px viewport with a 26-contact mock so the
     //      pagination bar is rendered.

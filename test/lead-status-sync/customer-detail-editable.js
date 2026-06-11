@@ -128,7 +128,7 @@ async function probeEditableRole(page, role, lsKey, record) {
 
   // Click the pill and confirm the React LeadStatusPicker (MUI Popover) opens.
   // The picker is now a React component rendered as a MUI Popover portal — it
-  // no longer uses the vanilla-JS #card-picker-popup DOM element (task #1382).
+  // no longer uses the vanilla-JS #card-picker-popup DOM element.
   if (pillInfo.present && pillInfo.clickable) {
     const pill = await page.$('#workflow-header .lead-status-badge');
     if (pill) {
@@ -401,7 +401,7 @@ async function writeReport(runId, findings) {
     '  CSS class that enables click-to-open.',
     '- **Picker popover opens**: clicks the pill element and asserts a MUI Popover',
     '  (or the "Clear status" button inside it) appears in the DOM. The picker is',
-    '  now a React LeadStatusPicker component (task #1382) — `#card-picker-popup`',
+    '  now a React LeadStatusPicker component — `#card-picker-popup`',
     '  is no longer used.',
     '- **Admin role**: repeats all four assertions with `privilege_level: "admin"` in',
     '  a fresh incognito context.',

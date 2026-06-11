@@ -13,7 +13,7 @@ const PROBE_LABELS = [
 // The login form has two credential fields that browsers fill via the native
 // HTMLInputElement value setter + a bubbling 'input' event — bypassing React's
 // synthetic onChange tracking.  This is the same vector tested on the
-// set-password page (task #1153 / task #1258).  Unlike set-password, the login
+// set-password page (see test/set-password/run.js).  Unlike set-password, the login
 // form renders no StrengthMeter, so the probe is purely a crash/error guard:
 // simulating autofill must not produce any console errors.
 //

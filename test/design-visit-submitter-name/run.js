@@ -1,7 +1,7 @@
 'use strict';
 // test/design-visit-submitter-name/run.js
 //
-// Regression test for task #740 ("Designer: unknown" / "Submitted by unknown"
+// Regression test for the "Designer: unknown" / "Submitted by unknown"
 // fix). Exercises the HubSpot note branch (section 3 of runSubmitSideEffects)
 // and the team-notification email branch (section 6) of design-visits.js and
 // asserts the submitter's email actually lands in the rendered strings.

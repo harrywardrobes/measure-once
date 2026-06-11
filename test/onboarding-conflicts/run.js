@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/onboarding-conflicts/run.js
 //
 // Automated tests for the onboarding conflict detection and admin resolution
-// flow (task #1108 / regression guard for task #1111).
+// flow.
 //
 // Covers:
 //   [API-1] POST /api/onboarding/complete with differing values → 200.

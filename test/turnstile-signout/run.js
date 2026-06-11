@@ -3,7 +3,7 @@ const { makeSkip } = require('../helpers/report');
 // test/turnstile-signout/run.js
 //
 // End-to-end test for the Turnstile widget reappearing after sign-out via the
-// command palette (task #1024).
+// command palette.
 //
 // Coverage:
 //   • POST /api/logout with a valid session and a non-JSON Accept header returns

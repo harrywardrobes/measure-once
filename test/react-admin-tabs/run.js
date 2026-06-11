@@ -311,7 +311,7 @@ async function main() {
     );
 
     // ── Team tab ─────────────────────────────────────────────────────────
-    // Regression guard for Task #793: AdminTeamPage was throwing a render-time
+    // Regression guard: AdminTeamPage was throwing a render-time
     // ReferenceError (missing phoneKey/phoneFieldLabel import), which left
     // #tab-team blank without any visible error. Confirm the panel mounts and
     // produces non-empty React-rendered content.
@@ -410,7 +410,7 @@ async function writeReport(runId, findings) {
     '- **(Search tab)** Asserts `#tab-search` exists, is flagged by',
     '  `src/react/main.tsx` with `data-ds-rendered="1"`, and contains at',
     '  least one `.ss-action-row` rendered by `<SearchSettingsPage/>`.',
-    '- **(Team tab)** Regression guard for Task #793 — asserts `#tab-team`',
+    '- **(Team tab)** Regression guard — asserts `#tab-team`',
     '  exists, is flagged as mounted, and renders the `<AdminTeamPage/>`',
     '  table (`#team-body`) with non-empty text and no `[data-island-error]`',
     '  fallback. A render-time throw (e.g. missing import) would surface here.',

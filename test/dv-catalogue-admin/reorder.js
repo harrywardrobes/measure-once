@@ -7,7 +7,7 @@ const { makeSkip } = require('../helpers/report');
 // the privileges harness, drives the UI with Puppeteer, writes a markdown
 // report to test-results/dv-catalogue-reorder.md.
 //
-// Covers (per task #720):
+// Covers:
 //   For each catalogue type:
 //     • Seeds two rows directly in the DB with known sort_order values
 //       (top=0, bottom=1) under a fixture name prefix.
