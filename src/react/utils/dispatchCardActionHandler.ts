@@ -1,5 +1,6 @@
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { openCardActionModal } from './cardActionModalRegistry';
+import { isHandlerType } from './handlerMeta';
 
 export interface CardActionContext {
   contactId: string;
@@ -18,5 +19,13 @@ export function dispatchCardActionHandler(
   handler: CardActionHandlerData,
   ctx: CardActionContext,
 ): void {
+  if (!isHandlerType(handler.type)) {
+    const msg = `[dispatchCardActionHandler] Unknown handler type: "${handler.type}". Ignoring action.`;
+    if (process.env.NODE_ENV !== 'production') {
+      throw new Error(msg);
+    }
+    console.warn(msg);
+    return;
+  }
   openCardActionModal(handler, ctx);
 }
