@@ -454,7 +454,6 @@ function ModalDetailCard({
   );
 }
 
-
 // ── StatusRow ─────────────────────────────────────────────────────────────────
 
 function StatusRow({
