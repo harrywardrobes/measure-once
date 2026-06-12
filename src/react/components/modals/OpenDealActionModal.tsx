@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { OPEN_DEAL_DRAFT_PREFIX } from '../../constants/localStorageKeys';
-import { DEMO_CONTACT } from './demoData';
+import { DEMO_CONTACT, DEMO_DECLINE_EMAIL_PREVIEW, DEMO_DEPOSIT_EMAIL_PREVIEW } from './demoData';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -241,7 +241,10 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo }: Props
   // Fetch live decline email preview when the step becomes visible (or refresh is triggered)
   useEffect(() => {
     if (step !== 'decline_email') return;
-    if (demo) return;
+    if (demo) {
+      setDeclineEmailPreview({ ...DEMO_DECLINE_EMAIL_PREVIEW, loading: false, error: false });
+      return;
+    }
     let cancelled = false;
     const firstName = contactData?.contactName?.split(' ')[0] || '';
     setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: true, error: false });
@@ -301,8 +304,13 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo }: Props
 
   // ── Deposit invoice email preview ──────────────────────────────────────────
   useEffect(() => {
-    if (step !== 'accept_confirm' || !contactData) return;
-    if (demo) return;
+    if (step !== 'accept_confirm') return;
+    if (demo) {
+      setDepositEmailPreview(DEMO_DEPOSIT_EMAIL_PREVIEW);
+      setPreviewLoading(false);
+      return;
+    }
+    if (!contactData) return;
 
     let cancelled = false;
     setPreviewLoading(true);
