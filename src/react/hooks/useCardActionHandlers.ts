@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { resolveActionLabel as resolveActionLabelPure } from '../utils/resolveActionLabel.mjs';
+import { GLOBAL_NULL_SLOT_KEY } from '../pages/admin/adminConstants';
 
 export interface CardActionHandlerBinding {
   stage_key?: string;
@@ -160,7 +161,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       return (
         idx[`${sKey}|${lsKey}`] ||
         idx[`${sKey}|`] ||
-        idx['__global__|'] ||
+        idx[GLOBAL_NULL_SLOT_KEY] ||
         null
       );
     },

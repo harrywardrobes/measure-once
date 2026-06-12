@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useToast } from '../../contexts/ToastContext';
+import { GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY, GLOBAL_NULL_SLOT_KEY } from './adminConstants';
 import { STATUS_COLORS, STAGE_COLORS } from '../../theme';
 import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
@@ -83,7 +84,7 @@ function buildModel(
   // Write sentinel: stage_key='__global__', status_key=''.
   // Read: prefer '__global__' (new saves), fall back to 'sales' (legacy null-row data).
   // Runtime resolver now falls back to '__global__|' when no per-stage default row is found.
-  const globalNullLabel = labelByKey['__global__|'] || labelByKey['sales|'] || '';
+  const globalNullLabel = labelByKey[GLOBAL_NULL_SLOT_KEY] || labelByKey['sales|'] || '';
   const globalNull: StatusModel = {
     key: '__NULL__', label: 'No lead status',
     defaultLabel: globalNullLabel,
@@ -353,7 +354,7 @@ export function CardActionsPage() {
             ) : (
               <>
                 {/* ── Global "No lead status" block ──────────────────────── */}
-                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`__global__-${reloadKey}`}>
+                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`${GLOBAL_NULL_STAGE_KEY}-${reloadKey}`}>
                   <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
                   <span className="adm-text-muted-xs" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                     no <code>hs_lead_status</code>
@@ -361,15 +362,15 @@ export function CardActionsPage() {
                   <input type="text" className="field ca-default-input adm-ca-default-input"
                     maxLength={128}
                     data-kind="ls-default"
-                    data-stage="__global__"
-                    data-status=""
+                    data-stage={GLOBAL_NULL_STAGE_KEY}
+                    data-status={GLOBAL_NULL_STATUS_KEY}
                     data-original={globalNull.defaultLabel}
                     defaultValue={globalNull.defaultLabel}
                     placeholder="(Action label)"
                     onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                   />
-                  <HandlerBadges stageKey="__global__" statusKey="" handlers={handlers} />
-                  {resolvedSlots.has('ls:__global__:') && (
+                  <HandlerBadges stageKey={GLOBAL_NULL_STAGE_KEY} statusKey={GLOBAL_NULL_STATUS_KEY} handlers={handlers} />
+                  {resolvedSlots.has(`ls:${GLOBAL_NULL_STAGE_KEY}:${GLOBAL_NULL_STATUS_KEY}`) && (
                     <span className="ca-resolved-pill" style={{
                       display: 'inline-flex', alignItems: 'center',
                       padding: '1px 8px', marginLeft: 6,

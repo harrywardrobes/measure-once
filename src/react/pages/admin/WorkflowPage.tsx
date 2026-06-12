@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY, GLOBAL_NULL_SLOT_KEY } from './adminConstants';
 import {
   Accordion,
   AccordionDetails,
@@ -670,7 +671,7 @@ function StatusRow({
   isFlashing: boolean;
   onPreviewClick?: (handler: Handler) => void;
 }) {
-  const lsKey          = stageKey === '__global__' ? '' : String(ls.key || '').toLowerCase();
+  const lsKey          = stageKey === GLOBAL_NULL_STAGE_KEY ? GLOBAL_NULL_STATUS_KEY : String(ls.key || '').toLowerCase();
   const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
   const hasNonDefault  = statusHandlers.some(isNonDefaultHandler);
   const hasHandler     = hasNonDefault;
@@ -1316,7 +1317,7 @@ export function WorkflowPage() {
     const q = searchText.toLowerCase().trim();
     if (!q) return true;
     if (globalNullRow.label.toLowerCase().includes(q)) return true;
-    const hs = handlersForSlot(handlers, '__global__', '');
+    const hs = handlersForSlot(handlers, GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY);
     return hs.some(h => {
       if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
       const meta = isHandlerType(h.type) ? HANDLER_COMPONENT_META[h.type] : undefined;
@@ -1458,11 +1459,11 @@ export function WorkflowPage() {
                   >
                     <StatusRow
                       ls={globalNullRow}
-                      stageKey="__global__"
+                      stageKey={GLOBAL_NULL_STAGE_KEY}
                       handlers={handlers}
                       emailTemplates={emailTemplates}
                       labelMap={globalLabelMap}
-                      isFlashing={flashedSlots.has('__global__|')}
+                      isFlashing={flashedSlots.has(GLOBAL_NULL_SLOT_KEY)}
                       onPreviewClick={(handler) => setDemoModal({ handler })}
                     />
                   </Paper>

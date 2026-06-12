@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '../../contexts/ToastContext';
+import { GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY, GLOBAL_NULL_SLOT_KEY } from './adminConstants';
 import {
   Accordion,
   AccordionDetails,
@@ -260,14 +261,14 @@ function _buildActionSlotGroups(): ActionStage[] {
   // Mirrors CardActionsPage: prefer '__global__' label, fall back to legacy 'sales' label for display.
   // Always rendered as an attachable slot so an admin can attach the first handler to it,
   // mirroring how every pipeline lead status renders even before a handler is bound.
-  const globalLabel = labelsByKey.get('__global__|') || '';
+  const globalLabel = labelsByKey.get(GLOBAL_NULL_SLOT_KEY) || '';
   const globalLabelDisplay = globalLabel || labelsByKey.get('sales|') || (nullRow?.label ?? 'No lead status');
   const globalStage: ActionStage = {
-    stage: { key: '__global__', label: 'No lead status' },
+    stage: { key: GLOBAL_NULL_STAGE_KEY, label: 'No lead status' },
     groups: [{
       ls: { key: '__GLOBAL_NULL__', label: '', isNullRow: false },
       slots: [{
-        kind: 'ls', stage_key: '__global__', status_key: '',
+        kind: 'ls', stage_key: GLOBAL_NULL_STAGE_KEY, status_key: GLOBAL_NULL_STATUS_KEY,
         label: globalLabelDisplay,
         hasLabel: !!globalLabel,
       }],
@@ -888,7 +889,7 @@ function HandlerBoundTo({ h }: { h: Handler }) {
         {h.bindings.map((b, i) => {
           const stage = String(b.stage_key || '');
           let chipLabel: string;
-          if (stage.toLowerCase() === '__global__' && (b.status_key || '') === '') {
+          if (stage.toLowerCase() === GLOBAL_NULL_STAGE_KEY && (b.status_key || '') === GLOBAL_NULL_STATUS_KEY) {
             chipLabel = 'No lead status';
           } else {
             const ck = String(b.status_key || '').toLowerCase();
