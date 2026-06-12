@@ -27,6 +27,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
+import { formatAddress, isAddressEmpty, type StructuredAddress } from '../../../../shared/address';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ interface Submission {
   address_line1: string | null;
   city: string | null;
   postcode: string | null;
+  structuredAddress?: StructuredAddress | null;
   room_count: string | null;
   room_notes: string | null;
   photo_keys: string[];
@@ -640,7 +642,9 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
     <Chip icon={<CheckCircleIcon />} label="Submitted" size="small" color="success" variant="outlined" data-testid="status-chip" />
   );
 
-  const address = [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ');
+  const address = sub.structuredAddress && !isAddressEmpty(sub.structuredAddress)
+    ? formatAddress(sub.structuredAddress).replace(/\n/g, ', ')
+    : [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ');
 
   return (
     <Box

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import { PROVIDER_COLORS } from '../../theme';
 import { Contact, LeadStatus, contactName } from './types';
+import { formatAddress, emptyAddress } from '../../../../shared/address';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
@@ -52,11 +53,8 @@ export function CustomerDetailHeader({
     : props.mobilephone    ? 'mobile'
     : props.hs_whatsapp_phone_number ? 'whatsapp'
     : null;
-  const address    = props.address || '';
-  const city       = props.city   || '';
-  const zip        = props.zip    || '';
+  const addressText = formatAddress(props.structuredAddress || emptyAddress());
   const customerNum = props.customer_number || '';
-  const cityLine   = [city, zip].filter(Boolean).join(' ');
 
   const rawStatus = props.hs_lead_status || '';
 
@@ -109,10 +107,11 @@ export function CustomerDetailHeader({
               )}
             </div>
 
-            {(address || cityLine) && (
+            {addressText && (
               <div className="mt-3 space-y-0.5">
-                {address  && <div className="text-sm" style={{ color: 'var(--ink-4)' }}>{address}</div>}
-                {cityLine && <div className="text-sm" style={{ color: 'var(--ink-4)' }}>{cityLine}</div>}
+                {addressText.split('\n').map((line, i) => (
+                  <div key={i} className="text-sm" style={{ color: 'var(--ink-4)' }}>{line}</div>
+                ))}
               </div>
             )}
 

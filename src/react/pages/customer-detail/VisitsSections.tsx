@@ -16,6 +16,7 @@ import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { formatAddress, emptyAddress, type StructuredAddress } from '../../../../shared/address';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { ScheduleVisitModal } from '../../components/modals/ScheduleVisitModal';
 
@@ -187,7 +188,7 @@ interface VisitsSectionProps {
   contactId: string;
   contact: {
     id: string;
-    properties: { firstname?: string; lastname?: string; email?: string; phone?: string; mobilephone?: string; address?: string; city?: string; zip?: string };
+    properties: { firstname?: string; lastname?: string; email?: string; phone?: string; mobilephone?: string; structuredAddress?: StructuredAddress };
   };
 }
 
@@ -199,7 +200,7 @@ function contactDisplayName(contact: VisitsSectionProps['contact']): string {
 
 function contactAddress(contact: VisitsSectionProps['contact']): string {
   const p = contact.properties;
-  return [p.address, p.city, p.zip].filter(Boolean).join(', ');
+  return formatAddress(p.structuredAddress || emptyAddress()).replace(/\n/g, ', ');
 }
 
 export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps) {

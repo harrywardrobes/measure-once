@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/react/test-setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'shared/**/*.test.{ts,tsx}'],
     alias: {
       '@': resolve(__dirname, 'src/react'),
     },

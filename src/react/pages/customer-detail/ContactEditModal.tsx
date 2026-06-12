@@ -9,6 +9,8 @@ import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
 import Alert from '@mui/material/Alert';
 import { Contact } from './types';
+import { AddressInput } from '../../components/AddressInput';
+import { emptyAddress, type StructuredAddress } from '../../../../shared/address';
 import { updateRecentCustomer } from '../../utils/formatters';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
@@ -23,9 +25,7 @@ type FormValues = {
   phone: string;
   mobilephone: string;
   hs_whatsapp_phone_number: string;
-  address: string;
-  city: string;
-  zip: string;
+  structuredAddress: StructuredAddress;
 };
 
 type ActivePhoneField = 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number' | null;
@@ -48,9 +48,7 @@ function toFormValues(contact: Contact): FormValues {
     phone:                   p.phone                   || '',
     mobilephone:             p.mobilephone             || '',
     hs_whatsapp_phone_number: p.hs_whatsapp_phone_number || '',
-    address:                 p.address                 || '',
-    city:                    p.city                    || '',
-    zip:                     p.zip                     || '',
+    structuredAddress:       p.structuredAddress       || emptyAddress(),
   };
 }
 
@@ -59,7 +57,7 @@ function draftKey(contactId: string): string {
 }
 
 function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number'> {
-  const { phone, mobilephone, hs_whatsapp_phone_number, ...safeValues } = values;
+  const { phone: _phone, mobilephone: _mobilephone, hs_whatsapp_phone_number: _wa, ...safeValues } = values;
   return safeValues;
 }
 
@@ -101,7 +99,9 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
 
   const savedValues = toFormValues(contact);
   const hasUnsavedChanges = (Object.keys(savedValues) as (keyof FormValues)[]).some(
-    (k) => values[k] !== savedValues[k],
+    (k) => k === 'structuredAddress'
+      ? JSON.stringify(values.structuredAddress) !== JSON.stringify(savedValues.structuredAddress)
+      : values[k] !== savedValues[k],
   );
 
   // Restore draft or reset to contact values each time the modal opens.
@@ -139,26 +139,28 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     saving,
   );
 
-  function handleChange(field: keyof FormValues) {
+  function handleChange(field: 'firstname' | 'lastname' | 'email' | 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number') {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       setValues(prev => ({ ...prev, [field]: e.target.value }));
     };
+  }
+
+  function handleAddressChange(next: StructuredAddress) {
+    setValues(prev => ({ ...prev, structuredAddress: next }));
   }
 
   async function handleSave() {
     setSaving(true);
     setError(null);
     try {
-      const body: Record<string, string> = {
+      const body: Record<string, unknown> = {
         firstname:               values.firstname,
         lastname:                values.lastname,
         email:                   values.email,
         phone:                   values.phone,
         mobilephone:             values.mobilephone,
         hs_whatsapp_phone_number: values.hs_whatsapp_phone_number,
-        address:                 values.address,
-        city:                    values.city,
-        zip:                     values.zip,
+        structuredAddress:       values.structuredAddress,
       };
       const res = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}`, {
         method: 'PATCH',
@@ -180,7 +182,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
         firstname: values.firstname,
         lastname:  values.lastname,
         email:     values.email,
-        zip:       values.zip,
+        zip:       values.structuredAddress.postalCode,
       });
       onSaved(updated);
       onClose();
@@ -263,33 +265,12 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             helperText={activePh === 'hs_whatsapp_phone_number' ? <HeaderBadge /> : undefined}
           />
 
-          <TextField
-            label="Address"
-            value={values.address}
-            onChange={handleChange('address')}
-            fullWidth
-            size="small"
-            autoComplete="off"
+          <AddressInput
+            value={values.structuredAddress}
+            onChange={handleAddressChange}
+            disabled={saving}
+            idPrefix="contact-edit-address"
           />
-
-          <Stack direction="row" spacing={2}>
-            <TextField
-              label="City"
-              value={values.city}
-              onChange={handleChange('city')}
-              fullWidth
-              size="small"
-              autoComplete="off"
-            />
-            <TextField
-              label="Postcode"
-              value={values.zip}
-              onChange={handleChange('zip')}
-              fullWidth
-              size="small"
-              autoComplete="off"
-            />
-          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions>

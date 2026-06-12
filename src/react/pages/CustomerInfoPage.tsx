@@ -16,6 +16,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { AddressInput } from '../components/AddressInput';
+import { emptyAddress, type StructuredAddress } from '../../../shared/address';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
@@ -27,13 +29,11 @@ import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 type PageState = 'loading' | 'main' | 'submitted' | 'expired' | 'already_submitted' | 'error';
 
 interface FormData {
-  correctedEmail:  string;
-  correctedMobile: string;
-  addressLine1:    string;
-  city:            string;
-  postcode:        string;
-  roomCount:       string;
-  roomNotes:       string;
+  correctedEmail:    string;
+  correctedMobile:   string;
+  structuredAddress: StructuredAddress;
+  roomCount:         string;
+  roomNotes:         string;
 }
 
 interface DraftPayload extends FormData {
@@ -270,13 +270,11 @@ export function CustomerInfoPage() {
   const [errorMsg, setErrorMsg]     = useState('');
 
   const [formData, setFormData] = useState<FormData>({
-    correctedEmail:  '',
-    correctedMobile: '',
-    addressLine1:    '',
-    city:            '',
-    postcode:        '',
-    roomCount:       '1',
-    roomNotes:       '',
+    correctedEmail:    '',
+    correctedMobile:   '',
+    structuredAddress: emptyAddress(),
+    roomCount:         '1',
+    roomNotes:         '',
   });
 
   const [photos, setPhotos]         = useState<UploadedPhoto[]>([]);
@@ -418,10 +416,11 @@ export function CustomerInfoPage() {
   async function handleSubmit() {
     setSubmitErr('');
 
-    if (!formData.addressLine1.trim()) { setSubmitErr('Please enter the first line of your address.'); return; }
-    if (!formData.city.trim())         { setSubmitErr('Please enter your city or town.'); return; }
-    if (!formData.postcode.trim())     { setSubmitErr('Please enter your postcode.'); return; }
-    if (!formData.roomCount)           { setSubmitErr('Please select how many rooms.'); return; }
+    const addr = formData.structuredAddress;
+    if (!(addr.addressLines[0] || '').trim()) { setSubmitErr('Please enter the first line of your address.'); return; }
+    if (!(addr.locality || '').trim())        { setSubmitErr('Please enter your city or town.'); return; }
+    if (!(addr.postalCode || '').trim())      { setSubmitErr('Please enter your postcode.'); return; }
+    if (!formData.roomCount)                  { setSubmitErr('Please select how many rooms.'); return; }
 
     setSubmitting(true);
     try {
@@ -429,14 +428,12 @@ export function CustomerInfoPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          correctedEmail:  formData.correctedEmail.trim()  || undefined,
-          correctedMobile: formData.correctedMobile.trim() || undefined,
-          addressLine1:    formData.addressLine1.trim(),
-          city:            formData.city.trim(),
-          postcode:        formData.postcode.trim(),
-          roomCount:       formData.roomCount,
-          roomNotes:       formData.roomNotes.trim() || undefined,
-          photoKeys:       photos.map(p => p.key),
+          correctedEmail:    formData.correctedEmail.trim()  || undefined,
+          correctedMobile:   formData.correctedMobile.trim() || undefined,
+          structuredAddress: formData.structuredAddress,
+          roomCount:         formData.roomCount,
+          roomNotes:         formData.roomNotes.trim() || undefined,
+          photoKeys:         photos.map(p => p.key),
         }),
       });
       const d = await r.json();
@@ -679,35 +676,19 @@ export function CustomerInfoPage() {
 
                 <Divider sx={{ my: 0.5 }} />
 
-                <TextField
-                  label="First line of address"
-                  placeholder="e.g. 12 Oak Avenue"
-                  value={formData.addressLine1}
-                  onChange={handleFieldChange('addressLine1')}
-                  fullWidth
-                  size="small"
+                <AddressInput
+                  value={formData.structuredAddress}
+                  onChange={(next) => {
+                    setFormData(prev => {
+                      const updated = { ...prev, structuredAddress: next };
+                      saveDraft(token, updated, photos.map(p => p.key));
+                      return updated;
+                    });
+                  }}
                   required
+                  disabled={submitting}
+                  idPrefix="ci-address"
                 />
-                <Stack direction="row" spacing={1.5}>
-                  <TextField
-                    label="City / Town"
-                    placeholder="e.g. Manchester"
-                    value={formData.city}
-                    onChange={handleFieldChange('city')}
-                    fullWidth
-                    size="small"
-                    required
-                  />
-                  <TextField
-                    label="Postcode"
-                    placeholder="e.g. M1 1AB"
-                    value={formData.postcode}
-                    onChange={handleFieldChange('postcode')}
-                    sx={{ minWidth: 130 }}
-                    size="small"
-                    required
-                  />
-                </Stack>
               </Stack>
             </SectionCard>
 

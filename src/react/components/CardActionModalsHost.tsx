@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { DesignVisitWizard } from './DesignVisitWizard';
 import { MessagePopupModal } from './modals/MessagePopupModal';
 import { ScheduleVisitModal } from './modals/ScheduleVisitModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
-import { ArrangeVisitModal } from './modals/ArrangeVisitModal';
+const DesignVisitWizard = React.lazy(() =>
+  import('./DesignVisitWizard').then(m => ({ default: m.DesignVisitWizard }))
+);
+const ArrangeVisitModal = React.lazy(() =>
+  import('./modals/ArrangeVisitModal').then(m => ({ default: m.ArrangeVisitModal }))
+);
 const ContactCustomerModal = React.lazy(() =>
   import('./modals/ContactCustomerModal').then(m => ({ default: m.ContactCustomerModal }))
 );
@@ -126,12 +130,14 @@ export function CardActionModalsHost() {
         <PhoneSummaryModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
       )}
       {modal.type === 'start_design_visit' && (
-        <DesignVisitWizard
-          handler={modal.handler}
-          ctx={modal.ctx}
-          existingVisit={modal.existingVisit}
-          onClose={close}
-        />
+        <React.Suspense fallback={null}>
+          <DesignVisitWizard
+            handler={modal.handler}
+            ctx={modal.ctx}
+            existingVisit={modal.existingVisit}
+            onClose={close}
+          />
+        </React.Suspense>
       )}
       {modal.type === 'upload_photos_and_info' && (
         <UploadPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
@@ -142,7 +148,9 @@ export function CardActionModalsHost() {
         </React.Suspense>
       )}
       {modal.type === 'arrange_visit' && (
-        <ArrangeVisitModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        <React.Suspense fallback={null}>
+          <ArrangeVisitModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        </React.Suspense>
       )}
       {modal.type === 'contact_customer' && (
         <React.Suspense fallback={null}>

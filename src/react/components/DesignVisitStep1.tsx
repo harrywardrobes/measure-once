@@ -13,11 +13,13 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { AddressInput } from './AddressInput';
+import type { StructuredAddress } from '../../../shared/address';
 
 export interface Step1Data {
   visitDate: string;
   duration: string;
-  location: string;
+  structuredAddress: StructuredAddress;
   designerName: string;
   handleId: string;
   furnitureRangeId: string;
@@ -142,15 +144,13 @@ export function DesignVisitStep1({
           />
         </Box>
 
-        <TextField
-          label="Location"
-          size="small"
-          fullWidth
-          placeholder="e.g. 12 Baker Street, London"
-          value={data.location}
-          onChange={e => update({ location: e.target.value })}
-          sx={{ mb: 1.5 }}
-        />
+        <Box sx={{ mb: 1.5 }}>
+          <AddressInput
+            value={data.structuredAddress}
+            onChange={(next) => update({ structuredAddress: next })}
+            idPrefix="dv-step1-address"
+          />
+        </Box>
 
         <TextField
           label="Designer name"

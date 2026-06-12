@@ -1,3 +1,5 @@
+import type { StructuredAddress } from '../../../../shared/address';
+
 export interface ContactProperties {
   firstname?: string;
   lastname?: string;
@@ -9,6 +11,7 @@ export interface ContactProperties {
   address?: string;
   city?: string;
   zip?: string;
+  structuredAddress?: StructuredAddress;
   customer_number?: string;
   hs_lead_status?: string;
   hs_object_id?: string;
@@ -74,6 +77,7 @@ export interface DesignVisit {
   handle_name?: string | null;
   furniture_range_name?: string | null;
   location?: string | null;
+  structuredAddress?: StructuredAddress | null;
   contact_name?: string;
   contact_email?: string;
 }
@@ -97,6 +101,7 @@ export interface Visit {
   customerId?: string;
   customerName?: string;
   location?: string;
+  structuredAddress?: StructuredAddress | null;
   notes?: string;
   assigneeId?: string;
   assigneeRole?: string;

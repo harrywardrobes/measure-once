@@ -1063,6 +1063,10 @@ export function ProjectsPage() {
       if (res.status === 401) { window.location.href = '/login'; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as Contact;
+      const topLevelAddr = (data as unknown as { structuredAddress?: Contact['properties']['structuredAddress'] }).structuredAddress;
+      if (topLevelAddr && !data.properties.structuredAddress) {
+        data.properties.structuredAddress = topLevelAddr;
+      }
       setEditContactData(data);
     } catch {
       showToast('Could not load contact details', true);
@@ -1074,7 +1078,7 @@ export function ProjectsPage() {
       firstname: updated.properties.firstname,
       lastname:  updated.properties.lastname,
       email:     updated.properties.email,
-      zip:       updated.properties.zip,
+      zip:       updated.properties.structuredAddress?.postalCode,
     });
     setEditContactData(null);
   }, [updateContactProperties]);

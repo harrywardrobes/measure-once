@@ -32,6 +32,7 @@ const {
 // deposit_invoice_followup accepted keys are only used inside this file; keep inline.
 const { getTerminalStatusMap, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 const { GLOBAL_NULL_STAGE_KEY } = require('./shared/slotConstants.cjs');
+const { structuredAddressSchema, hubspotToAddress, addressToHubspot, formatAddress } = require('./shared/address.cjs');
 const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
@@ -1965,14 +1966,28 @@ app.get('/api/project-contacts', async (req, res) => {
 
 // Create a new contact in HubSpot and generate a customer number
 app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
-  const { firstname, lastname, email, phone, postcode } = req.body || {};
+  const { firstname, lastname, email, phone, structuredAddress } = req.body || {};
 
-  if (!firstname || !email || !postcode) {
-    return res.status(400).json({ error: 'First name, email, and postcode are required.' });
+  if (!firstname || !email) {
+    return res.status(400).json({ error: 'First name and email are required.' });
+  }
+
+  // Structured address is the source for postcode + the customer-number area
+  // prefix. Validate it via the shared Zod schema; a postcode is required so a
+  // customer number can be derived.
+  let addr;
+  const parsedAddr = structuredAddressSchema.safeParse(structuredAddress || {});
+  if (!parsedAddr.success) {
+    return res.status(400).json({ error: 'Invalid address.' });
+  }
+  addr = parsedAddr.data;
+  const hsAddr = addressToHubspot(addr);
+  if (!hsAddr.zip) {
+    return res.status(400).json({ error: 'A postcode is required.' });
   }
 
   // Extract the area letters from the postcode (leading alpha chars before first digit)
-  const areaMatch = postcode.trim().match(/^([A-Za-z]+)/);
+  const areaMatch = hsAddr.zip.trim().match(/^([A-Za-z]+)/);
   const areaPrefix = areaMatch ? areaMatch[1].toUpperCase() : 'XX';
 
   try {
@@ -1984,7 +1999,11 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
         lastname:       lastname  || '',
         email,
         phone:          phone     || '',
-        zip:            postcode,
+        address:        hsAddr.address || '',
+        city:           hsAddr.city    || '',
+        state:          hsAddr.state   || '',
+        zip:            hsAddr.zip,
+        country:        hsAddr.country || '',
         hs_lead_status: 'OPEN_DEAL',
       }
     };
@@ -2037,9 +2056,14 @@ app.get('/api/contacts/:id', requireHubspotToken, async (req, res) => {
     const safeContactId = encodeURIComponent(contactId);
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: getHubSpotHeaders(),
-      params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,customer_number,hs_lead_status,createdate' }
+      params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,customer_number,hs_lead_status,createdate' }
     });
-    res.json(r.data);
+    const payload = r.data || {};
+    const p = payload.properties || {};
+    payload.structuredAddress = hubspotToAddress({
+      address: p.address, city: p.city, state: p.state, zip: p.zip, country: p.country,
+    });
+    res.json(payload);
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {
@@ -2058,12 +2082,26 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (!/^\d+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id.' });
     }
-    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number', 'address', 'city', 'zip'];
+    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number'];
     const properties = {};
     for (const key of allowed) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
         properties[key] = req.body[key];
       }
+    }
+    // Address is supplied as a structured object and expanded into the raw
+    // HubSpot address/city/state/zip/country properties via addressToHubspot().
+    if (Object.prototype.hasOwnProperty.call(req.body, 'structuredAddress')) {
+      const parsedAddr = structuredAddressSchema.safeParse(req.body.structuredAddress || {});
+      if (!parsedAddr.success) {
+        return res.status(400).json({ error: 'Invalid address.' });
+      }
+      const hsAddr = addressToHubspot(parsedAddr.data);
+      properties.address = hsAddr.address;
+      properties.city    = hsAddr.city;
+      properties.state   = hsAddr.state;
+      properties.zip     = hsAddr.zip;
+      properties.country = hsAddr.country;
     }
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
@@ -5852,7 +5890,7 @@ app.post('/api/card-actions/arrange-visit',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,hs_lead_status' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const leadStatus = String(props.hs_lead_status || '').toLowerCase();
@@ -5864,9 +5902,11 @@ app.post('/api/card-actions/arrange-visit',
       const contactMobilePhone   = String(props.mobilephone || '');
       const contactWhatsAppPhone = String(props.hs_whatsapp_phone_number || '');
       const contactEmail         = String(props.email || '');
-      const addressParts         = [props.address, props.city, props.zip].filter(Boolean);
-      const contactAddress       = addressParts.join(', ');
-      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactWhatsAppPhone, contactEmail, contactAddress });
+      const contactStructuredAddress = hubspotToAddress({
+        address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
+      });
+      const contactAddress       = formatAddress(contactStructuredAddress);
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactWhatsAppPhone, contactEmail, contactAddress, contactStructuredAddress });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
@@ -6196,7 +6236,7 @@ app.post('/api/card-actions/design-visit-followup',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_lead_status,address,city,zip' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_lead_status,address,city,state,zip,country' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const firstName    = String(props.firstname || '');
@@ -6206,9 +6246,11 @@ app.post('/api/card-actions/design-visit-followup',
       const phone        = String(props.phone || '');
       const mobile       = String(props.mobilephone || '');
       const leadStatus   = props.hs_lead_status || null;
-      const addressParts = [props.address, props.city, props.zip].filter(Boolean);
-      const contactAddress = addressParts.join(', ');
-      res.json({ contactName, contactEmail, phone, mobile, leadStatus, contactAddress });
+      const contactStructuredAddress = hubspotToAddress({
+        address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
+      });
+      const contactAddress = formatAddress(contactStructuredAddress);
+      res.json({ contactName, contactEmail, phone, mobile, leadStatus, contactAddress, contactStructuredAddress });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
@@ -6300,7 +6342,7 @@ app.post('/api/card-actions/open-deal',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,zip,hs_lead_status' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const firstName  = String(props.firstname || '');
@@ -6309,8 +6351,10 @@ app.post('/api/card-actions/open-deal',
       const contactEmail = String(props.email || '');
       const contactPhone = String(props.phone || '');
       const contactMobile = String(props.mobilephone || '');
-      const addressParts  = [props.address, props.city, props.zip].filter(Boolean);
-      const contactAddress = addressParts.join(', ');
+      const contactStructuredAddress = hubspotToAddress({
+        address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
+      });
+      const contactAddress = formatAddress(contactStructuredAddress);
 
       // Read deposit percent from qb_settings
       let depositPercent = 10;
@@ -6348,6 +6392,7 @@ app.post('/api/card-actions/open-deal',
         contactPhone,
         contactMobile,
         contactAddress,
+        contactStructuredAddress,
         depositPercent,
         qbConnected,
         estimates,
@@ -6379,7 +6424,7 @@ app.post('/api/card-actions/deposit-invoice',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,zip' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,state,zip,country' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const firstName     = String(props.firstname || '');
@@ -6388,8 +6433,10 @@ app.post('/api/card-actions/deposit-invoice',
       const contactEmail  = String(props.email   || '');
       const contactPhone  = String(props.phone   || '');
       const contactMobile = String(props.mobilephone || '');
-      const addressParts  = [props.address, props.city, props.zip].filter(Boolean);
-      const contactAddress = addressParts.join(', ');
+      const contactStructuredAddress = hubspotToAddress({
+        address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
+      });
+      const contactAddress = formatAddress(contactStructuredAddress);
 
       // Look up deposit_invoice_id + qb_estimate_id from the most-recent design_visit
       let storedInvoiceId  = null;
@@ -6478,6 +6525,7 @@ app.post('/api/card-actions/deposit-invoice',
         contactPhone,
         contactMobile,
         contactAddress,
+        contactStructuredAddress,
         qbConnected,
         paymentState,
         invoiceId,

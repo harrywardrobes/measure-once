@@ -28,6 +28,7 @@ import {
 } from './modals/demoData';
 import { ModalContactHeader } from './modals/ModalContactHeader';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
+import { emptyAddress, isAddressEmpty, type StructuredAddress } from '../../../shared/address';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
 
@@ -60,6 +61,7 @@ export interface ExistingVisit {
   visit_date?: string;
   duration_min?: number;
   location?: string;
+  structuredAddress?: StructuredAddress;
   handle_id?: string | number | null;
   furniture_range_id?: string | number | null;
   notes?: string;
@@ -93,7 +95,7 @@ function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit
   const s: Step1Data = {
     visitDate: '',
     duration: String(defaultDuration),
-    location: '',
+    structuredAddress: emptyAddress(),
     designerName: '',
     handleId: '',
     furnitureRangeId: '',
@@ -109,7 +111,11 @@ function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit
     } catch {}
   }
   if (ev.duration_min) s.duration = String(ev.duration_min);
-  if (ev.location) s.location = String(ev.location);
+  if (ev.structuredAddress && !isAddressEmpty(ev.structuredAddress)) {
+    s.structuredAddress = ev.structuredAddress;
+  } else if (ev.location) {
+    s.structuredAddress = { ...emptyAddress(), addressLines: [String(ev.location)] };
+  }
   if (ev.handle_id != null) s.handleId = String(ev.handle_id);
   if (ev.furniture_range_id != null) s.furnitureRangeId = String(ev.furniture_range_id);
   if (ev.notes) {
@@ -418,7 +424,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       step1.termsAccepted ||
       step1.visitDate.trim() !== '' ||
       step1.designerName.trim() !== '' ||
-      step1.location.trim() !== '' ||
+      !isAddressEmpty(step1.structuredAddress) ||
       step1.handleId !== '' ||
       step1.furnitureRangeId !== '';
     const roomsTouched = rooms.some(
@@ -482,7 +488,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         furnitureRangeId: step1.furnitureRangeId  || undefined,
         visitDate:        step1.visitDate         || undefined,
         durationMin:      parseInt(step1.duration, 10) || defaultDuration,
-        location:         step1.location          || undefined,
+        structuredAddress: step1.structuredAddress,
         notes:            step1.designerName ? `Designer: ${step1.designerName}` : undefined,
         termsAccepted:    true,
         rooms: rooms.map(r => ({

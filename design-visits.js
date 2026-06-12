@@ -13,6 +13,29 @@ const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel } = require('./auth');
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
+const {
+  structuredAddressSchema, hubspotToAddress, formatAddress, isAddressEmpty,
+} = require('./shared/address.cjs');
+
+// Normalises a design-visit address from the request body. Prefers the new
+// structured object; falls back to wrapping a legacy free-text `location`
+// string as a single address line. Returns { address, location } where
+// `location` is the single-line formatAddress() rendering persisted to the
+// legacy column for list/email read-fallback. Returns { error } on a malformed
+// structured object.
+function resolveDesignVisitAddress(structuredAddress, location) {
+  if (structuredAddress !== undefined && structuredAddress !== null) {
+    const parsed = structuredAddressSchema.safeParse(structuredAddress);
+    if (!parsed.success) return { error: 'Invalid address.' };
+    const address = isAddressEmpty(parsed.data) ? null : parsed.data;
+    return { address, location: address ? formatAddress(address).replace(/\n/g, ', ') : null };
+  }
+  // Legacy path: wrap the free-text location string as a single address line.
+  const loc = location ? String(location).trim() : '';
+  if (!loc) return { address: null, location: null };
+  const address = { addressLines: [loc.slice(0, 500)], countryCode: 'GB' };
+  return { address, location: loc.slice(0, 500) };
+}
 
 let _patchContactProperties = async (_contactId, _props) => {
   logger.warn('[design-visits] patchContactProperties called before wiring — HubSpot PATCH skipped');
@@ -318,6 +341,10 @@ async function loadVisitWithRooms(id) {
     ...r,
     images: imagesByRoom[r.id] || [],
   }));
+  // Surface a camelCase structured address. Prefer the stored JSONB column;
+  // fall back to wrapping the legacy single-line `location` for old rows.
+  visit.structuredAddress = visit.structured_address
+    || (visit.location ? { addressLines: [String(visit.location)], countryCode: 'GB' } : null);
   return visit;
 }
 
@@ -1342,13 +1369,18 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
   const {
     contactId, contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
-    location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, termsAccepted, rooms = [],
     handlerConfig,
   } = req.body;
 
   if (!contactId) return res.status(400).json({ error: 'contactId is required' });
   if (!Array.isArray(rooms) || !rooms.length) return res.status(400).json({ error: 'At least one room is required' });
   if (!termsAccepted) return res.status(400).json({ error: 'Terms and conditions must be accepted' });
+
+  // Resolve the structured address (preferred) and keep the legacy `location`
+  // column populated with a single-line rendering for list/email read-fallback.
+  const createAddr = resolveDesignVisitAddress(structuredAddress, location);
+  if (createAddr.error) return res.status(400).json({ error: createAddr.error });
 
   const client = await pool.connect();
   try {
@@ -1367,8 +1399,8 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     const vr = await client.query(`
       INSERT INTO design_visits
         (contact_id, contact_name, contact_email, created_by, handle_id, furniture_range_id,
-         visit_date, duration_min, location, notes, terms_accepted, terms_condition_version_id, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'draft')
+         visit_date, duration_min, location, structured_address, notes, terms_accepted, terms_condition_version_id, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,'draft')
       RETURNING id`,
       [
         String(contactId),
@@ -1379,7 +1411,8 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
         visitDate ? new Date(visitDate).toISOString() : null,
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
-        location ? String(location).slice(0, 500) : null,
+        createAddr.location,
+        createAddr.address ? JSON.stringify(createAddr.address) : null,
         notes    ? String(notes).slice(0, 4000)   : null,
         !!termsAccepted,
         termsVersionId,
@@ -1479,20 +1512,28 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
 router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
+  const { structuredAddress, location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
   try {
+    // Resolve the address only when the caller supplied one (structured or
+    // legacy). When neither is present, leave both columns untouched via COALESCE.
+    let patchAddr = { address: undefined, location: undefined };
+    if (structuredAddress !== undefined || location !== undefined) {
+      patchAddr = resolveDesignVisitAddress(structuredAddress, location);
+      if (patchAddr.error) return res.status(400).json({ error: patchAddr.error });
+    }
     const callerPrivilege = getRequestPrivilegeLevel(req);
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
     // Members may only patch their own draft visits; managers and admins may patch any.
-    const ownerClause = isMemberOnly ? `AND created_by = $8` : '';
+    const ownerClause = isMemberOnly ? `AND created_by = $9` : '';
     const params = [
-      location     ? String(location).slice(0, 500) : null,
+      patchAddr.location === undefined ? null : patchAddr.location,
       notes        ? String(notes).slice(0, 4000)   : null,
       visitDate    ? new Date(visitDate).toISOString() : null,
       durationMin  ? parseInt(durationMin, 10) || null : null,
       handleId     ? parseInt(handleId, 10) || null : null,
       furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
+      patchAddr.address === undefined ? null : (patchAddr.address ? JSON.stringify(patchAddr.address) : null),
       id,
     ];
     if (isMemberOnly) params.push(String(callerId));
@@ -1504,8 +1545,9 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
         duration_min       = COALESCE($4, duration_min),
         handle_id          = COALESCE($5, handle_id),
         furniture_range_id = COALESCE($6, furniture_range_id),
+        structured_address = COALESCE($7::jsonb, structured_address),
         updated_at         = NOW()
-      WHERE id = $7 AND status = 'draft' ${ownerClause}
+      WHERE id = $8 AND status = 'draft' ${ownerClause}
       RETURNING id`,
       params
     );
@@ -1533,12 +1575,15 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   const {
     contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
-    location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, termsAccepted, rooms = [],
     handlerConfig,
   } = req.body;
 
   if (!Array.isArray(rooms) || !rooms.length) return res.status(400).json({ error: 'At least one room is required' });
   if (!termsAccepted) return res.status(400).json({ error: 'Terms and conditions must be accepted' });
+
+  const putAddr = resolveDesignVisitAddress(structuredAddress, location);
+  if (putAddr.error) return res.status(400).json({ error: putAddr.error });
 
   const client = await pool.connect();
   try {
@@ -1581,9 +1626,10 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         visit_date                 = $5,
         duration_min               = $6,
         location                   = $7,
-        notes                      = $8,
-        terms_accepted             = $9,
-        terms_condition_version_id = $10,
+        structured_address         = $8::jsonb,
+        notes                      = $9,
+        terms_accepted             = $10,
+        terms_condition_version_id = $11,
         status                     = 'draft',
         superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
           THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
@@ -1591,7 +1637,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         signoff_token_hash         = NULL,
         signoff_expires_at         = NULL,
         updated_at                 = NOW()
-      WHERE id = $11`,
+      WHERE id = $12`,
       [
         contactName  ? String(contactName).slice(0, 300)  : null,
         contactEmail ? String(contactEmail).slice(0, 300) : null,
@@ -1599,7 +1645,8 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         furnitureRangeId ? parseInt(furnitureRangeId, 10) || null : null,
         visitDate ? new Date(visitDate).toISOString() : null,
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
-        location ? String(location).slice(0, 500) : null,
+        putAddr.location,
+        putAddr.address ? JSON.stringify(putAddr.address) : null,
         notes    ? String(notes).slice(0, 4000)   : null,
         !!termsAccepted,
         termsVersionId,

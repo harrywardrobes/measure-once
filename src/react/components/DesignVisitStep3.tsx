@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import { type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { type RoomData } from './DesignVisitRoomsStep';
+import { formatAddress, isAddressEmpty } from '../../../shared/address';
 
 export interface DesignVisitStep3Props {
   step1Data: Step1Data;
@@ -89,7 +90,9 @@ export function DesignVisitStep3({
       <ReviewSection title="Visit details">
         {visitDateDisplay && <ReviewRow label="Date" value={visitDateDisplay} />}
         <ReviewRow label="Duration" value={`${step1Data.duration} min`} />
-        {step1Data.location && <ReviewRow label="Location" value={step1Data.location} />}
+        {!isAddressEmpty(step1Data.structuredAddress) && (
+          <ReviewRow label="Location" value={formatAddress(step1Data.structuredAddress).replace(/\n/g, ', ')} />
+        )}
         {step1Data.designerName && <ReviewRow label="Designer" value={step1Data.designerName} />}
         {handles.length > 0 && <ReviewRow label="Handle" value={handleName} />}
         {furnitureRanges.length > 0 && <ReviewRow label="Furniture range" value={furnitureName} />}

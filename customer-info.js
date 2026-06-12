@@ -16,6 +16,9 @@ const { isAuthenticated, requirePrivilege } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./shared/handler-outcomes.cjs');
+const {
+  structuredAddressSchema, hubspotToAddress, addressToHubspot, formatAddress, isAddressEmpty,
+} = require('./shared/address.cjs');
 
 // Email template keys resolved from the central registry (single source of
 // truth). The customer invite is the upload_photos_and_info / link_sent
@@ -785,7 +788,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
 
   const {
     correctedEmail, correctedMobile,
-    addressLine1, city, postcode,
+    structuredAddress,
     roomCount, roomNotes,
     photoKeys,
   } = req.body;
@@ -794,15 +797,24 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   if (!['1', '2', '3+'].includes(roomCount)) {
     return res.status(400).json({ error: 'roomCount must be 1, 2, or 3+.' });
   }
-  if (!addressLine1 || typeof addressLine1 !== 'string' || !addressLine1.trim()) {
+  const parsedAddress = structuredAddressSchema.safeParse(structuredAddress || {});
+  if (!parsedAddress.success) {
+    return res.status(400).json({ error: 'A valid address is required.' });
+  }
+  const address = parsedAddress.data;
+  if (isAddressEmpty(address) || !(address.addressLines[0] || '').trim()) {
     return res.status(400).json({ error: 'First line of address is required.' });
   }
-  if (!city || typeof city !== 'string' || !city.trim()) {
+  if (!(address.locality || '').trim()) {
     return res.status(400).json({ error: 'City is required.' });
   }
-  if (!postcode || typeof postcode !== 'string' || !postcode.trim()) {
+  if (!(address.postalCode || '').trim()) {
     return res.status(400).json({ error: 'Postcode is required.' });
   }
+  // Legacy flat mirrors kept in sync for read-fallback on old display surfaces.
+  const addressLine1 = address.addressLines[0] || '';
+  const city = address.locality || '';
+  const postcode = address.postalCode || '';
   const rawKeys = Array.isArray(photoKeys) ? photoKeys : [];
   const badKey = rawKeys.find(k => typeof k !== 'string' || !k.startsWith('obj:ci_') || k.length <= 'obj:ci_'.length);
   if (badKey !== undefined) {
@@ -855,23 +867,25 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     // Mark submitted (clear form_link so staff can no longer use the stale URL).
     await client.query(
       `UPDATE customer_info_submissions SET
-         submitted_at     = NOW(),
-         form_link        = NULL,
-         corrected_email  = $1,
-         corrected_mobile = $2,
-         address_line1    = $3,
-         city             = $4,
-         postcode         = $5,
-         room_count       = $6,
-         room_notes       = $7,
-         photo_keys       = $8::jsonb
-       WHERE id = $9`,
+         submitted_at       = NOW(),
+         form_link          = NULL,
+         corrected_email    = $1,
+         corrected_mobile   = $2,
+         address_line1      = $3,
+         city               = $4,
+         postcode           = $5,
+         structured_address = $6::jsonb,
+         room_count         = $7,
+         room_notes         = $8,
+         photo_keys         = $9::jsonb
+       WHERE id = $10`,
       [
         correctedEmail  || null,
         correctedMobile || null,
         addressLine1.trim(),
         city.trim(),
         postcode.trim(),
+        JSON.stringify(address),
         roomCount,
         roomNotes || null,
         JSON.stringify(keys),
@@ -905,10 +919,20 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     client.release();
   }
 
-  // Update HubSpot lead status (non-fatal)
+  // Update HubSpot lead status + structured address (non-fatal).
+  // HubSpot remains the source of truth for the contact address, so expand the
+  // structured object into the raw address/city/state/zip/country properties.
   try {
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
-      await _patchContactProperties(lockedContactId, { hs_lead_status: 'AWAITING_PHOTOS' });
+      const hsAddr = addressToHubspot(address);
+      await _patchContactProperties(lockedContactId, {
+        hs_lead_status: 'AWAITING_PHOTOS',
+        address: hsAddr.address,
+        city:    hsAddr.city,
+        state:   hsAddr.state,
+        zip:     hsAddr.zip,
+        country: hsAddr.country,
+      });
     }
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
@@ -1299,6 +1323,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
   const r = await pool.query(
     `SELECT id, contact_name, contact_email, created_at, expires_at, submitted_at,
             corrected_email, corrected_mobile, address_line1, city, postcode,
+            structured_address,
             room_count, room_notes, photo_keys, masked_email, email_skipped_count,
             CASE WHEN submitted_at IS NULL THEN form_link ELSE NULL END AS form_link
      FROM customer_info_submissions
@@ -1306,13 +1331,20 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
      ORDER BY created_at DESC`,
     [cid]
   );
-  const rows = r.rows.map(row => ({
-    ...row,
-    email_skipped_count: row.email_skipped_count ?? 0,
-    photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
-    // Strip the bearer link from the response for non-manager/admin callers.
-    form_link: canSeeFormLink ? row.form_link : undefined,
-  }));
+  const rows = r.rows.map(row => {
+    // Prefer the stored structured address; fall back to the legacy flat columns
+    // for old rows submitted before the structured_address column existed.
+    const structuredAddress = row.structured_address
+      || hubspotToAddress({ address: row.address_line1, city: row.city, zip: row.postcode, country: 'United Kingdom' });
+    return {
+      ...row,
+      structuredAddress,
+      email_skipped_count: row.email_skipped_count ?? 0,
+      photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
+      // Strip the bearer link from the response for non-manager/admin callers.
+      form_link: canSeeFormLink ? row.form_link : undefined,
+    };
+  });
   res.json(rows);
 });
 

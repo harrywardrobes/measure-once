@@ -2,6 +2,7 @@ import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { DesignVisitStep1 } from './DesignVisitStep1';
 import type { Step1Data } from './DesignVisitStep1';
+import { emptyAddress } from '../../../shared/address';
 
 const meta: Meta<typeof DesignVisitStep1> = {
   title: 'Features/DesignVisitStep1',
@@ -43,7 +44,7 @@ const TERMS_TEXT =
 const DEFAULT_DATA: Step1Data = {
   visitDate: '',
   duration: '90',
-  location: '',
+  structuredAddress: emptyAddress(),
   designerName: '',
   handleId: '',
   furnitureRangeId: '',
@@ -53,7 +54,12 @@ const DEFAULT_DATA: Step1Data = {
 const PREFILLED_DATA: Step1Data = {
   visitDate: '2026-06-15T10:00',
   duration: '120',
-  location: '14 Maple Avenue, Oxford, OX1 2AB',
+  structuredAddress: {
+    ...emptyAddress(),
+    addressLines: ['14 Maple Avenue'],
+    locality: 'Oxford',
+    postalCode: 'OX1 2AB',
+  },
   designerName: 'Sarah Jones',
   handleId: '1',
   furnitureRangeId: '2',

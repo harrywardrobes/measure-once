@@ -20,7 +20,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
@@ -31,6 +31,8 @@ import { ARRANGE_VISIT_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handler
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
+import { AddressInput } from '../AddressInput';
+import { emptyAddress, formatAddress, type StructuredAddress } from '../../../../shared/address';
 
 interface Props {
   handler: CardActionHandlerData;
@@ -55,11 +57,12 @@ interface ContactInfo {
   contactWhatsAppPhone: string;
   contactEmail: string;
   contactAddress: string;
+  contactStructuredAddress: StructuredAddress;
 }
 
 interface DraftState {
   step: Step;
-  address: string;
+  structuredAddress: StructuredAddress;
   bookedSlotIso: string | null;
   emailSubject: string;
   emailBody: string;
@@ -118,6 +121,13 @@ const DEMO_CONTACT_INFO: ContactInfo = {
   contactWhatsAppPhone: DEMO_CONTACT.whatsapp,
   contactEmail: DEMO_CONTACT.email,
   contactAddress: DEMO_CONTACT.address,
+  contactStructuredAddress: {
+    addressLines: ['12 Willow Lane'],
+    locality: 'London',
+    administrativeArea: '',
+    postalCode: 'SW1A 1AA',
+    countryCode: 'GB',
+  },
 };
 
 export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) {
@@ -149,7 +159,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const _hasUnsavedChangesRef = useRef(hasUnsavedChanges);
   _hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-  const [address, setAddress]       = useState(demo ? DEMO_CONTACT.address : (draft.address ?? ''));
+  const [structuredAddress, setStructuredAddress] = useState<StructuredAddress>(
+    demo ? DEMO_CONTACT_INFO.contactStructuredAddress : (draft.structuredAddress ?? emptyAddress()),
+  );
   const [bookedSlot, setBookedSlot] = useState<Dayjs | null>(
     draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : null,
   );
@@ -188,7 +200,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     const hasDraft = draft.step && draft.step !== 'loading' && draft.step !== 'done';
     if (hasDraft) {
       setStep(draft.step as Step);
-      if (draft.address) setAddress(draft.address);
+      if (draft.structuredAddress) setStructuredAddress(draft.structuredAddress);
       if (draft.bookedSlotIso) setBookedSlot(dayjs(draft.bookedSlotIso));
       if (draft.emailSubject) setEmailSubject(draft.emailSubject);
       if (draft.emailBody) setEmailBody(draft.emailBody);
@@ -207,9 +219,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           // Fresh open: initialise address and step from the API response.
           // Use functional update so a stale response from a rapid reopen
           // never clobbers a step that has already advanced past 'loading'.
-          setAddress(d.contactAddress || '');
+          setStructuredAddress(d.contactStructuredAddress || emptyAddress());
           setStep(prev => prev === 'loading' ? 'call' : prev);
-          saveDraft(key, { step: 'call', address: d.contactAddress || '', bookedSlotIso: null, emailSubject: '', emailBody: '' });
+          saveDraft(key, { step: 'call', structuredAddress: d.contactStructuredAddress || emptyAddress(), bookedSlotIso: null, emailSubject: '', emailBody: '' });
         }
 
         // Pre-fetch the no-answer email template using the actual contact name
@@ -241,14 +253,14 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     if (step === 'loading' || step === 'done') return;
     saveDraft(key, {
       step,
-      address,
+      structuredAddress,
       bookedSlotIso: bookedSlot?.toISOString() ?? null,
       emailSubject,
       emailBody,
       proposedEmailDateIso: proposedEmailDate?.toISOString() ?? null,
       proposedEmailTimeIso: proposedEmailTime?.toISOString() ?? null,
     });
-  }, [key, step, address, bookedSlot, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
+  }, [key, step, structuredAddress, bookedSlot, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
 
   // Re-fetch the no-answer email template whenever the proposed date/time changes
   // while the user is on the email step (same pattern as DesignVisitFollowupModal).
@@ -337,6 +349,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       // reconnect. The calendar-event side effect requires a live Google
       // session, so it is dispatched only when the write actually went through
       // now (skipped when queued offline).
+      // Persist any address edits back to the contact (HubSpot source of truth).
+      // Best-effort: a failure here (e.g. offline) must not block the booking,
+      // which is itself offline-aware via sendOrQueue below.
+      try {
+        await PATCH(`/api/contacts/${encodeURIComponent(ctx.contactId)}`, { structuredAddress });
+      } catch { /* address save is best-effort; booking still proceeds */ }
+
       const { sendOrQueue } = await import('../../lib/offlineQueue');
       const res = await sendOrQueue({
         area: 'visit',
@@ -348,7 +367,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           outcome: ARRANGE_VISIT_KEY.booked,
           visitType: contactInfo?.visitType ?? 'design',
           slot: bookedSlot.toISOString(),
-          address: address.trim(),
+          address: formatAddress(structuredAddress),
         },
       });
       if (!res.queued && !res.ok) {
@@ -599,15 +618,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                     },
                   }}
                 />
-                <TextField
-                  id="av-booked-address"
-                  label="Address"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  slotProps={{ htmlInput: { maxLength: 300 } }}
-                  placeholder="Customer address"
-                  fullWidth
-                  size="small"
+                <AddressInput
+                  value={structuredAddress}
+                  onChange={setStructuredAddress}
+                  disabled={submitting}
+                  idPrefix="av-booked-address"
                 />
                 {actionError && (
                   <Alert severity="error">{actionError}</Alert>

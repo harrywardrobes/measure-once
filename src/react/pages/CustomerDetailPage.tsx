@@ -172,6 +172,13 @@ export function CustomerDetailPage() {
       setFromCache(true);
     }
     if (!c?.id) return null;
+    // The contacts endpoint returns the structured address alongside the raw
+    // HubSpot props; fold it into properties so all consumers read it from the
+    // canonical ContactProperties.structuredAddress field.
+    const topLevelAddr = (c as unknown as { structuredAddress?: Contact['properties']['structuredAddress'] }).structuredAddress;
+    if (topLevelAddr && !c.properties.structuredAddress) {
+      c.properties.structuredAddress = topLevelAddr;
+    }
     // Write-through to the offline store (best-effort, never blocks the UI).
     // Only re-stamp when fetched from the network — caching cached data is a no-op
     // beyond refreshing the timestamp, which we don't want for stale offline reads.

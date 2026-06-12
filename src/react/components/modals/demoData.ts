@@ -56,12 +56,18 @@ export const DEMO_TERMS_TEXT =
 export const DEMO_STEP1 = {
   visitDate: '2026-06-25T10:00',
   duration: '90',
-  location: '12 Willow Lane, London, SW1A 1AA',
+  structuredAddress: {
+    addressLines: ['12 Willow Lane'],
+    locality: 'London',
+    administrativeArea: '',
+    postalCode: 'SW1A 1AA',
+    countryCode: 'GB',
+  },
   designerName: 'Alex Taylor',
   handleId: 'demo-h1',
   furnitureRangeId: 'demo-fr1',
   termsAccepted: true,
-} as const;
+};
 
 /** Pre-filled rooms shown in the wizard demo. */
 export const DEMO_ROOMS = [
