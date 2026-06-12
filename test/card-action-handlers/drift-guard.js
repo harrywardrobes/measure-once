@@ -26,6 +26,7 @@
  *   10. upload_photos_and_info: link_sent is terminal with AWAITING_PHOTOS
  *   11. CJS ↔ TS parity: same handler type keys
  *   12. CJS ↔ TS parity: same terminal-key counts per handler type
+ *   12b. CJS ↔ TS parity: same sendsEmailTemplates arrays per outcome
  *   13. Email coverage: every registry-referenced template key exists in
  *       email-templates.js TEMPLATE_KEYS
  *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
@@ -255,6 +256,94 @@ for (const type of REQUIRED_TYPES) {
     }
     if (allCountsMatch) {
       pass('CJS↔TS parity: all handler types have matching terminal key counts');
+    }
+
+    // ── 12b. CJS↔TS parity: sendsEmailTemplates arrays match per outcome ──────
+    //
+    // Parses sendsEmailTemplates from the TS source text — both bare key strings
+    // ('template_key') and object refs ({ key: 'template_key', system, sentFrom })
+    // — and compares the sorted key list against the runtime CJS registry values
+    // for every outcome in every handler type.  Detects renames or additions
+    // applied to only one registry that would slip past checks 12 and 13.
+    //
+    // Outcome key lines use exactly 6 leading spaces in the TS file:
+    //   ^      key: 'OUTCOME_KEY'
+    // Template-ref key lines inside a sendsEmailTemplates object are inline,
+    // never at the start of a line with 6 spaces, so they are not confused with
+    // outcome keys.
+    {
+      const parseTsTemplateKeys = (arrayContent) => {
+        // Object refs: { key: 'TEMPLATE_KEY', ... }
+        const objRe = /\bkey:\s*'([^']+)'/g;
+        const objKeys = [];
+        let m;
+        while ((m = objRe.exec(arrayContent)) !== null) objKeys.push(m[1]);
+        if (objKeys.length) return objKeys.sort();
+        // Bare string refs: 'TEMPLATE_KEY'
+        const bareRe = /'([^']+)'/g;
+        const bareKeys = [];
+        while ((m = bareRe.exec(arrayContent)) !== null) bareKeys.push(m[1]);
+        return bareKeys.sort();
+      };
+
+      let allEmailsMatch = true;
+      for (let i = 0; i < posMatches.length; i++) {
+        const type = posMatches[i][1];
+        if (!HANDLER_OUTCOMES[type]) continue;
+        const typeStart = posMatches[i].index;
+        const typeEnd   = i + 1 < posMatches.length ? posMatches[i + 1].index : houBlock.length;
+        const typeBlock = houBlock.slice(typeStart, typeEnd);
+
+        // Outcome key lines in the TS file have exactly 6 leading spaces:
+        //   "      key: 'OUTCOME_KEY',"
+        // Template-ref objects (inside sendsEmailTemplates arrays) place their
+        // key: field inline — never at 6-space line-start — so this regex only
+        // matches outcome boundaries, not nested template refs.
+        const outcomeKeyRe = /^      key:\s*'([^']+)'/gm;
+        const outcomePositions = [];
+        let okm;
+        while ((okm = outcomeKeyRe.exec(typeBlock)) !== null) {
+          outcomePositions.push({ key: okm[1], index: okm.index });
+        }
+
+        for (let j = 0; j < outcomePositions.length; j++) {
+          const outcomeKey = outcomePositions[j].key;
+          const oStart = outcomePositions[j].index;
+          const oEnd   = j + 1 < outcomePositions.length
+            ? outcomePositions[j + 1].index
+            : typeBlock.length;
+          const outcomeBlock = typeBlock.slice(oStart, oEnd);
+
+          // CJS: runtime template keys for this outcome
+          const cjsOutcome = (HANDLER_OUTCOMES[type] || []).find(o => o.key === outcomeKey);
+          const cjsKeys = cjsOutcome
+            ? (cjsOutcome.sendsEmailTemplates || []).map(templateRefKey).sort()
+            : [];
+
+          // TS: parse sendsEmailTemplates from source text
+          const tsKeys = [];
+          const setIdx = outcomeBlock.indexOf('sendsEmailTemplates:');
+          if (setIdx !== -1) {
+            const arrayStart = outcomeBlock.indexOf('[', setIdx);
+            const arrayEnd   = arrayStart !== -1 ? outcomeBlock.indexOf(']', arrayStart) : -1;
+            if (arrayStart !== -1 && arrayEnd !== -1) {
+              const arrayContent = outcomeBlock.slice(arrayStart + 1, arrayEnd);
+              tsKeys.push(...parseTsTemplateKeys(arrayContent));
+            }
+          }
+
+          if (cjsKeys.join(',') !== tsKeys.join(',')) {
+            fail(
+              `CJS↔TS parity: '${type}.${outcomeKey}' sendsEmailTemplates mismatch` +
+              ` (CJS: [${cjsKeys.join(', ')}], TS: [${tsKeys.join(', ')}])`,
+            );
+            allEmailsMatch = false;
+          }
+        }
+      }
+      if (allEmailsMatch) {
+        pass('CJS↔TS parity: all outcome sendsEmailTemplates arrays match');
+      }
     }
   }
 }
