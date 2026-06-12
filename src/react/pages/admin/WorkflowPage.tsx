@@ -58,6 +58,7 @@ import { PhoneSummaryModal } from '../../components/modals/PhoneSummaryModal';
 
 import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
 import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
+import { DesignVisitFollowupModal } from '../../components/modals/DesignVisitFollowupModal';
 import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
 import { DesignVisitWizard } from '../../components/DesignVisitWizard';
 const ReviewCustomerPhotosDrawer = React.lazy(() =>
@@ -1065,6 +1066,8 @@ function WorkflowDemoModalHost({
       return <UploadPhotosModal handler={handler} ctx={DEMO_CTX} {...common} />;
     case 'arrange_visit':
       return <ArrangeVisitModal handler={handler} ctx={DEMO_CTX} {...common} />;
+    case 'design_visit_followup':
+      return <DesignVisitFollowupModal handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />;
     case 'start_design_visit':
       return <DesignVisitWizard handler={handler} ctx={DEMO_CTX} onClose={onClose} demo />;
     case 'review_customer_photos':

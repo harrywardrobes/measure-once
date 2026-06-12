@@ -109,3 +109,8 @@ export const ScheduleStep: Story = {
     },
   ],
 };
+
+export const DemoPreview: Story = {
+  name: 'Demo preview (hub)',
+  args: { demo: true },
+};

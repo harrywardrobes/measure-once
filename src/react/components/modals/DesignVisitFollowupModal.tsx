@@ -25,7 +25,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -38,6 +37,8 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { DEMO_CONTACT } from './demoData';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { ModalContactHeader } from './ModalContactHeader';
 import { ScheduleVisitModal } from './ScheduleVisitModal';
 
@@ -51,6 +52,15 @@ interface ContactInfo {
   leadStatus: string | null;
   contactAddress: string;
 }
+
+const DEMO_CONTACT_INFO: ContactInfo = {
+  contactName: DEMO_CONTACT.name,
+  contactEmail: DEMO_CONTACT.email,
+  phone: DEMO_CONTACT.phone,
+  mobile: DEMO_CONTACT.mobile,
+  leadStatus: null,
+  contactAddress: DEMO_CONTACT.address,
+};
 
 function draftKey(contactId: string | number | null | undefined): string {
   return `${DVF_DRAFT_PREFIX}${contactId ?? 'unknown'}`;
@@ -78,14 +88,15 @@ export interface DesignVisitFollowupModalProps {
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
-export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: DesignVisitFollowupModalProps) {
+export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: DesignVisitFollowupModalProps) {
   const showToast = useToast();
   const key = draftKey(ctx.contactId);
 
-  const [step, setStep] = useState<Step>('loading');
-  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null);
+  const [step, setStep] = useState<Step>(demo ? 'hub' : 'loading');
+  const [contactInfo, setContactInfo] = useState<ContactInfo | null>(demo ? DEMO_CONTACT_INFO : null);
   const [loadError, setLoadError] = useState('');
 
   const [emailSubject, setEmailSubject] = useState('');
@@ -113,6 +124,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
 
   useEffect(() => {
     if (!open || fetchedRef.current) return;
+    if (demo) {
+      fetchedRef.current = true;
+      setContactInfo(DEMO_CONTACT_INFO);
+      setStep('hub');
+      return;
+    }
     fetchedRef.current = true;
     setStep('loading');
     setLoadError('');
@@ -130,6 +147,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
 
   /** Fetch (or re-fetch) the visit_invite template, incorporating optional proposed date/time. */
   function fetchResendTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null) {
+    if (demo) {
+      const firstName = (info?.contactName || '').split(' ')[0] || 'there';
+      setEmailSubject('Your design visit — getting in touch');
+      setEmailBody(`Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`);
+      return;
+    }
     setEmailLoading(true);
     setEmailError('');
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
@@ -165,9 +188,10 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     fetchResendTemplate(null, null, contactInfo);
   }
 
-  // Re-fetch template whenever the proposed date/time changes (only on the resend step)
+  // Re-fetch template whenever the proposed date/time changes (only on the resend step, non-demo)
   useEffect(() => {
     if (step !== 'resend') return;
+    if (demo) return;
     fetchResendTemplate(resendDate, resendTime, contactInfo);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resendDate, resendTime]);
@@ -181,6 +205,11 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   // Called by ScheduleVisitModal on successful calendar event creation
   function handleScheduleSuccess() {
     setScheduleOpen(false);
+    if (demo) {
+      showToast('Demo mode — no changes saved', false);
+      goToStep('done');
+      return;
+    }
     goToStep('outcome_in_progress');
     setOutcomeError('');
     POST('/api/card-actions/design-visit-followup/outcome', {
@@ -204,12 +233,17 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   }
 
   async function handleSendResendEmail() {
-    if (!contactInfo?.contactEmail) return;
+    if (!demo && !contactInfo?.contactEmail) return;
     setEmailError('');
+    if (demo) {
+      showToast('Demo mode — no changes saved', false);
+      goToStep('done');
+      return;
+    }
     goToStep('outcome_in_progress');
     try {
       await POST('/api/emails/send', {
-        to: contactInfo.contactEmail,
+        to: contactInfo!.contactEmail,
         subject: emailSubject.trim(),
         text: emailBody.trim(),
       });
@@ -227,6 +261,11 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
   }
 
   async function handleNotProceeding() {
+    if (demo) {
+      showToast('Demo mode — no changes saved', false);
+      goToStep('done');
+      return;
+    }
     goToStep('outcome_in_progress');
     setOutcomeError('');
     try {
@@ -304,20 +343,22 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
               variant="outlined"
               fullWidth
               onClick={handleResendInvite}
-              disabled={!contactInfo?.contactEmail}
+              disabled={!demo && !contactInfo?.contactEmail}
               data-testid="dvf-resend"
             >
               Resend invite email
             </Button>
-            <Button
-              variant="outlined"
-              color="error"
-              fullWidth
-              onClick={handleNotProceeding}
-              data-testid="dvf-not-proceeding"
-            >
-              Not proceeding
-            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                variant="outlined"
+                color="error"
+                fullWidth
+                onClick={() => void handleNotProceeding()}
+                data-testid="dvf-not-proceeding"
+              >
+                Not proceeding
+              </Button>
+            </DemoActionTooltip>
           </Stack>
         </Stack>
       );
@@ -395,14 +436,16 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
       return (
         <>
           <Button onClick={() => goToStep('hub')}>Back</Button>
-          <Button
-            variant="contained"
-            onClick={() => void handleSendResendEmail()}
-            disabled={emailLoading || !emailSubject.trim() || !emailBody.trim() || !contactInfo?.contactEmail}
-            data-testid="dvf-send-invite"
-          >
-            Send invite
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={() => void handleSendResendEmail()}
+              disabled={demo || emailLoading || !emailSubject.trim() || !emailBody.trim() || (!demo && !contactInfo?.contactEmail)}
+              data-testid="dvf-send-invite"
+            >
+              Send invite
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -419,7 +462,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <>
         <Dialog open={hubDialogOpen} onClose={step === 'hub' ? handleClose : undefined} maxWidth="sm" fullWidth>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DemoDialogTitle demo={demo}>{dialogTitle}</DemoDialogTitle>
           <DialogContent sx={{ pt: 2 }}>
             {renderContent()}
           </DialogContent>
@@ -436,6 +479,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
           open={scheduleOpen}
           onClose={handleScheduleClose}
           onSuccess={handleScheduleSuccess}
+          demo={demo ?? false}
         />
       </>
     </LocalizationProvider>
