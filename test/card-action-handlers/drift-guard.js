@@ -112,6 +112,24 @@ for (const type of REQUIRED_TYPES) {
   assert(contractGetArrangeVisitStatus('booked', 'design') === 'DESIGN_SCHEDULED', 'arrange_visit: contract helper matches registry helper');
 }
 
+// ── 3b. arrange_visit: per-visitType variant labels (chip rendering) ──────────
+// The Workflow page OutcomeChipsRow reads variant `label` overrides when a
+// handler is configured for a specific visit type. Assert each variant carries
+// the expected per-type label so the chip text stays in sync with the data.
+{
+  const arrangeVisit = HANDLER_OUTCOMES.arrange_visit || [];
+  const booked    = arrangeVisit.find(o => o.key === 'booked');
+  const emailSent = arrangeVisit.find(o => o.key === 'email_sent');
+  const np        = arrangeVisit.find(o => o.key === 'not_proceeding');
+
+  assert(booked?.variants?.design?.label === 'Design visit scheduled', 'arrange_visit: booked+design variant label = "Design visit scheduled"');
+  assert(booked?.variants?.survey?.label === 'Survey scheduled',       'arrange_visit: booked+survey variant label = "Survey scheduled"');
+  assert(emailSent?.variants?.design?.label === 'Design invite sent',  'arrange_visit: email_sent+design variant label = "Design invite sent"');
+  assert(emailSent?.variants?.survey?.label === 'Survey scheduled',    'arrange_visit: email_sent+survey variant label = "Survey scheduled"');
+  // Outcomes without variants carry no per-type label (chip falls back to base).
+  assert(np && !np.variants, 'arrange_visit: not_proceeding has no variants (chip uses base label)');
+}
+
 // ── 4. design_visit_followup: server contract == registry terminal status map ──
 {
   const registryMap = getTerminalStatusMap('design_visit_followup');

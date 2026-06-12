@@ -377,10 +377,17 @@ function CallChainStepper({ handlerType }: { handlerType?: string }) {
 //   • Terminal outcomes (purple filled) — show the lead status written on completion
 //   • Partial outcomes (outlined)       — show actions that log progress without moving the card
 //
-// arrange_visit uses the `variants` record to expand each outcome into
-// per-visitType chips (e.g. "Booked (design) → DESIGN_SCHEDULED").
+// arrange_visit uses the `variants` record for per-visitType outcomes.
+//   • When the handler is configured for a specific visit type
+//     (`config.visitType`), each variant outcome collapses to a single chip
+//     that shows the matching per-type label (e.g. "Booked → Design visit
+//     scheduled" for design, "Booked → Survey scheduled" for survey).
+//   • Otherwise the outcome expands into one chip per variant so the overview
+//     still shows every per-type result (e.g. "Booked (design)", "Booked
+//     (survey)"). The chip's status segment prefers the variant `label` and
+//     falls back to the base label / raw lead status when no variant matches.
 
-function OutcomeChipsRow({ outcomes }: { outcomes: ActionOutcome[] }) {
+function OutcomeChipsRow({ outcomes, visitType }: { outcomes: ActionOutcome[]; visitType?: string }) {
   const terminal = outcomes.filter(o => o.kind === 'terminal');
   const partial  = outcomes.filter(o => o.kind === 'partial');
 
@@ -389,9 +396,19 @@ function OutcomeChipsRow({ outcomes }: { outcomes: ActionOutcome[] }) {
   type TerminalChip = { label: string; status: string | undefined };
   const terminalChips: TerminalChip[] = [];
   for (const o of terminal) {
-    if (o.variants && Object.keys(o.variants).length > 0) {
-      for (const [vKey, vVal] of Object.entries(o.variants)) {
-        terminalChips.push({ label: `${o.label} (${vKey})`, status: vVal.setsLeadStatus });
+    const variantKeys = o.variants ? Object.keys(o.variants) : [];
+    if (variantKeys.length > 0) {
+      const matched = visitType ? o.variants![visitType] : undefined;
+      if (matched) {
+        // Configured visit type → single chip with the matching variant label.
+        terminalChips.push({ label: o.label, status: matched.label ?? matched.setsLeadStatus });
+      } else {
+        // No visit type configured (or no matching variant) → expand each
+        // variant, falling back to the base outcome label per chip.
+        for (const vKey of variantKeys) {
+          const vVal = o.variants![vKey];
+          terminalChips.push({ label: `${o.label} (${vKey})`, status: vVal.label ?? vVal.setsLeadStatus });
+        }
       }
     } else {
       terminalChips.push({ label: o.label, status: o.setsLeadStatus });
@@ -583,7 +600,10 @@ function ModalDetailCard({
         )}
 
         {isHandlerType(handler.type) && HANDLER_OUTCOMES[handler.type].length > 0 && (
-          <OutcomeChipsRow outcomes={HANDLER_OUTCOMES[handler.type]} />
+          <OutcomeChipsRow
+            outcomes={HANDLER_OUTCOMES[handler.type]}
+            visitType={handler.config?.visitType as string | undefined}
+          />
         )}
 
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>

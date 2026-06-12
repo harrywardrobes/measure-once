@@ -63,8 +63,12 @@ export interface ActionOutcome {
   kind: 'terminal' | 'partial';
   /** HubSpot hs_lead_status written on completion (omitted when no status change). */
   setsLeadStatus?: string;
-  /** Per-visitType overrides for arrange_visit (design / survey keys). */
-  variants?: Record<string, { setsLeadStatus: string }>;
+  /**
+   * Per-visitType overrides for arrange_visit (design / survey keys).
+   * `label` is an optional human-friendly per-type label used by the Workflow
+   * page outcome chips when a handler is configured for a specific visit type.
+   */
+  variants?: Record<string, { setsLeadStatus: string; label?: string }>;
   /** Optional extra context for tooltips / documentation. */
   description?: string;
   /**
@@ -97,8 +101,8 @@ export const HANDLER_OUTCOMES: Record<string, ActionOutcome[]> = {
       label: 'Booked',
       kind: 'terminal',
       variants: {
-        design: { setsLeadStatus: 'DESIGN_SCHEDULED' },
-        survey: { setsLeadStatus: 'SURVEY_SCHEDULED' },
+        design: { setsLeadStatus: 'DESIGN_SCHEDULED', label: 'Design visit scheduled' },
+        survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
       },
       description: 'Visit booked — lead status depends on visit type (design or survey)',
     },
@@ -107,8 +111,8 @@ export const HANDLER_OUTCOMES: Record<string, ActionOutcome[]> = {
       label: 'No answer — email sent',
       kind: 'terminal',
       variants: {
-        design: { setsLeadStatus: 'DESIGN_INVITED' },
-        survey: { setsLeadStatus: 'SURVEY_SCHEDULED' },
+        design: { setsLeadStatus: 'DESIGN_INVITED', label: 'Design invite sent' },
+        survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
       },
       description: 'No-answer email sent — status depends on visit type',
       sendsEmailTemplates: ['arrange_visit_no_answer'],

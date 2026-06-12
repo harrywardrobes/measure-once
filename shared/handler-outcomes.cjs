@@ -32,8 +32,8 @@ const HANDLER_OUTCOMES = {
       label: 'Booked',
       kind: 'terminal',
       variants: {
-        design: { setsLeadStatus: 'DESIGN_SCHEDULED' },
-        survey: { setsLeadStatus: 'SURVEY_SCHEDULED' },
+        design: { setsLeadStatus: 'DESIGN_SCHEDULED', label: 'Design visit scheduled' },
+        survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
       },
       description: 'Visit booked — lead status depends on visit type (design or survey)',
     },
@@ -42,8 +42,8 @@ const HANDLER_OUTCOMES = {
       label: 'No answer — email sent',
       kind: 'terminal',
       variants: {
-        design: { setsLeadStatus: 'DESIGN_INVITED' },
-        survey: { setsLeadStatus: 'SURVEY_SCHEDULED' },
+        design: { setsLeadStatus: 'DESIGN_INVITED', label: 'Design invite sent' },
+        survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
       },
       description: 'No-answer email sent — status depends on visit type',
       sendsEmailTemplates: ['arrange_visit_no_answer'],
