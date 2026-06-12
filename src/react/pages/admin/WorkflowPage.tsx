@@ -936,7 +936,6 @@ function StageAccordionNew({
 
   const stageStatuses = useMemo(() => {
     const q = searchText.toLowerCase().trim();
-    const nullRow = statuses.find(s => s.is_null_row);
     let list = statuses
       .filter(s => !s.is_null_row && lsStageToKey(s.stage || '') === stageKey)
       .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
@@ -955,22 +954,8 @@ function StageAccordionNew({
       });
     }
 
-    if (nullRow) {
-      const includeNull = !q || (() => {
-        if (nullRow.label.toLowerCase().includes(q)) return true;
-        const hs = handlersForSlot(handlers, stageKey, '');
-        return hs.some(h => {
-          if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
-          const meta = isHandlerType(h.type) ? HANDLER_COMPONENT_META[h.type] : undefined;
-          if (meta?.component.toLowerCase().includes(q)) return true;
-          return false;
-        });
-      })();
-      if (includeNull) list = [nullRow, ...list];
-    }
-
     return list;
-  }, [statuses, stageKey, handlers, searchText, labels]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statuses, stageKey, handlers, searchText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const colors = STAGE_COLORS[stageKey];
   const borderColor = colors?.bg ?? '#8B2BFF';
@@ -1308,6 +1293,28 @@ export function WorkflowPage() {
     ? lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : null;
 
+  // ── Global null row ("NEW Contact") — pinned above all stage accordions ──────
+  const globalNullRow = useMemo(
+    () => statuses.find(s => s.is_null_row) ?? null,
+    [statuses],
+  );
+
+  const globalLabelMap = useMemo(() => buildStageActionLabelMap(labels), [labels]);
+
+  const showGlobalNullRow = useMemo(() => {
+    if (!globalNullRow) return false;
+    const q = searchText.toLowerCase().trim();
+    if (!q) return true;
+    if (globalNullRow.label.toLowerCase().includes(q)) return true;
+    const hs = handlersForSlot(handlers, '__global__', '');
+    return hs.some(h => {
+      if (handlerDisplayName(h).toLowerCase().includes(q)) return true;
+      const meta = isHandlerType(h.type) ? HANDLER_COMPONENT_META[h.type] : undefined;
+      if (meta?.component.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [globalNullRow, searchText, handlers]);
+
   const scrollToStage = (key: string) => {
     const ref = accordionRefs.current[key];
     ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1428,6 +1435,29 @@ export function WorkflowPage() {
               </Alert>
             ) : (
               <Stack spacing={1}>
+                {/* ── Global "NEW Contact" row — pinned above all stage accordions ── */}
+                {showGlobalNullRow && globalNullRow && (
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      borderRadius: 1,
+                      overflow: 'hidden',
+                      borderLeft: '4px solid',
+                      borderLeftColor: 'divider',
+                    }}
+                  >
+                    <StatusRow
+                      ls={globalNullRow}
+                      stageKey="__global__"
+                      handlers={handlers}
+                      emailTemplates={emailTemplates}
+                      labelMap={globalLabelMap}
+                      isFlashing={flashedSlots.has('__global__|')}
+                      onPreviewClick={(handler) => setDemoModal({ handler })}
+                    />
+                  </Paper>
+                )}
+
                 {workflowStages.map(stage => (
                   <StageAccordionNew
                     key={stage.key}
