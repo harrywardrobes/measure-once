@@ -239,6 +239,22 @@ export const Demo: Story = {
   },
 };
 
+export const DemoAcceptPick: Story = {
+  name: 'Demo — accept deal step 1 (pick estimate)',
+  args: {
+    demo: true,
+    demoInitialStep: 'accept_pick',
+  },
+};
+
+export const DemoAmendHub: Story = {
+  name: 'Demo — amend hub (amendment choices)',
+  args: {
+    demo: true,
+    demoInitialStep: 'amend_hub',
+  },
+};
+
 export const DemoAcceptConfirm: Story = {
   name: 'Demo — accept deal step 2 (confirm, disabled button + tooltip)',
   args: {
