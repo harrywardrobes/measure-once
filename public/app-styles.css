@@ -489,6 +489,7 @@ input.token-overlay {
   color: transparent !important;
   border: none !important;
   outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ── Shared button base ──────────────────────────────────────────────────────── */
