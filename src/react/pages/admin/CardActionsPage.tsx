@@ -120,51 +120,40 @@ function HandlerBadges({
     fn(stageKey, statusKey, null);
   };
 
-  const summaries = matched
-    .map(h => HANDLER_MODAL_SUMMARY[h.type])
-    .filter(Boolean) as Array<{ steps: string; hubspot: string }>;
-
   return (
-    <span style={{ marginLeft: 6, display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, verticalAlign: 'middle' }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        {matched.map(h => {
-          const summary = HANDLER_MODAL_SUMMARY[h.type];
-          const tooltipTitle = summary
-            ? `${HANDLER_TYPE_LABELS[h.type] || h.type}\n${summary.steps}\n${summary.hubspot}`
-            : `${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`;
-          return (
-            <Tooltip key={h.id} title={<span style={{ whiteSpace: 'pre-line' }}>{tooltipTitle}</span>} arrow placement="top">
-              <span className="ca-handler-badge adm-handler-badge"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  padding: '1px 7px', background: STATUS_COLORS.violet.bg, color: STATUS_COLORS.violet.text,
-                  borderRadius: 999, fontSize: '.7rem', fontWeight: 600, cursor: 'default',
-                }}>
-                <span aria-hidden="true">⚡</span>
-                <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.type)}</span>
-              </span>
-            </Tooltip>
-          );
-        })}
-        {matched.length > 1 && (
-          <button type="button" className="ca-fix-conflict-btn"
-            title="Multiple handlers bound to this slot — click to resolve"
-            onClick={openFix}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-              padding: '1px 8px', marginLeft: 4, background: STATUS_COLORS.warning.bg,
-              color: STATUS_COLORS.warning.text, border: `1px solid ${STATUS_COLORS.warning.border}`,
-              borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
-              lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
-            }}>
-            ⚠ Fix
-          </button>
-        )}
-      </span>
-      {summaries.length > 0 && (
-        <span style={{ fontSize: '.68rem', color: 'var(--neutral-500)', fontStyle: 'italic', lineHeight: 1.4 }}>
-          {summaries.map(s => s.steps).join(' · ')}
-        </span>
+    <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}>
+      {matched.map(h => {
+        const summary = HANDLER_MODAL_SUMMARY[h.type];
+        const tooltipTitle = summary
+          ? `${HANDLER_TYPE_LABELS[h.type] || h.type}\n${summary.steps}\n${summary.hubspot}`
+          : `${HANDLER_TYPE_LABELS[h.type] || h.type} — manage in Action handlers`;
+        return (
+          <Tooltip key={h.id} title={<span style={{ whiteSpace: 'pre-line' }}>{tooltipTitle}</span>} arrow placement="top">
+            <span className="ca-handler-badge adm-handler-badge"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '1px 7px', background: STATUS_COLORS.violet.bg, color: STATUS_COLORS.violet.text,
+                borderRadius: 999, fontSize: '.7rem', fontWeight: 600, cursor: 'default',
+              }}>
+              <span aria-hidden="true">⚡</span>
+              <span>{String(h.config?.action_name || HANDLER_TYPE_LABELS[h.type] || h.type)}</span>
+            </span>
+          </Tooltip>
+        );
+      })}
+      {matched.length > 1 && (
+        <button type="button" className="ca-fix-conflict-btn"
+          title="Multiple handlers bound to this slot — click to resolve"
+          onClick={openFix}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '1px 8px', marginLeft: 4, background: STATUS_COLORS.warning.bg,
+            color: STATUS_COLORS.warning.text, border: `1px solid ${STATUS_COLORS.warning.border}`,
+            borderRadius: 999, fontSize: '.7rem', fontWeight: 700,
+            lineHeight: 1.5, whiteSpace: 'nowrap', cursor: 'pointer',
+          }}>
+          ⚠ Fix
+        </button>
       )}
     </span>
   );
