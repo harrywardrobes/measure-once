@@ -155,6 +155,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:bottom-nav-lint',              'static-lint — binary Icon/IconOutlined completeness check'],
   ['test:retired-tokens',               'static-lint — binary retired CSS token scan'],
   ['test:tokens-css',                   'static-lint — binary tokens.css naming convention check'],
+  ['test:ls-keys',                      'static-lint — binary localStorage/sessionStorage key registry scan'],
   // -- static / build checks ------------------------------------------------
   ['test:stale-bundle',                 'static-check — binary build artifact check'],
   ['test:storybook-output-clean',       'static-check — binary Storybook output guard'],
@@ -168,6 +169,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:handler-config-blocks',        'unit-flat — Vitest render checks on pure React config blocks'],
   ['test:conflicts-review-logic',       'unit-flat — Vitest assertions on pure diff/restore logic'],
   ['test:keyboard-shortcuts',           'unit-flat — pure function smoke across platform paths'],
+  ['test:formatters',                   'unit-flat — flat Vitest assertions on compactRelativeTime / latestTimestamp pure functions'],
   // -- capability matrix ----------------------------------------------------
   ['test:privileges',                   'capability-matrix — 5-actor × 123-route matrix; not decomposed into named probes'],
   // -- smoke tests ----------------------------------------------------------
