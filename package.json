@@ -268,6 +268,7 @@
     "test:no-config-handler-types": "node scripts/check-no-config-handler-types.mjs",
     "test:handler-meta": "node scripts/check-handler-meta.mjs",
     "test:handler-outcomes-drift": "node test/card-action-handlers/drift-guard.js",
+    "test:slot-constants-drift": "node test/slot-constants/drift-guard.js",
     "test:golden-schema": "node scripts/check-golden-schema.mjs",
     "test:status-key-fields": "node scripts/check-status-key-fields.mjs",
     "test:mui-select-click": "node scripts/check-mui-select-click.mjs",

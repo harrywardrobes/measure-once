@@ -76,6 +76,7 @@ const STATIC_SUITES = [
   'test:template-vars',
   'test:handler-meta',
   'test:handler-outcomes-drift',
+  'test:slot-constants-drift',
   'test:golden-schema',
   'test:conflicts-review-logic',
   'test:lead-status-keys',
