@@ -322,11 +322,13 @@ interface MalformedGroup extends MalformedReasonText {
 
 interface EditDialogProps {
   template: EmailTemplate;
+  /** Plain-language description of what fires this email — passed through from the row's trigger prop. */
+  trigger?: string;
   onClose: () => void;
   onSaved: (updated: EmailTemplate) => void;
 }
 
-function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
+function EditTemplateDialog({ template, trigger, onClose, onSaved }: EditDialogProps) {
   const showToast = useToast();
   const [activeTab, setActiveTab] = useState(0);
   const [fields, setFields] = useState<DraftFields>(() => {
@@ -482,9 +484,35 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
     handleConfirmedSave();
   }, [fields.subject, unknownTokens, malformedTokens, showToast, handleConfirmedSave]);
 
+  const audience = template.audience ?? null;
+  const audienceMeta = audience ? AUDIENCE_META[audience] : null;
+  const chipSx = { height: 20, fontSize: '0.7rem', '.MuiChip-label': { px: 0.75 } } as const;
+
   return (
     <Dialog open onClose={handleRequestClose} maxWidth="md" fullWidth>
       <DialogTitle>Edit: {template.label}</DialogTitle>
+
+      {(audienceMeta || trigger) && (
+        <Box sx={{ px: 3, pb: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+          {audienceMeta && (
+            <Tooltip title={audienceMeta.tooltip} arrow>
+              <Chip
+                icon={audience === 'team' ? <GroupsOutlinedIcon /> : <PersonOutlineIcon />}
+                label={audienceMeta.label}
+                size="small"
+                variant="outlined"
+                color={audience === 'team' ? 'secondary' : 'success'}
+                sx={{ ...chipSx, '.MuiChip-icon': { fontSize: '0.85rem', ml: 0.5 } }}
+              />
+            </Tooltip>
+          )}
+          {trigger && (
+            <Typography variant="caption" color="text.secondary">
+              <Box component="span" sx={{ fontWeight: 600 }}>Triggered:</Box> {trigger}
+            </Typography>
+          )}
+        </Box>
+      )}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
@@ -724,7 +752,7 @@ interface TemplateRowProps {
   sentFrom?: string;
   /** Plain-language description of the exact condition that fires this email. */
   trigger?: string;
-  onEdit: (t: EmailTemplate) => void;
+  onEdit: (t: EmailTemplate, trigger?: string) => void;
 }
 
 /** A single email-template row used inside every accordion (handler / system /
@@ -808,7 +836,7 @@ export function TemplateRow({ templateKey, template, shared, system, sentFrom, t
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
               {formatUpdated(template)}
             </Typography>
-            <Button size="small" variant="outlined" onClick={() => onEdit(template)}>Edit</Button>
+            <Button size="small" variant="outlined" onClick={() => onEdit(template!, trigger)}>Edit</Button>
           </>
         ) : (
           <Typography variant="caption" color="error">Template not found</Typography>
@@ -825,7 +853,8 @@ export default function EmailTemplatesPage() {
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<EmailTemplate | null>(null);
+  const [editing, setEditing] = useState<{ template: EmailTemplate; trigger?: string } | null>(null);
+  const handleEdit = useCallback((t: EmailTemplate, trigger?: string) => setEditing({ template: t, trigger }), []);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -1071,7 +1100,7 @@ export default function EmailTemplatesPage() {
                             system={r.system}
                             sentFrom={r.sentFrom}
                             trigger={r.trigger ?? g.trigger}
-                            onEdit={setEditing}
+                            onEdit={handleEdit}
                           />
                         ))}
                       </Stack>
@@ -1110,7 +1139,7 @@ export default function EmailTemplatesPage() {
                     system
                     sentFrom={s.sentFrom}
                     trigger={s.description}
-                    onEdit={setEditing}
+                    onEdit={handleEdit}
                   />
                 ))}
               </Stack>
@@ -1147,7 +1176,7 @@ export default function EmailTemplatesPage() {
                       template={t}
                       shared={false}
                       system={false}
-                      onEdit={setEditing}
+                      onEdit={handleEdit}
                     />
                   ))}
                 </Stack>
@@ -1159,7 +1188,8 @@ export default function EmailTemplatesPage() {
 
       {editing && (
         <EditTemplateDialog
-          template={editing}
+          template={editing.template}
+          trigger={editing.trigger}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />
