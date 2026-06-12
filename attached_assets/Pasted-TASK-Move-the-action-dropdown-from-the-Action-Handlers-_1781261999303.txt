@@ -1,0 +1,39 @@
+TASK: Move the action dropdown from the Action Handlers page into the Card Actions tab
+
+CONTEXT
+The admin area has two pages that overlap:
+1. Action Handlers page (src/react/pages/admin/ActionHandlersPage.tsx) — has a dropdown
+   to pick an action/handler type for each stage+status slot, with an editable "Action name"
+   that can be changed or cleared/removed. Saves via POST/PATCH /api/admin/card-action-handlers
+   and removes bindings via DELETE /api/admin/card-action-handlers/:id/binding.
+2. Card Actions tab (src/react/pages/admin/CardActionsPage.tsx) — currently shows a plain
+   free-text label input per stage+status slot (global row, plus per-stage accordions for
+   sales / designvisit / survey), saved via PUT /api/admin/stage-action-labels.
+
+WHAT TO DO
+1. In the Card Actions tab, replace the current plain-text action label input on each row
+   (global default, per-stage default, and per-status rows) with the same action dropdown
+   used on the Action Handlers page, including the action name/label field.
+2. The behaviour must match the Action Handlers page exactly:
+   - The user can SELECT an action from the dropdown for any stage+status slot.
+   - The user can CHANGE the selected action and edit its action name/label at any time.
+   - The user can REMOVE the action entirely (same as removing the binding / clearing the
+     action name on the Action Handlers page), leaving the slot with no action.
+3. Reuse the existing backend endpoints (/api/admin/card-action-handlers and bindings) —
+   do not invent a new persistence model. Keep the existing conflict handling (warn/resolve
+   when more than one handler is bound to the same stage+status slot).
+4. Keep the resolveActionLabel logic working so cards on the Projects/Customers pages still
+   show the correct action button label (per-status label → per-stage default → global
+   default). The useCardActionHandlers hook and BroadcastChannel sync must keep working so
+   open tabs update live.
+5. Do NOT delete the Action Handlers page in this task — that is a separate follow-up
+   subtask. Both pages should keep working side by side for now.
+
+ACCEPTANCE CRITERIA
+- On the Card Actions tab I can pick, change, and remove an action for the global default,
+  each stage default, and each individual lead status — without visiting the Action
+  Handlers page.
+- Changes persist after reload and are reflected on the action buttons on cards.
+- Removing an action from a slot behaves identically to removing it on the Action
+  Handlers page (binding removed, label cleared).
+- No regressions on the Action Handlers page or on card action buttons.
