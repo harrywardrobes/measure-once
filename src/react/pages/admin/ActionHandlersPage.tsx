@@ -258,16 +258,11 @@ function _buildActionSlotGroups(): ActionStage[] {
 
   // Global null slot (stage_key='__global__', status_key='').
   // Mirrors CardActionsPage: prefer '__global__' label, fall back to legacy 'sales' label for display.
-  // Shown only when a handler is already bound to this slot (see follow-up task to allow first-attach).
+  // Always rendered as an attachable slot so an admin can attach the first handler to it,
+  // mirroring how every pipeline lead status renders even before a handler is bound.
   const globalLabel = labelsByKey.get('__global__|') || '';
   const globalLabelDisplay = globalLabel || labelsByKey.get('sales|') || (nullRow?.label ?? 'No lead status');
-  const hasGlobalHandler = _handlersRef.current.some(h =>
-    (h.bindings || []).some(b =>
-      (b.stage_key || '').toLowerCase() === '__global__' &&
-      (b.status_key || '') === '',
-    ),
-  );
-  const globalStage: ActionStage | null = hasGlobalHandler ? {
+  const globalStage: ActionStage = {
     stage: { key: '__global__', label: 'No lead status' },
     groups: [{
       ls: { key: '__GLOBAL_NULL__', label: '', isNullRow: false },
@@ -277,7 +272,7 @@ function _buildActionSlotGroups(): ActionStage[] {
         hasLabel: !!globalLabel,
       }],
     }],
-  } : null;
+  };
 
   // Legacy Sales null-row omitted — superseded by the global null slot above.
 
@@ -290,7 +285,7 @@ function _buildActionSlotGroups(): ActionStage[] {
   }
 
   const pipelineStages = Array.from(stageMap.values()).filter(s => s.groups.length > 0);
-  return globalStage ? [globalStage, ...pipelineStages] : pipelineStages;
+  return [globalStage, ...pipelineStages];
 }
 
 // ── DOM-appending modal functions ─────────────────────────────────────────────
