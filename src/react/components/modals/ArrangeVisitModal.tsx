@@ -26,6 +26,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { ARRANGE_VISIT_KEY } from '../../utils/handlerMeta';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
@@ -305,9 +306,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         throw new Error(d?.error || 'Could not update status.');
       }
       clearDraft(key);
-      showToast(res.queued ? 'Saved offline — status will update when you reconnect' : 'Status updated to Not Suitable', false);
-      if (!res.queued) {
-        const d = res.data as { hs_lead_status?: string } | undefined;
+      if (res.queued) {
+        showToast('Saved offline — status will update when you reconnect', false);
+      } else {
+        const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+        showToast(leadStatusConfirmationMessage(d?.setsLeadStatus) || 'Status updated to Not Suitable', false);
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
@@ -356,10 +359,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         throw new Error(d?.error || 'Could not update status.');
       }
       clearDraft(key);
-      showToast(res.queued ? 'Booking saved offline — it will sync when you reconnect' : 'Visit booked and status updated', false);
 
-      if (!res.queued) {
-        const d = res.data as { hs_lead_status?: string } | undefined;
+      if (res.queued) {
+        showToast('Booking saved offline — it will sync when you reconnect', false);
+      } else {
+        const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+        const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
+        showToast(conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated', false);
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
@@ -444,9 +450,10 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         contactId: ctx.contactId,
         outcome: ARRANGE_VISIT_KEY.email_sent,
         visitType,
-      }) as { hs_lead_status?: string } | undefined;
+      }) as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
       clearDraft(key);
-      showToast('Email sent and status updated', false);
+      const conf = leadStatusConfirmationMessage(outcomeData?.setsLeadStatus);
+      showToast(conf ? `Email sent — ${conf.toLowerCase()}` : 'Email sent and status updated', false);
       broadcastLeadStatusChange(ctx.contactId, {
         hs_lead_status: outcomeData?.hs_lead_status ?? '',
       });

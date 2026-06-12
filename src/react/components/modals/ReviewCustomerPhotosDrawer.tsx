@@ -17,6 +17,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { REVIEW_PHOTOS_OUTCOME_KEY } from '../../utils/handlerMeta';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
@@ -147,6 +148,8 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
+  const [confirmQueued, setConfirmQueued] = useState(false);
 
   const hasUnsavedChanges =
     step !== 'done' &&
@@ -284,6 +287,14 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
         throw new Error(d?.error || d?.message || 'Failed');
       }
 
+      if (res.queued) {
+        setConfirmQueued(true);
+        setConfirmStatus(null);
+      } else {
+        setConfirmQueued(false);
+        const d = res.data as { setsLeadStatus?: string | null } | undefined;
+        setConfirmStatus(d?.setsLeadStatus ?? null);
+      }
       setStep('done');
 
       // Notify other tabs that lead status changed
@@ -394,7 +405,11 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
               <CheckCircleOutlinedIcon sx={{ fontSize: 48, color: 'success.main' }} />
               <Typography variant="h6">Email sent</Typography>
               <Typography variant="body2" color="text.secondary">
-                The customer has been emailed and the card status has been updated.
+                {confirmQueued
+                  ? 'The customer will be emailed and the card status updated when you reconnect.'
+                  : (leadStatusConfirmationMessage(confirmStatus)
+                      ? `The customer has been emailed. ${leadStatusConfirmationMessage(confirmStatus)}.`
+                      : 'The customer has been emailed and the card status has been updated.')}
               </Typography>
             </Box>
           )}

@@ -31,6 +31,8 @@ import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { PaymentHistory } from '../PaymentHistory';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
+import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
@@ -115,6 +117,7 @@ function clearDraft(key: string): void {
 export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   const { contactId, contactName: ctxContactName } = ctx;
   const key = draftKey(contactId);
+  const showToast = useToast();
 
   const [step, setStep] = useState<Step>('loading');
   const [loaderData, setLoaderData] = useState<LoaderData | null>(null);
@@ -326,7 +329,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   async function handleNotProceeding(shouldSendThankYou: boolean) {
     navigateTo('not_proceeding_submitting');
     try {
-      const result = await POST<{ ok: boolean; hs_lead_status: string }>(
+      const result = await POST<{ ok: boolean; hs_lead_status: string; setsLeadStatus?: string | null }>(
         '/api/card-actions/deposit-invoice/not-proceeding',
         {
           contactId,
@@ -341,6 +344,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
       );
       broadcastLeadStatusChange(contactId, { hs_lead_status: result.hs_lead_status });
       clearDraft(key);
+      showToast(leadStatusConfirmationMessage(result.setsLeadStatus) || 'Marked as not proceeding', false);
       handleClose();
     } catch (err) {
       setNotProceedingError((err as Error).message || 'Something went wrong.');

@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { ToastProvider, useToastContext } from '../contexts/ToastContext';
+import { leadStatusConfirmationMessage } from '../utils/leadStatusConfirmation';
 
 const meta: Meta = {
   title: 'Feedback/Toast',
@@ -103,6 +104,70 @@ export const AllVariants: Story = {
   render: () => (
     <ToastProvider>
       <ToastTriggers />
+    </ToastProvider>
+  ),
+};
+
+/**
+ * Lead-status confirmation toast — shown by the card-action modals after a
+ * terminal outcome. The raw hs_lead_status key returned by the execute route
+ * (e.g. DESIGN_SCHEDULED) is mapped to its configured human label via
+ * `window.LEAD_STATUS_OPTIONS`, producing "Lead status set to Design visit
+ * scheduled" rather than a vague "status updated" message.
+ */
+function LeadStatusConfirmTriggers() {
+  const { showToast } = useToastContext();
+  React.useEffect(() => {
+    (window as unknown as Record<string, unknown>).LEAD_STATUS_OPTIONS = [
+      { value: 'DESIGN_SCHEDULED', label: 'Design visit scheduled' },
+      { value: 'DEPOSIT_INVOICE', label: 'Deposit invoice sent' },
+      { value: 'DECLINED_DEAL', label: 'Declined deal' },
+      { value: 'NOT_SUITABLE', label: 'Not suitable' },
+    ];
+  }, []);
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h6" gutterBottom>
+        Lead-status confirmation
+      </Typography>
+      <Stack spacing={2} direction="column" sx={{ maxWidth: 360 }}>
+        <Button
+          variant="contained"
+          color="success"
+          onClick={() => showToast(leadStatusConfirmationMessage('DESIGN_SCHEDULED'))}
+        >
+          Booked (design)
+        </Button>
+        <Button
+          variant="contained"
+          color="success"
+          onClick={() => showToast(leadStatusConfirmationMessage('DEPOSIT_INVOICE'))}
+        >
+          Deal accepted
+        </Button>
+        <Button
+          variant="contained"
+          color="success"
+          onClick={() => showToast(leadStatusConfirmationMessage('NOT_SUITABLE'))}
+        >
+          Not suitable
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={() => showToast(leadStatusConfirmationMessage('UNREGISTERED_KEY'))}
+        >
+          Unregistered key (falls back to raw key)
+        </Button>
+      </Stack>
+    </Box>
+  );
+}
+
+export const LeadStatusConfirmation: Story = {
+  name: 'Lead-status confirmation',
+  render: () => (
+    <ToastProvider>
+      <LeadStatusConfirmTriggers />
     </ToastProvider>
   ),
 };

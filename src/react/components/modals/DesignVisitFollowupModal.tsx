@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DVF_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import { DVF_OUTCOME_KEY } from '../../utils/handlerMeta';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -186,8 +187,9 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
       contactId: ctx.contactId,
       outcome: DVF_OUTCOME_KEY.confirmed,
     })
-      .then(() => {
-        showToast('Visit confirmed and scheduled', false);
+      .then((data) => {
+        const conf = leadStatusConfirmationMessage((data as { setsLeadStatus?: string | null } | undefined)?.setsLeadStatus);
+        showToast(conf ? `Visit confirmed — ${conf.toLowerCase()}` : 'Visit confirmed and scheduled', false);
         goToStep('done');
       })
       .catch((e: Error) => {
@@ -211,11 +213,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
         subject: emailSubject.trim(),
         text: emailBody.trim(),
       });
-      await POST('/api/card-actions/design-visit-followup/outcome', {
+      const data = await POST('/api/card-actions/design-visit-followup/outcome', {
         contactId: ctx.contactId,
         outcome: DVF_OUTCOME_KEY.invite_resent,
-      });
-      showToast('Invite email sent', false);
+      }) as { setsLeadStatus?: string | null } | undefined;
+      const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
+      showToast(conf ? `Invite email sent — ${conf.toLowerCase()}` : 'Invite email sent', false);
       goToStep('done');
     } catch (e) {
       setOutcomeError((e as { message?: string }).message || 'Failed to send email.');
@@ -227,11 +230,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     goToStep('outcome_in_progress');
     setOutcomeError('');
     try {
-      await POST('/api/card-actions/design-visit-followup/outcome', {
+      const data = await POST('/api/card-actions/design-visit-followup/outcome', {
         contactId: ctx.contactId,
         outcome: DVF_OUTCOME_KEY.not_proceeding,
-      });
-      showToast('Contact marked as not proceeding', false);
+      }) as { setsLeadStatus?: string | null } | undefined;
+      const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
+      showToast(conf ? `Not proceeding — ${conf.toLowerCase()}` : 'Contact marked as not proceeding', false);
       goToStep('done');
     } catch (e) {
       setOutcomeError((e as { message?: string }).message || 'Failed to update lead status.');

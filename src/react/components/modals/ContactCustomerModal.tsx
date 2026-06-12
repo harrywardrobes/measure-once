@@ -19,6 +19,7 @@ import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activ
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
@@ -109,6 +110,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [contactData, setContactData] = useState<ContactData | null>(demo ? DEMO_CONTACT_DATA : null);
   const [loadError, setLoadError] = useState('');
   const [advanceError, setAdvanceError] = useState('');
+  const [confirmMessage, setConfirmMessage] = useState('');
 
   const [callAttempted, setCallAttempted] = useState(false);
   const [emailSent, setEmailSent]         = useState(false);
@@ -235,10 +237,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       setPhase('advancing');
       setAdvanceError('');
       try {
-        await POST(
+        const res = await POST(
           `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
           { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
-        );
+        ) as { setsLeadStatus?: string | null } | undefined;
+        setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
       } catch (e) {
         const err = e as Error & { code?: string };
         if (err.code === 'LEAD_STATUS_REMOVED') {
@@ -260,10 +263,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setPhase('advancing');
     setAdvanceError('');
     try {
-      await POST(
+      const res = await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
         { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.no_response },
-      );
+      ) as { setsLeadStatus?: string | null } | undefined;
+      setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
       setPhase('done');
       autoCloseTimerRef.current = setTimeout(() => onClose(), 1500);
     } catch (e) {
@@ -807,7 +811,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
           <DialogTitle>Done</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary">
-              Contact record updated.
+              {confirmMessage || 'Contact record updated.'}
             </Typography>
           </DialogContent>
         </>

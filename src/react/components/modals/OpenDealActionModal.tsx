@@ -36,6 +36,8 @@ import { POST } from '../../utils/api';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { leadStatusLabelFor, leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
+import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { PaymentHistory } from '../PaymentHistory';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -96,6 +98,7 @@ interface AcceptResult {
   invoiceId?: string;
   invoiceDocNum?: string | null;
   hs_lead_status?: string;
+  setsLeadStatus?: string | null;
   steps?: Record<string, boolean>;
   code?: string;
   removedKey?: string;
@@ -105,6 +108,7 @@ interface AcceptResult {
 interface DeclineResult {
   ok?: boolean;
   hs_lead_status?: string;
+  setsLeadStatus?: string | null;
   steps?: Record<string, boolean>;
   emailAlreadySent?: boolean;
   thankYouError?: string;
@@ -140,6 +144,7 @@ function isPending(status: string) {
 export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   const { contactId, contactName: ctxContactName } = ctx;
   const draftKey = `${OPEN_DEAL_DRAFT_PREFIX}${contactId}`;
+  const showToast = useToast();
 
   const [step, setStep] = useState<Step>('loading');
   const [contactData, setContactData] = useState<ContactData | null>(null);
@@ -365,6 +370,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         setDeclineResult(result);
         navigateTo('decline_done');
       } else {
+        showToast(leadStatusConfirmationMessage(result.setsLeadStatus) || 'Deal declined', false);
         handleClose();
       }
     } catch (err: unknown) {
@@ -941,7 +947,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main' }} />
         <Typography variant="h6" sx={{ fontWeight: 700 }}>Deal declined</Typography>
         <Typography variant="body2" color="text.secondary">
-          Lead status has been updated to <strong>DECLINED_DEAL</strong>.
+          Lead status set to <strong>{leadStatusLabelFor(declineResult?.setsLeadStatus) || 'Declined deal'}</strong>.
         </Typography>
         {declineResult?.emailAlreadySent && (
           <Alert severity="info" sx={{ width: '100%' }}>
@@ -975,7 +981,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
           </Alert>
         )}
         <Typography variant="body2" color="text.secondary">
-          Lead status has been updated to <strong>DEPOSIT_INVOICE</strong>.
+          Lead status set to <strong>{leadStatusLabelFor(acceptResult?.setsLeadStatus) || 'Deposit invoice'}</strong>.
         </Typography>
       </Stack>
     );
