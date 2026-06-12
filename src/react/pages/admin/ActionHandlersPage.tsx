@@ -1301,131 +1301,163 @@ export function ActionHandlersPage() {
               <p className="admin-msg admin-msg--muted">Loading…</p>
             ) : !stages.length ? (
               <p className="admin-msg admin-msg--muted">No lead statuses are assigned to a card-action stage yet.</p>
-            ) : (
-              <Stack spacing={1}>
-                {stages.map(stage => {
-                  const colors = STAGE_COLORS[stage.stage.key];
-                  const borderColor = colors?.bg ?? '#8B2BFF';
-                  const boundCount = stage.groups.reduce(
-                    (acc, g) => acc + g.slots.filter(s => _handlersForSlot(s).length > 0).length, 0);
-                  const totalCount = stage.groups.reduce(
-                    (acc, g) => acc + g.slots.length, 0);
+            ) : (() => {
+              const globalStage = stages.find(s => s.stage.key === '__global__') ?? null;
+              const pipelineStages = stages.filter(s => s.stage.key !== '__global__');
+
+              const renderSlotRows = (stage: typeof stages[number]) =>
+                stage.groups.map(g => {
+                  const lsLabel = g.ls.isNullRow
+                    ? `${g.ls.label} (no lead status)` : g.ls.label;
                   return (
-                    <Accordion
-                      key={stage.stage.key}
-                      defaultExpanded={false}
-                      disableGutters
-                      variant="outlined"
+                    <div key={g.ls.key} className="adm-handlers-group">
+                      {lsLabel && <div className="adm-handlers-group-head">{lsLabel}</div>}
+                      <table className="adm-handlers-table">
+                        <tbody>
+                          {g.slots.map(slot => {
+                            const handler = _handlersForSlot(slot)[0] || null;
+                            return (
+                              <tr key={`${slot.kind}-${slot.status_key}`} className="adm-handlers-row" data-handler-id={handler?.id != null ? String(handler.id) : undefined}>
+                                <td className="adm-handlers-cell adm-handlers-cell--slot">
+                                  <div className="adm-handlers-slot-label">{slot.label}</div>
+                                  <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
+                                  {slot.kind === 'ls' && slot.hasLabel === false && (
+                                    <Tooltip
+                                      title="This slot has no card-action label. Click to go to Card Actions and add one."
+                                      arrow
+                                      placement="top"
+                                    >
+                                      <Chip
+                                        data-testid="no-label-warning"
+                                        color="warning"
+                                        size="small"
+                                        label="No action label"
+                                        onClick={() => {
+                                          const win = window as unknown as Record<string, unknown>;
+                                          if (typeof win.adminSwitchToTab === 'function') {
+                                            (win.adminSwitchToTab as (id: string) => void)('cardactions');
+                                          } else {
+                                            try {
+                                              localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
+                                              localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
+                                            } catch { /* restricted context */ }
+                                            location.href = '/admin';
+                                          }
+                                        }}
+                                        sx={{ mt: 0.5, cursor: 'pointer' }}
+                                      />
+                                    </Tooltip>
+                                  )}
+                                </td>
+                                <td className="adm-handlers-cell">
+                                  {handler ? (
+                                    <HandlerSummary
+                                      h={handler}
+                                      expanded={expandedSummaries.has(handler.id)}
+                                      onToggle={() => toggleSummary(handler.id)}
+                                    />
+                                  ) : (
+                                    <em className="adm-handlers-none">No action attached.</em>
+                                  )}
+                                </td>
+                                <td className="adm-handlers-cell adm-handlers-cell--actions">
+                                  {handler ? (
+                                    <>
+                                      <button className="btn btn-ghost"
+                                        onClick={() => setEditorOpen({ slot, existing: handler })}>
+                                        Change
+                                      </button>
+                                      <button className="btn btn-ghost adm-btn-remove"
+                                        onClick={() => _deleteHandler(handler.id, slot)}>
+                                        Remove
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button className="btn btn-primary adm-btn-add-action"
+                                      onClick={() => setEditorOpen({ slot, existing: null })}>
+                                      + Add action
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                });
+
+              return (
+                <Stack spacing={1}>
+                  {/* ── Global "No lead status" block — always visible, no accordion ── */}
+                  {globalStage && (
+                    <Box
+                      className="adm-ca-block adm-ca-block--global-null"
                       sx={{
-                        borderLeft: `4px solid ${borderColor}`,
+                        border: '1px solid',
+                        borderColor: 'divider',
                         borderRadius: 1,
-                        '&:before': { display: 'none' },
+                        overflow: 'hidden',
                       }}
                     >
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 44, px: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', pr: 1 }}>
-                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: borderColor, flexShrink: 0 }} />
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{stage.stage.label}</Typography>
-                          <Chip
-                            label={`${boundCount} / ${totalCount} bound`}
-                            size="small"
-                            sx={{
-                              height: 18, fontSize: '0.62rem',
-                              bgcolor: boundCount > 0 ? 'rgba(124,58,237,0.08)' : 'rgba(0,0,0,0.04)',
-                              color: boundCount > 0 ? 'rgb(109,40,217)' : 'text.disabled',
-                              '.MuiChip-label': { px: 0.75 },
-                            }}
-                          />
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails sx={{ p: 0 }}>
-                        {stage.groups.map(g => {
-                          const lsLabel = g.ls.isNullRow
-                            ? `${g.ls.label} (no lead status)` : g.ls.label;
-                          return (
-                            <div key={g.ls.key} className="adm-handlers-group">
-                              {lsLabel && <div className="adm-handlers-group-head">{lsLabel}</div>}
-                              <table className="adm-handlers-table">
-                                <tbody>
-                                  {g.slots.map(slot => {
-                                    const handler = _handlersForSlot(slot)[0] || null;
-                                    return (
-                                      <tr key={`${slot.kind}-${slot.status_key}`} className="adm-handlers-row" data-handler-id={handler?.id != null ? String(handler.id) : undefined}>
-                                        <td className="adm-handlers-cell adm-handlers-cell--slot">
-                                          <div className="adm-handlers-slot-label">{slot.label}</div>
-                                          <div className="adm-handlers-slot-sub">{slot.rowLabel}</div>
-                                          {slot.kind === 'ls' && slot.hasLabel === false && (
-                                            <Tooltip
-                                              title="This slot has no card-action label. Click to go to Card Actions and add one."
-                                              arrow
-                                              placement="top"
-                                            >
-                                              <Chip
-                                                data-testid="no-label-warning"
-                                                color="warning"
-                                                size="small"
-                                                label="No action label"
-                                                onClick={() => {
-                                                  const win = window as unknown as Record<string, unknown>;
-                                                  if (typeof win.adminSwitchToTab === 'function') {
-                                                    (win.adminSwitchToTab as (id: string) => void)('cardactions');
-                                                  } else {
-                                                    try {
-                                                      localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
-                                                      localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
-                                                    } catch { /* restricted context */ }
-                                                    location.href = '/admin';
-                                                  }
-                                                }}
-                                                sx={{ mt: 0.5, cursor: 'pointer' }}
-                                              />
-                                            </Tooltip>
-                                          )}
-                                        </td>
-                                        <td className="adm-handlers-cell">
-                                          {handler ? (
-                                            <HandlerSummary
-                                              h={handler}
-                                              expanded={expandedSummaries.has(handler.id)}
-                                              onToggle={() => toggleSummary(handler.id)}
-                                            />
-                                          ) : (
-                                            <em className="adm-handlers-none">No action attached.</em>
-                                          )}
-                                        </td>
-                                        <td className="adm-handlers-cell adm-handlers-cell--actions">
-                                          {handler ? (
-                                            <>
-                                              <button className="btn btn-ghost"
-                                                onClick={() => setEditorOpen({ slot, existing: handler })}>
-                                                Change
-                                              </button>
-                                              <button className="btn btn-ghost adm-btn-remove"
-                                                onClick={() => _deleteHandler(handler.id, slot)}>
-                                                Remove
-                                              </button>
-                                            </>
-                                          ) : (
-                                            <button className="btn btn-primary adm-btn-add-action"
-                                              onClick={() => setEditorOpen({ slot, existing: null })}>
-                                              + Add action
-                                            </button>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          );
-                        })}
-                      </AccordionDetails>
-                    </Accordion>
-                  );
-                })}
-              </Stack>
-            )}
+                      <Box sx={{ px: 1.5, py: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }} className="is-null">
+                          {globalStage.stage.label}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                          no <code>hs_lead_status</code>
+                        </Typography>
+                      </Box>
+                      {renderSlotRows(globalStage)}
+                    </Box>
+                  )}
+
+                  {/* ── Per-stage accordions ── */}
+                  {pipelineStages.map(stage => {
+                    const colors = STAGE_COLORS[stage.stage.key];
+                    const borderColor = colors?.bg ?? '#8B2BFF';
+                    const boundCount = stage.groups.reduce(
+                      (acc, g) => acc + g.slots.filter(s => _handlersForSlot(s).length > 0).length, 0);
+                    const totalCount = stage.groups.reduce(
+                      (acc, g) => acc + g.slots.length, 0);
+                    return (
+                      <Accordion
+                        key={stage.stage.key}
+                        defaultExpanded={false}
+                        disableGutters
+                        variant="outlined"
+                        sx={{
+                          borderLeft: `4px solid ${borderColor}`,
+                          borderRadius: 1,
+                          '&:before': { display: 'none' },
+                        }}
+                      >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 44, px: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', pr: 1 }}>
+                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: borderColor, flexShrink: 0 }} />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{stage.stage.label}</Typography>
+                            <Chip
+                              label={`${boundCount} / ${totalCount} bound`}
+                              size="small"
+                              sx={{
+                                height: 18, fontSize: '0.62rem',
+                                bgcolor: boundCount > 0 ? 'rgba(124,58,237,0.08)' : 'rgba(0,0,0,0.04)',
+                                color: boundCount > 0 ? 'rgb(109,40,217)' : 'text.disabled',
+                                '.MuiChip-label': { px: 0.75 },
+                              }}
+                            />
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ p: 0 }}>
+                          {renderSlotRows(stage)}
+                        </AccordionDetails>
+                      </Accordion>
+                    );
+                  })}
+                </Stack>
+              );
+            })()}
           </div>
         </CardContent>
       </Card>
