@@ -354,6 +354,39 @@ function getTerminalKeys(handlerType) {
 }
 
 /**
+ * Returns the response metadata triple for a single executed outcome:
+ *   { outcome, setsLeadStatus, terminal }
+ *
+ * Used by execute routes to echo the resolved outcome back to the client so the
+ * modal UI can show "Lead status set to X" and debugging is easier. All values
+ * are derived from the registry — no hardcoding in the routes.
+ *
+ * For arrange_visit the resolved status depends on visitType (design / survey),
+ * so pass `{ visitType }` in opts; getArrangeVisitStatus handles the fallback.
+ * Unknown outcome keys return `{ outcome, setsLeadStatus: null, terminal: false }`.
+ *
+ * @param {string} handlerType
+ * @param {string} outcomeKey
+ * @param {{ visitType?: string }} [opts]
+ * @returns {{ outcome: string, setsLeadStatus: string|null, terminal: boolean }}
+ */
+function getOutcomeMeta(handlerType, outcomeKey, opts = {}) {
+  const outcomes = HANDLER_OUTCOMES[handlerType] || [];
+  const outcome = outcomes.find(o => o.key === outcomeKey);
+  if (!outcome) {
+    return { outcome: outcomeKey, setsLeadStatus: null, terminal: false };
+  }
+  const terminal = outcome.kind === 'terminal';
+  let setsLeadStatus = null;
+  if (terminal) {
+    setsLeadStatus = (handlerType === 'arrange_visit' && outcome.variants)
+      ? getArrangeVisitStatus(outcomeKey, opts.visitType)
+      : (outcome.setsLeadStatus || null);
+  }
+  return { outcome: outcomeKey, setsLeadStatus, terminal };
+}
+
+/**
  * For arrange_visit: returns the hs_lead_status to set for a given outcome + visitType.
  * Falls back to the 'design' variant when visitType is unknown.
  * Returns null when the outcome is not found or has no status.
@@ -375,12 +408,13 @@ function getArrangeVisitStatus(outcomeKey, visitType) {
 // Named-export form (exports.X = X) rather than module.exports = {...} so that
 // Rollup's CommonJS plugin can statically detect the named exports when this
 // module is imported from src/react/utils/handlerMeta.ts via Vite.
-exports.HANDLER_OUTCOMES            = HANDLER_OUTCOMES;
+exports.HANDLER_OUTCOMES             = HANDLER_OUTCOMES;
 exports.ACTION_LEVEL_EMAIL_TEMPLATES = ACTION_LEVEL_EMAIL_TEMPLATES;
-exports.SYSTEM_EMAIL_TEMPLATES      = SYSTEM_EMAIL_TEMPLATES;
-exports.templateRefKey              = templateRefKey;
-exports.templateRefIsSystem         = templateRefIsSystem;
-exports.templateRefSentFrom         = templateRefSentFrom;
-exports.getTerminalStatusMap        = getTerminalStatusMap;
-exports.getTerminalKeys             = getTerminalKeys;
-exports.getArrangeVisitStatus       = getArrangeVisitStatus;
+exports.SYSTEM_EMAIL_TEMPLATES       = SYSTEM_EMAIL_TEMPLATES;
+exports.templateRefKey               = templateRefKey;
+exports.templateRefIsSystem          = templateRefIsSystem;
+exports.templateRefSentFrom          = templateRefSentFrom;
+exports.getTerminalStatusMap         = getTerminalStatusMap;
+exports.getTerminalKeys              = getTerminalKeys;
+exports.getOutcomeMeta               = getOutcomeMeta;
+exports.getArrangeVisitStatus        = getArrangeVisitStatus;

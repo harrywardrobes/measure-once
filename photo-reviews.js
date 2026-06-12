@@ -12,6 +12,7 @@ const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { REVIEW_OUTCOME_STATUS: _REVIEW_OUTCOME_STATUS } = require('./shared/handler-route-contracts.cjs');
+const { getOutcomeMeta } = require('./shared/handler-outcomes.cjs');
 const _REVIEW_VALID_OUTCOMES  = new Set(Object.keys(_REVIEW_OUTCOME_STATUS));
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -356,7 +357,8 @@ router.post('/api/card-actions/review-customer-photos',
       }
     }
 
-    return res.json({ ok: true });
+    const meta = getOutcomeMeta('review_customer_photos', outcome);
+    return res.json({ ok: true, ...meta });
   }
 );
 

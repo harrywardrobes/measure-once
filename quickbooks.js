@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
-const { HANDLER_OUTCOMES } = require('./shared/handler-outcomes.cjs');
+const { HANDLER_OUTCOMES, getOutcomeMeta } = require('./shared/handler-outcomes.cjs');
 
 // Status values derived from the outcome registry — keeps them in sync with
 // what the Workflow page displays as outcome chips.
@@ -913,7 +913,8 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         });
       }
 
-      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: _QB_ACCEPT_STATUS, ...(idempotentRetry ? { idempotent: true } : {}), ...(sendAlreadyDone ? { sendSkipped: true } : {}) });
+      const acceptMeta = getOutcomeMeta('open_deal', 'accept');
+      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: _QB_ACCEPT_STATUS, ...acceptMeta, ...(idempotentRetry ? { idempotent: true } : {}), ...(sendAlreadyDone ? { sendSkipped: true } : {}) });
     } catch (e) {
       if (e._qbNoInvoiceId) {
         // Thrown from inside the advisory-lock block to ensure the finally clause
@@ -1099,7 +1100,8 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: _QB_DECLINE_STATUS, ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}), ...(thankYouError ? { thankYouError } : {}) });
+      const declineMeta = getOutcomeMeta('open_deal', 'decline');
+      res.json({ ok: true, steps, hs_lead_status: _QB_DECLINE_STATUS, ...declineMeta, ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}), ...(thankYouError ? { thankYouError } : {}) });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/quickbooks/contacts/:contactId/decline-deal error:');
       res.status(503).json({ error: e.message, steps });

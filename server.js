@@ -30,7 +30,7 @@ const {
 // always agree.  Exceptions are documented in handler-route-contracts.cjs.
 
 // deposit_invoice_followup accepted keys are only used inside this file; keep inline.
-const { getTerminalStatusMap } = require('./shared/handler-outcomes.cjs');
+const { getTerminalStatusMap, getOutcomeMeta } = require('./shared/handler-outcomes.cjs');
 const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
@@ -5892,7 +5892,8 @@ app.post('/api/card-actions/arrange-visit/outcome',
     try {
       await assertLeadStatusKey(newLeadStatus);
       await patchContactProperties(contactId, { hs_lead_status: newLeadStatus });
-      res.json({ ok: true, hs_lead_status: newLeadStatus });
+      const meta = getOutcomeMeta('arrange_visit', outcome, { visitType });
+      res.json({ ok: true, hs_lead_status: newLeadStatus, ...meta });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
         return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
@@ -6159,7 +6160,8 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
       clearContactCache();
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
-      res.json({ ok: true, advancedTo: key });
+      const meta = getOutcomeMeta('contact_customer', target);
+      res.json({ ok: true, advancedTo: key, ...meta });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
         return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
@@ -6231,7 +6233,8 @@ app.post('/api/card-actions/design-visit-followup/outcome',
     try {
       await assertLeadStatusKey(newLeadStatus);
       await patchContactProperties(contactId, { hs_lead_status: newLeadStatus });
-      res.json({ ok: true, hs_lead_status: newLeadStatus });
+      const meta = getOutcomeMeta('design_visit_followup', outcome);
+      res.json({ ok: true, hs_lead_status: newLeadStatus, ...meta });
     } catch (e) {
       if (e.code === 'LEAD_STATUS_REMOVED') {
         return res.status(422).json({ error: e.message, code: 'LEAD_STATUS_REMOVED', removedKey: e.removedKey });
@@ -6731,7 +6734,8 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: _diNotProceedingStatus });
+      const meta = getOutcomeMeta('deposit_invoice_followup', 'not_proceeding');
+      res.json({ ok: true, steps, hs_lead_status: _diNotProceedingStatus, ...meta });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/deposit-invoice/not-proceeding error:');
       res.status(503).json({ error: e.message, steps });
