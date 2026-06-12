@@ -668,7 +668,7 @@ function StatusRow({
   isFlashing: boolean;
   onPreviewClick?: (handler: Handler) => void;
 }) {
-  const lsKey          = String(ls.key || '').toLowerCase();
+  const lsKey          = stageKey === '__global__' ? '' : String(ls.key || '').toLowerCase();
   const statusHandlers = handlersForSlot(handlers, stageKey, lsKey);
   const hasNonDefault  = statusHandlers.some(isNonDefaultHandler);
   const hasHandler     = hasNonDefault;
