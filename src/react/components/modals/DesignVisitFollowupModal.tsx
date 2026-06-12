@@ -16,7 +16,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { DVF_DRAFT_PREFIX } from '../../constants/localStorageKeys';
-import { DVF_OUTCOME_KEY } from '../../utils/handlerMeta';
+import { DVF_OUTCOME_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -134,7 +134,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     setEmailError('');
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     POST('/api/email-templates/render', {
-      key: 'visit_invite',
+      key: STAFF_EMAIL_TEMPLATE_KEY.visit_invite,
       vars: {
         firstName,
         visitLabel: 'design visit',

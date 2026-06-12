@@ -27,6 +27,7 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
 import SendIcon from '@mui/icons-material/Send';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import { POST, isGoogleAuthError } from '../../utils/api';
+import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { PaymentHistory } from '../PaymentHistory';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
@@ -229,7 +230,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
     setDeclineEmailLoading(true);
     setDeclineEmailFetchError(false);
     POST<{ subject: string; body_text: string }>('/api/email-templates/render', {
-      key: 'open_deal_declined_thank_you',
+      key: STAFF_EMAIL_TEMPLATE_KEY.open_deal_declined_thank_you,
       vars: { firstName },
     })
       .then(data => {
@@ -260,7 +261,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
     const balance     = loaderData?.invoiceBalance  ?? 0;
     const invoiceLink = loaderData?.invoiceLink     || '';
     POST<{ subject: string; body_text: string }>('/api/email-templates/render', {
-      key: 'deposit_invoice_payment_reminder',
+      key: STAFF_EMAIL_TEMPLATE_KEY.deposit_invoice_payment_reminder,
       vars: {
         firstName,
         invoiceDocNum: docNum,

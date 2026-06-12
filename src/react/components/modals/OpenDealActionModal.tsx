@@ -35,6 +35,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { POST } from '../../utils/api';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusLabelFor, leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
@@ -212,7 +213,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     const firstName = contactData?.contactName?.split(' ')[0] || '';
     setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: true, error: false });
     POST<{ subject: string; body_text: string; html: string }>('/api/email-templates/render', {
-      key: 'open_deal_declined_thank_you',
+      key: STAFF_EMAIL_TEMPLATE_KEY.open_deal_declined_thank_you,
       vars: { firstName },
     })
       .then(data => {

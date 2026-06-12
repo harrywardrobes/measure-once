@@ -27,7 +27,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
-import { ARRANGE_VISIT_KEY } from '../../utils/handlerMeta';
+import { ARRANGE_VISIT_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
@@ -217,7 +217,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         const firstName = (d.contactName || '').split(' ')[0] || 'there';
         const vLabel = visitLabel(d.visitType ?? 'design');
         POST('/api/email-templates/render', {
-          key: 'arrange_visit_no_answer',
+          key: STAFF_EMAIL_TEMPLATE_KEY.arrange_visit_no_answer,
           vars: { firstName, visitLabel: vLabel, proposedDate: '', proposedTime: '', proposedDateLine: '' },
         })
           .then((t: unknown) => setNoAnswerTemplate(t as { subject: string; body_text: string }))
@@ -407,7 +407,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     const vLabel = visitLabel(info?.visitType ?? 'design');
     POST('/api/email-templates/render', {
-      key: 'arrange_visit_no_answer',
+      key: STAFF_EMAIL_TEMPLATE_KEY.arrange_visit_no_answer,
       vars: {
         firstName,
         visitLabel: vLabel,

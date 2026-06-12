@@ -135,6 +135,46 @@ export const CONTACT_CUSTOMER_KEY = {
   whatsapp_sent:        _k('contact_customer', 'whatsapp_sent'),
 } as const;
 
+/**
+ * Looks up the email template key at the given index within an outcome's
+ * sendsEmailTemplates list. Throws at module load time if the registry entry
+ * is missing so renames are caught immediately.
+ * (Mirrors _k() above; inlines the string/object normalisation to stay under
+ * the main.js gzip cap rather than importing templateRefKey.)
+ */
+function _t(type: string, outcomeKey: string, templateIndex = 0): string {
+  const outcome = (HANDLER_OUTCOMES as Record<string, ActionOutcome[]>)[type]?.find(
+    o => o.key === outcomeKey,
+  );
+  const refs = outcome?.sendsEmailTemplates;
+  if (!refs || refs.length <= templateIndex) {
+    throw new Error(
+      `[handlerMeta] Registry missing email template [${templateIndex}] for outcome '${outcomeKey}' on handler '${type}'`,
+    );
+  }
+  const ref = refs[templateIndex];
+  return typeof ref === 'string' ? ref : ref.key;
+}
+
+/**
+ * Email template keys for the four staff-edited email steps, derived from the
+ * registry at module load time. Import these instead of hardcoding raw key
+ * strings in modal components — renaming a key in the registry automatically
+ * propagates here and to every modal that uses it.
+ */
+export const STAFF_EMAIL_TEMPLATE_KEY = {
+  /** arrange_visit > email_sent — "no answer" email composed by staff */
+  arrange_visit_no_answer:          _t('arrange_visit',            'email_sent',     0),
+  /** design_visit_followup > invite_resent — visit invite resent by staff */
+  visit_invite:                     _t('design_visit_followup',    'invite_resent',  0),
+  /** schedule_visit > scheduled — optional confirmation email after scheduling */
+  visit_confirmation:               _t('schedule_visit',           'scheduled',      0),
+  /** deposit_invoice_followup > send_reminder — payment reminder composed by staff */
+  deposit_invoice_payment_reminder: _t('deposit_invoice_followup', 'send_reminder',  0),
+  /** open_deal > decline — thank-you / decline email composed by staff */
+  open_deal_declined_thank_you:     _t('open_deal',                'decline',        0),
+} as const;
+
 export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
   deposit_invoice_followup: {
     steps: '6 options — arrange survey / re-send invoice / send reminder / not proceeding / log call / amend deal',

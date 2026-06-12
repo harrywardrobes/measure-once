@@ -42,6 +42,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage } from '../../utils/api';
+import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
@@ -203,7 +204,7 @@ export function ScheduleVisitModal({
     const dateStr = startDt?.isValid() ? startDt.format('D MMMM YYYY') : '';
     const timeStr = startDt?.isValid() ? startDt.format('h:mm A') : '';
     POST('/api/email-templates/render', {
-      key: 'visit_confirmation',
+      key: STAFF_EMAIL_TEMPLATE_KEY.visit_confirmation,
       vars: {
         firstName,
         visitLabel: visitTypeLabel(visitType),
