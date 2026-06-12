@@ -238,3 +238,27 @@ export const Demo: Story = {
     demo: true,
   },
 };
+
+export const DemoAcceptConfirm: Story = {
+  name: 'Demo — accept deal step 2 (confirm, disabled button + tooltip)',
+  args: {
+    demo: true,
+    demoInitialStep: 'accept_confirm',
+  },
+};
+
+export const DemoDeclineConfirm: Story = {
+  name: 'Demo — decline deal step 1 (confirm checked, Continue enabled)',
+  args: {
+    demo: true,
+    demoInitialStep: 'decline_confirm',
+  },
+};
+
+export const DemoDeclineEmail: Story = {
+  name: 'Demo — decline deal step 2 (email preview, disabled send buttons)',
+  args: {
+    demo: true,
+    demoInitialStep: 'decline_email',
+  },
+};

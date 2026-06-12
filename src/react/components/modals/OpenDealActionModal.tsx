@@ -74,6 +74,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   demo?: boolean;
+  /** Only meaningful when demo=true — which step to open at instead of 'hub'. */
+  demoInitialStep?: Step;
 }
 
 type Step =
@@ -197,12 +199,12 @@ function isPending(status: string) {
   return PENDING_STATUSES.has((status || '').toLowerCase());
 }
 
-export function OpenDealActionModal({ handler, ctx, open, onClose, demo }: Props) {
+export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoInitialStep }: Props) {
   const { contactId, contactName: ctxContactName } = ctx;
   const draftKey = `${OPEN_DEAL_DRAFT_PREFIX}${contactId}`;
   const showToast = useToast();
 
-  const [step, setStep] = useState<Step>(() => demo ? 'hub' : 'loading');
+  const [step, setStep] = useState<Step>(() => demo ? (demoInitialStep ?? 'hub') : 'loading');
   const [contactData, setContactData] = useState<ContactData | null>(() => demo ? DEMO_CONTACT_DATA : null);
   const [loadError, setLoadError] = useState('');
 
@@ -285,6 +287,38 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo }: Props
       });
     return () => { cancelled = true; };
   }, [step, contactData, declineEmailRefreshCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Demo-mode synthetic state for non-hub steps ────────────────────────────
+  useEffect(() => {
+    if (!demo || !open) return;
+    const s = demoInitialStep ?? 'hub';
+    if (s === 'accept_confirm') {
+      const firstPending = DEMO_CONTACT_DATA.estimates.find(e => isPending(e.txnStatus));
+      setSelectedEstimateId(firstPending?.id ?? DEMO_CONTACT_DATA.estimates[0]?.id ?? null);
+      const firstName = DEMO_CONTACT_DATA.contactName.split(' ')[0];
+      const pct = DEMO_CONTACT_DATA.depositPercent;
+      setDepositEmailPreview({
+        subject: 'Your deposit invoice',
+        html: `<p>Hi ${firstName},</p>\n<p>I've sent over the <strong>${pct}% deposit invoice</strong> — please let me know if you haven't received it.</p>\n<p>Once received, we can then book in a survey visit to confirm the final measurements and design choices.</p>\n<p style="color:#555">Warm regards,<br>The team</p>`,
+        text: `Hi ${firstName},\n\nI've sent over the ${pct}% deposit invoice — please let me know if you haven't received it.`,
+      });
+    }
+    if (s === 'decline_confirm') {
+      const pending = DEMO_CONTACT_DATA.estimates.filter(e => isPending(e.txnStatus)).map(e => e.id);
+      setEstimateIdsToDeclineOnDecline(pending);
+      setDeclineConfirmed(true);
+    }
+    if (s === 'decline_email') {
+      const firstName = DEMO_CONTACT_DATA.contactName.split(' ')[0];
+      setDeclineEmailPreview({
+        subject: 'Thank you',
+        bodyText: `Hi ${firstName},\n\nThank you for your time — please feel free to get in touch if you have any questions.\n\nWarm regards,\nThe team`,
+        html: `<p>Hi ${firstName},</p>\n<p>Thank you for your time — please feel free to get in touch if you have any questions.</p>\n<p style="color:#555">Warm regards,<br>The team</p>`,
+        loading: false,
+        error: false,
+      });
+    }
+  }, [open, demo, demoInitialStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load data on open ──────────────────────────────────────────────────────
   useEffect(() => {
