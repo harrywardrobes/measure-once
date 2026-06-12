@@ -62,6 +62,7 @@ import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
 import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
 import { DesignVisitFollowupModal } from '../../components/modals/DesignVisitFollowupModal';
 import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
+import { OpenDealActionModal } from '../../components/modals/OpenDealActionModal';
 import { DesignVisitWizard } from '../../components/DesignVisitWizard';
 const ReviewCustomerPhotosDrawer = React.lazy(() =>
   import('../../components/modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
@@ -1078,6 +1079,8 @@ function WorkflowDemoModalHost({
           <ReviewCustomerPhotosDrawer handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />
         </React.Suspense>
       );
+    case 'open_deal':
+      return <OpenDealActionModal handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />;
     case 'contact_customer':
       return (
         <ContactCustomerModal

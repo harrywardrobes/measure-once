@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { OPEN_DEAL_DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import { DEMO_CONTACT } from './demoData';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,7 +11,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
@@ -49,6 +50,7 @@ interface Props {
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 type Step =
@@ -115,6 +117,36 @@ interface DeclineResult {
   thankYouError?: string;
 }
 
+const DEMO_CONTACT_DATA: ContactData = {
+  contactName: DEMO_CONTACT.name,
+  contactEmail: DEMO_CONTACT.email,
+  contactPhone: DEMO_CONTACT.phone,
+  contactMobile: DEMO_CONTACT.mobile,
+  contactAddress: DEMO_CONTACT.address,
+  depositPercent: 10,
+  qbConnected: true,
+  estimates: [
+    {
+      id: 'demo-est-001',
+      docNumber: '1042',
+      txnDate: '2026-05-15',
+      totalAmt: 12500,
+      txnStatus: 'Pending',
+      billEmail: DEMO_CONTACT.email,
+      customerRef: DEMO_CONTACT.name,
+    },
+    {
+      id: 'demo-est-002',
+      docNumber: '1039',
+      txnDate: '2026-04-01',
+      totalAmt: 9800,
+      txnStatus: 'Rejected',
+      billEmail: DEMO_CONTACT.email,
+      customerRef: DEMO_CONTACT.name,
+    },
+  ],
+};
+
 function formatCurrency(n: number): string {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n);
 }
@@ -142,13 +174,13 @@ function isPending(status: string) {
   return PENDING_STATUSES.has((status || '').toLowerCase());
 }
 
-export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
+export function OpenDealActionModal({ handler, ctx, open, onClose, demo }: Props) {
   const { contactId, contactName: ctxContactName } = ctx;
   const draftKey = `${OPEN_DEAL_DRAFT_PREFIX}${contactId}`;
   const showToast = useToast();
 
-  const [step, setStep] = useState<Step>('loading');
-  const [contactData, setContactData] = useState<ContactData | null>(null);
+  const [step, setStep] = useState<Step>(() => demo ? 'hub' : 'loading');
+  const [contactData, setContactData] = useState<ContactData | null>(() => demo ? DEMO_CONTACT_DATA : null);
   const [loadError, setLoadError] = useState('');
 
   // Accept-path state
@@ -203,12 +235,13 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   // Save step/selections to draft whenever they change
   useEffect(() => {
     if (!hasMounted.current) return;
-    saveDraft({ step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou });
+    if (!demo) saveDraft({ step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou });
   }, [step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch live decline email preview when the step becomes visible (or refresh is triggered)
   useEffect(() => {
     if (step !== 'decline_email') return;
+    if (demo) return;
     let cancelled = false;
     const firstName = contactData?.contactName?.split(' ')[0] || '';
     setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: true, error: false });
@@ -230,6 +263,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   // ── Load data on open ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
+    if (demo) return;
     hasMounted.current = true;
 
     const draft = loadDraft();
@@ -268,6 +302,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
   // ── Deposit invoice email preview ──────────────────────────────────────────
   useEffect(() => {
     if (step !== 'accept_confirm' || !contactData) return;
+    if (demo) return;
 
     let cancelled = false;
     setPreviewLoading(true);
@@ -291,11 +326,11 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
 
   function navigateTo(s: Step) {
     setStep(s);
-    saveDraft({ step: s });
+    if (!demo) saveDraft({ step: s });
   }
 
   function handleClose() {
-    clearDraft();
+    if (!demo) clearDraft();
     onClose();
   }
 
@@ -318,6 +353,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
     selectedEstimate.billEmail.toLowerCase() !== contactData.contactEmail.toLowerCase();
 
   async function handleAccept() {
+    if (demo) return;
     if (!selectedEstimateId || !acceptConfirmed) return;
     navigateTo('accept_submitting');
     try {
@@ -353,6 +389,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
 
   // ── Option 3: decline ──────────────────────────────────────────────────────
   async function handleDecline(shouldSendThankYou: boolean) {
+    if (demo) return;
     if (!declineConfirmed) return;
     navigateTo('decline_submitting');
     try {
@@ -436,7 +473,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
             QuickBooks is not connected — the accept deal flow requires a QuickBooks connection.
           </Alert>
         )}
-        <PaymentHistory variant="banner" contactId={contactId} />
+        {!demo && <PaymentHistory variant="banner" contactId={contactId} />}
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
           What would you like to do with this deal?
         </Typography>
@@ -1022,14 +1059,16 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         <>
           <Button onClick={() => navigateTo('accept_pick')} startIcon={<ArrowBackIcon />}>Back</Button>
           <Box sx={{ flex: 1 }} />
-          <Button
-            variant="contained"
-            color="success"
-            disabled={!acceptConfirmed}
-            onClick={handleAccept}
-          >
-            Confirm & Send Invoice
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              color="success"
+              disabled={!acceptConfirmed || !!demo}
+              onClick={handleAccept}
+            >
+              Confirm & Send Invoice
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -1056,19 +1095,24 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
         <>
           <Button onClick={() => navigateTo('decline_confirm')} startIcon={<ArrowBackIcon />}>Back</Button>
           <Box sx={{ flex: 1 }} />
-          <Button
-            onClick={() => handleDecline(false)}
-            sx={{ mr: 1 }}
-          >
-            Skip
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!contactData?.contactEmail}
-            onClick={() => handleDecline(true)}
-          >
-            Send &amp; Close
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              disabled={!!demo}
+              onClick={() => handleDecline(false)}
+              sx={{ mr: 1 }}
+            >
+              Skip
+            </Button>
+          </DemoActionTooltip>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              disabled={!contactData?.contactEmail || !!demo}
+              onClick={() => handleDecline(true)}
+            >
+              Send &amp; Close
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -1100,7 +1144,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onClose={isSubmitting ? undefined : handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+      <DemoDialogTitle demo={demo} sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         {showBackHeader && (
           <IconButton size="small" onClick={() => {
             if (step === 'amend_hub')       navigateTo('hub');
@@ -1113,7 +1157,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose }: Props) {
           </IconButton>
         )}
         {getTitle()}
-      </DialogTitle>
+      </DemoDialogTitle>
       <DialogContent dividers>
         {renderContent()}
       </DialogContent>

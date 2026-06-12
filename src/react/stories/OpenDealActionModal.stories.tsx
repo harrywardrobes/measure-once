@@ -231,3 +231,10 @@ export const DealAcceptedDone: Story = {
     },
   ],
 };
+
+export const Demo: Story = {
+  name: 'Demo — hub step (no fetch needed)',
+  args: {
+    demo: true,
+  },
+};
