@@ -621,6 +621,7 @@ export const TokenHighlightField = React.forwardRef<
             minHeight,
             resize: 'none',
             background: 'transparent',
+            '&:focus': { background: 'transparent' },
             color: 'transparent',
             caretColor: (t) => t.palette.text.primary,
             outline: 'none',
