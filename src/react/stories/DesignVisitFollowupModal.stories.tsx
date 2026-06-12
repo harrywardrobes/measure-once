@@ -132,3 +132,20 @@ export const DemoResendStep: Story = {
   args: { demo: true },
   render: (args) => <DemoResendWrapper {...args} />,
 };
+
+function DemoScheduleWrapper(props: React.ComponentProps<typeof DesignVisitFollowupModal>) {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="dvf-confirmed"]');
+      btn?.click();
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+  return <DesignVisitFollowupModal {...props} />;
+}
+
+export const DemoScheduleStep: Story = {
+  name: 'Demo preview (schedule step)',
+  args: { demo: true },
+  render: (args) => <DemoScheduleWrapper {...args} />,
+};
