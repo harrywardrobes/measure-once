@@ -110,6 +110,19 @@ const NO_PROBE_LABELS_ALLOWLIST = new Map([
 ]);
 
 // ---------------------------------------------------------------------------
+// Allowlist — suites with documented probe callouts whose test file cannot be
+// located from package.json scripts (no script entry, or the file referenced
+// by the script does not yet exist on disk).  Each entry must carry a short
+// reason.  Any suite NOT listed here will trigger a non-failing advisory so
+// new unresolved additions are visible immediately.
+// ---------------------------------------------------------------------------
+
+const FILE_NOT_FOUND_ALLOWLIST = new Map([
+  ['test:substatus-hubspot-label-format', 'pending implementation — test file not yet written'],
+  ['test:audit-log-scrolling',            'pending implementation — no package.json script yet; suite not enrolled in test:ci'],
+]);
+
+// ---------------------------------------------------------------------------
 // Allowlist — suites that intentionally have NO probe callouts in docs and NO
 // PROBE_LABELS array in their test file.  Each entry must carry a short reason
 // explaining why named probes are not appropriate for that suite.  Any suite
@@ -227,6 +240,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:active-projects-hubspot-outage','narrative — Active Projects error branch during HubSpot 502'],
   ['test:stage-scoped-pills',           'narrative — stage-tab pill filter update regression guard'],
   ['test:bundle-sizes',                 'narrative — post-build gzip size snapshot (standalone only)'],
+  ['test:suite-probe-counts',           'static-lint — self-referential check; no discrete probe IDs in the implementation'],
 ]);
 
 // ---------------------------------------------------------------------------
@@ -235,14 +249,26 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
 
 /**
  * Build a map of suite name → absolute file path from package.json scripts.
- * Only considers non-:ci test:* entries whose command ends with a .js file.
+ * Handles three command shapes:
+ *   node test/…/run.js          — plain Node runner (.js or .mjs)
+ *   node scripts/check-….mjs   — plain Node runner (.js or .mjs)
+ *   vitest run src/react/…     — Vitest unit suite
  */
 function buildFileMap(scripts) {
   const map = new Map();
   for (const [key, cmd] of Object.entries(scripts)) {
     if (!key.startsWith('test:') || key.endsWith(':ci')) continue;
-    const m = cmd.match(/\s((?:test|scripts)\/[^\s]+\.js)\s*$/);
-    if (m) map.set(key, join(ROOT, m[1]));
+    // node <path>.js|.mjs — path must start with test/ or scripts/
+    const nodeMatch = cmd.match(/\s((?:test|scripts)\/[^\s]+\.m?js)\s*$/);
+    if (nodeMatch) {
+      map.set(key, join(ROOT, nodeMatch[1]));
+      continue;
+    }
+    // vitest run <path>
+    const vitestMatch = cmd.match(/^vitest\s+run\s+(\S+)$/);
+    if (vitestMatch) {
+      map.set(key, join(ROOT, vitestMatch[1]));
+    }
   }
   return map;
 }
@@ -330,10 +356,12 @@ const docExtrasRedundantFailures = [];  // PROBE_LABELS_DOC_EXTRAS entries that 
 const noArrayWarn                = [];  // suites with doc probes but no PROBE_LABELS, not in allowlist
 const docExtrasWarn              = [];  // suites using PROBE_LABELS_DOC_EXTRAS (non-failing advisory)
 const noProbeSuiteWarn           = [];  // suites with no probe callouts AND not in NO_PROBE_SUITES_ALLOWLIST
+const fileNotFoundWarn           = [];  // suites with doc probes, file not found, not in FILE_NOT_FOUND_ALLOWLIST
 let   checked                    = 0;
 let   skipped                    = 0;
 let   allowlisted                = 0;
 let   noProbeSuiteAllowlisted    = 0;
+let   fileNotFoundAllowlisted    = 0;
 
 for (const [suiteName, rowText] of suiteRows) {
   const docIds = extractDocProbeIds(rowText);
@@ -352,7 +380,14 @@ for (const [suiteName, rowText] of suiteRows) {
 
   const filePath = fileMap.get(suiteName);
   if (!filePath || !existsSync(filePath)) {
-    // Cannot locate the test file from package.json scripts — skip.
+    // Cannot locate the test file from package.json scripts.
+    // Check the allowlist: known pending/unimplemented suites are listed there.
+    // Anything NOT in the allowlist gets a non-failing advisory.
+    if (FILE_NOT_FOUND_ALLOWLIST.has(suiteName)) {
+      fileNotFoundAllowlisted++;
+    } else {
+      fileNotFoundWarn.push(suiteName);
+    }
     skipped++;
     continue;
   }
@@ -473,6 +508,30 @@ if (noProbeSuiteWarn.length > 0) {
 }
 
 // ---------------------------------------------------------------------------
+// Report advisories (non-failing) for suites with doc probes whose file
+// could not be located and are not in FILE_NOT_FOUND_ALLOWLIST
+// ---------------------------------------------------------------------------
+
+if (fileNotFoundWarn.length > 0) {
+  console.warn(
+    `ℹ️   suite-probe-counts: ${fileNotFoundWarn.length} suite` +
+    `${fileNotFoundWarn.length === 1 ? '' : 's'} document` +
+    `${fileNotFoundWarn.length === 1 ? 's' : ''} probe callouts but` +
+    `${fileNotFoundWarn.length === 1 ? ' its' : ' their'} test file` +
+    `${fileNotFoundWarn.length === 1 ? '' : 's'} could not be located` +
+    ` (drift cannot be detected):\n`,
+  );
+  for (const suite of fileNotFoundWarn) {
+    console.warn(`  ${suite}`);
+  }
+  console.warn(
+    `\n    Fix: either implement the test suite so its file can be found via\n` +
+    `    package.json scripts, or add the suite to FILE_NOT_FOUND_ALLOWLIST\n` +
+    `    in scripts/check-suite-probe-counts.mjs with a one-line reason.\n`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Report warnings (non-failing) for suites with doc probes but no PROBE_LABELS
 // ---------------------------------------------------------------------------
 
@@ -523,15 +582,13 @@ const totalFailures = forwardFailures.length + reverseFailures.length + docExtra
 
 if (totalFailures === 0) {
   const parts = [`all ${checked} suites with documented probes are up-to-date`];
-  if (noProbeSuiteAllowlisted > 0) parts.push(`${noProbeSuiteAllowlisted} confirmed no-probe (see NO_PROBE_SUITES_ALLOWLIST)`);
-  if (noProbeSuiteWarn.length > 0) parts.push(`${noProbeSuiteWarn.length} advisory (no probe callouts — add to NO_PROBE_SUITES_ALLOWLIST or label)`);
-  if (skipped - noProbeSuiteAllowlisted - noProbeSuiteWarn.length > 0) {
-    const fileNotFound = skipped - noProbeSuiteAllowlisted - noProbeSuiteWarn.length;
-    parts.push(`${fileNotFound} skipped (file not found via package.json scripts)`);
-  }
-  if (allowlisted > 0)          parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
-  if (noArrayWarn.length > 0)   parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
-  if (docExtrasWarn.length > 0) parts.push(`${docExtrasWarn.length} advisory (PROBE_LABELS_DOC_EXTRAS used — prefer distinct labels)`);
+  if (noProbeSuiteAllowlisted > 0)    parts.push(`${noProbeSuiteAllowlisted} confirmed no-probe (see NO_PROBE_SUITES_ALLOWLIST)`);
+  if (noProbeSuiteWarn.length > 0)    parts.push(`${noProbeSuiteWarn.length} advisory (no probe callouts — add to NO_PROBE_SUITES_ALLOWLIST or label)`);
+  if (fileNotFoundAllowlisted > 0)    parts.push(`${fileNotFoundAllowlisted} pending (see FILE_NOT_FOUND_ALLOWLIST)`);
+  if (fileNotFoundWarn.length > 0)    parts.push(`${fileNotFoundWarn.length} advisory (file not found — add to FILE_NOT_FOUND_ALLOWLIST or implement)`);
+  if (allowlisted > 0)                parts.push(`${allowlisted} allowlisted (no PROBE_LABELS array — see NO_PROBE_LABELS_ALLOWLIST)`);
+  if (noArrayWarn.length > 0)         parts.push(`${noArrayWarn.length} warned (no PROBE_LABELS array — not in allowlist)`);
+  if (docExtrasWarn.length > 0)       parts.push(`${docExtrasWarn.length} advisory (PROBE_LABELS_DOC_EXTRAS used — prefer distinct labels)`);
   console.log(`✅  suite-probe-counts: ${parts.join('; ')}`);
   process.exit(0);
 }

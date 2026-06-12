@@ -60,6 +60,19 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
+// Probe labels — consumed by scripts/check-suite-probe-counts.mjs to verify
+// the five invariants documented in docs/TEST_SUITES.md match this file.
+// ---------------------------------------------------------------------------
+
+const PROBE_LABELS = [
+  '(A) every // public-island-annotated MOUNTS id ∈ PUBLIC_ISLAND_IDS',
+  '(B) PUBLIC_ISLAND_IDS ⊆ annotated MOUNTS ids',
+  '(C) BOOTSTRAP_ONLY_IDS ∩ PUBLIC_ISLAND_IDS = ∅',
+  '(D) every BOOTSTRAP_ONLY_IDS id ∈ all MOUNTS ids',
+  '(E) every BOOTSTRAP_ONLY_IDS entry carries a file annotation and that file exists',
+];
+
+// ---------------------------------------------------------------------------
 // Helper: extract string literals from a `new Set([…])` declaration
 // ---------------------------------------------------------------------------
 
