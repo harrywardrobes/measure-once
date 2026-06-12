@@ -596,9 +596,13 @@ export const TokenHighlightField = React.forwardRef<
           {value.endsWith('\n') ? '\u200b' : ''}
         </Box>
 
-        {/* Transparent text input layered on top — provides caret, selection, editing. */}
+        {/* Transparent text input layered on top — provides caret, selection, editing.
+            The `token-overlay` class is referenced by the global CSS reset in
+            app-styles.css to prevent bare textarea/input rules from overwriting
+            background/color/border on this element. */}
         <Box
           component={multiline ? 'textarea' : 'input'}
+          className="token-overlay"
           id={inputId}
           ref={textareaRef as React.Ref<HTMLTextAreaElement>}
           value={value}
@@ -621,7 +625,6 @@ export const TokenHighlightField = React.forwardRef<
             minHeight,
             resize: 'none',
             background: 'transparent',
-            '&:focus': { background: 'transparent' },
             color: 'transparent',
             caretColor: (t) => t.palette.text.primary,
             outline: 'none',
