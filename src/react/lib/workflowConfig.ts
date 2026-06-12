@@ -25,7 +25,8 @@ export const DEFAULT_WORKFLOW: WorkflowDef = {
     packing:      { label: 'Packing' },
     delivery:     { label: 'Delivery' },
     installation: { label: 'Installation' },
-    aftercare:    { label: 'Aftercare' },
+    aftercare:       { label: 'Aftercare' },
+    customerservice: { label: 'Customer Service' },
   },
 };
 

@@ -48,6 +48,7 @@ import type {
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -168,6 +169,7 @@ const _handlersRef:       { current: Handler[]       }                      = { 
 const _labelsRef:         { current: CALabel[]       }                      = { current: [] };
 const _statusesRef:       { current: LeadStatus[]    }                      = { current: [] };
 const _emailTemplatesRef: { current: EmailTemplate[] }                      = { current: [] };
+const _workflowStagesRef: { current: Array<{ key: string; label: string }> } = { current: [] };
 const _toastRef:          { fn: ((m: string, err?: boolean) => void) | null } = { fn: null };
 
 // Refs to open modals from outside the React tree (e.g. window exposure)
@@ -175,6 +177,12 @@ const _openEditorRef: { fn: ((slot: ActionSlot, existing?: Handler | null) => vo
 const _openConflictResolverRef: { fn: ((stageKey: string | null, statusKey: string | null) => void) | null } = { fn: null };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Maps lead_status_config.stage (e.g. 'DESIGN_VISIT') → workflow key (e.g. 'designvisit').
+// Mirrors the server-side _normToCardStageKey rule: lowercase + strip underscores.
+function lsStageToKey(stage: string): string {
+  return stage.toLowerCase().replace(/_/g, '');
+}
 
 function showToast(msg: string, err?: boolean) {
   if (_toastRef.fn) _toastRef.fn(msg, err);
@@ -212,11 +220,16 @@ function _resolveLeadStatusLabel(key: string): string {
 }
 
 function _buildActionSlotGroups(): ActionStage[] {
-  const CARD_ACTION_STAGES = [
-    { key: 'sales', label: 'Sales', lsStage: 'SALES' },
-    { key: 'designvisit', label: 'Design Visit', lsStage: 'DESIGN_VISIT' },
-    { key: 'survey', label: 'Survey', lsStage: 'SURVEY' },
-  ];
+  // Use the runtime workflow stages (all 10 pipeline stages) so this list
+  // stays in sync with the server's LEAD_STATUS_STAGE_KEYS automatically.
+  // Falls back to DEFAULT_WORKFLOW if the fetch hasn't completed yet.
+  const workflowStages = _workflowStagesRef.current.length > 0
+    ? _workflowStagesRef.current
+    : Object.entries(DEFAULT_WORKFLOW.stages ?? {}).map(([key, data]) => ({
+        key,
+        label: (data as WorkflowStage).label ?? key,
+      }));
+
   const labelsByKey = new Map<string, string>();
 
   for (const lbl of _labelsRef.current) {
@@ -225,29 +238,17 @@ function _buildActionSlotGroups(): ActionStage[] {
   }
 
   const stageMap = new Map<string, ActionStage>();
-  for (const cs of CARD_ACTION_STAGES) {
-    stageMap.set(cs.key, { stage: { key: cs.key, label: cs.label }, groups: [] });
+  for (const ws of workflowStages) {
+    stageMap.set(ws.key, { stage: { key: ws.key, label: ws.label }, groups: [] });
   }
 
   const statuses = _statusesRef.current.filter(s => !s.is_null_row);
   const nullRow  = _statusesRef.current.find(s => s.is_null_row);
 
-  const STAGE_FOR_LS: Record<string, string> = Object.fromEntries(
-    CARD_ACTION_STAGES.map(s => [s.lsStage, s.key]),
-  );
-
   const processLs = (ls: LeadStatus, stageKey: string) => {
     const lsKeyLower = String(ls.key || '').toLowerCase();
 
     const dflt = labelsByKey.get(`${stageKey}|${lsKeyLower}`) || '';
-    const hasHandler = _handlersRef.current.some(h =>
-      (h.bindings || []).some(b =>
-        (b.stage_key  || '').toLowerCase() === stageKey &&
-        (b.status_key || '').toLowerCase() === lsKeyLower,
-      ),
-    );
-
-    if (!hasHandler) return [];
 
     const slots: ActionSlot[] = [
       { kind: 'ls', stage_key: stageKey, status_key: lsKeyLower, label: dflt || ls.label, hasLabel: !!dflt },
@@ -257,7 +258,7 @@ function _buildActionSlotGroups(): ActionStage[] {
 
   // Global null slot (stage_key='__global__', status_key='').
   // Mirrors CardActionsPage: prefer '__global__' label, fall back to legacy 'sales' label for display.
-  // Shown when the '__global__' label is set OR a handler is already bound to this slot.
+  // Shown only when a handler is already bound to this slot (see follow-up task to allow first-attach).
   const globalLabel = labelsByKey.get('__global__|') || '';
   const globalLabelDisplay = globalLabel || labelsByKey.get('sales|') || (nullRow?.label ?? 'No lead status');
   const hasGlobalHandler = _handlersRef.current.some(h =>
@@ -281,8 +282,8 @@ function _buildActionSlotGroups(): ActionStage[] {
   // Legacy Sales null-row omitted — superseded by the global null slot above.
 
   for (const ls of statuses) {
-    const stageKey = STAGE_FOR_LS[ls.stage || ''];
-    if (!stageKey) continue;
+    const stageKey = lsStageToKey(ls.stage || '');
+    if (!stageKey || !stageMap.has(stageKey)) continue;
     const stage = stageMap.get(stageKey)!;
     const groups = processLs(ls, stageKey);
     stage.groups.push(...groups);
@@ -1070,14 +1071,15 @@ export function ActionHandlersPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [hdl, lbl, sta, cfl, orp, tpl] = await Promise.all([
+      const [wfl, hdl, lbl, sta, cfl, orp, tpl] = await Promise.all([
+        GET('/api/workflow'),
         GET('/api/admin/card-action-handlers'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers/conflicts'),
         GET('/api/admin/card-action-handlers/orphaned'),
         GET('/api/admin/email-templates'),
-      ]) as [Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }, EmailTemplate[]];
+      ]) as [WorkflowDef | null, Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }, EmailTemplate[]];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const h  = safeArr<Handler>(hdl);
@@ -1089,16 +1091,23 @@ export function ActionHandlersPage() {
         : { total: 0, conflicts: [] };
       const orphCount = (orp && typeof orp === 'object') ? (Number((orp as { count: number }).count) || 0) : 0;
 
+      const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
+      const wfStages = Object.entries(rawStages).map(([key, data]) => ({
+        key,
+        label: (data as WorkflowStage).label ?? key,
+      }));
+
       setHandlers(h);
       setLabels(lb);
       setStatuses(st);
       setConflicts(cf);
       setOrphanedCount(orphCount);
 
-      _handlersRef.current       = h;
-      _labelsRef.current         = lb;
-      _statusesRef.current       = st;
-      _emailTemplatesRef.current = et;
+      _handlersRef.current        = h;
+      _labelsRef.current          = lb;
+      _statusesRef.current        = st;
+      _emailTemplatesRef.current  = et;
+      _workflowStagesRef.current  = wfStages;
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
