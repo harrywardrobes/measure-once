@@ -5975,7 +5975,7 @@ app.post('/api/card-actions/contact-customer',
           [contactId]
         ),
         pool.query(
-          `SELECT cahl.attempted_at, cahl.call_attempted, cahl.email_sent, cahl.whatsapp_sent,
+          `SELECT cahl.attempted_at, cahl.call_attempted, cahl.email_sent, cahl.whatsapp_sent, cahl.notes,
                   COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
            FROM contact_attempt_history_log cahl
            LEFT JOIN users u ON u.id::text = cahl.attempted_by
@@ -6014,6 +6014,7 @@ app.post('/api/card-actions/contact-customer',
           callAttempted: r.call_attempted    || false,
           emailSent:     r.email_sent        || false,
           whatsappSent:  r.whatsapp_sent     || false,
+          notes:         Array.isArray(r.notes) ? r.notes : [],
         })),
       });
     } catch (e) {
@@ -6126,16 +6127,39 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
           [contactId]
         );
         const a = catRow.rows[0] || {};
+
+        // Aggregate the notes logged during this session (every attempt made
+        // since the previous committed history row for this contact) so the
+        // "Across all sessions" history retains note context.
+        const notesRes = await pool.query(
+          `SELECT method, note, attempted_at
+             FROM contact_attempt_log
+            WHERE hubspot_contact_id = $1
+              AND note IS NOT NULL
+              AND attempted_at > COALESCE(
+                (SELECT MAX(attempted_at) FROM contact_attempt_history_log
+                  WHERE hubspot_contact_id = $1),
+                '-infinity'::timestamptz)
+            ORDER BY attempted_at ASC`,
+          [contactId]
+        );
+        const sessionNotes = notesRes.rows.map(r => ({
+          method:      r.method,
+          note:        r.note,
+          attemptedAt: r.attempted_at,
+        }));
+
         await pool.query(
           `INSERT INTO contact_attempt_history_log
-             (hubspot_contact_id, attempted_by, call_attempted, email_sent, whatsapp_sent)
-           VALUES ($1, $2, $3, $4, $5)`,
+             (hubspot_contact_id, attempted_by, call_attempted, email_sent, whatsapp_sent, notes)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             contactId,
             req.user?.id || null,
             !!a.call_attempted,
             !!a.email_sent,
             !!a.whatsapp_sent,
+            sessionNotes.length ? JSON.stringify(sessionNotes) : null,
           ]
         );
       }

@@ -49,12 +49,19 @@ interface AttemptLogEntry {
   note: string | null;
 }
 
+interface HistoryNoteEntry {
+  method: Method;
+  note: string;
+  attemptedAt: string;
+}
+
 interface HistorySessionEntry {
   attemptedAt: string;
   attemptedBy: string | null;
   callAttempted: boolean;
   emailSent: boolean;
   whatsappSent: boolean;
+  notes: HistoryNoteEntry[];
 }
 
 interface ContactData {
@@ -553,9 +560,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                       <Box
                                         key={i}
                                         sx={{
-                                          display: 'flex',
-                                          alignItems: 'baseline',
-                                          gap: 0.75,
                                           px: 1,
                                           py: 0.375,
                                           borderRadius: 1,
@@ -563,19 +567,35 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                           opacity: 0.85,
                                         }}
                                       >
-                                        <Typography
-                                          variant="caption"
-                                          sx={{
-                                            fontWeight: 600,
-                                            minWidth: 56,
-                                          }}
-                                        >
-                                          {sessionMethods}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                                          {relativeTime(entry.attemptedAt)}
-                                          {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
-                                        </Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+                                          <Typography
+                                            variant="caption"
+                                            sx={{
+                                              fontWeight: 600,
+                                              minWidth: 56,
+                                            }}
+                                          >
+                                            {sessionMethods}
+                                          </Typography>
+                                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
+                                            {relativeTime(entry.attemptedAt)}
+                                            {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                                          </Typography>
+                                        </Box>
+                                        {entry.notes.length > 0 && (
+                                          <Box sx={{ mt: 0.25, pl: '56px', display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                                            {entry.notes.map((n, ni) => (
+                                              <Typography
+                                                key={ni}
+                                                variant="caption"
+                                                color="text.secondary"
+                                                sx={{ display: 'block', fontStyle: 'italic' }}
+                                              >
+                                                {METHOD_LABEL[n.method]}: {n.note}
+                                              </Typography>
+                                            ))}
+                                          </Box>
+                                        )}
                                       </Box>
                                     );
                                   })}
