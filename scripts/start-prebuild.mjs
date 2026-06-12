@@ -39,6 +39,16 @@ if (existsSync(BUNDLE)) {
 // bundle. Cheap (~ms) and idempotent, so it's safe on the skip-build path too.
 execSync('node scripts/build-sw.mjs', { stdio: 'inherit' });
 
+// Reclaim port 5000 — kill any stale process that would cause EADDRINUSE.
+// This is a no-op when the port is already free.
+const PORT = process.env.PORT || 5000;
+try {
+  execSync(`fuser -k ${PORT}/tcp`, { stdio: 'pipe' });
+  console.log(`[start-prebuild] Reclaimed port ${PORT}.`);
+} catch {
+  // fuser exits non-zero when nothing is using the port — that's fine.
+}
+
 if (existsSync(STORYBOOK)) {
   console.log('[start-prebuild] Storybook already built — skipping.');
 } else {
