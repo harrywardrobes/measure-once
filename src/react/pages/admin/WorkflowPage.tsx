@@ -459,6 +459,47 @@ function OutcomeChipsRow({ outcomes }: { outcomes: ActionOutcome[] }) {
   );
 }
 
+// ── OutcomeSummaryInline ──────────────────────────────────────────────────────
+// Compact one-line outcome summary shown on each collapsed handler row so admins
+// can scan every handler's outcomes at a glance without opening the detail card.
+//   • Prefix counts every outcome ("3 outcomes:")
+//   • Terminal outcomes  → purple filled tint (they move the card / write a status)
+//   • Partial outcomes   → outlined muted (progress logging only, no card move)
+// Driven entirely by HANDLER_OUTCOMES — no hardcoded outcome lists.
+
+function OutcomeSummaryInline({ outcomes }: { outcomes: ActionOutcome[] }) {
+  if (outcomes.length === 0) return null;
+
+  const count = outcomes.length;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4, flexWrap: 'wrap', mt: 0.4 }}>
+      <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontSize: '0.6rem' }}>
+        {count} outcome{count === 1 ? '' : 's'}:
+      </Typography>
+      {outcomes.map((o, i) => {
+        const isTerminal = o.kind === 'terminal';
+        return (
+          <Chip
+            key={i}
+            label={o.label}
+            size="small"
+            variant={isTerminal ? 'filled' : 'outlined'}
+            sx={{
+              height: 16,
+              fontSize: '0.58rem',
+              ...(isTerminal
+                ? { bgcolor: 'rgba(109,33,205,0.08)', color: 'rgb(109,33,205)', border: 'none' }
+                : { color: 'text.secondary', borderColor: 'divider' }),
+              '.MuiChip-label': { px: 0.5 },
+            }}
+          />
+        );
+      })}
+    </Box>
+  );
+}
+
 // ── ModalDetailCard ───────────────────────────────────────────────────────────
 
 function ModalDetailCard({
@@ -723,6 +764,9 @@ function StatusRow({
                 <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.62rem', display: 'block', mt: 0.25 }}>
                   type: <Box component="code" sx={{ fontFamily: 'monospace', fontSize: '0.6rem' }}>{h.type}</Box>
                 </Typography>
+                {isHandlerType(h.type) && (
+                  <OutcomeSummaryInline outcomes={HANDLER_OUTCOMES[h.type]} />
+                )}
               </Box>
             ))
           ) : (
