@@ -358,6 +358,32 @@ export const DemoHub: Story = {
   },
 };
 
+export const DemoLogCallTooltip: Story = {
+  name: 'Hub — demo mode, Log a call tooltip',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /log a call/i });
+    await userEvent.hover(btn);
+  },
+};
+
+export const DemoAmendDealTooltip: Story = {
+  name: 'Hub — demo mode, Amend the deal tooltip',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /amend the deal/i });
+    await userEvent.hover(btn);
+  },
+};
+
 export const DemoResend: Story = {
   name: 'Re-send — demo mode',
   args: {
