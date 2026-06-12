@@ -30,6 +30,8 @@
  *   12c. CJS ↔ TS parity: same ACTION_LEVEL_EMAIL_TEMPLATES handler keys and
  *        template arrays
  *   12d. CJS ↔ TS parity: same SYSTEM_EMAIL_TEMPLATES key set
+ *   12d-ii. CJS ↔ TS parity: same SYSTEM_EMAIL_TEMPLATES sentFrom and system
+ *        field values per entry
  *   13. Email coverage: every registry-referenced template key exists in
  *       email-templates.js TEMPLATE_KEYS
  *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
@@ -433,11 +435,70 @@ for (const type of REQUIRED_TYPES) {
 
         const cjsSystemKeys = SYSTEM_EMAIL_TEMPLATES.map((s) => s.key).sort();
 
+        const keySetsMatch = tsSystemKeys.join(',') === cjsSystemKeys.join(',');
         assert(
-          tsSystemKeys.join(',') === cjsSystemKeys.join(','),
+          keySetsMatch,
           `CJS↔TS parity (12d): SYSTEM_EMAIL_TEMPLATES key sets match` +
             ` (TS: [${tsSystemKeys.join(', ')}], CJS: [${cjsSystemKeys.join(', ')}])`,
         );
+
+        // ── 12d-ii. CJS↔TS parity: per-entry sentFrom and system fields ──────
+        //
+        // Comparing the key set alone misses a copy-paste error or incomplete
+        // update that leaves an entry's `sentFrom` or `system` field out of sync
+        // between the two registries.  For each entry (keyed by its `key`), parse
+        // the TS source block and compare `sentFrom` and `system` against the
+        // runtime CJS value.  Only runs when the key sets match — otherwise the
+        // 12d failure above already identifies the structural drift.
+        if (keySetsMatch) {
+          // Split the TS array into one block per entry, boundaried by each
+          // entry's `key:` line.
+          const keyPosRe = /\bkey:\s*'([^']+)'/g;
+          const entryPositions = [];
+          let km;
+          while ((km = keyPosRe.exec(setBlock)) !== null) {
+            entryPositions.push({ key: km[1], index: km.index });
+          }
+
+          let allFieldsMatch = true;
+          for (let i = 0; i < entryPositions.length; i++) {
+            const entryKey = entryPositions[i].key;
+            const eStart   = entryPositions[i].index;
+            const eEnd     = i + 1 < entryPositions.length
+              ? entryPositions[i + 1].index
+              : setBlock.length;
+            const entryBlock = setBlock.slice(eStart, eEnd);
+
+            // TS: parse sentFrom (string) and system (boolean) from source text.
+            const tsSentFromMatch = entryBlock.match(/\bsentFrom:\s*'([^']*)'/);
+            const tsSentFrom = tsSentFromMatch ? tsSentFromMatch[1] : undefined;
+            const tsSystemMatch = entryBlock.match(/\bsystem:\s*(true|false)/);
+            const tsSystem = tsSystemMatch ? tsSystemMatch[1] === 'true' : undefined;
+
+            // CJS: runtime values for this entry.
+            const cjsEntry = SYSTEM_EMAIL_TEMPLATES.find((s) => s.key === entryKey);
+            const cjsSentFrom = cjsEntry ? cjsEntry.sentFrom : undefined;
+            const cjsSystem   = cjsEntry ? cjsEntry.system : undefined;
+
+            if (tsSentFrom !== cjsSentFrom) {
+              fail(
+                `CJS↔TS parity (12d-ii): SYSTEM_EMAIL_TEMPLATES['${entryKey}'] sentFrom mismatch` +
+                ` (TS: ${JSON.stringify(tsSentFrom)}, CJS: ${JSON.stringify(cjsSentFrom)})`,
+              );
+              allFieldsMatch = false;
+            }
+            if (tsSystem !== cjsSystem) {
+              fail(
+                `CJS↔TS parity (12d-ii): SYSTEM_EMAIL_TEMPLATES['${entryKey}'] system mismatch` +
+                ` (TS: ${JSON.stringify(tsSystem)}, CJS: ${JSON.stringify(cjsSystem)})`,
+              );
+              allFieldsMatch = false;
+            }
+          }
+          if (allFieldsMatch) {
+            pass('CJS↔TS parity (12d-ii): SYSTEM_EMAIL_TEMPLATES sentFrom and system fields match');
+          }
+        }
       }
     }
   }
