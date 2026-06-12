@@ -5965,7 +5965,7 @@ app.post('/api/card-actions/contact-customer',
 
       const [{ rows: logRows }, { rows: histLogRows }] = await Promise.all([
         pool.query(
-          `SELECT cal.method, cal.attempted_at,
+          `SELECT cal.method, cal.attempted_at, cal.note,
                   COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
            FROM contact_attempt_log cal
            LEFT JOIN users u ON u.id = cal.attempted_by
@@ -6000,6 +6000,7 @@ app.post('/api/card-actions/contact-customer',
           method:      r.method,
           attemptedAt: r.attempted_at,
           attemptedBy: r.attempted_by_name || null,
+          note:        r.note || null,
         })),
         historySessionCount:  hist.total_sessions,
         historyTotalAttempts: hist.total_attempts,
@@ -6028,75 +6029,50 @@ app.post('/api/card-actions/contact-customer',
   }
 );
 
-// ── contact_customer: upsert attempt-tracking flags ──────────────────────────
-app.patch('/api/card-actions/contact-customer/:contactId/attempts',
+// ── contact_customer: log a contact attempt with a required note ──────────────
+app.post('/api/card-actions/contact-customer/:contactId/attempts',
   isAuthenticated, requirePrivilege('member'),
   async (req, res) => {
     const contactId = req.params.contactId;
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
 
-    const allowed = ['call_attempted', 'email_sent', 'whatsapp_sent'];
-    const updates = {};
-    for (const field of allowed) {
-      if (req.body[field] !== undefined) {
-        updates[field] = !!req.body[field];
-      }
+    const VALID_METHODS = ['call', 'email', 'whatsapp'];
+    const method = String(req.body?.method || '');
+    const note   = String(req.body?.note   || '').trim();
+
+    if (!VALID_METHODS.includes(method)) {
+      return res.status(400).json({ error: 'method must be call, email, or whatsapp.' });
     }
-    if (!Object.keys(updates).length) {
-      return res.status(400).json({ error: 'At least one of call_attempted, email_sent, whatsapp_sent is required.' });
+    if (!note) {
+      return res.status(400).json({ error: 'note is required and must not be empty.' });
     }
 
-    const updateKeys = Object.keys(updates);
-    const updateVals = Object.values(updates);
-    const isSettingAnyTrue = updateVals.some(v => v === true);
+    const methodColMap = { call: 'call_attempted', email: 'email_sent', whatsapp: 'whatsapp_sent' };
+    const col    = methodColMap[method];
     const userId = req.user?.id;
-
-    let insertCols = updateKeys.join(', ');
-    let insertPlaceholders = updateKeys.map((_, i) => `$${i + 2}`).join(', ');
-    let setClauses = updateKeys.map((k, i) => `${k} = $${i + 2}`).join(', ');
-    const queryValues = [contactId, ...updateVals];
-
-    if (isSettingAnyTrue && userId) {
-      const pIdx = queryValues.length + 1;
-      insertCols += ', attempted_at, attempted_by';
-      insertPlaceholders += `, NOW(), $${pIdx}`;
-      setClauses += `, attempted_at = NOW(), attempted_by = $${pIdx}`;
-      queryValues.push(userId);
-    }
-
-    const methodMap = {
-      call_attempted: 'call',
-      email_sent:     'email',
-      whatsapp_sent:  'whatsapp',
-    };
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      const { rows } = await client.query(
-        `INSERT INTO contact_attempt_tracking (hubspot_contact_id, ${insertCols}, updated_at)
-         VALUES ($1, ${insertPlaceholders}, NOW())
-         ON CONFLICT (hubspot_contact_id) DO UPDATE
-         SET ${setClauses}, updated_at = NOW()
-         RETURNING call_attempted, email_sent, whatsapp_sent, attempted_at, updated_at`,
-        queryValues
+      await client.query(
+        `INSERT INTO contact_attempt_log (hubspot_contact_id, method, attempted_by, note)
+         VALUES ($1, $2, $3, $4)`,
+        [contactId, method, userId || null, note]
       );
 
-      if (isSettingAnyTrue) {
-        for (const [field, val] of Object.entries(updates)) {
-          if (val === true) {
-            await client.query(
-              `INSERT INTO contact_attempt_log (hubspot_contact_id, method, attempted_by)
-               VALUES ($1, $2, $3)`,
-              [contactId, methodMap[field], userId || null]
-            );
-          }
-        }
-      }
+      const { rows } = await client.query(
+        `INSERT INTO contact_attempt_tracking
+           (hubspot_contact_id, ${col}, attempted_at, attempted_by, updated_at)
+         VALUES ($1, TRUE, NOW(), $2, NOW())
+         ON CONFLICT (hubspot_contact_id) DO UPDATE
+         SET ${col} = TRUE, attempted_at = NOW(), attempted_by = $2, updated_at = NOW()
+         RETURNING call_attempted, email_sent, whatsapp_sent, attempted_at`,
+        [contactId, userId || null]
+      );
 
       const { rows: logRows } = await client.query(
-        `SELECT cal.method, cal.attempted_at,
+        `SELECT cal.method, cal.attempted_at, cal.note,
                 COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
          FROM contact_attempt_log cal
          LEFT JOIN users u ON u.id = cal.attempted_by
@@ -6113,12 +6089,13 @@ app.patch('/api/card-actions/contact-customer/:contactId/attempts',
           method:      r.method,
           attemptedAt: r.attempted_at,
           attemptedBy: r.attempted_by_name || null,
+          note:        r.note || null,
         })),
       });
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
-      logger.error({ err: e.message }, 'PATCH /api/card-actions/contact-customer/:contactId/attempts error:');
-      res.status(500).json({ error: 'Could not save attempt tracking.' });
+      logger.error({ err: e.message }, 'POST /api/card-actions/contact-customer/:contactId/attempts error:');
+      res.status(500).json({ error: 'Could not save attempt.' });
     } finally {
       client.release();
     }

@@ -2,18 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { POST, PATCH } from '../../utils/api';
+import { POST } from '../../utils/api';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
@@ -24,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
+import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
 
 interface Props {
   contactId: string;
@@ -40,10 +40,13 @@ type Phase =
   | 'advancing'
   | 'done';
 
+type Method = 'call' | 'email' | 'whatsapp';
+
 interface AttemptLogEntry {
-  method: 'call' | 'email' | 'whatsapp';
+  method: Method;
   attemptedAt: string;
   attemptedBy: string | null;
+  note: string | null;
 }
 
 interface HistorySessionEntry {
@@ -75,12 +78,13 @@ interface ContactData {
   historyAttemptLog: HistorySessionEntry[];
 }
 
-const METHOD_LABEL: Record<AttemptLogEntry['method'], string> = {
+const METHOD_LABEL: Record<Method, string> = {
   call:     'Called',
   email:    'Emailed',
   whatsapp: 'WhatsApp',
 };
 
+const METHODS: Method[] = ['call', 'email', 'whatsapp'];
 
 const DEMO_CONTACT_DATA: ContactData = {
   contactName: DEMO_CONTACT.name,
@@ -129,13 +133,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [historyAttemptLog,     setHistoryAttemptLog]     = useState<HistorySessionEntry[]>([]);
   const [showHiddenSessions,    setShowHiddenSessions]    = useState(false);
 
-  const [callInFlight,     setCallInFlight]     = useState(false);
-  const [emailInFlight,    setEmailInFlight]     = useState(false);
-  const [whatsappInFlight, setWhatsappInFlight] = useState(false);
-
-  const [callError,     setCallError]     = useState('');
-  const [emailError,    setEmailError]    = useState('');
-  const [whatsappError, setWhatsappError] = useState('');
+  // Note panel state — one panel open at a time
+  const [openPanel,   setOpenPanel]   = useState<Method | null>(null);
+  const [noteText,    setNoteText]    = useState('');
+  const [submitting,  setSubmitting]  = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -148,9 +150,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setPhase('loading');
     setLoadError('');
     setAdvanceError('');
-    setCallError('');
-    setEmailError('');
-    setWhatsappError('');
 
     POST('/api/card-actions/contact-customer', { contactId })
       .then((data: unknown) => {
@@ -183,45 +182,52 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
 
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
-  async function toggleAttempt(
-    field: typeof CONTACT_CUSTOMER_KEY.call_attempted | typeof CONTACT_CUSTOMER_KEY.email_sent | typeof CONTACT_CUSTOMER_KEY.whatsapp_sent,
-    currentValue: boolean,
-    setInFlight: (v: boolean) => void,
-    setValue: (v: boolean) => void,
-    setError: (v: string) => void,
-  ) {
-    const newValue = !currentValue;
-    setValue(newValue);
-    if (demo) return;
-    setInFlight(true);
-    setError('');
+  function openNotePanel(method: Method) {
+    setOpenPanel(method);
+    setNoteText('');
+    setSubmitError('');
+  }
+
+  function closeNotePanel() {
+    setOpenPanel(null);
+    setNoteText('');
+    setSubmitError('');
+  }
+
+  async function handleConfirmAttempt(method: Method) {
+    if (demo) {
+      closeNotePanel();
+      return;
+    }
+    if (!noteText.trim()) return;
+    setSubmitting(true);
+    setSubmitError('');
     try {
-      const result = await PATCH(
+      const result = await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/attempts`,
-        { [field]: newValue },
+        { method, note: noteText.trim() },
       ) as {
         call_attempted: boolean;
         email_sent: boolean;
         whatsapp_sent: boolean;
-        attempted_at?: string | null;
-        attemptLog?: AttemptLogEntry[];
+        attempted_at: string;
+        attemptLog: AttemptLogEntry[];
       };
       setCallAttempted(result.call_attempted);
       setEmailSent(result.email_sent);
       setWhatsappSent(result.whatsapp_sent);
-      if (result.attemptLog) {
-        setAttemptLog(result.attemptLog);
-      }
-      if (newValue && result.attempted_at) {
+      setAttemptLog(result.attemptLog);
+      if (result.attempted_at) {
         setLastAttemptAt(result.attempted_at);
         const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
         setLastAttemptBy(fullName || null);
       }
+      closeNotePanel();
+      broadcastContactAttemptLogged(contactId);
     } catch (e) {
-      setValue(currentValue);
-      setError((e as Error).message || 'Could not save change.');
+      setSubmitError((e as Error).message || 'Could not save attempt.');
     } finally {
-      setInFlight(false);
+      setSubmitting(false);
     }
   }
 
@@ -295,9 +301,15 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   const displayName = contactData?.contactName || contactName || 'the customer';
-  const phone   = contactData?.phone    || '';
-  const mobile  = contactData?.mobile   || '';
+  const phone    = contactData?.phone    || '';
+  const mobile   = contactData?.mobile   || '';
   const whatsapp = contactData?.whatsapp || '';
+
+  const methodLogged: Record<Method, boolean> = {
+    call:     callAttempted,
+    email:    emailSent,
+    whatsapp: whatsappSent,
+  };
 
   return (
     <Dialog open onClose={() => { if (phase !== 'advancing') onClose(); }} maxWidth="xs" fullWidth>
@@ -337,87 +349,107 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
               )}
 
               <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   Contact methods tried:
                 </Typography>
-                <Stack spacing={0}>
-                  <Box>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={callAttempted}
-                          disabled={callInFlight}
-                          onChange={() =>
-                            toggleAttempt(CONTACT_CUSTOMER_KEY.call_attempted, callAttempted, setCallInFlight, setCallAttempted, setCallError)
-                          }
-                          size="small"
-                        />
-                      }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2">Called</Typography>
-                          {callInFlight && <CircularProgress size={14} />}
+                <Stack spacing={1}>
+                  {METHODS.map((method) => {
+                    const logged  = methodLogged[method];
+                    const isOpen  = openPanel === method;
+                    return (
+                      <Box key={method}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Button
+                            data-testid={`contact-method-${method}-btn`}
+                            variant="outlined"
+                            size="small"
+                            onClick={() => {
+                              if (isOpen) {
+                                closeNotePanel();
+                              } else {
+                                openNotePanel(method);
+                              }
+                            }}
+                            disabled={submitting}
+                            sx={logged ? {
+                              borderColor: 'grey.400',
+                              color: 'text.secondary',
+                              bgcolor: 'grey.100',
+                              '&:hover': { bgcolor: 'grey.200', borderColor: 'grey.500' },
+                            } : {}}
+                          >
+                            {logged ? `✓ ${METHOD_LABEL[method]}` : METHOD_LABEL[method]}
+                          </Button>
+                          {logged && !isOpen && (
+                            <Typography
+                              component="button"
+                              variant="caption"
+                              onClick={() => openNotePanel(method)}
+                              sx={{
+                                color: 'primary.main',
+                                cursor: 'pointer',
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                textDecoration: 'underline',
+                                '&:hover': { color: 'primary.dark' },
+                              }}
+                            >
+                              + log another
+                            </Typography>
+                          )}
                         </Box>
-                      }
-                    />
-                    {callError && (
-                      <Typography variant="caption" color="error" sx={{ ml: 4, display: 'block' }}>
-                        {callError}
-                      </Typography>
-                    )}
-                  </Box>
 
-                  <Box>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={emailSent}
-                          disabled={emailInFlight}
-                          onChange={() =>
-                            toggleAttempt(CONTACT_CUSTOMER_KEY.email_sent, emailSent, setEmailInFlight, setEmailSent, setEmailError)
-                          }
-                          size="small"
-                        />
-                      }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2">Emailed</Typography>
-                          {emailInFlight && <CircularProgress size={14} />}
-                        </Box>
-                      }
-                    />
-                    {emailError && (
-                      <Typography variant="caption" color="error" sx={{ ml: 4, display: 'block' }}>
-                        {emailError}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  <Box>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={whatsappSent}
-                          disabled={whatsappInFlight}
-                          onChange={() =>
-                            toggleAttempt(CONTACT_CUSTOMER_KEY.whatsapp_sent, whatsappSent, setWhatsappInFlight, setWhatsappSent, setWhatsappError)
-                          }
-                          size="small"
-                        />
-                      }
-                      label={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2">WhatsApp</Typography>
-                          {whatsappInFlight && <CircularProgress size={14} />}
-                        </Box>
-                      }
-                    />
-                    {whatsappError && (
-                      <Typography variant="caption" color="error" sx={{ ml: 4, display: 'block' }}>
-                        {whatsappError}
-                      </Typography>
-                    )}
-                  </Box>
+                        {isOpen && (
+                          <Box
+                            sx={{
+                              mt: 1,
+                              pl: 1.5,
+                              borderLeft: '2px solid',
+                              borderColor: 'primary.main',
+                            }}
+                          >
+                            <TextField
+                              data-testid="contact-attempt-note-field"
+                              size="small"
+                              multiline
+                              minRows={2}
+                              fullWidth
+                              placeholder="Add a note about this attempt…"
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              disabled={submitting}
+                            />
+                            {submitError && (
+                              <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                                {submitError}
+                              </Typography>
+                            )}
+                            <Box sx={{ display: 'flex', gap: 1, mt: 0.75 }}>
+                              <Button
+                                data-testid="contact-attempt-confirm-btn"
+                                size="small"
+                                variant="contained"
+                                disabled={!noteText.trim() || submitting}
+                                onClick={() => handleConfirmAttempt(method)}
+                                startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                              >
+                                Confirm
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="text"
+                                onClick={closeNotePanel}
+                                disabled={submitting}
+                              >
+                                Cancel
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
                 </Stack>
               </Box>
 
@@ -428,8 +460,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                     Contact history
                   </Typography>
                   {attemptLog.length > 0 && (() => {
-                    const methodOrder: Array<AttemptLogEntry['method']> = ['call', 'email', 'whatsapp'];
-                    const methodLabels: Record<AttemptLogEntry['method'], (n: number) => string> = {
+                    const methodOrder: Array<Method> = ['call', 'email', 'whatsapp'];
+                    const methodLabels: Record<Method, (n: number) => string> = {
                       call:     (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
                       email:    (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
                       whatsapp: (n) => `${n} WhatsApp`,
@@ -440,7 +472,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                     }, {});
                     const breakdown = [
                       ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => methodLabels[m](mc[m])),
-                      ...Object.keys(mc).filter((m) => !methodOrder.includes(m as AttemptLogEntry['method']) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
+                      ...Object.keys(mc).filter((m) => !methodOrder.includes(m as Method) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
                     ].join(', ');
                     const total = attemptLog.length;
                     return (
@@ -658,6 +690,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                           <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
                             {relativeTime(entry.attemptedAt)}
                             {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
+                            {entry.note ? ` | Note: ${entry.note}` : ''}
                           </Typography>
                         </Box>
                       ))}

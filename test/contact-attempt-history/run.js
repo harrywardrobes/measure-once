@@ -2,6 +2,7 @@
 
 const PROBE_LABELS = [
   '(A) contact_attempt_history_log table has expected columns',
+  '(A2) contact_attempt_log table has expected columns including note',
   '(B) advance-status returning 503 (no HubSpot token) leaves history log empty',
   '(C) advance-status returning 502 (fake HubSpot token → auth rejection) leaves history log empty',
 ];
@@ -151,6 +152,31 @@ async function main() {
   } catch (e) {
     record(
       '(A) contact_attempt_history_log table has expected columns',
+      false,
+      `query failed: ${e.message}`,
+    );
+  }
+
+  // ── probe (A2): contact_attempt_log has note column ──────────────────────────
+  const EXPECTED_LOG_COLS = [
+    'id', 'hubspot_contact_id', 'method', 'attempted_at', 'attempted_by', 'note',
+  ];
+  try {
+    const r2 = await pool.query(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'contact_attempt_log'
+        ORDER BY ordinal_position`,
+    );
+    const found2 = r2.rows.map(row => row.column_name);
+    const missing2 = EXPECTED_LOG_COLS.filter(c => !found2.includes(c));
+    record(
+      '(A2) contact_attempt_log table has expected columns including note',
+      missing2.length === 0,
+      missing2.length ? `missing columns: ${missing2.join(', ')}` : `found: ${found2.join(', ')}`,
+    );
+  } catch (e) {
+    record(
+      '(A2) contact_attempt_log table has expected columns including note',
       false,
       `query failed: ${e.message}`,
     );
