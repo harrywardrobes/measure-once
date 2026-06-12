@@ -5426,6 +5426,10 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
   open_deal(_cfg) {
     return { value: {} };
   },
+  // No required config keys — contact info and QB deposit invoice are fetched at open time.
+  deposit_invoice_followup(_cfg) {
+    return { value: {} };
+  },
 };
 
 const CARD_ACTION_HANDLER_TYPES = new Set(

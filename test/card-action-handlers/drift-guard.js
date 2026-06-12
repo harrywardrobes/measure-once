@@ -31,6 +31,9 @@
  *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
  *       action-level slot, or the system email list (no unassigned keys), and
  *       no key is claimed by both a handler slot and the system list
+ *   15. server.js CARD_ACTION_HANDLER_CONFIG_VALIDATORS keys exactly equal
+ *       Object.keys(HANDLER_OUTCOMES) — prevents a new registry type from
+ *       being accepted by the UI but rejected by the server validator
  */
 
 const fs   = require('fs');
@@ -331,6 +334,51 @@ for (const type of REQUIRED_TYPES) {
       `reference and a system email` +
       (overlap.length ? ` (overlap: ${overlap.join(', ')})` : ''),
   );
+}
+
+// ── 15. server.js validator keys == registry keys ─────────────────────────────
+{
+  const serverSrc = fs.readFileSync(path.join(__dirname, '../../server.js'), 'utf8');
+  // Extract keys from CARD_ACTION_HANDLER_CONFIG_VALIDATORS by finding the
+  // block and collecting top-level method/property identifiers.
+  const blockStart = serverSrc.indexOf('const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {');
+  if (blockStart === -1) {
+    assert(false, 'Check 15: CARD_ACTION_HANDLER_CONFIG_VALIDATORS not found in server.js');
+  } else {
+    const after  = serverSrc.slice(blockStart);
+    let depth    = 0;
+    let inBlock  = false;
+    const validatorKeys = new Set();
+    for (const line of after.split('\n')) {
+      if (!inBlock) {
+        if (line.includes('{')) { inBlock = true; depth = 1; }
+        continue;
+      }
+      // Check for a top-level key BEFORE updating depth for this line.
+      // A top-level entry is a line at depth 1 (still inside the outer object)
+      // that starts a new method/property.
+      if (depth === 1) {
+        const m = line.match(/^\s{2}([a-z_][a-z0-9_]*)\s*[\(({]/);
+        if (m) validatorKeys.add(m[1]);
+      }
+      depth += (line.match(/\{/g) || []).length;
+      depth -= (line.match(/\}/g) || []).length;
+      if (depth <= 0) break;
+    }
+    const registryKeys = new Set(Object.keys(HANDLER_OUTCOMES));
+    const missingFromValidator = [...registryKeys].filter(k => !validatorKeys.has(k)).sort();
+    const extraInValidator     = [...validatorKeys].filter(k => !registryKeys.has(k)).sort();
+    assert(
+      missingFromValidator.length === 0,
+      `Check 15: CARD_ACTION_HANDLER_CONFIG_VALIDATORS is missing types that exist in the registry` +
+        (missingFromValidator.length ? `: ${missingFromValidator.join(', ')}` : ''),
+    );
+    assert(
+      extraInValidator.length === 0,
+      `Check 15: CARD_ACTION_HANDLER_CONFIG_VALIDATORS has types not in the registry` +
+        (extraInValidator.length ? `: ${extraInValidator.join(', ')}` : ''),
+    );
+  }
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
