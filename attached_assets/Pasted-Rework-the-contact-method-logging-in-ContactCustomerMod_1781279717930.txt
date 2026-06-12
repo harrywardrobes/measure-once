@@ -1,0 +1,51 @@
+Rework the contact-method logging in ContactCustomerModal (src/react/components/modals/ContactCustomerModal.tsx).
+
+CURRENT BEHAVIOUR (to replace):
+The "Contact methods tried" section shows three tickboxes (Called / Emailed / WhatsApp). Ticking one immediately PATCHes /api/card-actions/contact-customer/:contactId/attempts with a boolean field, which inserts into contact_attempt_log and appears in Contact history straight away. Unticking removes it.
+
+NEW BEHAVIOUR:
+
+1. Replace the tickboxes with three buttons: "Called", "Emailed", "WhatsApp".
+   - An attempt that has NOT been logged this session shows as a normal (enabled, outlined) button — this incentivises the user to work through the remaining methods.
+   - Once logged, the button greys out and shows a tick (✓). Nothing else on the button — time and note live in the Contact history list below.
+
+2. Confirm-before-save with a REQUIRED note:
+   - Clicking a button does NOT save anything. It expands an inline panel directly under that button containing:
+     - A small text field labelled "Note" (e.g. placeholder: "Customer didn't answer, voicemail left")
+     - "Confirm" and "Cancel" buttons
+   - Confirm is DISABLED until the note has non-whitespace content — every logged attempt must have a note.
+   - Cancel collapses the panel with nothing saved.
+   - Confirm sends the attempt + note to the server, then collapses the panel and greys out the button with a tick. Show an inline spinner while in flight and an inline error (keeping the panel open with the typed note intact) on failure.
+   - Only one panel open at a time — opening another method's panel closes the previous one (discarding its unsaved note).
+
+3. Repeats allowed: after a method is confirmed (greyed + tick), show a small "+ log another" text link under/next to it that reopens the same note panel so the user can log a second call/email/WhatsApp in the same session, each with its own note.
+
+4. No undo: once confirmed, an attempt cannot be removed from this modal. History is append-only. Remove the old untick/removal path entirely.
+
+5. Notes in Contact history (this modal only):
+   - Current-session entries in the Contact history list should render the note, e.g.:
+     "Called · 4hr ago · Harry | Note: Customer didn't answer, voicemail left"
+   - Keep the existing summary boxes and prior-session ("Across all sessions") rendering as they are — prior sessions are summaries and don't need notes.
+   - Do NOT surface notes anywhere outside this modal (no card tooltips, no other pages).
+
+BACKEND CHANGES:
+
+6. Migration: add a nullable TEXT "note" column to contact_attempt_log (existing rows stay NULL). Follow the existing migration pattern in migrations/ (e.g. migrations/1749200000019_contact_attempt_log.js).
+
+7. API: the current PATCH /api/card-actions/contact-customer/:contactId/attempts endpoint (server.js, ~line 6031) toggles booleans on contact_attempt_tracking and inserts/removes log rows. Replace/extend it so the frontend can POST a single logged attempt: { method: 'call' | 'email' | 'whatsapp', note: string }. The endpoint must:
+   - Reject an empty/whitespace-only note (400).
+   - INSERT into contact_attempt_log with method, attempted_by, and note.
+   - Set the corresponding session boolean (call_attempted / email_sent / whatsapp_sent) to true on contact_attempt_tracking (these booleans still drive the lead-status advance on "Done" and the session history rollups — keep that working). They never get set back to false from this flow.
+   - Return the updated booleans, attempted_at, and the refreshed attemptLog (now including note per entry) in the same shape the modal consumes today.
+   - Remove the now-dead removal/untick handling.
+
+8. Include note in the attemptLog entries returned by the initial POST /api/card-actions/contact-customer load, and update the AttemptLogEntry interface in the modal accordingly.
+
+KEEP WORKING:
+- The "Done" flow: if the lead status is null and any method has been logged this session, Done still advances the status (anyTicked should now derive from "any attempt logged this session").
+- The "No Response" confirm screen and its attempt-count summary.
+- Demo mode (demo prop): buttons render but confirming does nothing, consistent with how demo is handled today.
+- broadcastContactAttempt (src/react/utils/broadcastContactAttempt.ts) and anything else listening for attempt updates.
+- Update affected tests (test/contact-attempt-history/run.js, src/react/pages/CustomersPage.urgency.test.tsx) and keep/add data-testids for the new buttons, note field, and confirm button.
+
+Please ask before changing anything outside this scope.
