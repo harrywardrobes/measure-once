@@ -31,6 +31,7 @@ const {
 
 // deposit_invoice_followup accepted keys are only used inside this file; keep inline.
 const { getTerminalStatusMap, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
+const { GLOBAL_NULL_STAGE_KEY } = require('./shared/slotConstants.cjs');
 const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
@@ -5094,7 +5095,7 @@ app.put('/api/admin/stage-action-labels', isAuthenticated, requireAdmin, async (
   const { stage_key, status_key, label } = _normaliseStageActionInput(
     req.body?.stage_key, req.body?.status_key, req.body?.label
   );
-  const isGlobal = stage_key === '__global__';
+  const isGlobal = stage_key === GLOBAL_NULL_STAGE_KEY;
   if (!stage_key || (!isGlobal && !STAGE_ACTION_STAGE_KEYS.has(stage_key))) {
     return res.status(400).json({ error: 'stage_key must be a valid pipeline stage key.' });
   }
@@ -5135,7 +5136,7 @@ app.delete('/api/admin/stage-action-labels/:stage_key/:status_key', isAuthentica
   // we translate back to ''.
   const rawStatus  = String(req.params.status_key || '');
   const status_key = rawStatus === '_EMPTY_' ? '' : rawStatus.toLowerCase();
-  if (!stage_key || (stage_key !== '__global__' && !STAGE_ACTION_STAGE_KEYS.has(stage_key))) {
+  if (!stage_key || (stage_key !== GLOBAL_NULL_STAGE_KEY && !STAGE_ACTION_STAGE_KEYS.has(stage_key))) {
     return res.status(400).json({ error: 'Invalid stage_key.' });
   }
   try {
@@ -5466,7 +5467,7 @@ function _validateHandlerBinding(b) {
     ? String(b.status_key).trim().toLowerCase()
     : '';
   if (!stage) return { error: 'Each binding requires a stage_key.' };
-  if (stage === '__global__') {
+  if (stage === GLOBAL_NULL_STAGE_KEY) {
     if (status.length > 0) {
       return { error: 'The __global__ stage only supports an empty status_key.' };
     }

@@ -12,6 +12,7 @@ const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { REVIEW_OUTCOME_STATUS: _REVIEW_OUTCOME_STATUS } = require('./shared/handler-route-contracts.cjs');
+const { GLOBAL_NULL_STAGE_KEY } = require('./shared/slotConstants.cjs');
 const { getOutcomeMeta, getOutcomeEmailTemplates } = require('./shared/handler-outcomes.cjs');
 const _REVIEW_VALID_OUTCOMES  = new Set(Object.keys(_REVIEW_OUTCOME_STATUS));
 
@@ -398,8 +399,8 @@ async function ensureContactCustomerHandlerBindings() {
   // has no unique constraint on (stage_key, status_key), so ON CONFLICT DO NOTHING is a
   // no-op that lets the seed insert duplicate rows on every boot.
   const bindings = [
-    { stage_key: '__global__', status_key: '' },
-    { stage_key: 'sales',      status_key: 'attempted_to_contact' },
+    { stage_key: GLOBAL_NULL_STAGE_KEY, status_key: '' },
+    { stage_key: 'sales',               status_key: 'attempted_to_contact' },
   ];
   for (const b of bindings) {
     await pool.query(
@@ -416,8 +417,8 @@ async function ensureContactCustomerHandlerBindings() {
 
   // Step 3: seed stage_action_labels defaults (ON CONFLICT DO NOTHING preserves admin edits).
   const labels = [
-    { stage_key: '__global__', status_key: '',                      label: 'Call Customer' },
-    { stage_key: 'sales',      status_key: 'attempted_to_contact',  label: 'Call Again' },
+    { stage_key: GLOBAL_NULL_STAGE_KEY, status_key: '',                     label: 'Call Customer' },
+    { stage_key: 'sales',               status_key: 'attempted_to_contact', label: 'Call Again' },
   ];
   for (const l of labels) {
     await pool.query(
