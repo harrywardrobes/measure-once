@@ -457,26 +457,38 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .task-save-btn:hover:not(:disabled) { filter: brightness(0.92); }
 .task-save-btn:active:not(:disabled) { filter: brightness(0.85); }
 
-/* Inputs — .token-overlay is excluded so its transparent background/color
-   are never overwritten by these bare-element rules. */
-input[type="text"]:not(.token-overlay),
-input[type="date"]:not(.token-overlay),
+/* Inputs ─────────────────────────────────────────────────────────────────── */
+input[type="text"],
+input[type="date"],
 select,
-textarea:not(.token-overlay) {
+textarea {
   font-family: 'Open Sans', system-ui, sans-serif;
   color: var(--ink-1);
   background: var(--paper);
   border-color: var(--stone);
   border-radius: var(--radius-md);
 }
-input[type="text"]:not(.token-overlay):focus,
-input[type="date"]:not(.token-overlay):focus,
+input[type="text"]:focus,
+input[type="date"]:focus,
 select:focus,
-textarea:not(.token-overlay):focus {
+textarea:focus {
   outline: none;
   border-color: var(--orchid-soft);
   background: #fff; /* hex-color-ok: plain white for focused input */
   box-shadow: 0 0 0 3px rgba(139,43,255,0.10);
+}
+
+/* Transparent overlay used by TokenHighlightField.
+   Hard-pinned with !important so any future bare-element rule that sets
+   background, color, border, or outline cannot silently break the overlay.
+   Specificity (element + class) already beats bare-element rules, but
+   !important makes the guarantee unconditional. */
+textarea.token-overlay,
+input.token-overlay {
+  background: transparent !important;
+  color: transparent !important;
+  border: none !important;
+  outline: none !important;
 }
 
 /* ── Shared button base ──────────────────────────────────────────────────────── */
