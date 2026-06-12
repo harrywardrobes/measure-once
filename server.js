@@ -30,7 +30,7 @@ const {
 // always agree.  Exceptions are documented in handler-route-contracts.cjs.
 
 // deposit_invoice_followup accepted keys are only used inside this file; keep inline.
-const { getTerminalStatusMap, getOutcomeMeta } = require('./shared/handler-outcomes.cjs');
+const { getTerminalStatusMap, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
@@ -6267,7 +6267,7 @@ app.post('/api/card-actions/open-deal/deposit-invoice-email-preview',
     const firstName     = String(req.body?.firstName     ?? '');
     const depositPercent = String(req.body?.depositPercent ?? '10');
     try {
-      const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
+      const template = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'accept'));
       const vars = { firstName, depositPercent };
       const htmlVars = Object.fromEntries(
         Object.entries(vars).map(([k, v]) => [k, escapeHtml(String(v))])
@@ -6697,7 +6697,7 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
       if (sendThankYou && contactEmail) {
         try {
           const { getEmailTemplate, renderEmail } = require('./email-templates');
-          const template  = await getEmailTemplate('open_deal_declined_thank_you');
+          const template  = await getEmailTemplate(getRequiredOutcomeEmailTemplate('deposit_invoice_followup', 'not_proceeding'));
           const firstName = contactName.split(' ')[0] || 'there';
           const rendered  = renderEmail(template, { textVars: { firstName } });
           const transport = _createMailTransport();

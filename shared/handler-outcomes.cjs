@@ -322,6 +322,61 @@ function templateRefSentFrom(ref) {
 }
 
 /**
+ * Returns the ordered list of email-template keys an outcome sends, resolved
+ * from the registry's `sendsEmailTemplates`. This is the single source of
+ * truth for which template a server send path uses for a given outcome —
+ * routes must resolve their template key from here rather than hardcoding it.
+ *
+ * Returns an empty array when the handler/outcome is unknown or sends no email.
+ *
+ * @param {string} handlerType
+ * @param {string} outcomeKey
+ * @returns {string[]}
+ */
+function getOutcomeEmailTemplates(handlerType, outcomeKey) {
+  const outcomes = HANDLER_OUTCOMES[handlerType] || [];
+  const outcome = outcomes.find(o => o.key === outcomeKey);
+  const refs = (outcome && outcome.sendsEmailTemplates) || [];
+  return refs.map(templateRefKey);
+}
+
+/**
+ * Like getOutcomeEmailTemplates but returns the single template key an outcome
+ * sends, throwing a clear error when the outcome has none registered. Use this
+ * at send sites that send exactly one email per outcome so a misconfigured
+ * registry fails loudly rather than silently calling getEmailTemplate(undefined).
+ *
+ * @param {string} handlerType
+ * @param {string} outcomeKey
+ * @returns {string}
+ */
+function getRequiredOutcomeEmailTemplate(handlerType, outcomeKey) {
+  const keys = getOutcomeEmailTemplates(handlerType, outcomeKey);
+  if (!keys.length) {
+    throw new Error(
+      `No email template registered for outcome "${outcomeKey}" of handler ` +
+      `"${handlerType}" in shared/handler-outcomes.cjs`
+    );
+  }
+  return keys[0];
+}
+
+/**
+ * Returns the ordered list of action-level email-template keys for a handler
+ * type (emails sent during a handler's flow but not tied to a single
+ * staff-selected outcome, e.g. customer-submitted-form notifications),
+ * resolved from `ACTION_LEVEL_EMAIL_TEMPLATES`.
+ *
+ * Order matches the registry declaration order.
+ *
+ * @param {string} handlerType
+ * @returns {string[]}
+ */
+function getActionLevelEmailTemplates(handlerType) {
+  return (ACTION_LEVEL_EMAIL_TEMPLATES[handlerType] || []).map(templateRefKey);
+}
+
+/**
  * Returns the terminal outcomes for a given handler type as an object
  * mapping outcome key → setsLeadStatus (or null when no status change).
  * Used by server routes to derive accepted key sets and status writes.
@@ -414,6 +469,9 @@ exports.SYSTEM_EMAIL_TEMPLATES       = SYSTEM_EMAIL_TEMPLATES;
 exports.templateRefKey               = templateRefKey;
 exports.templateRefIsSystem          = templateRefIsSystem;
 exports.templateRefSentFrom          = templateRefSentFrom;
+exports.getOutcomeEmailTemplates         = getOutcomeEmailTemplates;
+exports.getRequiredOutcomeEmailTemplate  = getRequiredOutcomeEmailTemplate;
+exports.getActionLevelEmailTemplates     = getActionLevelEmailTemplates;
 exports.getTerminalStatusMap         = getTerminalStatusMap;
 exports.getTerminalKeys              = getTerminalKeys;
 exports.getOutcomeMeta               = getOutcomeMeta;

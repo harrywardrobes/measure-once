@@ -15,6 +15,21 @@ const os         = require('os');
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
+const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./shared/handler-outcomes.cjs');
+
+// Email template keys resolved from the central registry (single source of
+// truth). The customer invite is the upload_photos_and_info / link_sent
+// outcome email; the admin notification and customer thank-you are the
+// handler's two action-level emails (declaration order: admin, then customer).
+const INVITE_TEMPLATE_KEY = getOutcomeEmailTemplates('upload_photos_and_info', 'link_sent')[0];
+const [ADMIN_NOTIFICATION_TEMPLATE_KEY, CUSTOMER_THANK_YOU_TEMPLATE_KEY] =
+  getActionLevelEmailTemplates('upload_photos_and_info');
+if (!INVITE_TEMPLATE_KEY || !ADMIN_NOTIFICATION_TEMPLATE_KEY || !CUSTOMER_THANK_YOU_TEMPLATE_KEY) {
+  throw new Error(
+    '[customer-info] upload_photos_and_info email templates are not fully registered ' +
+    'in shared/handler-outcomes.cjs (expected link_sent + 2 action-level templates).'
+  );
+}
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -144,7 +159,7 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const tmpl = await getEmailTemplate('photo_review_invite');
+  const tmpl = await getEmailTemplate(INVITE_TEMPLATE_KEY);
   const { subject, text, html } = renderEmail(tmpl, {
     textVars: { maskedEmail, formLink },
     htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
@@ -255,7 +270,7 @@ async function sendAdminNotificationEmail(submission) {
   const customerName  = contact_name || contact_email || 'Unknown';
   const customerEmail = contact_email || '—';
   const notesValue    = room_notes || '—';
-  const tmpl = await getEmailTemplate('admin_notification');
+  const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
   const { subject, text, html } = renderEmail(tmpl, {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
@@ -294,7 +309,7 @@ async function sendCustomerThankYouEmail(contactEmail, contactName) {
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
   const firstName = contactName ? contactName.split(' ')[0] : '';
-  const tmpl = await getEmailTemplate('customer_thank_you');
+  const tmpl = await getEmailTemplate(CUSTOMER_THANK_YOU_TEMPLATE_KEY);
   const { subject, text, html } = renderEmail(tmpl, {
     textVars: { firstName },
     htmlVars: { firstName: escapeHtml(firstName) },

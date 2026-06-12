@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
-const { HANDLER_OUTCOMES, getOutcomeMeta } = require('./shared/handler-outcomes.cjs');
+const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 
 // Status values derived from the outcome registry — keeps them in sync with
 // what the Workflow page displays as outcome chips.
@@ -790,7 +790,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
 
           // 5c. Follow-up app email — fatal: if template/send fails, status does NOT advance
           try {
-            const template = await getEmailTemplate('open_deal_deposit_invoice_sent');
+            const template = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'accept'));
             const firstName = contactName.split(' ')[0] || 'there';
             const rendered  = renderEmail(template, { textVars: { firstName, depositPercent: String(depositPercent) } });
             const transport = _createMailTransport();
@@ -1037,7 +1037,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
             steps.emailAlreadySent = true;
           } else {
             try {
-              const template = await getEmailTemplate('open_deal_declined_thank_you');
+              const template = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'decline'));
               const firstName = contactName.split(' ')[0] || 'there';
               const rendered  = renderEmail(template, { textVars: { firstName } });
               const transport = _createMailTransport();
