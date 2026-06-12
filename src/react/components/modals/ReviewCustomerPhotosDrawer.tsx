@@ -16,6 +16,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { REVIEW_PHOTOS_OUTCOME_KEY } from '../../utils/handlerMeta';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
@@ -225,7 +226,9 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     }
   }
 
-  async function handleConfirm(outcome: 'not_suitable' | 'rough_estimate_sent') {
+  async function handleConfirm(
+    outcome: typeof REVIEW_PHOTOS_OUTCOME_KEY[keyof typeof REVIEW_PHOTOS_OUTCOME_KEY],
+  ) {
     setSubmitError('');
     if (!emailSubject.trim()) {
       setSubmitError('Email subject is required.');
@@ -627,7 +630,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 <Button
                   variant="contained"
                   color="error"
-                  onClick={() => handleConfirm('not_suitable')}
+                  onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.not_suitable)}
                   disabled={submitting}
                   startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                   data-testid="cah-primary"
@@ -644,7 +647,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 </Button>
                 <Button
                   variant="contained"
-                  onClick={() => handleConfirm('rough_estimate_sent')}
+                  onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.rough_estimate_sent)}
                   disabled={submitting}
                   startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                   data-testid="cah-primary"

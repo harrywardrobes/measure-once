@@ -52,6 +52,7 @@ const STEPS = [
   'test:template-vars',
   'test:no-config-handler-types',
   'test:handler-meta',
+  'test:handler-outcomes-drift',
   'test:golden-schema',
   'test:lead-status-keys',
   'test:status-key-fields',

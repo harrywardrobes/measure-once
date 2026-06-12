@@ -75,6 +75,7 @@ const STATIC_SUITES = [
   'test:payment-history-component',
   'test:template-vars',
   'test:handler-meta',
+  'test:handler-outcomes-drift',
   'test:golden-schema',
   'test:conflicts-review-logic',
   'test:lead-status-keys',

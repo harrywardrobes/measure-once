@@ -43,8 +43,10 @@ import {
   HANDLER_EMAIL_TEMPLATES,
   HANDLER_TYPE_LABELS,
   HANDLER_COMPONENT_META,
+  HANDLER_OUTCOMES,
   isHandlerType,
 } from '../../utils/handlerMeta';
+import type { ActionOutcome } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
 import { STAGE_COLORS } from '../../theme';
@@ -370,6 +372,93 @@ function CallChainStepper({ handlerType }: { handlerType?: string }) {
   );
 }
 
+// ── OutcomeChipsRow ───────────────────────────────────────────────────────────
+// Renders two compact chip rows for a handler's outcomes:
+//   • Terminal outcomes (purple filled) — show the lead status written on completion
+//   • Partial outcomes (outlined)       — show actions that log progress without moving the card
+//
+// arrange_visit uses the `variants` record to expand each outcome into
+// per-visitType chips (e.g. "Booked (design) → DESIGN_SCHEDULED").
+
+function OutcomeChipsRow({ outcomes }: { outcomes: ActionOutcome[] }) {
+  const terminal = outcomes.filter(o => o.kind === 'terminal');
+  const partial  = outcomes.filter(o => o.kind === 'partial');
+
+  if (terminal.length === 0 && partial.length === 0) return null;
+
+  type TerminalChip = { label: string; status: string | undefined };
+  const terminalChips: TerminalChip[] = [];
+  for (const o of terminal) {
+    if (o.variants && Object.keys(o.variants).length > 0) {
+      for (const [vKey, vVal] of Object.entries(o.variants)) {
+        terminalChips.push({ label: `${o.label} (${vKey})`, status: vVal.setsLeadStatus });
+      }
+    } else {
+      terminalChips.push({ label: o.label, status: o.setsLeadStatus });
+    }
+  }
+
+  return (
+    <>
+      {terminalChips.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ flexShrink: 0, fontSize: '0.65rem', mt: 0.15 }}
+          >
+            Outcomes:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+            {terminalChips.map((c, i) => (
+              <Chip
+                key={i}
+                label={c.status ? `${c.label} → ${c.status}` : `${c.label} → no status change`}
+                size="small"
+                sx={{
+                  height: 18,
+                  fontSize: '0.62rem',
+                  bgcolor: 'rgba(109,33,205,0.08)',
+                  color: 'rgb(109,33,205)',
+                  '.MuiChip-label': { px: 0.5 },
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+      {partial.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ flexShrink: 0, fontSize: '0.65rem', mt: 0.15 }}
+          >
+            Progress logged:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.4 }}>
+            {partial.map((o, i) => (
+              <Chip
+                key={i}
+                label={o.label}
+                size="small"
+                variant="outlined"
+                sx={{
+                  height: 18,
+                  fontSize: '0.62rem',
+                  color: 'text.secondary',
+                  borderColor: 'divider',
+                  '.MuiChip-label': { px: 0.5 },
+                }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
+    </>
+  );
+}
+
 // ── ModalDetailCard ───────────────────────────────────────────────────────────
 
 function ModalDetailCard({
@@ -450,6 +539,10 @@ function ModalDetailCard({
               {hubspotText}
             </Typography>
           </Box>
+        )}
+
+        {isHandlerType(handler.type) && HANDLER_OUTCOMES[handler.type].length > 0 && (
+          <OutcomeChipsRow outcomes={HANDLER_OUTCOMES[handler.type]} />
         )}
 
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>

@@ -16,6 +16,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { DVF_DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import { DVF_OUTCOME_KEY } from '../../utils/handlerMeta';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -183,7 +184,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     setOutcomeError('');
     POST('/api/card-actions/design-visit-followup/outcome', {
       contactId: ctx.contactId,
-      outcome: 'confirmed',
+      outcome: DVF_OUTCOME_KEY.confirmed,
     })
       .then(() => {
         showToast('Visit confirmed and scheduled', false);
@@ -212,7 +213,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
       });
       await POST('/api/card-actions/design-visit-followup/outcome', {
         contactId: ctx.contactId,
-        outcome: 'invite_resent',
+        outcome: DVF_OUTCOME_KEY.invite_resent,
       });
       showToast('Invite email sent', false);
       goToStep('done');
@@ -228,7 +229,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose }: Design
     try {
       await POST('/api/card-actions/design-visit-followup/outcome', {
         contactId: ctx.contactId,
-        outcome: 'not_proceeding',
+        outcome: DVF_OUTCOME_KEY.not_proceeding,
       });
       showToast('Contact marked as not proceeding', false);
       goToStep('done');

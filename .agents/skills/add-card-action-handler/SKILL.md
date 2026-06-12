@@ -27,7 +27,9 @@ Card action handlers are configurable actions attached to Sales/Survey/Design Vi
 | `src/react/components/CardActionModalsHost.tsx` | React component that renders all handler modals; dispatches via `switch(handler.type)` |
 | `src/react/pages/admin/ActionHandlersPage.tsx` | Admin UI for creating/editing handlers; `NO_CONFIG_HANDLER_TYPES` set |
 | `src/react/pages/admin/HandlerConfigBlocks.tsx` | Per-type config block components used in the admin editor |
-| `src/react/utils/handlerMeta.ts` | `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, `HANDLER_EMAIL_TEMPLATES` — must stay in sync with server validator keys |
+| `src/react/utils/handlerMeta.ts` | `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, `HANDLER_EMAIL_TEMPLATES`, `HANDLER_OUTCOMES` — must stay in sync with server validator keys |
+| `shared/handler-outcomes.ts` | **Canonical** ESM/TypeScript outcome registry — single source of truth imported by `handlerMeta.ts` and bundled by Vite. |
+| `shared/handler-outcomes.cjs` | CJS mirror — `require()`d by `server.js`, `photo-reviews.js`, and `quickbooks.js`. Must stay in sync with `.ts`; drift-guard enforces this. |
 | `visits.js` | `ensureVisitsTable`, visit CRUD routes (`POST /api/visits`) |
 | `auth.js` | `isAuthenticated`, `requireAdmin`, `requirePrivilege` middleware |
 
@@ -283,7 +285,7 @@ case 'start_design_visit':
 
 ---
 
-## 8-Step Checklist: Adding Any New Handler Type
+## 9-Step Checklist: Adding Any New Handler Type
 
 Follow these steps in order when implementing a new handler type:
 
@@ -291,17 +293,38 @@ Follow these steps in order when implementing a new handler type:
 
 2. **Add config validation** — In the validator function: strip unknown keys, validate ranges/lengths, return `{ value }` on success or `{ error }` on failure.
 
-3. **Register in React meta** — Add the type to `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, and `HANDLER_EMAIL_TEMPLATES` in `src/react/utils/handlerMeta.ts`.
+3. **Define outcomes in the registry** — Add a new entry to `HANDLER_OUTCOMES` in **both** `shared/handler-outcomes.ts` (TypeScript/ESM canonical, used by React and handlerMeta.ts) and `shared/handler-outcomes.cjs` (CJS, used by server routes). Each entry is an `ActionOutcome` object with `key`, `label`, `kind` (`'terminal'` or `'partial'`), and `setsLeadStatus` (terminal entries only). Use `variants` for `arrange_visit`-style per-visitType overrides. Update `test/card-action-handlers/drift-guard.js` with assertions for any new terminal keys. Verify with `npm run test:handler-outcomes-drift` and `npm run test:handler-meta`.
 
-4. **Add config block** — If the type needs special fields (beyond the generic JSON textarea), add a component in `HandlerConfigBlocks.tsx` and wire it into `ActionHandlersPage.tsx` (add to or remove from `NO_CONFIG_HANDLER_TYPES`).
+4. **Register in React meta** — Add the type to `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, and `HANDLER_EMAIL_TEMPLATES` in `src/react/utils/handlerMeta.ts`. `HANDLER_OUTCOMES` is imported from `shared/handler-outcomes.ts` — add the entry there (and its CJS mirror). The `check-handler-meta.mjs` CI check enforces exhaustiveness for all `Record<HandlerType, …>` tables.
 
-5. **Add server execute route(s)** — Create `POST /api/card-actions/<action-name>` (or equivalent). Guard with `isAuthenticated`, appropriate `requirePrivilege`, and a rate-limiter.
+5. **Add config block** — If the type needs special fields (beyond the generic JSON textarea), add a component in `HandlerConfigBlocks.tsx` and wire it into `ActionHandlersPage.tsx` (add to or remove from `NO_CONFIG_HANDLER_TYPES`).
 
-6. **Add React modal and dispatch** — Add the modal component and a `case` in `CardActionModalsHost.tsx`.
+6. **Add server execute route(s)** — Create `POST /api/card-actions/<action-name>` (or equivalent). Guard with `isAuthenticated`, appropriate `requirePrivilege`, and a rate-limiter. Derive accepted outcome keys and status writes from `getTerminalKeys()` / `getTerminalStatusMap()` / `getArrangeVisitStatus()` in `shared/handler-outcomes.cjs` rather than hardcoding them inline.
 
-7. **Create any DB tables** — Add `ensureXxxTables()` function and call it from `server.js` startup.
+7. **Add React modal and dispatch** — Add the modal component and a `case` in `CardActionModalsHost.tsx`. Import `HANDLER_OUTCOMES` from `handlerMeta.ts` and reference outcome keys from there rather than hardcoding strings.
 
-8. **Fire BroadcastChannel on admin mutations** — After any admin catalogue mutation, emit `new BroadcastChannel('<type>_changed').postMessage({ ts: Date.now() })`.
+8. **Create any DB tables** — Add `ensureXxxTables()` function and call it from `server.js` startup.
+
+9. **Fire BroadcastChannel on admin mutations** — After any admin catalogue mutation, emit `new BroadcastChannel('<type>_changed').postMessage({ ts: Date.now() })`.
+
+### Outcome Registry Quick Reference
+
+```
+HANDLER_OUTCOMES in shared/handler-outcomes.ts   — canonical TypeScript/ESM source
+                                                    (imported by handlerMeta.ts via Vite)
+HANDLER_OUTCOMES in shared/handler-outcomes.cjs  — CJS mirror (server.js, photo-reviews.js, quickbooks.js)
+
+kind: 'terminal' — moves the card; writes hs_lead_status
+kind: 'partial'  — logs progress; no card move, no status write
+
+Server helpers (from shared/handler-outcomes.cjs):
+  getTerminalKeys('handler_type')           → Set<string> of accepted keys
+  getTerminalStatusMap('handler_type')      → Record<key, hs_lead_status>
+  getArrangeVisitStatus(key, visitType)     → hs_lead_status | null
+
+Drift guard: npm run test:handler-outcomes-drift
+Meta check:  npm run test:handler-meta
+```
 
 ---
 

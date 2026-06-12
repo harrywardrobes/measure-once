@@ -1,6 +1,13 @@
 /**
  * Static lookup tables that describe each card-action handler type.
  *
+ * HANDLER_OUTCOMES — maps handler type → ActionOutcome[] describing every
+ *   possible result (terminal = moves the card, partial = logs progress).
+ *   This is the TypeScript mirror of shared/handler-outcomes.js (the CJS
+ *   module used by server-side routes).  The drift-guard test in
+ *   test/card-action-handlers/drift-guard.js asserts both agree on terminal
+ *   outcome keys.  The WorkflowPage ModalDetailCard renders these as chips.
+ *
  * HANDLER_MODAL_SUMMARY  — maps handler type → { steps, hubspot } strings
  *   shown as inline one-liners in CardActionsPage and as detail rows in
  *   WorkflowPage.
@@ -32,6 +39,12 @@
  */
 
 import type { HandlerType } from '../components/CardActionModalsHost';
+import {
+  HANDLER_OUTCOMES as _sharedHandlerOutcomes,
+  type ActionOutcome,
+} from '../../../shared/handler-outcomes';
+
+export type { ActionOutcome };
 
 export interface HandlerModalSummary {
   steps: string;
@@ -43,10 +56,83 @@ export interface HandlerComponentMeta {
   filePath: string;
 }
 
+/**
+ * Outcome registry — maps every handler type to its possible outcomes.
+ *
+ * Data source: shared/handler-outcomes.js (CJS — single source of truth).
+ * Each entry below pulls its value from the shared module so there is exactly
+ * one place where the data lives.  The object-literal form is kept so that
+ * check-handler-meta.mjs can statically verify exhaustiveness across all
+ * Record<HandlerType, …> tables; the HandlerType constraint catches any
+ * handler type added to CardActionModalsHost.tsx that is not listed here.
+ * Drift guard: test/card-action-handlers/drift-guard.js.
+ */
+const _s = _sharedHandlerOutcomes;
+export const HANDLER_OUTCOMES: Record<HandlerType, ActionOutcome[]> = {
+  arrange_visit:            _s['arrange_visit'],
+  contact_customer:         _s['contact_customer'],
+  deposit_invoice_followup: _s['deposit_invoice_followup'],
+  design_visit_followup:    _s['design_visit_followup'],
+  open_deal:                _s['open_deal'],
+  review_customer_photos:   _s['review_customer_photos'],
+  schedule_visit:           _s['schedule_visit'],
+  show_message:             _s['show_message'],
+  start_design_visit:       _s['start_design_visit'],
+  summarise_phone_call:     _s['summarise_phone_call'],
+  upload_photos_and_info:   _s['upload_photos_and_info'],
+};
+
+/**
+ * Typed outcome key helpers — derived from the registry at module load time.
+ * Any key that no longer exists in the registry will throw a build-time error.
+ * Import these in modal components instead of hardcoding raw string literals.
+ */
+function _k(type: string, key: string): string {
+  const found = (HANDLER_OUTCOMES as Record<string, ActionOutcome[]>)[type]?.find(
+    o => o.key === key,
+  );
+  if (!found) {
+    throw new Error(`[handlerMeta] Registry missing outcome key '${key}' for handler '${type}'`);
+  }
+  return found.key;
+}
+
+/** Outcome keys for arrange_visit — import these instead of hardcoding strings. */
+export const ARRANGE_VISIT_KEY = {
+  booked:          _k('arrange_visit', 'booked'),
+  email_sent:      _k('arrange_visit', 'email_sent'),
+  not_proceeding:  _k('arrange_visit', 'not_proceeding'),
+} as const;
+
+/** Outcome keys for design_visit_followup — import these instead of hardcoding strings. */
+export const DVF_OUTCOME_KEY = {
+  confirmed:       _k('design_visit_followup', 'confirmed'),
+  invite_resent:   _k('design_visit_followup', 'invite_resent'),
+  not_proceeding:  _k('design_visit_followup', 'not_proceeding'),
+} as const;
+
+/** Outcome keys for review_customer_photos — import these instead of hardcoding strings. */
+export const REVIEW_PHOTOS_OUTCOME_KEY = {
+  not_suitable:        _k('review_customer_photos', 'not_suitable'),
+  rough_estimate_sent: _k('review_customer_photos', 'rough_estimate_sent'),
+} as const;
+
+/** Outcome keys for contact_customer — import these instead of hardcoding strings. */
+export const CONTACT_CUSTOMER_KEY = {
+  // Terminal outcomes (move the card / write hs_lead_status)
+  attempted_to_contact: _k('contact_customer', 'attempted_to_contact'),
+  no_response:          _k('contact_customer', 'no_response'),
+  send_upload_link:     _k('contact_customer', 'send_upload_link'),
+  // Partial outcomes (attempt tracking — no card move)
+  call_attempted:       _k('contact_customer', 'call_attempted'),
+  email_sent:           _k('contact_customer', 'email_sent'),
+  whatsapp_sent:        _k('contact_customer', 'whatsapp_sent'),
+} as const;
+
 export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
   deposit_invoice_followup: {
     steps: '6 options — arrange survey / re-send invoice / send reminder / not proceeding / log call / amend deal',
-    hubspot: 'Stays DEPOSIT_INVOICE unless not-proceeding → DECLINED_DEAL or arrange-survey outcome updates status',
+    hubspot: 'No status change unless not-proceeding is selected',
   },
   schedule_visit: {
     steps: '1 step — date, time, duration, title, location, notes',
@@ -66,27 +152,27 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
   },
   upload_photos_and_info: {
     steps: '1 step — confirmation → emails customer a unique form link',
-    hubspot: 'Sets lead status to AWAITING_PHOTOS on submission',
+    hubspot: 'See outcomes below',
   },
   review_customer_photos: {
     steps: '2 steps — review drawer → Not Suitable or Send Rough Estimate',
-    hubspot: 'Sets lead status to NOT_SUITABLE or ROUGH_ESTIMATE on confirm',
+    hubspot: 'See outcomes below',
   },
   arrange_visit: {
     steps: '2+ steps — call outcome → Booked / No answer / Call back / Not proceeding',
-    hubspot: 'Sets lead status based on outcome (e.g. DSSC_AGREED, DSSC_SUGGESTED, not_suitable)',
+    hubspot: 'Status written depends on outcome and visit type — see outcomes below',
   },
   contact_customer: {
     steps: '1–2 steps — log contact attempts → optionally advance lead status',
-    hubspot: 'Advances lead status to ATTEMPTED_TO_CONTACT or NO_RESPONSE',
+    hubspot: 'See outcomes below',
   },
   design_visit_followup: {
     steps: '2+ steps — hub (Confirmed / Resend invite / Not proceeding) → schedule or email step',
-    hubspot: 'Sets lead status to DESIGN_SCHEDULED (confirmed), DESIGN_INVITED (resend), or NOT_SUITABLE (not proceeding)',
+    hubspot: 'See outcomes below',
   },
   open_deal: {
     steps: '3 paths — amendments hub / accept deal wizard (3 steps) / decline flow (2 steps)',
-    hubspot: 'Stays OPEN_DEAL on amendments; → DEPOSIT_INVOICE on accept; → DECLINED_DEAL on decline',
+    hubspot: 'No status change on amendments — see outcomes below for accept / decline',
   },
 };
 

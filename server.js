@@ -19,6 +19,19 @@ const {
   quickbooksReadWriteLimiter,
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
+const {
+  ARRANGE_VISIT_KEYS    : _ARRANGE_VISIT_KEYS,
+  DVF_STATUS_MAP        : _DVF_STATUS_MAP,
+  CONTACT_CUSTOMER_MAP  : _CONTACT_CUSTOMER_MAP,
+  getArrangeVisitStatus,
+} = require('./shared/handler-route-contracts.cjs');
+// ↑ handler-route-contracts.cjs derives every accepted key set from the outcome registry
+// (shared/handler-outcomes.cjs) so server routes and the WorkflowPage outcome chips
+// always agree.  Exceptions are documented in handler-route-contracts.cjs.
+
+// deposit_invoice_followup accepted keys are only used inside this file; keep inline.
+const { getTerminalStatusMap } = require('./shared/handler-outcomes.cjs');
+const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
 const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties, ensureStartDesignVisitHandlerBindings } = require('./design-visits');
@@ -5871,24 +5884,10 @@ app.post('/api/card-actions/arrange-visit/outcome',
     const outcome   = String(req.body?.outcome   || '');
     const visitType = String(req.body?.visitType || 'design').toLowerCase();
 
-    const OUTCOME_MAP = {
-      booked: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED' },
-        design: { hs_lead_status: 'DESIGN_SCHEDULED' },
-      },
-      email_sent: {
-        survey: { hs_lead_status: 'SURVEY_SCHEDULED' },
-        design: { hs_lead_status: 'DESIGN_INVITED' },
-      },
-      not_proceeding: {
-        survey: { hs_lead_status: 'NOT_SUITABLE' },
-        design: { hs_lead_status: 'NOT_SUITABLE' },
-      },
-    };
-
-    const outcomeEntry = OUTCOME_MAP[outcome];
-    if (!outcomeEntry) return res.status(400).json({ error: 'outcome must be one of: booked, email_sent, not_proceeding.' });
-    const { hs_lead_status: newLeadStatus } = outcomeEntry[visitType] || outcomeEntry['design'];
+    if (!_ARRANGE_VISIT_KEYS.has(outcome)) {
+      return res.status(400).json({ error: `outcome must be one of: ${[..._ARRANGE_VISIT_KEYS].join(', ')}.` });
+    }
+    const newLeadStatus = getArrangeVisitStatus(outcome, visitType);
 
     try {
       await assertLeadStatusKey(newLeadStatus);
@@ -6128,13 +6127,9 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
 
     const target = String(req.body?.target || '').toLowerCase();
-    const TARGET_MAP = {
-      attempted_to_contact: 'ATTEMPTED_TO_CONTACT',
-      no_response:          'NO_RESPONSE',
-    };
-    const key = TARGET_MAP[target];
+    const key = _CONTACT_CUSTOMER_MAP[target];
     if (!key) {
-      return res.status(400).json({ error: 'target must be "attempted_to_contact" or "no_response".' });
+      return res.status(400).json({ error: `target must be one of: ${Object.keys(_CONTACT_CUSTOMER_MAP).join(', ')}.` });
     }
 
     try {
@@ -6227,15 +6222,10 @@ app.post('/api/card-actions/design-visit-followup/outcome',
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
     const outcome = String(req.body?.outcome || '');
 
-    // outcome → new lead status
-    const OUTCOME_STATUS = {
-      confirmed:      'DESIGN_SCHEDULED',
-      invite_resent:  'DESIGN_INVITED',
-      not_proceeding: 'NOT_SUITABLE',
-    };
-    const newLeadStatus = OUTCOME_STATUS[outcome];
+    // outcome → new lead status (derived from the outcome registry)
+    const newLeadStatus = _DVF_STATUS_MAP[outcome];
     if (!newLeadStatus) {
-      return res.status(400).json({ error: 'outcome must be one of: confirmed, invite_resent, not_proceeding.' });
+      return res.status(400).json({ error: `outcome must be one of: ${Object.keys(_DVF_STATUS_MAP).join(', ')}.` });
     }
 
     try {
@@ -6723,10 +6713,11 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
         steps.thankYouSent = !sendThankYou;
       }
 
-      // 4. Update lead status to DECLINED_DEAL
+      // 4. Update lead status (from outcome registry: deposit_invoice_followup not_proceeding)
+      const _diNotProceedingStatus = _DI_TERMINAL_STATUS['not_proceeding'] ?? 'DECLINED_DEAL';
       try {
-        await assertLeadStatusKey('DECLINED_DEAL');
-        await patchContactProperties(contactId, { hs_lead_status: 'DECLINED_DEAL' });
+        await assertLeadStatusKey(_diNotProceedingStatus);
+        await patchContactProperties(contactId, { hs_lead_status: _diNotProceedingStatus });
         steps.statusUpdated = true;
       } catch (e) {
         if (e.code === 'LEAD_STATUS_REMOVED') {
@@ -6740,7 +6731,7 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL' });
+      res.json({ ok: true, steps, hs_lead_status: _diNotProceedingStatus });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/deposit-invoice/not-proceeding error:');
       res.status(503).json({ error: e.message, steps });

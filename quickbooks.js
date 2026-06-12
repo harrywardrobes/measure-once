@@ -7,6 +7,12 @@ const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { HANDLER_OUTCOMES } = require('./shared/handler-outcomes.cjs');
+
+// Status values derived from the outcome registry — keeps them in sync with
+// what the Workflow page displays as outcome chips.
+const _QB_ACCEPT_STATUS  = HANDLER_OUTCOMES.open_deal.find(o => o.key === 'accept')?.setsLeadStatus  ?? 'DEPOSIT_INVOICE';
+const _QB_DECLINE_STATUS = HANDLER_OUTCOMES.open_deal.find(o => o.key === 'decline')?.setsLeadStatus ?? 'DECLINED_DEAL';
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.
@@ -888,10 +894,10 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         logger.warn({ err: e.message }, '[accept-deal] Could not store invoice on design_visit (non-fatal):');
       }
 
-      // 8. Update lead status to DEPOSIT_INVOICE
+      // 8. Update lead status (from outcome registry: open_deal accept → _QB_ACCEPT_STATUS)
       try {
-        await _assertLeadStatusKey('DEPOSIT_INVOICE');
-        await _patchContactProperties(contactId, { hs_lead_status: 'DEPOSIT_INVOICE' });
+        await _assertLeadStatusKey(_QB_ACCEPT_STATUS);
+        await _patchContactProperties(contactId, { hs_lead_status: _QB_ACCEPT_STATUS });
         steps.statusUpdated = true;
       } catch (e) {
         if (e.code === 'LEAD_STATUS_REMOVED') {
@@ -907,7 +913,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
         });
       }
 
-      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: 'DEPOSIT_INVOICE', ...(idempotentRetry ? { idempotent: true } : {}), ...(sendAlreadyDone ? { sendSkipped: true } : {}) });
+      res.json({ ok: true, steps, invoiceId, invoiceDocNum, hs_lead_status: _QB_ACCEPT_STATUS, ...(idempotentRetry ? { idempotent: true } : {}), ...(sendAlreadyDone ? { sendSkipped: true } : {}) });
     } catch (e) {
       if (e._qbNoInvoiceId) {
         // Thrown from inside the advisory-lock block to ensure the finally clause
@@ -1076,10 +1082,10 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
         steps.thankYouSent = !sendThankYou;
       }
 
-      // 3. Update lead status to DECLINED_DEAL
+      // 3. Update lead status (from outcome registry: open_deal decline → _QB_DECLINE_STATUS)
       try {
-        await _assertLeadStatusKey('DECLINED_DEAL');
-        await _patchContactProperties(contactId, { hs_lead_status: 'DECLINED_DEAL' });
+        await _assertLeadStatusKey(_QB_DECLINE_STATUS);
+        await _patchContactProperties(contactId, { hs_lead_status: _QB_DECLINE_STATUS });
         steps.statusUpdated = true;
       } catch (e) {
         if (e.code === 'LEAD_STATUS_REMOVED') {
@@ -1093,7 +1099,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
         });
       }
 
-      res.json({ ok: true, steps, hs_lead_status: 'DECLINED_DEAL', ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}), ...(thankYouError ? { thankYouError } : {}) });
+      res.json({ ok: true, steps, hs_lead_status: _QB_DECLINE_STATUS, ...(steps.emailAlreadySent ? { emailAlreadySent: true } : {}), ...(thankYouError ? { thankYouError } : {}) });
     } catch (e) {
       logger.error({ err: e.response?.data || e.message }, 'POST /api/quickbooks/contacts/:contactId/decline-deal error:');
       res.status(503).json({ error: e.message, steps });

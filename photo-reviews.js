@@ -11,6 +11,8 @@ const { isAuthenticated, requirePrivilege } = require('./auth');
 const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
+const { REVIEW_OUTCOME_STATUS: _REVIEW_OUTCOME_STATUS } = require('./shared/handler-route-contracts.cjs');
+const _REVIEW_VALID_OUTCOMES  = new Set(Object.keys(_REVIEW_OUTCOME_STATUS));
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -198,8 +200,8 @@ router.post('/api/card-actions/review-customer-photos',
     if (!submissionId || !Number.isInteger(Number(submissionId)) || Number(submissionId) <= 0) {
       return res.status(400).json({ error: 'submissionId is required.' });
     }
-    if (!['not_suitable', 'rough_estimate_sent'].includes(outcome)) {
-      return res.status(400).json({ error: 'outcome must be not_suitable or rough_estimate_sent.' });
+    if (!_REVIEW_VALID_OUTCOMES.has(outcome)) {
+      return res.status(400).json({ error: `outcome must be one of: ${[..._REVIEW_VALID_OUTCOMES].join(', ')}.` });
     }
     if (outcome === 'rough_estimate_sent' && (!priceRange || typeof priceRange !== 'string' || !priceRange.trim())) {
       return res.status(400).json({ error: 'priceRange is required for rough_estimate_sent.' });
@@ -211,7 +213,7 @@ router.post('/api/card-actions/review-customer-photos',
 
     // Reject early if the target lead status no longer exists in lead_status_config,
     // so we never commit the review outcome and then fail the HubSpot patch.
-    const hsStatusForCheck = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE';
+    const hsStatusForCheck = _REVIEW_OUTCOME_STATUS[outcome];
     try {
       await assertLeadStatusKey(hsStatusForCheck);
     } catch (e) {
@@ -345,7 +347,7 @@ router.post('/api/card-actions/review-customer-photos',
     }
 
     // Update HubSpot (non-fatal — don't fail the whole request if HubSpot is down)
-    const hsStatus = outcome === 'not_suitable' ? 'NOT_SUITABLE' : 'ROUGH_ESTIMATE';
+    const hsStatus = _REVIEW_OUTCOME_STATUS[outcome];
     if (process.env.HUBSPOT_ACCESS_TOKEN) {
       try {
         await _patchContactProperties(cid, { hs_lead_status: hsStatus });

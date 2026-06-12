@@ -26,6 +26,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { ARRANGE_VISIT_KEY } from '../../utils/handlerMeta';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 import { DEMO_CONTACT } from './demoData';
@@ -292,7 +293,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         url: '/api/card-actions/arrange-visit/outcome',
         body: {
           contactId: ctx.contactId,
-          outcome: 'not_proceeding',
+          outcome: ARRANGE_VISIT_KEY.not_proceeding,
           visitType: contactInfo?.visitType ?? 'design',
         },
       });
@@ -341,7 +342,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         url: '/api/card-actions/arrange-visit/outcome',
         body: {
           contactId: ctx.contactId,
-          outcome: 'booked',
+          outcome: ARRANGE_VISIT_KEY.booked,
           visitType: contactInfo?.visitType ?? 'design',
           slot: bookedSlot.toISOString(),
           address: address.trim(),
@@ -441,7 +442,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       });
       const outcomeData = await POST('/api/card-actions/arrange-visit/outcome', {
         contactId: ctx.contactId,
-        outcome: 'email_sent',
+        outcome: ARRANGE_VISIT_KEY.email_sent,
         visitType,
       }) as { hs_lead_status?: string } | undefined;
       clearDraft(key);

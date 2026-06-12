@@ -18,6 +18,7 @@ import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
@@ -181,7 +182,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   async function toggleAttempt(
-    field: 'call_attempted' | 'email_sent' | 'whatsapp_sent',
+    field: typeof CONTACT_CUSTOMER_KEY.call_attempted | typeof CONTACT_CUSTOMER_KEY.email_sent | typeof CONTACT_CUSTOMER_KEY.whatsapp_sent,
     currentValue: boolean,
     setInFlight: (v: boolean) => void,
     setValue: (v: boolean) => void,
@@ -236,7 +237,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       try {
         await POST(
           `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
-          { currentLeadStatus, target: 'attempted_to_contact' },
+          { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
         );
       } catch (e) {
         const err = e as Error & { code?: string };
@@ -261,7 +262,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     try {
       await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
-        { currentLeadStatus, target: 'no_response' },
+        { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.no_response },
       );
       setPhase('done');
       autoCloseTimerRef.current = setTimeout(() => onClose(), 1500);
@@ -343,7 +344,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                           checked={callAttempted}
                           disabled={callInFlight}
                           onChange={() =>
-                            toggleAttempt('call_attempted', callAttempted, setCallInFlight, setCallAttempted, setCallError)
+                            toggleAttempt(CONTACT_CUSTOMER_KEY.call_attempted, callAttempted, setCallInFlight, setCallAttempted, setCallError)
                           }
                           size="small"
                         />
@@ -369,7 +370,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                           checked={emailSent}
                           disabled={emailInFlight}
                           onChange={() =>
-                            toggleAttempt('email_sent', emailSent, setEmailInFlight, setEmailSent, setEmailError)
+                            toggleAttempt(CONTACT_CUSTOMER_KEY.email_sent, emailSent, setEmailInFlight, setEmailSent, setEmailError)
                           }
                           size="small"
                         />
@@ -395,7 +396,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                           checked={whatsappSent}
                           disabled={whatsappInFlight}
                           onChange={() =>
-                            toggleAttempt('whatsapp_sent', whatsappSent, setWhatsappInFlight, setWhatsappSent, setWhatsappError)
+                            toggleAttempt(CONTACT_CUSTOMER_KEY.whatsapp_sent, whatsappSent, setWhatsappInFlight, setWhatsappSent, setWhatsappError)
                           }
                           size="small"
                         />
