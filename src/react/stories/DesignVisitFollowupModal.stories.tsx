@@ -1,3 +1,4 @@
+import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { DesignVisitFollowupModal } from '../components/modals/DesignVisitFollowupModal';
 
@@ -113,4 +114,21 @@ export const ScheduleStep: Story = {
 export const DemoPreview: Story = {
   name: 'Demo preview (hub)',
   args: { demo: true },
+};
+
+function DemoResendWrapper(props: React.ComponentProps<typeof DesignVisitFollowupModal>) {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const btn = document.querySelector<HTMLButtonElement>('[data-testid="dvf-resend"]');
+      btn?.click();
+    }, 50);
+    return () => clearTimeout(t);
+  }, []);
+  return <DesignVisitFollowupModal {...props} />;
+}
+
+export const DemoResendStep: Story = {
+  name: 'Demo preview (resend step)',
+  args: { demo: true },
+  render: (args) => <DemoResendWrapper {...args} />,
 };
