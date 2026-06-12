@@ -529,8 +529,14 @@ function ModalDetailCard({
   const summary = isHandlerType(handler.type) ? HANDLER_MODAL_SUMMARY[handler.type] : undefined;
   const meta    = isHandlerType(handler.type) ? HANDLER_COMPONENT_META[handler.type] : undefined;
 
+  const arrangeVisitType = handler.type === 'arrange_visit'
+    ? (handler.config?.visitType as string | undefined)
+    : undefined;
+
   const hubspotText = handler.type === 'start_design_visit' && handler.config?.submittedLeadStatus
     ? `Sets lead status to in-progress on open; to ${handler.config.submittedLeadStatus} on submit`
+    : arrangeVisitType
+    ? `Configured for ${arrangeVisitType} visits — see outcomes below`
     : summary?.hubspot ?? '';
 
   const templateKeys  = (isHandlerType(handler.type) ? HANDLER_EMAIL_TEMPLATES[handler.type] : undefined) ?? [];
