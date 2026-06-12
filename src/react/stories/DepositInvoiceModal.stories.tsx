@@ -357,3 +357,57 @@ export const DemoHub: Story = {
     demo: true,
   },
 };
+
+export const DemoResend: Story = {
+  name: 'Re-send — demo mode',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /re-send deposit invoice/i });
+    await userEvent.click(btn);
+  },
+};
+
+export const DemoReminder: Story = {
+  name: 'Send payment reminder — demo mode',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /send payment reminder/i });
+    await userEvent.click(btn);
+  },
+};
+
+export const DemoNotProceedingConfirm: Story = {
+  name: 'Not proceeding step 1 — demo mode',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /not proceeding/i });
+    await userEvent.click(btn);
+  },
+};
+
+export const DemoNotProceedingEmail: Story = {
+  name: 'Not proceeding step 2 — demo mode',
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByRole('button', { name: /not proceeding/i });
+    await userEvent.click(btn);
+    const continueBtn = await canvas.findByRole('button', { name: /continue/i });
+    await userEvent.click(continueBtn);
+  },
+};
