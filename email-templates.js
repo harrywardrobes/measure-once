@@ -39,6 +39,7 @@ const TEMPLATE_DEFS = {
   photo_review_invite: {
     label: 'Photo Review — Invite',
     description: 'Sent to a customer inviting them to fill in the info form (photo review flow).',
+    audience: 'customer',
     variables: ['maskedEmail', 'formLink'],
     variableDescriptions: {
       maskedEmail: "Customer's partially masked email address, e.g. 'j***@example.com'. Shown in the email so they know the link is personalised for them.",
@@ -77,6 +78,7 @@ const TEMPLATE_DEFS = {
   admin_notification: {
     label: 'Admin notification',
     description: 'Sent to admins when a customer submits their info form.',
+    audience: 'team',
     variables: ['customerName', 'customerEmail', 'address', 'rooms', 'notes', 'photoSummary'],
     variableDescriptions: {
       customerName:  "Full name of the customer who submitted the form.",
@@ -119,6 +121,7 @@ const TEMPLATE_DEFS = {
   customer_thank_you: {
     label: 'Customer thank-you',
     description: 'Sent to a customer after they submit their info form.',
+    audience: 'customer',
     variables: ['firstName'],
     variableDescriptions: {
       firstName: "Customer's first name. Empty if no first name is recorded.",
@@ -139,6 +142,7 @@ const TEMPLATE_DEFS = {
   set_password_welcome: {
     label: 'Set password — welcome',
     description: 'Sent to a newly approved user with their first set-password link.',
+    audience: 'team',
     variables: ['link'],
     variableDescriptions: {
       link: 'The one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
@@ -161,6 +165,7 @@ const TEMPLATE_DEFS = {
   set_password_resend: {
     label: 'Set password — resend',
     description: 'Sent when a new set-password link is re-issued for a user.',
+    audience: 'team',
     variables: ['link'],
     variableDescriptions: {
       link: 'The new one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
@@ -183,6 +188,7 @@ const TEMPLATE_DEFS = {
   set_password_reset: {
     label: 'Set password — reset',
     description: 'Sent when a user requests a password reset.',
+    audience: 'team',
     variables: ['link'],
     variableDescriptions: {
       link: 'The one-time URL for the recipient to reset their password. Valid for 1 hour. Always present.',
@@ -205,6 +211,7 @@ const TEMPLATE_DEFS = {
   photo_review_not_suitable: {
     label: 'Photo review — not suitable',
     description: 'Sent to a customer when their enquiry is reviewed as not suitable.',
+    audience: 'customer',
     variables: ['firstName'],
     variableDescriptions: {
       firstName: "Customer's first name. Empty if no first name is recorded.",
@@ -226,6 +233,7 @@ const TEMPLATE_DEFS = {
   photo_review_rough_estimate: {
     label: 'Photo review — rough estimate',
     description: 'Sent to a customer with a rough estimate after a photo review.',
+    audience: 'customer',
     variables: ['firstName', 'priceRange'],
     variableDescriptions: {
       firstName:  "Customer's first name. Empty if no first name is recorded.",
@@ -254,6 +262,7 @@ const TEMPLATE_DEFS = {
   arrange_visit_no_answer: {
     label: 'Arrange visit — no answer',
     description: 'Sent to a customer when we call to book a visit but get no answer, asking for their availability.',
+    audience: 'customer',
     variables: ['firstName', 'visitLabel', 'proposedDateLine'],
     variableDescriptions: {
       firstName:        "Customer's first name. Empty if no first name is recorded.",
@@ -279,6 +288,7 @@ const TEMPLATE_DEFS = {
   open_deal_deposit_invoice_sent: {
     label: 'Open deal — deposit invoice sent',
     description: 'Sent to a customer after their deposit invoice has been issued via QuickBooks.',
+    audience: 'customer',
     variables: ['firstName', 'depositPercent'],
     variableDescriptions: {
       firstName:      "Customer's first name. Empty if no first name is recorded.",
@@ -303,6 +313,7 @@ const TEMPLATE_DEFS = {
   open_deal_declined_thank_you: {
     label: 'Open deal — declined thank you',
     description: 'Sent optionally to a customer when a deal is declined.',
+    audience: 'customer',
     variables: ['firstName'],
     variableDescriptions: {
       firstName: "Customer's first name. Empty if no first name is recorded.",
@@ -323,6 +334,7 @@ const TEMPLATE_DEFS = {
   visit_invite: {
     label: 'Visit Invite',
     description: 'Sent to a customer to invite them to propose a time for a design visit.',
+    audience: 'customer',
     variables: ['firstName', 'visitLabel', 'visitDuration', 'location', 'proposedDateLine'],
     variableDescriptions: {
       firstName:        "Customer's first name.",
@@ -350,6 +362,7 @@ const TEMPLATE_DEFS = {
   deposit_invoice_payment_reminder: {
     label: 'Deposit invoice — payment reminder',
     description: 'Sent to a customer as a payment reminder for their deposit invoice.',
+    audience: 'customer',
     variables: ['firstName', 'invoiceDocNum', 'depositAmount', 'balanceAmount', 'invoiceLink'],
     variableDescriptions: {
       firstName:     "Customer's first name. Empty if no first name is recorded.",
@@ -384,6 +397,7 @@ const TEMPLATE_DEFS = {
   visit_confirmation: {
     label: 'Visit Confirmation',
     description: 'Sent to a customer to confirm the details of their upcoming visit.',
+    audience: 'customer',
     variables: ['firstName', 'visitLabel', 'visitDate', 'visitTime', 'visitDuration', 'location'],
     variableDescriptions: {
       firstName:    "Customer's first name. Empty if no first name is recorded.",

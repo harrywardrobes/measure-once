@@ -5,6 +5,7 @@ const sampleTemplate: EmailTemplate = {
   key: 'visit_confirmation',
   label: 'Visit confirmation',
   description: 'Sent to the customer to confirm a booked visit.',
+  audience: 'customer',
   variables: ['customer_name', 'visit_date'],
   subject: 'Your visit is confirmed for {{visit_date}}',
   body_text: 'Hi {{customer_name}}, your visit is confirmed.',
@@ -24,6 +25,7 @@ const meta: Meta<typeof TemplateRow> = {
     template: sampleTemplate,
     shared: false,
     system: false,
+    trigger: 'Sent when "Visit booked" is selected on the Arrange visit action.',
     onEdit: () => {},
   },
   argTypes: {
@@ -40,12 +42,32 @@ export const Shared: Story = {
   args: { shared: true },
 };
 
+export const InternalTeam: Story = {
+  args: {
+    templateKey: 'admin_notification',
+    template: {
+      ...sampleTemplate,
+      key: 'admin_notification',
+      label: 'Admin notification',
+      audience: 'team',
+      subject: 'New customer submission',
+    },
+    trigger: 'Sent automatically when the customer submits their uploaded photos & info.',
+  },
+};
+
 export const System: Story = {
   args: {
     templateKey: 'set_password_welcome',
-    template: { ...sampleTemplate, key: 'set_password_welcome', label: 'Set password — welcome', subject: 'Set your password' },
+    template: {
+      ...sampleTemplate,
+      key: 'set_password_welcome',
+      label: 'Set password — welcome',
+      audience: 'team',
+      subject: 'Set your password',
+    },
     system: true,
-    description: 'Welcome email with a one-time set-password link, sent when an admin approves access.',
+    trigger: 'Welcome email with a one-time set-password link, sent when an admin approves access.',
     sentFrom: 'auth.js',
   },
 };
@@ -57,6 +79,7 @@ export const SystemInFlow: Story = {
       ...sampleTemplate,
       key: 'open_deal_deposit_invoice_sent',
       label: 'Deposit invoice sent',
+      audience: 'customer',
       subject: 'Your deposit invoice',
     },
     system: true,

@@ -259,8 +259,8 @@ const ACTION_LEVEL_EMAIL_TEMPLATES = {
   // uploaded photos/info: an internal team notification and a customer
   // thank-you confirmation. Both are system-in-flow emails.
   upload_photos_and_info: [
-    { key: 'admin_notification', system: true, sentFrom: 'customer-info.js' },
-    { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js' },
+    { key: 'admin_notification', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
+    { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
   ],
 };
 
@@ -319,6 +319,15 @@ function templateRefIsSystem(ref) {
  */
 function templateRefSentFrom(ref) {
   return typeof ref === 'string' ? undefined : ref.sentFrom;
+}
+
+/**
+ * Plain-language trigger note on a template ref (action-level refs), or undefined.
+ * @param {string | {trigger?: string}} ref
+ * @returns {string|undefined}
+ */
+function templateRefTrigger(ref) {
+  return typeof ref === 'string' ? undefined : ref.trigger;
 }
 
 /**
@@ -469,6 +478,7 @@ exports.SYSTEM_EMAIL_TEMPLATES       = SYSTEM_EMAIL_TEMPLATES;
 exports.templateRefKey               = templateRefKey;
 exports.templateRefIsSystem          = templateRefIsSystem;
 exports.templateRefSentFrom          = templateRefSentFrom;
+exports.templateRefTrigger           = templateRefTrigger;
 exports.getOutcomeEmailTemplates         = getOutcomeEmailTemplates;
 exports.getRequiredOutcomeEmailTemplate  = getRequiredOutcomeEmailTemplate;
 exports.getActionLevelEmailTemplates     = getActionLevelEmailTemplates;

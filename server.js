@@ -4752,6 +4752,7 @@ function _emailTemplateWithMeta(row) {
     key:                  row.key,
     label:                def.label || row.key,
     description:          def.description || '',
+    audience:             def.audience || null,
     variables:            def.variables || [],
     variableDescriptions: def.variableDescriptions || {},
     defaultVariablesUsed: [...defaultUsed],

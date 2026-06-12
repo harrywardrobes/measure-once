@@ -35,6 +35,13 @@ export interface EmailTemplateRef {
   system?: boolean;
   /** Source module the email is sent from (for the System chip caption). */
   sentFrom?: string;
+  /**
+   * Plain-language description of the exact condition that fires this email.
+   * Used for action-level emails (sent when the customer themselves acts,
+   * with no staff-selected outcome to derive the trigger from). For
+   * outcome-level refs the trigger is derived from the outcome instead.
+   */
+  trigger?: string;
 }
 
 /** Either a bare template key or an annotated {@link EmailTemplateRef}. */
@@ -53,6 +60,11 @@ export function templateRefIsSystem(ref: EmailTemplateRefInput): boolean {
 /** The source module of a template ref (system-in-flow refs only), or undefined. */
 export function templateRefSentFrom(ref: EmailTemplateRefInput): string | undefined {
   return typeof ref === 'string' ? undefined : ref.sentFrom;
+}
+
+/** Plain-language trigger note on a template ref (action-level refs), or undefined. */
+export function templateRefTrigger(ref: EmailTemplateRefInput): string | undefined {
+  return typeof ref === 'string' ? undefined : ref.trigger;
 }
 
 export interface ActionOutcome {
@@ -326,8 +338,8 @@ export const ACTION_LEVEL_EMAIL_TEMPLATES: Record<string, EmailTemplateRefInput[
   // uploaded photos/info: an internal team notification and a customer
   // thank-you confirmation. Both are system-in-flow emails.
   upload_photos_and_info: [
-    { key: 'admin_notification', system: true, sentFrom: 'customer-info.js' },
-    { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js' },
+    { key: 'admin_notification', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
+    { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
   ],
 };
 

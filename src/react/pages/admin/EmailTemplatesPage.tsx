@@ -44,7 +44,10 @@ import {
   templateRefKey,
   templateRefIsSystem,
   templateRefSentFrom,
+  templateRefTrigger,
 } from '../../../../shared/handler-outcomes';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import {
   analyzeTemplateTokens,
@@ -75,10 +78,27 @@ const IFRAME_BODY_COLOR = '#111';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export type TemplateAudience = 'customer' | 'team';
+
+/** Display metadata for each recipient audience. Keyed by audience, not by
+ *  template key — sourced from the per-template `audience` field on the API. */
+const AUDIENCE_META: Record<TemplateAudience, { label: string; tooltip: string }> = {
+  customer: {
+    label: 'Customer',
+    tooltip: 'Sent to the customer (external recipient).',
+  },
+  team: {
+    label: 'Internal team',
+    tooltip: 'Sent to internal staff / the team — not to the customer.',
+  },
+};
+
 export interface EmailTemplate {
   key: string;
   label: string;
   description: string;
+  /** Recipient audience — 'customer' or 'team' (internal). Null if unspecified. */
+  audience: TemplateAudience | null;
   variables: string[];
   variableDescriptions?: Record<string, string>;
   defaultVariablesUsed?: string[];
@@ -702,21 +722,23 @@ interface TemplateRowProps {
   system: boolean;
   /** For system / system-in-flow emails: the module that actually sends it. */
   sentFrom?: string;
-  /** For system emails: a human-readable description of when it fires. */
-  description?: string;
+  /** Plain-language description of the exact condition that fires this email. */
+  trigger?: string;
   onEdit: (t: EmailTemplate) => void;
 }
 
 /** A single email-template row used inside every accordion (handler / system /
  *  unassigned). Carries the `data-template-key` attribute the deep-link flash
  *  targets. */
-export function TemplateRow({ templateKey, template, shared, system, sentFrom, description, onEdit }: TemplateRowProps) {
+export function TemplateRow({ templateKey, template, shared, system, sentFrom, trigger, onEdit }: TemplateRowProps) {
   const chipSx = { height: 18, fontSize: '0.65rem', '.MuiChip-label': { px: 0.6 } } as const;
   const systemTooltip = system
     ? sentFrom
       ? `System / in-flow email — sent by ${sentFrom}`
       : 'System / lifecycle email — not tied to a workflow handler'
     : '';
+  const audience = template?.audience ?? null;
+  const audienceMeta = audience ? AUDIENCE_META[audience] : null;
   return (
     <Box
       data-template-key={templateKey}
@@ -748,13 +770,25 @@ export function TemplateRow({ templateKey, template, shared, system, sentFrom, d
               <Chip label="System" size="small" variant="outlined" sx={chipSx} />
             </Tooltip>
           )}
+          {audienceMeta && (
+            <Tooltip title={audienceMeta.tooltip} arrow>
+              <Chip
+                icon={audience === 'team' ? <GroupsOutlinedIcon /> : <PersonOutlineIcon />}
+                label={audienceMeta.label}
+                size="small"
+                variant="outlined"
+                color={audience === 'team' ? 'secondary' : 'success'}
+                sx={{ ...chipSx, '.MuiChip-icon': { fontSize: '0.8rem', ml: 0.4 } }}
+              />
+            </Tooltip>
+          )}
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           {templateKey}
         </Typography>
-        {description && (
+        {trigger && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-            {description}
+            <Box component="span" sx={{ fontWeight: 600 }}>Triggered:</Box> {trigger}
           </Typography>
         )}
         {sentFrom && (
@@ -841,27 +875,34 @@ export default function EmailTemplatesPage() {
   // outcome-registry key order, so handlers always render in the same sequence
   // they appear elsewhere in the admin UI.
   const handlerAccordions = useMemo(() => {
-    type Ref = { key: string; system: boolean; sentFrom?: string };
+    type Ref = { key: string; system: boolean; sentFrom?: string; trigger?: string };
     const toRef = (r: Parameters<typeof templateRefKey>[0]): Ref => ({
       key: templateRefKey(r),
       system: templateRefIsSystem(r),
       sentFrom: templateRefSentFrom(r),
+      trigger: templateRefTrigger(r),
     });
     return Object.keys(HANDLER_TYPE_LABELS)
       .filter(isHandlerType)
       .map((type) => {
-        const groups: { label: string; refs: Ref[] }[] = [];
+        const handlerLabel = HANDLER_TYPE_LABELS[type];
+        const groups: { label: string; trigger?: string; refs: Ref[] }[] = [];
         for (const o of HANDLER_OUTCOMES[type] ?? []) {
           if (o.sendsEmailTemplates && o.sendsEmailTemplates.length > 0) {
-            groups.push({ label: o.label, refs: o.sendsEmailTemplates.map(toRef) });
+            // Plain-language trigger derived from the outcome: which staff
+            // selection on which handler fires this email.
+            const groupTrigger = `Sent when "${o.label}" is selected on the ${handlerLabel} action.`;
+            groups.push({ label: o.label, trigger: groupTrigger, refs: o.sendsEmailTemplates.map(toRef) });
           }
         }
         const actionLevel = ACTION_LEVEL_EMAIL_TEMPLATES[type] ?? [];
         if (actionLevel.length > 0) {
+          // Action-level emails carry their own per-ref trigger (no staff
+          // outcome to derive from), so the group has no shared trigger.
           groups.push({ label: 'During action', refs: actionLevel.map(toRef) });
         }
         const keys = groups.flatMap((g) => g.refs.map((r) => r.key));
-        return { id: `handler:${type}`, type, label: HANDLER_TYPE_LABELS[type], groups, keys };
+        return { id: `handler:${type}`, type, label: handlerLabel, groups, keys };
       })
       .filter((a) => a.groups.length > 0);
   }, []);
@@ -1029,6 +1070,7 @@ export default function EmailTemplatesPage() {
                             shared={(usageCount.get(r.key) ?? 0) > 1}
                             system={r.system}
                             sentFrom={r.sentFrom}
+                            trigger={r.trigger ?? g.trigger}
                             onEdit={setEditing}
                           />
                         ))}
@@ -1067,7 +1109,7 @@ export default function EmailTemplatesPage() {
                     shared={false}
                     system
                     sentFrom={s.sentFrom}
-                    description={s.description}
+                    trigger={s.description}
                     onEdit={setEditing}
                   />
                 ))}
