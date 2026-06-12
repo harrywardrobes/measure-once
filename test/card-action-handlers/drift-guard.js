@@ -27,6 +27,8 @@
  *   11. CJS ↔ TS parity: same handler type keys
  *   12. CJS ↔ TS parity: same terminal-key counts per handler type
  *   12b. CJS ↔ TS parity: same sendsEmailTemplates arrays per outcome
+ *   12c. CJS ↔ TS parity: same ACTION_LEVEL_EMAIL_TEMPLATES handler keys and
+ *        template arrays
  *   13. Email coverage: every registry-referenced template key exists in
  *       email-templates.js TEMPLATE_KEYS
  *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
@@ -258,6 +260,23 @@ for (const type of REQUIRED_TYPES) {
       pass('CJS↔TS parity: all handler types have matching terminal key counts');
     }
 
+    // Shared helper for 12b and 12c: extract sorted template keys from an array
+    // literal in the TS source.  Handles both bare string refs ('TEMPLATE_KEY')
+    // and object refs ({ key: 'TEMPLATE_KEY', ... }).
+    const parseTsTemplateKeys = (arrayContent) => {
+      // Object refs: { key: 'TEMPLATE_KEY', ... }
+      const objRe = /\bkey:\s*'([^']+)'/g;
+      const objKeys = [];
+      let m;
+      while ((m = objRe.exec(arrayContent)) !== null) objKeys.push(m[1]);
+      if (objKeys.length) return objKeys.sort();
+      // Bare string refs: 'TEMPLATE_KEY'
+      const bareRe = /'([^']+)'/g;
+      const bareKeys = [];
+      while ((m = bareRe.exec(arrayContent)) !== null) bareKeys.push(m[1]);
+      return bareKeys.sort();
+    };
+
     // ── 12b. CJS↔TS parity: sendsEmailTemplates arrays match per outcome ──────
     //
     // Parses sendsEmailTemplates from the TS source text — both bare key strings
@@ -272,20 +291,6 @@ for (const type of REQUIRED_TYPES) {
     // never at the start of a line with 6 spaces, so they are not confused with
     // outcome keys.
     {
-      const parseTsTemplateKeys = (arrayContent) => {
-        // Object refs: { key: 'TEMPLATE_KEY', ... }
-        const objRe = /\bkey:\s*'([^']+)'/g;
-        const objKeys = [];
-        let m;
-        while ((m = objRe.exec(arrayContent)) !== null) objKeys.push(m[1]);
-        if (objKeys.length) return objKeys.sort();
-        // Bare string refs: 'TEMPLATE_KEY'
-        const bareRe = /'([^']+)'/g;
-        const bareKeys = [];
-        while ((m = bareRe.exec(arrayContent)) !== null) bareKeys.push(m[1]);
-        return bareKeys.sort();
-      };
-
       let allEmailsMatch = true;
       for (let i = 0; i < posMatches.length; i++) {
         const type = posMatches[i][1];
@@ -343,6 +348,64 @@ for (const type of REQUIRED_TYPES) {
       }
       if (allEmailsMatch) {
         pass('CJS↔TS parity: all outcome sendsEmailTemplates arrays match');
+      }
+    }
+
+    // ── 12c. CJS↔TS parity: ACTION_LEVEL_EMAIL_TEMPLATES handler keys and arrays ──
+    //
+    // Locates the ACTION_LEVEL_EMAIL_TEMPLATES block in the TS source, extracts
+    // each handler-type key and its sorted template-key array, and compares them
+    // against the runtime CJS values.  Catches renames or additions applied to
+    // only one registry that would not be detected by checks 12 or 12b (which
+    // only cover per-outcome sendsEmailTemplates inside HANDLER_OUTCOMES).
+    {
+      const aletStart = tsContent.indexOf('export const ACTION_LEVEL_EMAIL_TEMPLATES');
+      const aletEnd   = aletStart >= 0 ? tsContent.indexOf('\n};', aletStart) : -1;
+      if (aletStart === -1 || aletEnd === -1) {
+        fail('CJS↔TS parity (12c): could not locate ACTION_LEVEL_EMAIL_TEMPLATES block in TS source');
+      } else {
+        const aletBlock = tsContent.slice(aletStart, aletEnd);
+
+        // Extract handler type keys: lines matching "  identifier: ["
+        const aletTypeKeyRe = /^  (\w+): \[/gm;
+        const tsAletKeys = [];
+        let am;
+        while ((am = aletTypeKeyRe.exec(aletBlock)) !== null) tsAletKeys.push(am[1]);
+        const cjsAletKeys = Object.keys(ACTION_LEVEL_EMAIL_TEMPLATES).sort();
+
+        assert(
+          [...tsAletKeys].sort().join(',') === cjsAletKeys.join(','),
+          `CJS↔TS parity (12c): ACTION_LEVEL_EMAIL_TEMPLATES same handler type keys` +
+            ` (TS: [${[...tsAletKeys].sort().join(', ')}], CJS: [${cjsAletKeys.join(', ')}])`,
+        );
+
+        // For each handler type, compare the sorted template key arrays.
+        const aletTypePositions = [...aletBlock.matchAll(/^  (\w+): \[/gm)];
+        let allAletMatch = true;
+        for (let i = 0; i < aletTypePositions.length; i++) {
+          const type     = aletTypePositions[i][1];
+          const tStart   = aletTypePositions[i].index;
+          const tEnd     = i + 1 < aletTypePositions.length
+            ? aletTypePositions[i + 1].index
+            : aletBlock.length;
+          const tBlock   = aletBlock.slice(tStart, tEnd);
+          const arrStart = tBlock.indexOf('[');
+          const arrEnd   = tBlock.lastIndexOf(']');
+          const tsKeys   = arrStart !== -1 && arrEnd !== -1
+            ? parseTsTemplateKeys(tBlock.slice(arrStart + 1, arrEnd))
+            : [];
+          const cjsKeys  = (ACTION_LEVEL_EMAIL_TEMPLATES[type] || []).map(templateRefKey).sort();
+          if (tsKeys.join(',') !== cjsKeys.join(',')) {
+            fail(
+              `CJS↔TS parity (12c): ACTION_LEVEL_EMAIL_TEMPLATES['${type}'] template key mismatch` +
+              ` (TS: [${tsKeys.join(', ')}], CJS: [${cjsKeys.join(', ')}])`,
+            );
+            allAletMatch = false;
+          }
+        }
+        if (allAletMatch) {
+          pass('CJS↔TS parity (12c): ACTION_LEVEL_EMAIL_TEMPLATES handler keys and template arrays match');
+        }
       }
     }
   }
