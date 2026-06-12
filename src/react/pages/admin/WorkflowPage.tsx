@@ -55,6 +55,7 @@ import { DEMO_CONTACT } from '../../components/modals/demoData';
 import { MessagePopupModal } from '../../components/modals/MessagePopupModal';
 import { ScheduleVisitModal } from '../../components/modals/ScheduleVisitModal';
 import { PhoneSummaryModal } from '../../components/modals/PhoneSummaryModal';
+import { DepositInvoiceModal } from '../../components/modals/DepositInvoiceModal';
 
 import { UploadPhotosModal } from '../../components/modals/UploadPhotosModal';
 import { ArrangeVisitModal } from '../../components/modals/ArrangeVisitModal';
@@ -1085,6 +1086,12 @@ function WorkflowDemoModalHost({
           onClose={onClose}
           demo
         />
+      );
+    case 'deposit_invoice_followup':
+      return (
+        <React.Suspense fallback={null}>
+          <DepositInvoiceModal handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />
+        </React.Suspense>
       );
     default:
       return (

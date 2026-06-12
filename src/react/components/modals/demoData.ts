@@ -122,6 +122,28 @@ const DEMO_PHOTO_1 =
 const DEMO_PHOTO_2 =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect width='200' height='200' fill='%23d4dce8'/%3E%3Ctext x='100' y='108' font-size='15' font-family='sans-serif' text-anchor='middle' fill='%2370809a'%3ELiving room%3C/text%3E%3C/svg%3E";
 
+// ── Deposit Invoice follow-up demo fixture ────────────────────────────────────
+
+/**
+ * Placeholder LoaderData shown inside DepositInvoiceModal when demo=true.
+ * Matches the private LoaderData interface in DepositInvoiceModal.tsx.
+ */
+export const DEMO_DEPOSIT_INVOICE = {
+  contactName:      DEMO_CONTACT.name,
+  contactEmail:     DEMO_CONTACT.email,
+  contactPhone:     DEMO_CONTACT.phone,
+  contactMobile:    DEMO_CONTACT.mobile,
+  contactAddress:   DEMO_CONTACT.address,
+  qbConnected:      true,
+  invoiceId:        'demo-inv-001',
+  invoiceDocNum:    '2099',
+  invoiceTotalAmt:  1500,
+  invoiceBalance:   1500,
+  invoiceTxnDate:   '2026-06-01',
+  invoiceLink:      'https://app.qbo.intuit.com/app/invoice?txnId=demo-inv-001',
+  qbEstimateId:     'demo-est-001',
+} as const;
+
 export const DEMO_SUBMISSION: DemoSubmissionData = {
   id: 0,
   contactId: 'demo-preview',

@@ -35,6 +35,8 @@ import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
+import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DEMO_DEPOSIT_INVOICE } from './demoData';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
@@ -43,6 +45,7 @@ interface Props {
   ctx: CardActionContext;
   open: boolean;
   onClose: () => void;
+  demo?: boolean;
 }
 
 
@@ -115,7 +118,7 @@ function clearDraft(key: string): void {
   } catch {}
 }
 
-export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
+export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props) {
   const { contactId, contactName: ctxContactName } = ctx;
   const key = draftKey(contactId);
   const showToast = useToast();
@@ -161,6 +164,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }, [step]);
 
   function saveDraftMerge(updates: Partial<DraftState>) {
+    if (demo) return;
     try {
       const existing: DraftState = JSON.parse(sessionStorage.getItem(key) || '{}') as DraftState;
       sessionStorage.setItem(key, JSON.stringify({ ...existing, ...updates }));
@@ -169,12 +173,12 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
 
   function navigateTo(s: Step) {
     setStep(s);
-    saveDraftMerge({ step: s });
+    if (!demo) saveDraftMerge({ step: s });
     if (s !== 'resend' && s !== 'reminder') setSendAnywayOverride(false);
   }
 
   function handleClose() {
-    clearDraft(key);
+    if (!demo) clearDraft(key);
     onClose();
   }
 
@@ -185,6 +189,13 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
     setResendError('');
     setReminderError('');
     setNotProceedingError('');
+
+    if (demo) {
+      setLoaderData(DEMO_DEPOSIT_INVOICE);
+      setRecipientEmail(DEMO_DEPOSIT_INVOICE.contactEmail);
+      setStep('hub');
+      return;
+    }
 
     const draft = loadDraft(key);
 
@@ -218,12 +229,14 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }, [open, contactId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (demo) return;
     if (!hasMounted.current) return;
     saveDraftMerge({ step, recipientEmail, reminderSubject, reminderBody, voidInvoice, notProceedingConfirmed, declineEmailSubject, declineEmailBody });
   }, [step, recipientEmail, reminderSubject, reminderBody, voidInvoice, notProceedingConfirmed, declineEmailSubject, declineEmailBody]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (step !== 'not_proceeding_email') return;
+    if (demo) return;
     if (declineEmailSubject || declineEmailBody) return;
     let cancelled = false;
     const firstName = loaderData?.contactName?.split(' ')[0] || '';
@@ -249,6 +262,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
 
   useEffect(() => {
     if (step !== 'reminder') return;
+    if (demo) return;
     if (reminderSubject || reminderBody) return;
     fetchReminderTemplate();
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -279,6 +293,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }
 
   async function handleResend() {
+    if (demo) return;
     if (!loaderData?.invoiceId) return;
     setSubmitting(true);
     setResendError('');
@@ -299,6 +314,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }
 
   async function handleSendReminder() {
+    if (demo) return;
     if (!reminderBody.trim()) {
       setReminderError('Email body cannot be empty.');
       return;
@@ -328,6 +344,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }
 
   async function handleNotProceeding(shouldSendThankYou: boolean) {
+    if (demo) return;
     navigateTo('not_proceeding_submitting');
     try {
       const result = await POST<{ ok: boolean; hs_lead_status: string; setsLeadStatus?: string | null }>(
@@ -354,18 +371,22 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
   }
 
   function openArrangeSurvey() {
+    if (demo) return;
     dispatchCardActionHandler({ id: handler.id, type: 'arrange_visit', config: {} }, ctx);
   }
 
   function openLogCall() {
+    if (demo) return;
     dispatchCardActionHandler({ id: handler.id, type: 'contact_customer', config: {} }, ctx);
   }
 
   function openUploadPhotos() {
+    if (demo) return;
     dispatchCardActionHandler({ id: handler.id, type: 'upload_photos_and_info', config: {} }, ctx);
   }
 
   function openDesignVisit() {
+    if (demo) return;
     dispatchCardActionHandler({ id: handler.id, type: 'start_design_visit', config: {} }, ctx);
   }
 
@@ -408,17 +429,21 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
       <Stack spacing={2}>
         {renderContactHeader()}
         {loadError && <Alert severity="warning">{loadError}</Alert>}
-        <PaymentHistory
-          variant="banner"
-          contactId={contactId}
-          invoiceId={loaderData?.invoiceId ?? null}
-          onPaidStateChange={setIsPaid}
-        />
+        {!demo && (
+          <PaymentHistory
+            variant="banner"
+            contactId={contactId}
+            invoiceId={loaderData?.invoiceId ?? null}
+            onPaidStateChange={setIsPaid}
+          />
+        )}
         <Stack spacing={1.5}>
+          <DemoActionTooltip demo={demo}>
           <Button
             variant={isPaid ? 'contained' : 'outlined'}
             color={isPaid ? 'success' : 'inherit'}
             fullWidth
+            disabled={!!demo}
             sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
             startIcon={<CalendarMonthIcon />}
             onClick={openArrangeSurvey}
@@ -430,6 +455,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
               </Typography>
             </Box>
           </Button>
+          </DemoActionTooltip>
 
           <Button
             variant={(!isPaid && qbOk && hasInvoice) ? 'contained' : 'outlined'}
@@ -490,9 +516,11 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
             </Box>
           </Button>
 
+          <DemoActionTooltip demo={demo}>
           <Button
             variant="outlined"
             fullWidth
+            disabled={!!demo}
             sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
             startIcon={<CallIcon />}
             onClick={openLogCall}
@@ -504,10 +532,13 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
               </Typography>
             </Box>
           </Button>
+          </DemoActionTooltip>
 
+          <DemoActionTooltip demo={demo}>
           <Button
             variant="outlined"
             fullWidth
+            disabled={!!demo}
             sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
             startIcon={<EditIcon />}
             onClick={() => {
@@ -523,20 +554,23 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
                   size="small"
                   icon={<PhotoCameraIcon />}
                   variant="outlined"
+                  disabled={!!demo}
                   onClick={e => { e.stopPropagation(); openUploadPhotos(); }}
-                  sx={{ cursor: 'pointer' }}
+                  sx={{ cursor: demo ? 'default' : 'pointer' }}
                 />
                 <Chip
                   label="Amend design visit"
                   size="small"
                   icon={<AutoFixHighIcon />}
                   variant="outlined"
+                  disabled={!!demo}
                   onClick={e => { e.stopPropagation(); openDesignVisit(); }}
-                  sx={{ cursor: 'pointer' }}
+                  sx={{ cursor: demo ? 'default' : 'pointer' }}
                 />
               </Stack>
             </Box>
           </Button>
+          </DemoActionTooltip>
         </Stack>
       </Stack>
     );
@@ -783,13 +817,15 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
         <>
           <Button onClick={() => navigateTo('hub')} startIcon={<ArrowBackIcon />}>Back</Button>
           <Box sx={{ flex: 1 }} />
-          <Button
-            variant="contained"
-            disabled={submitting || !loaderData?.invoiceId || (!!isPaid && !sendAnywayOverride)}
-            onClick={handleResend}
-          >
-            Re-send Invoice
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              disabled={demo || submitting || !loaderData?.invoiceId || (!!isPaid && !sendAnywayOverride)}
+              onClick={handleResend}
+            >
+              Re-send Invoice
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -799,13 +835,15 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
         <>
           <Button onClick={() => navigateTo('hub')} startIcon={<ArrowBackIcon />}>Back</Button>
           <Box sx={{ flex: 1 }} />
-          <Button
-            variant="contained"
-            disabled={submitting || reminderLoading || !reminderBody.trim() || (!!isPaid && !sendAnywayOverride)}
-            onClick={handleSendReminder}
-          >
-            Send Reminder
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              disabled={demo || submitting || reminderLoading || !reminderBody.trim() || (!!isPaid && !sendAnywayOverride)}
+              onClick={handleSendReminder}
+            >
+              Send Reminder
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -818,7 +856,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           <Button
             variant="contained"
             color="error"
-            disabled={!notProceedingConfirmed}
+            disabled={!demo && !notProceedingConfirmed}
             onClick={() => navigateTo('not_proceeding_email')}
           >
             Continue
@@ -832,14 +870,18 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
         <>
           <Button onClick={() => navigateTo('not_proceeding_confirm')} startIcon={<ArrowBackIcon />}>Back</Button>
           <Box sx={{ flex: 1 }} />
-          <Button onClick={() => handleNotProceeding(false)} sx={{ mr: 1 }}>Skip</Button>
-          <Button
-            variant="contained"
-            disabled={!loaderData?.contactEmail || declineEmailLoading || !declineEmailBody.trim()}
-            onClick={() => handleNotProceeding(true)}
-          >
-            Send &amp; Close
-          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button disabled={!!demo} onClick={() => handleNotProceeding(false)} sx={{ mr: 1 }}>Skip</Button>
+          </DemoActionTooltip>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              disabled={demo || !loaderData?.contactEmail || declineEmailLoading || !declineEmailBody.trim()}
+              onClick={() => handleNotProceeding(true)}
+            >
+              Send &amp; Close
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
@@ -856,7 +898,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
 
   return (
     <Dialog open={open} onClose={isSubmittingStep ? undefined : handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+      <DemoDialogTitle demo={demo} sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
         {showBackInTitle && (
           <IconButton size="small" onClick={() => {
             if (step === 'resend')                  navigateTo('hub');
@@ -868,7 +910,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose }: Props) {
           </IconButton>
         )}
         {getTitle()}
-      </DialogTitle>
+      </DemoDialogTitle>
       <DialogContent dividers>
         {renderContent()}
       </DialogContent>

@@ -350,3 +350,10 @@ export const NotProceedingEmail: Story = {
     },
   ],
 };
+
+export const DemoHub: Story = {
+  name: 'Hub — demo mode',
+  args: {
+    demo: true,
+  },
+};
