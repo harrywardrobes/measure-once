@@ -29,6 +29,7 @@
  *   12b. CJS ↔ TS parity: same sendsEmailTemplates arrays per outcome
  *   12c. CJS ↔ TS parity: same ACTION_LEVEL_EMAIL_TEMPLATES handler keys and
  *        template arrays
+ *   12d. CJS ↔ TS parity: same SYSTEM_EMAIL_TEMPLATES key set
  *   13. Email coverage: every registry-referenced template key exists in
  *       email-templates.js TEMPLATE_KEYS
  *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
@@ -406,6 +407,37 @@ for (const type of REQUIRED_TYPES) {
         if (allAletMatch) {
           pass('CJS↔TS parity (12c): ACTION_LEVEL_EMAIL_TEMPLATES handler keys and template arrays match');
         }
+      }
+    }
+
+    // ── 12d. CJS↔TS parity: SYSTEM_EMAIL_TEMPLATES key set ───────────────────
+    //
+    // Locates the SYSTEM_EMAIL_TEMPLATES array in the TS source, extracts each
+    // entry's `key` field, and compares the sorted set against the runtime CJS
+    // values.  Catches a key that is added, removed, or renamed in only one of
+    // the two registries — drift that checks 12, 12b, and 12c cannot detect
+    // because SYSTEM_EMAIL_TEMPLATES sits outside HANDLER_OUTCOMES and
+    // ACTION_LEVEL_EMAIL_TEMPLATES.
+    {
+      const setStart = tsContent.indexOf('export const SYSTEM_EMAIL_TEMPLATES');
+      const setEnd   = setStart >= 0 ? tsContent.indexOf('];', setStart) : -1;
+      if (setStart === -1 || setEnd === -1) {
+        fail('CJS↔TS parity (12d): could not locate SYSTEM_EMAIL_TEMPLATES block in TS source');
+      } else {
+        const setBlock = tsContent.slice(setStart, setEnd);
+        const keyRe = /\bkey:\s*'([^']+)'/g;
+        const tsSystemKeys = [];
+        let sm;
+        while ((sm = keyRe.exec(setBlock)) !== null) tsSystemKeys.push(sm[1]);
+        tsSystemKeys.sort();
+
+        const cjsSystemKeys = SYSTEM_EMAIL_TEMPLATES.map((s) => s.key).sort();
+
+        assert(
+          tsSystemKeys.join(',') === cjsSystemKeys.join(','),
+          `CJS↔TS parity (12d): SYSTEM_EMAIL_TEMPLATES key sets match` +
+            ` (TS: [${tsSystemKeys.join(', ')}], CJS: [${cjsSystemKeys.join(', ')}])`,
+        );
       }
     }
   }
