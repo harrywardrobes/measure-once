@@ -17,6 +17,7 @@ import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import { useToastContext } from '../contexts/ToastContext';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import {
   DEMO_TOOLTIP,
   DEMO_HANDLES,
@@ -358,6 +359,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hs_lead_status: cfg.intermediateLeadStatus }),
+      }).then(() => {
+        broadcastLeadStatusChange(contactId, { hs_lead_status: cfg.intermediateLeadStatus });
       }).catch(e => console.warn('[design-visit] intermediate lead status update failed:', e.message));
     }
   }, [editMode, cfg.intermediateLeadStatus, contactId, demo]);

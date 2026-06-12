@@ -16,6 +16,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { REVIEW_PHOTOS_OUTCOME_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
@@ -294,17 +295,10 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
         setConfirmQueued(false);
         const d = res.data as { setsLeadStatus?: string | null } | undefined;
         setConfirmStatus(d?.setsLeadStatus ?? null);
+        // Notify other tabs/same tab that lead status changed
+        broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: d?.setsLeadStatus ?? undefined });
       }
       setStep('done');
-
-      // Notify other tabs that lead status changed
-      if (typeof BroadcastChannel !== 'undefined') {
-        try {
-          const bc = new BroadcastChannel('hs_lead_status_changed');
-          bc.postMessage({ contactIds: [ctx.contactId] });
-          bc.close();
-        } catch { /* ignore */ }
-      }
     } catch (e) {
       setSubmitError((e as Error).message);
     } finally {
