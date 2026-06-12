@@ -27,9 +27,11 @@ Card action handlers are configurable actions attached to Sales/Survey/Design Vi
 | `src/react/components/CardActionModalsHost.tsx` | React component that renders all handler modals; dispatches via `switch(handler.type)` |
 | `src/react/pages/admin/ActionHandlersPage.tsx` | Admin UI for creating/editing handlers; `NO_CONFIG_HANDLER_TYPES` set |
 | `src/react/pages/admin/HandlerConfigBlocks.tsx` | Per-type config block components used in the admin editor |
-| `src/react/utils/handlerMeta.ts` | `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, `HANDLER_EMAIL_TEMPLATES`, `HANDLER_OUTCOMES` — must stay in sync with server validator keys |
-| `shared/handler-outcomes.ts` | **Canonical** ESM/TypeScript outcome registry — single source of truth imported by `handlerMeta.ts` and bundled by Vite. |
-| `shared/handler-outcomes.cjs` | CJS mirror — `require()`d by `server.js`, `photo-reviews.js`, and `quickbooks.js`. Must stay in sync with `.ts`; drift-guard enforces this. |
+| `src/react/utils/handlerMeta.ts` | `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, `HANDLER_OUTCOMES`, and re-exports `ACTION_LEVEL_EMAIL_TEMPLATES` / `SYSTEM_EMAIL_TEMPLATES` — must stay in sync with server validator keys. **`HANDLER_EMAIL_TEMPLATES` is now derived** (not hand-maintained): each value is computed by `deriveHandlerEmailTemplates()` from the registry's per-outcome `sendsEmailTemplates` plus `ACTION_LEVEL_EMAIL_TEMPLATES`. |
+| `shared/handler-outcomes.ts` | **Canonical** ESM/TypeScript outcome registry — single source of truth imported by `handlerMeta.ts` and bundled by Vite. Also exports `ACTION_LEVEL_EMAIL_TEMPLATES` (handler-type → action-level template keys) and `SYSTEM_EMAIL_TEMPLATES` (lifecycle emails not tied to a handler). |
+| `shared/handler-outcomes.cjs` | CJS mirror — `require()`d by `server.js`, `photo-reviews.js`, and `quickbooks.js`. Must stay in sync with `.ts` (including `sendsEmailTemplates`, `ACTION_LEVEL_EMAIL_TEMPLATES`, `SYSTEM_EMAIL_TEMPLATES`); drift-guard enforces this. |
+| `src/react/pages/admin/EmailTemplatesPage.tsx` | Admin Email Templates UI. Renders one accordion per handler (outcome sub-groups + a "During action" group), a "System emails" accordion, and an "Unassigned" warning accordion for any `TEMPLATE_KEY` the registry doesn't reference. Grouping is derived entirely from the registry — no hardcoded handler→template lists. |
+| `email-templates.js` | `TEMPLATE_DEFS` / `TEMPLATE_KEYS` — the actual email template definitions. Every key referenced by the registry must exist here, and every key here must be reachable from the registry or `SYSTEM_EMAIL_TEMPLATES` (drift-guard enforces both directions). |
 | `visits.js` | `ensureVisitsTable`, visit CRUD routes (`POST /api/visits`) |
 | `auth.js` | `isAuthenticated`, `requireAdmin`, `requirePrivilege` middleware |
 
@@ -293,9 +295,17 @@ Follow these steps in order when implementing a new handler type:
 
 2. **Add config validation** — In the validator function: strip unknown keys, validate ranges/lengths, return `{ value }` on success or `{ error }` on failure.
 
-3. **Define outcomes in the registry** — Add a new entry to `HANDLER_OUTCOMES` in **both** `shared/handler-outcomes.ts` (TypeScript/ESM canonical, used by React and handlerMeta.ts) and `shared/handler-outcomes.cjs` (CJS, used by server routes). Each entry is an `ActionOutcome` object with `key`, `label`, `kind` (`'terminal'` or `'partial'`), and `setsLeadStatus` (terminal entries only). Use `variants` for `arrange_visit`-style per-visitType overrides. Update `test/card-action-handlers/drift-guard.js` with assertions for any new terminal keys. Verify with `npm run test:handler-outcomes-drift` and `npm run test:handler-meta`.
+3. **Define outcomes in the registry** — Add a new entry to `HANDLER_OUTCOMES` in **both** `shared/handler-outcomes.ts` (TypeScript/ESM canonical, used by React and handlerMeta.ts) and `shared/handler-outcomes.cjs` (CJS, used by server routes). Each entry is an `ActionOutcome` object with `key`, `label`, `kind` (`'terminal'` or `'partial'`), and `setsLeadStatus` (terminal entries only). Use `variants` for `arrange_visit`-style per-visitType overrides. If an outcome sends an email, add the template key(s) to that outcome's `sendsEmailTemplates: ['…']` array (in both files). Update `test/card-action-handlers/drift-guard.js` with assertions for any new terminal keys. Verify with `npm run test:handler-outcomes-drift` and `npm run test:handler-meta`.
 
-4. **Register in React meta** — Add the type to `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, `HANDLER_COMPONENT_META`, and `HANDLER_EMAIL_TEMPLATES` in `src/react/utils/handlerMeta.ts`. `HANDLER_OUTCOMES` is imported from `shared/handler-outcomes.ts` — add the entry there (and its CJS mirror). The `check-handler-meta.mjs` CI check enforces exhaustiveness for all `Record<HandlerType, …>` tables.
+   **Wiring up emails (do this in the registry, not the React layer):**
+   - **Per-outcome email** (sent when a specific staff-selected outcome fires) → add the template key to that outcome's `sendsEmailTemplates`. Each entry is either a bare key string (`'template_key'`, for staff-composed emails) **or** an annotated `{ key, system: true, sentFrom: 'quickbooks.js' }` object for a **system-in-flow** email — one sent automatically by a system/integration module (QuickBooks, customer-info, photo-reviews) during the handler's flow rather than composed by staff. System-in-flow refs render a "System" chip (captioned with `sentFrom`) on the admin Email Templates page while still grouping under the triggering handler.
+   - **Action-level email** (sent during the flow but not tied to one outcome — e.g. when the customer themselves submits) → add the handler type + key(s) to `ACTION_LEVEL_EMAIL_TEMPLATES`. Entries use the same bare-key-or-`{key,system,sentFrom}` ref form as per-outcome emails.
+   - **System / lifecycle email** (sent outside any handler — auth, onboarding) → add an entry to `SYSTEM_EMAIL_TEMPLATES` with `key`, `sentFrom`, `description`, `system: true`.
+   - **System-in-flow overlap is allowed:** a template key may appear in both a handler/action `sendsEmailTemplates` (flagged `system: true`) and `SYSTEM_EMAIL_TEMPLATES`. The drift-guard permits this overlap **only** when every handler reference of that key is system-flagged; a plain (non-system) handler ref overlapping `SYSTEM_EMAIL_TEMPLATES` is still a drift error.
+   - A **shared** template (referenced by >1 outcome/handler) needs no special flag — list its key in every outcome that sends it; the admin page auto-labels it "Shared".
+   - Every template key referenced above **must** exist in `email-templates.js` `TEMPLATE_KEYS`, and every `TEMPLATE_KEY` **must** be reachable from the registry or `SYSTEM_EMAIL_TEMPLATES` (otherwise it lands in the admin "Unassigned" warning accordion). The drift-guard enforces both directions, so add the template to `email-templates.js` in the same change.
+
+4. **Register in React meta** — Add the type to `HANDLER_TYPE_LABELS`, `HANDLER_MODAL_SUMMARY`, and `HANDLER_COMPONENT_META` in `src/react/utils/handlerMeta.ts`. `HANDLER_OUTCOMES` is imported from `shared/handler-outcomes.ts` — add the entry there (and its CJS mirror). **`HANDLER_EMAIL_TEMPLATES` is derived automatically** from the registry (`deriveHandlerEmailTemplates()`), so you do **not** hand-edit its values — just add a literal `<type>: deriveHandlerEmailTemplates('<type>'),` line so `check-handler-meta.mjs` (which requires a literal key per handler) stays satisfied. The `check-handler-meta.mjs` CI check enforces exhaustiveness for all `Record<HandlerType, …>` tables.
 
 5. **Add config block** — If the type needs special fields (beyond the generic JSON textarea), add a component in `HandlerConfigBlocks.tsx` and wire it into `ActionHandlersPage.tsx` (add to or remove from `NO_CONFIG_HANDLER_TYPES`).
 
@@ -317,12 +327,27 @@ HANDLER_OUTCOMES in shared/handler-outcomes.cjs  — CJS mirror (server.js, phot
 kind: 'terminal' — moves the card; writes hs_lead_status
 kind: 'partial'  — logs progress; no card move, no status write
 
+Per-outcome email:  outcome.sendsEmailTemplates: ['template_key', …]
+                    or system-in-flow: [{ key, system: true, sentFrom: 'quickbooks.js' }, …]
+Action-level email: ACTION_LEVEL_EMAIL_TEMPLATES['handler_type'] = [ref, …]  (same ref form)
+System email:       SYSTEM_EMAIL_TEMPLATES = [{ key, sentFrom, description, system: true }, …]
+                    (system-in-flow key may ALSO appear in SYSTEM_EMAIL_TEMPLATES — overlap
+                     allowed only when every handler ref of that key is system-flagged)
+
+Derived (do not hand-edit values):
+  HANDLER_EMAIL_TEMPLATES = deriveHandlerEmailTemplates(type)   (handlerMeta.ts)
+      = union of every outcome.sendsEmailTemplates for the type
+        + ACTION_LEVEL_EMAIL_TEMPLATES[type]
+
 Server helpers (from shared/handler-outcomes.cjs):
   getTerminalKeys('handler_type')           → Set<string> of accepted keys
   getTerminalStatusMap('handler_type')      → Record<key, hs_lead_status>
   getArrangeVisitStatus(key, visitType)     → hs_lead_status | null
 
 Drift guard: npm run test:handler-outcomes-drift
+  └─ also checks email coverage: every referenced template key exists in
+     email-templates.js, and every TEMPLATE_KEY is reachable from the
+     registry or SYSTEM_EMAIL_TEMPLATES (else "Unassigned" in the admin UI).
 Meta check:  npm run test:handler-meta
 ```
 

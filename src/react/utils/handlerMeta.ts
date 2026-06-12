@@ -41,10 +41,16 @@
 import type { HandlerType } from '../components/CardActionModalsHost';
 import {
   HANDLER_OUTCOMES as _sharedHandlerOutcomes,
+  ACTION_LEVEL_EMAIL_TEMPLATES,
+  SYSTEM_EMAIL_TEMPLATES,
   type ActionOutcome,
+  type SystemEmailTemplate,
+  type EmailTemplateRef,
+  type EmailTemplateRefInput,
 } from '../../../shared/handler-outcomes';
 
-export type { ActionOutcome };
+export type { ActionOutcome, SystemEmailTemplate, EmailTemplateRef, EmailTemplateRefInput };
+export { ACTION_LEVEL_EMAIL_TEMPLATES, SYSTEM_EMAIL_TEMPLATES };
 
 export interface HandlerModalSummary {
   steps: string;
@@ -195,18 +201,49 @@ export function isHandlerType(v: string): v is HandlerType {
   return Object.prototype.hasOwnProperty.call(HANDLER_TYPE_LABELS, v);
 }
 
+/**
+ * Derives the full list of email template keys a handler can send by unioning
+ * its per-outcome `sendsEmailTemplates` with its action-level templates
+ * (ACTION_LEVEL_EMAIL_TEMPLATES). Order is preserved (outcomes first, then
+ * action-level) and duplicates are removed. This is the single source of truth
+ * for HANDLER_EMAIL_TEMPLATES below, so the registry and this map never drift.
+ */
+function deriveHandlerEmailTemplates(type: HandlerType): string[] {
+  const out: string[] = [];
+  // Inline the bare-key / {key,…} normalisation (rather than importing
+  // templateRefKey) so this main-bundle module stays under its gzip cap.
+  const push = (ref: EmailTemplateRefInput) => {
+    const k = typeof ref === 'string' ? ref : ref.key;
+    if (!out.includes(k)) out.push(k);
+  };
+  for (const o of (HANDLER_OUTCOMES[type] ?? [])) {
+    for (const ref of (o.sendsEmailTemplates ?? [])) push(ref);
+  }
+  for (const ref of (ACTION_LEVEL_EMAIL_TEMPLATES[type] ?? [])) push(ref);
+  return out;
+}
+
+/**
+ * Maps handler type → email template key array. Derived from the outcome
+ * registry (`sendsEmailTemplates` per outcome) plus ACTION_LEVEL_EMAIL_TEMPLATES.
+ * The object-literal form (one literal key per handler type) is kept so
+ * check-handler-meta.mjs can statically verify exhaustiveness; only the values
+ * are derived. The email-coverage drift guard
+ * (test/card-action-handlers/drift-guard.js) asserts every template key is
+ * either reachable here or listed in SYSTEM_EMAIL_TEMPLATES.
+ */
 export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
-  deposit_invoice_followup:     ['deposit_invoice_payment_reminder', 'open_deal_declined_thank_you'],
-  upload_photos_and_info:       ['photo_review_invite', 'admin_notification', 'customer_thank_you'],
-  review_customer_photos:       ['photo_review_not_suitable', 'photo_review_rough_estimate'],
-  arrange_visit:                ['arrange_visit_no_answer'],
-  contact_customer:             [],
-  start_design_visit:           [],
-  schedule_visit:               ['visit_confirmation'],
-  summarise_phone_call:         [],
-  show_message:                 [],
-  design_visit_followup:        ['visit_invite', 'visit_confirmation'],
-  open_deal:                    ['open_deal_deposit_invoice_sent', 'open_deal_declined_thank_you'],
+  deposit_invoice_followup:     deriveHandlerEmailTemplates('deposit_invoice_followup'),
+  upload_photos_and_info:       deriveHandlerEmailTemplates('upload_photos_and_info'),
+  review_customer_photos:       deriveHandlerEmailTemplates('review_customer_photos'),
+  arrange_visit:                deriveHandlerEmailTemplates('arrange_visit'),
+  contact_customer:             deriveHandlerEmailTemplates('contact_customer'),
+  start_design_visit:           deriveHandlerEmailTemplates('start_design_visit'),
+  schedule_visit:               deriveHandlerEmailTemplates('schedule_visit'),
+  summarise_phone_call:         deriveHandlerEmailTemplates('summarise_phone_call'),
+  show_message:                 deriveHandlerEmailTemplates('show_message'),
+  design_visit_followup:        deriveHandlerEmailTemplates('design_visit_followup'),
+  open_deal:                    deriveHandlerEmailTemplates('open_deal'),
 };
 
 export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> = {

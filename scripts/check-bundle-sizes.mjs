@@ -83,7 +83,7 @@ const THRESHOLDS = [
     prefix: 'main.js',
     label: 'main (entry)',
     alwaysLoaded: true,
-    threshold: 47 * 1024,       // 47 kB — mount runtime + shell UI + card-action modals (raised: open_deal ModalState union + lazy import added to CardActionModalsHost; measured 46.1 kB)
+    threshold: 48 * 1024,       // 48 kB — mount runtime + shell UI + card-action modals (raised: email-template refs in HANDLER_OUTCOMES annotated with {system, sentFrom} for the admin System chip captions; HANDLER_OUTCOMES ships in main, measured 47.1 kB)
   },
   // More-specific vendor-* prefixes must come before any shorter prefix.
   {

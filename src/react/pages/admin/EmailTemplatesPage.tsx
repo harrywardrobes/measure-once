@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY } from '../../constants/localStorageKeys';
 
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -14,25 +17,34 @@ import {
   GlobalStyles,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Tabs,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import MailOutlineIcon from '@mui/icons-material/EmailOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { HANDLER_EMAIL_TEMPLATES, HANDLER_TYPE_LABELS, isHandlerType } from '../../utils/handlerMeta';
+import {
+  HANDLER_OUTCOMES,
+  HANDLER_TYPE_LABELS,
+  ACTION_LEVEL_EMAIL_TEMPLATES,
+  SYSTEM_EMAIL_TEMPLATES,
+  isHandlerType,
+} from '../../utils/handlerMeta';
+import {
+  templateRefKey,
+  templateRefIsSystem,
+  templateRefSentFrom,
+} from '../../../../shared/handler-outcomes';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import {
   analyzeTemplateTokens,
@@ -63,7 +75,7 @@ const IFRAME_BODY_COLOR = '#111';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface EmailTemplate {
+export interface EmailTemplate {
   key: string;
   label: string;
   description: string;
@@ -681,6 +693,97 @@ function EditTemplateDialog({ template, onClose, onSaved }: EditDialogProps) {
   );
 }
 
+// ── Template row ───────────────────────────────────────────────────────────────
+
+interface TemplateRowProps {
+  templateKey: string;
+  template: EmailTemplate | undefined;
+  shared: boolean;
+  system: boolean;
+  /** For system / system-in-flow emails: the module that actually sends it. */
+  sentFrom?: string;
+  /** For system emails: a human-readable description of when it fires. */
+  description?: string;
+  onEdit: (t: EmailTemplate) => void;
+}
+
+/** A single email-template row used inside every accordion (handler / system /
+ *  unassigned). Carries the `data-template-key` attribute the deep-link flash
+ *  targets. */
+export function TemplateRow({ templateKey, template, shared, system, sentFrom, description, onEdit }: TemplateRowProps) {
+  const chipSx = { height: 18, fontSize: '0.65rem', '.MuiChip-label': { px: 0.6 } } as const;
+  const systemTooltip = system
+    ? sentFrom
+      ? `System / in-flow email — sent by ${sentFrom}`
+      : 'System / lifecycle email — not tied to a workflow handler'
+    : '';
+  return (
+    <Box
+      data-template-key={templateKey}
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 1,
+        px: 1.5,
+        py: 1,
+        borderRadius: 1,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+      }}
+    >
+      <Box sx={{ flex: '1 1 280px', minWidth: 0 }}>
+        <Stack direction="row" sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {template?.label || templateKey}
+          </Typography>
+          {shared && (
+            <Tooltip title="Sent by more than one outcome or handler" arrow>
+              <Chip label="Shared" size="small" color="info" variant="outlined" sx={chipSx} />
+            </Tooltip>
+          )}
+          {system && (
+            <Tooltip title={systemTooltip} arrow>
+              <Chip label="System" size="small" variant="outlined" sx={chipSx} />
+            </Tooltip>
+          )}
+        </Stack>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          {templateKey}
+        </Typography>
+        {description && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+            {description}
+          </Typography>
+        )}
+        {sentFrom && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, fontStyle: 'italic' }}>
+            Sent from {sentFrom}
+          </Typography>
+        )}
+        {template && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }} noWrap>
+            {template.subject}
+          </Typography>
+        )}
+      </Box>
+      <Box sx={{ flex: '0 0 auto', textAlign: 'right', ml: 'auto' }}>
+        {template ? (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              {formatUpdated(template)}
+            </Typography>
+            <Button size="small" variant="outlined" onClick={() => onEdit(template)}>Edit</Button>
+          </>
+        ) : (
+          <Typography variant="caption" color="error">Template not found</Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EmailTemplatesPage() {
@@ -705,7 +808,113 @@ export default function EmailTemplatesPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Deep-link: scroll + flash the requested template row ──────────────────
+  // ── Derive the accordion structure from the outcome registry ──────────────
+
+  const templatesByKey = useMemo(() => {
+    const m = new Map<string, EmailTemplate>();
+    for (const t of templates) m.set(t.key, t);
+    return m;
+  }, [templates]);
+
+  // How many handler outcomes / action-level slots reference each template key.
+  // A count > 1 marks the template as "shared" across outcomes/handlers.
+  const usageCount = useMemo(() => {
+    const m = new Map<string, number>();
+    const bump = (k: string) => m.set(k, (m.get(k) ?? 0) + 1);
+    for (const type of Object.keys(HANDLER_OUTCOMES)) {
+      for (const o of HANDLER_OUTCOMES[type as HandlerType] ?? []) {
+        for (const ref of o.sendsEmailTemplates ?? []) bump(templateRefKey(ref));
+      }
+      for (const ref of ACTION_LEVEL_EMAIL_TEMPLATES[type as HandlerType] ?? []) bump(templateRefKey(ref));
+    }
+    return m;
+  }, []);
+
+  const systemKeys = useMemo(
+    () => new Set(SYSTEM_EMAIL_TEMPLATES.map((s) => s.key)),
+    [],
+  );
+
+  // One accordion per handler that sends ≥1 email. Each has outcome sub-groups
+  // plus a "During action" group for action-level templates. Iteration order
+  // follows HANDLER_TYPE_LABELS (the canonical display order) rather than the
+  // outcome-registry key order, so handlers always render in the same sequence
+  // they appear elsewhere in the admin UI.
+  const handlerAccordions = useMemo(() => {
+    type Ref = { key: string; system: boolean; sentFrom?: string };
+    const toRef = (r: Parameters<typeof templateRefKey>[0]): Ref => ({
+      key: templateRefKey(r),
+      system: templateRefIsSystem(r),
+      sentFrom: templateRefSentFrom(r),
+    });
+    return Object.keys(HANDLER_TYPE_LABELS)
+      .filter(isHandlerType)
+      .map((type) => {
+        const groups: { label: string; refs: Ref[] }[] = [];
+        for (const o of HANDLER_OUTCOMES[type] ?? []) {
+          if (o.sendsEmailTemplates && o.sendsEmailTemplates.length > 0) {
+            groups.push({ label: o.label, refs: o.sendsEmailTemplates.map(toRef) });
+          }
+        }
+        const actionLevel = ACTION_LEVEL_EMAIL_TEMPLATES[type] ?? [];
+        if (actionLevel.length > 0) {
+          groups.push({ label: 'During action', refs: actionLevel.map(toRef) });
+        }
+        const keys = groups.flatMap((g) => g.refs.map((r) => r.key));
+        return { id: `handler:${type}`, type, label: HANDLER_TYPE_LABELS[type], groups, keys };
+      })
+      .filter((a) => a.groups.length > 0);
+  }, []);
+
+  // Templates the registry doesn't reference (no handler outcome / action-level
+  // slot, not in the system list) — surfaced in a warning accordion.
+  const coveredKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of handlerAccordions) for (const k of a.keys) s.add(k);
+    for (const k of systemKeys) s.add(k);
+    return s;
+  }, [handlerAccordions, systemKeys]);
+
+  const unassignedTemplates = useMemo(
+    () => templates.filter((t) => !coveredKeys.has(t.key)),
+    [templates, coveredKeys],
+  );
+
+  // Map each template key → the set of accordion ids that reveal it, so the
+  // deep-link flash can expand EVERY panel containing the row before scrolling.
+  // A system-in-flow template can live under both a handler accordion and the
+  // System accordion, so a single id is not enough.
+  const keyToAccordionIds = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    const add = (k: string, id: string) => {
+      const s = m.get(k) ?? new Set<string>();
+      s.add(id);
+      m.set(k, s);
+    };
+    for (const a of handlerAccordions) for (const k of a.keys) add(k, a.id);
+    for (const k of systemKeys) add(k, 'system');
+    for (const t of unassignedTemplates) add(t.key, 'unassigned');
+    return m;
+  }, [handlerAccordions, systemKeys, unassignedTemplates]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  // Expand the Unassigned panel by default whenever it has entries so the
+  // warning is never hidden behind a collapsed accordion.
+  useEffect(() => {
+    if (unassignedTemplates.length === 0) return;
+    setExpanded((prev) => (prev.has('unassigned') ? prev : new Set(prev).add('unassigned')));
+  }, [unassignedTemplates.length]);
+
+  const toggleAccordion = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // ── Deep-link: expand the parent accordion, then scroll + flash the row ────
 
   useEffect(() => {
     if (loading) return;
@@ -713,14 +922,26 @@ export default function EmailTemplatesPage() {
       const key = localStorage.getItem(ADMIN_DEEP_LINK_KEY);
       if (!key) return;
       localStorage.removeItem(ADMIN_DEEP_LINK_KEY);
-      const el = document.querySelector<HTMLElement>(`[data-template-key="${CSS.escape(key)}"]`);
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.style.animation = 'none';
-      el.getBoundingClientRect();
-      el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
+      const accIds = keyToAccordionIds.get(key);
+      if (accIds && accIds.size > 0) {
+        setExpanded((prev) => {
+          let changed = false;
+          const next = new Set(prev);
+          for (const id of accIds) if (!next.has(id)) { next.add(id); changed = true; }
+          return changed ? next : prev;
+        });
+      }
+      // Let the accordion expansion render before scrolling / flashing.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLElement>(`[data-template-key="${CSS.escape(key)}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.style.animation = 'none';
+        el.getBoundingClientRect();
+        el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
+      }));
     } catch { /* ignore */ }
-  }, [loading]);
+  }, [loading, keyToAccordionIds]);
 
   const handleSaved = useCallback((updated: EmailTemplate) => {
     setTemplates((prev) => prev.map((t) => (t.key === updated.key ? updated : t)));
@@ -740,7 +961,8 @@ export default function EmailTemplatesPage() {
       <Typography variant="h6" sx={{ mb: 1 }}>Email templates</Typography>
       <Alert severity="info" sx={{ mb: 2 }}>
         Edit the subject, body and footer of the emails this app sends. Changes take effect immediately.
-        Templates left unedited use the built-in defaults. The <strong>Used by</strong> column shows which action handlers send each template.
+        Templates left unedited use the built-in defaults. Templates are grouped by the action handler that
+        sends them, by outcome. <strong>System emails</strong> are lifecycle messages sent outside the workflow.
       </Alert>
 
       {loading && (
@@ -757,72 +979,140 @@ export default function EmailTemplatesPage() {
         </Alert>
       )}
 
-      {!loading && !error && (
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Template</TableCell>
-                <TableCell>Subject</TableCell>
-                <TableCell>Last updated</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {templates.map((t) => {
-                const usedByHandlers = Object.entries(HANDLER_EMAIL_TEMPLATES)
-                  .filter(([, keys]) => keys.includes(t.key))
-                  .map(([type]) => ({ type, label: (isHandlerType(type) ? HANDLER_TYPE_LABELS[type] : undefined) || type }));
-                return (
-                  <TableRow key={t.key} hover data-template-key={t.key}>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{t.label}</Typography>
-                      <Typography variant="caption" color="text.secondary">{t.key}</Typography>
-                      {usedByHandlers.length > 0 && (
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                          {usedByHandlers.map(h => (
-                            <Tooltip key={h.type} title="View in Workflow tab" arrow>
-                              <Chip
-                                label={h.label}
-                                size="small"
-                                clickable
-                                onClick={() => navigateToWorkflow(h.type)}
-                                sx={{
-                                  fontSize: '0.7rem',
-                                  height: 20,
-                                  bgcolor: 'rgba(124,58,237,0.08)',
-                                  color: 'rgb(109,40,217)',
-                                  '&:hover': { bgcolor: 'rgba(124,58,237,0.15)' },
-                                  '.MuiChip-label': { px: 0.75 },
-                                }}
-                              />
-                            </Tooltip>
-                          ))}
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell>{t.subject}</TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">{formatUpdated(t)}</Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Button size="small" onClick={() => setEditing(t)}>Edit</Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {templates.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4}>
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                      No email templates found.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+      {!loading && !error && templates.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+          No email templates found.
+        </Typography>
+      )}
+
+      {!loading && !error && templates.length > 0 && (
+        <Stack spacing={1}>
+          {/* Handler accordions — one per handler that sends email, in registry order */}
+          {handlerAccordions.map((a) => (
+            <Accordion
+              key={a.id}
+              expanded={expanded.has(a.id)}
+              onChange={() => toggleAccordion(a.id)}
+              disableGutters
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon />}
+                sx={{ '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1, my: 1, pr: 1 } }}
+              >
+                <MailOutlineIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{a.label}</Typography>
+                <Chip label={`${a.keys.length} template${a.keys.length === 1 ? '' : 's'}`} size="small" sx={{ height: 20 }} />
+                <Tooltip title="View this handler in the Workflow tab" arrow>
+                  <Button
+                    size="small"
+                    startIcon={<OpenInNewIcon />}
+                    onClick={(e) => { e.stopPropagation(); navigateToWorkflow(a.type); }}
+                    sx={{ ml: 'auto', textTransform: 'none' }}
+                  >
+                    Workflow
+                  </Button>
+                </Tooltip>
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <Stack spacing={2}>
+                  {a.groups.map((g) => (
+                    <Box key={g.label}>
+                      <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        {g.label}
+                      </Typography>
+                      <Stack spacing={1}>
+                        {g.refs.map((r) => (
+                          <TemplateRow
+                            key={r.key}
+                            templateKey={r.key}
+                            template={templatesByKey.get(r.key)}
+                            shared={(usageCount.get(r.key) ?? 0) > 1}
+                            system={r.system}
+                            sentFrom={r.sentFrom}
+                            onEdit={setEditing}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                  ))}
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
+          ))}
+
+          {/* System emails — lifecycle messages sent outside the workflow */}
+          <Accordion
+            expanded={expanded.has('system')}
+            onChange={() => toggleAccordion('system')}
+            disableGutters
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMoreIcon />}
+              sx={{ '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1, my: 1, pr: 1 } }}
+            >
+              <MailOutlineIcon fontSize="small" color="action" />
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>System emails</Typography>
+              <Chip label={`${SYSTEM_EMAIL_TEMPLATES.length} template${SYSTEM_EMAIL_TEMPLATES.length === 1 ? '' : 's'}`} size="small" sx={{ height: 20 }} />
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0 }}>
+              <Alert severity="info" sx={{ mb: 1.5 }}>
+                Lifecycle emails sent by the sign-in and onboarding flow — not triggered by a workflow handler.
+              </Alert>
+              <Stack spacing={1}>
+                {SYSTEM_EMAIL_TEMPLATES.map((s) => (
+                  <TemplateRow
+                    key={s.key}
+                    templateKey={s.key}
+                    template={templatesByKey.get(s.key)}
+                    shared={false}
+                    system
+                    sentFrom={s.sentFrom}
+                    description={s.description}
+                    onEdit={setEditing}
+                  />
+                ))}
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* Unassigned — templates not referenced by the registry (warning) */}
+          {unassignedTemplates.length > 0 && (
+            <Accordion
+              expanded={expanded.has('unassigned')}
+              onChange={() => toggleAccordion('unassigned')}
+              disableGutters
+              sx={{ border: '1px solid', borderColor: 'warning.main' }}
+            >
+              <AccordionSummary
+                expandIcon={<ExpandMoreIcon />}
+                sx={{ '& .MuiAccordionSummary-content': { alignItems: 'center', gap: 1, my: 1, pr: 1 } }}
+              >
+                <WarningAmberIcon fontSize="small" color="warning" />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Unassigned</Typography>
+                <Chip label={`${unassignedTemplates.length} template${unassignedTemplates.length === 1 ? '' : 's'}`} size="small" color="warning" sx={{ height: 20 }} />
+              </AccordionSummary>
+              <AccordionDetails sx={{ pt: 0 }}>
+                <Alert severity="warning" sx={{ mb: 1.5 }}>
+                  These templates aren&apos;t linked to any handler outcome, action-level slot, or the system
+                  email list. Add them to the outcome registry (<code>shared/handler-outcomes.ts</code>) so the
+                  grouping stays accurate.
+                </Alert>
+                <Stack spacing={1}>
+                  {unassignedTemplates.map((t) => (
+                    <TemplateRow
+                      key={t.key}
+                      templateKey={t.key}
+                      template={t}
+                      shared={false}
+                      system={false}
+                      onEdit={setEditing}
+                    />
+                  ))}
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
+          )}
+        </Stack>
       )}
 
       {editing && (

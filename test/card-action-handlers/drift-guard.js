@@ -26,13 +26,28 @@
  *   10. upload_photos_and_info: link_sent is terminal with AWAITING_PHOTOS
  *   11. CJS ↔ TS parity: same handler type keys
  *   12. CJS ↔ TS parity: same terminal-key counts per handler type
+ *   13. Email coverage: every registry-referenced template key exists in
+ *       email-templates.js TEMPLATE_KEYS
+ *   14. Email coverage: every TEMPLATE_KEY is referenced by a handler outcome,
+ *       action-level slot, or the system email list (no unassigned keys), and
+ *       no key is claimed by both a handler slot and the system list
  */
 
 const fs   = require('fs');
 const path = require('path');
 
-const { HANDLER_OUTCOMES, getTerminalKeys, getTerminalStatusMap, getArrangeVisitStatus } =
-  require('../../shared/handler-outcomes.cjs');
+const {
+  HANDLER_OUTCOMES,
+  ACTION_LEVEL_EMAIL_TEMPLATES,
+  SYSTEM_EMAIL_TEMPLATES,
+  templateRefKey,
+  templateRefIsSystem,
+  getTerminalKeys,
+  getTerminalStatusMap,
+  getArrangeVisitStatus,
+} = require('../../shared/handler-outcomes.cjs');
+
+const { TEMPLATE_KEYS } = require('../../email-templates.js');
 
 const {
   ARRANGE_VISIT_KEYS,
@@ -178,11 +193,20 @@ for (const type of REQUIRED_TYPES) {
   }
 
   if (tsContent) {
+    // Scope the parse to the HANDLER_OUTCOMES object literal only, so the
+    // regex does not pick up other top-level `  identifier: [` lines (e.g.
+    // ACTION_LEVEL_EMAIL_TEMPLATES keys) that share the same shape.
+    const houStart = tsContent.indexOf('export const HANDLER_OUTCOMES');
+    const houEnd   = houStart >= 0 ? tsContent.indexOf('\n};', houStart) : -1;
+    const houBlock = houStart >= 0 && houEnd >= 0
+      ? tsContent.slice(houStart, houEnd)
+      : tsContent;
+
     // Extract top-level handler type keys: lines matching "  identifier: ["
     const tsTypeKeys = [];
     const typeKeyRe = /^  (\w+): \[/gm;
     let m;
-    while ((m = typeKeyRe.exec(tsContent)) !== null) {
+    while ((m = typeKeyRe.exec(houBlock)) !== null) {
       tsTypeKeys.push(m[1]);
     }
     const cjsTypeKeys = Object.keys(HANDLER_OUTCOMES);
@@ -193,14 +217,14 @@ for (const type of REQUIRED_TYPES) {
     );
 
     // Compare terminal-key counts per handler type
-    const posMatches = [...tsContent.matchAll(/^  (\w+): \[/gm)];
+    const posMatches = [...houBlock.matchAll(/^  (\w+): \[/gm)];
     let allCountsMatch = true;
     for (let i = 0; i < posMatches.length; i++) {
       const type = posMatches[i][1];
       if (!HANDLER_OUTCOMES[type]) continue;
       const start = posMatches[i].index;
-      const end   = i + 1 < posMatches.length ? posMatches[i + 1].index : tsContent.length;
-      const block = tsContent.slice(start, end);
+      const end   = i + 1 < posMatches.length ? posMatches[i + 1].index : houBlock.length;
+      const block = houBlock.slice(start, end);
       const tsCount  = (block.match(/kind:\s*'terminal'/g) || []).length;
       const cjsCount = getTerminalKeys(type).size;
       if (tsCount !== cjsCount) {
@@ -212,6 +236,83 @@ for (const type of REQUIRED_TYPES) {
       pass('CJS↔TS parity: all handler types have matching terminal key counts');
     }
   }
+}
+
+// ── 13 & 14. Email-template coverage ─────────────────────────────────────────
+//
+// Every template key the registry references (per-outcome sendsEmailTemplates,
+// ACTION_LEVEL_EMAIL_TEMPLATES, SYSTEM_EMAIL_TEMPLATES) must exist in
+// email-templates.js TEMPLATE_KEYS, and conversely every real template key must
+// be reachable from the registry or the system list. The admin Email Templates
+// page derives its accordion grouping from these, so any drift would leave a
+// template either dangling or grouped under a non-existent key.
+{
+  const knownKeys = new Set(TEMPLATE_KEYS);
+
+  // 13a. Collect every template key referenced by the registry. Template refs
+  // may be bare key strings or {key, system, sentFrom} objects — normalise both.
+  const referenced = new Set();
+  for (const type of Object.keys(HANDLER_OUTCOMES)) {
+    for (const o of HANDLER_OUTCOMES[type]) {
+      for (const ref of (o.sendsEmailTemplates || [])) referenced.add(templateRefKey(ref));
+    }
+  }
+  for (const type of Object.keys(ACTION_LEVEL_EMAIL_TEMPLATES)) {
+    for (const ref of ACTION_LEVEL_EMAIL_TEMPLATES[type]) referenced.add(templateRefKey(ref));
+  }
+  const systemKeys = new Set(SYSTEM_EMAIL_TEMPLATES.map((s) => s.key));
+  for (const k of systemKeys) referenced.add(k);
+
+  // 13. Every referenced key must be a real template key.
+  const unknownRefs = [...referenced].filter((k) => !knownKeys.has(k)).sort();
+  assert(
+    unknownRefs.length === 0,
+    `Email coverage: all registry-referenced template keys exist in TEMPLATE_KEYS` +
+      (unknownRefs.length ? ` (unknown: ${unknownRefs.join(', ')})` : ''),
+  );
+
+  // 14. Every real template key must be reachable from the registry/system list.
+  const uncovered = [...knownKeys].filter((k) => !referenced.has(k)).sort();
+  assert(
+    uncovered.length === 0,
+    `Email coverage: every TEMPLATE_KEY is referenced by a handler outcome, ` +
+      `action-level slot, or the system list` +
+      (uncovered.length ? ` (unassigned: ${uncovered.join(', ')})` : ''),
+  );
+
+  // 14b. A template key claimed by both a handler/action slot and the system
+  // list (SYSTEM_EMAIL_TEMPLATES) would make its grouping ambiguous — UNLESS
+  // every handler reference of that key is flagged system-in-flow ({system:true}).
+  // System-in-flow refs are an intentional overlap: the email is sent by a
+  // system/integration module during the handler's flow, so it can legitimately
+  // appear in the handler grouping (with a System chip) even if it is also a
+  // lifecycle email. A plain (non-system) handler ref overlapping the system
+  // list remains an error.
+  //
+  // Track, per key, whether ANY handler ref is non-system (ambiguous overlap).
+  const handlerRefHasPlain = new Map(); // key -> true if referenced without system flag
+  const noteRef = (ref) => {
+    const k = templateRefKey(ref);
+    const plain = !templateRefIsSystem(ref);
+    handlerRefHasPlain.set(k, (handlerRefHasPlain.get(k) || false) || plain);
+  };
+  for (const type of Object.keys(HANDLER_OUTCOMES)) {
+    for (const o of HANDLER_OUTCOMES[type]) {
+      for (const ref of (o.sendsEmailTemplates || [])) noteRef(ref);
+    }
+  }
+  for (const type of Object.keys(ACTION_LEVEL_EMAIL_TEMPLATES)) {
+    for (const ref of ACTION_LEVEL_EMAIL_TEMPLATES[type]) noteRef(ref);
+  }
+  const overlap = [...systemKeys]
+    .filter((k) => handlerRefHasPlain.get(k) === true)
+    .sort();
+  assert(
+    overlap.length === 0,
+    `Email coverage: no template key is both a (non-system-in-flow) handler ` +
+      `reference and a system email` +
+      (overlap.length ? ` (overlap: ${overlap.join(', ')})` : ''),
+  );
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

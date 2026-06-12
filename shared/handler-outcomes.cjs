@@ -46,6 +46,7 @@ const HANDLER_OUTCOMES = {
         survey: { setsLeadStatus: 'SURVEY_SCHEDULED' },
       },
       description: 'No-answer email sent — status depends on visit type',
+      sendsEmailTemplates: ['arrange_visit_no_answer'],
     },
     {
       key: 'not_proceeding',
@@ -61,12 +62,14 @@ const HANDLER_OUTCOMES = {
       label: 'Customer confirmed',
       kind: 'terminal',
       setsLeadStatus: 'DESIGN_SCHEDULED',
+      sendsEmailTemplates: ['visit_confirmation'],
     },
     {
       key: 'invite_resent',
       label: 'Invite resent',
       kind: 'terminal',
       setsLeadStatus: 'DESIGN_INVITED',
+      sendsEmailTemplates: ['visit_invite'],
     },
     {
       key: 'not_proceeding',
@@ -124,6 +127,7 @@ const HANDLER_OUTCOMES = {
       kind: 'terminal',
       setsLeadStatus: 'DEPOSIT_INVOICE',
       description: 'Creates QB deposit invoice and sends it; sets status to DEPOSIT_INVOICE',
+      sendsEmailTemplates: [{ key: 'open_deal_deposit_invoice_sent', system: true, sentFrom: 'quickbooks.js' }],
     },
     {
       key: 'decline',
@@ -131,6 +135,7 @@ const HANDLER_OUTCOMES = {
       kind: 'terminal',
       setsLeadStatus: 'DECLINED_DEAL',
       description: 'Rejects QB estimate, sends thank-you email, sets status to DECLINED_DEAL',
+      sendsEmailTemplates: [{ key: 'open_deal_declined_thank_you', system: true, sentFrom: 'quickbooks.js' }],
     },
     {
       key: 'amend_deal',
@@ -147,6 +152,7 @@ const HANDLER_OUTCOMES = {
       kind: 'terminal',
       setsLeadStatus: 'DECLINED_DEAL',
       description: 'Rejects estimate, optionally voids invoice, sets status to DECLINED_DEAL',
+      sendsEmailTemplates: [{ key: 'open_deal_declined_thank_you', system: true, sentFrom: 'quickbooks.js' }],
     },
     {
       key: 'resend_invoice',
@@ -159,6 +165,7 @@ const HANDLER_OUTCOMES = {
       label: 'Send payment reminder',
       kind: 'partial',
       description: 'Sends a payment chaser email — no status change',
+      sendsEmailTemplates: [{ key: 'deposit_invoice_payment_reminder', system: true, sentFrom: 'quickbooks.js' }],
     },
     {
       key: 'arrange_survey',
@@ -186,12 +193,14 @@ const HANDLER_OUTCOMES = {
       label: 'Not Suitable',
       kind: 'terminal',
       setsLeadStatus: 'NOT_SUITABLE',
+      sendsEmailTemplates: [{ key: 'photo_review_not_suitable', system: true, sentFrom: 'photo-reviews.js' }],
     },
     {
       key: 'rough_estimate_sent',
       label: 'Send Rough Estimate',
       kind: 'terminal',
       setsLeadStatus: 'ROUGH_ESTIMATE',
+      sendsEmailTemplates: [{ key: 'photo_review_rough_estimate', system: true, sentFrom: 'photo-reviews.js' }],
     },
   ],
 
@@ -202,6 +211,7 @@ const HANDLER_OUTCOMES = {
       kind: 'terminal',
       setsLeadStatus: 'AWAITING_PHOTOS',
       description: 'Customer photo form link generated and emailed; status set to AWAITING_PHOTOS',
+      sendsEmailTemplates: [{ key: 'photo_review_invite', system: true, sentFrom: 'customer-info.js' }],
     },
   ],
 
@@ -220,6 +230,7 @@ const HANDLER_OUTCOMES = {
       label: 'Visit scheduled',
       kind: 'partial',
       description: 'Creates a Google Calendar event — no lead status change',
+      sendsEmailTemplates: ['visit_confirmation'],
     },
   ],
 
@@ -234,6 +245,81 @@ const HANDLER_OUTCOMES = {
 
   show_message: [],
 };
+
+/**
+ * Action-level email templates: sent during a handler's flow but not tied to a
+ * single staff-selected outcome (e.g. emails triggered when the customer
+ * themselves submits the form). Keyed by handler type. Handlers with no
+ * action-level emails are omitted.
+ *
+ * @type {Record<string, import('./handler-outcomes').EmailTemplateRefInput[]>}
+ */
+const ACTION_LEVEL_EMAIL_TEMPLATES = {
+  // Sent automatically by customer-info.js when the customer submits their
+  // uploaded photos/info: an internal team notification and a customer
+  // thank-you confirmation. Both are system-in-flow emails.
+  upload_photos_and_info: [
+    { key: 'admin_notification', system: true, sentFrom: 'customer-info.js' },
+    { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js' },
+  ],
+};
+
+/**
+ * System / lifecycle emails not tied to any card-action handler. These are sent
+ * by the auth flow (account onboarding and password reset) rather than the
+ * workflow handlers, and are grouped separately on the admin Email Templates
+ * page.
+ *
+ * @type {import('./handler-outcomes').SystemEmailTemplate[]}
+ */
+const SYSTEM_EMAIL_TEMPLATES = [
+  {
+    key: 'set_password_welcome',
+    sentFrom: 'auth.js',
+    description: 'Welcome email with a one-time set-password link, sent when an admin approves access or adds a team member.',
+    system: true,
+  },
+  {
+    key: 'set_password_resend',
+    sentFrom: 'auth.js',
+    description: 'Re-sends the set-password link when an admin clicks "Resend set-password" on the Team tab.',
+    system: true,
+  },
+  {
+    key: 'set_password_reset',
+    sentFrom: 'auth.js',
+    description: 'Password-reset link sent when a user requests a forgotten-password reset.',
+    system: true,
+  },
+];
+
+/**
+ * Normalises an email template ref (bare key string or {key, system, sentFrom})
+ * to its template key.
+ * @param {string | {key: string}} ref
+ * @returns {string}
+ */
+function templateRefKey(ref) {
+  return typeof ref === 'string' ? ref : ref.key;
+}
+
+/**
+ * True when a template ref is flagged as a system / integration in-flow email.
+ * @param {string | {system?: boolean}} ref
+ * @returns {boolean}
+ */
+function templateRefIsSystem(ref) {
+  return typeof ref === 'string' ? false : !!ref.system;
+}
+
+/**
+ * The source module of a system-in-flow template ref, or undefined.
+ * @param {string | {sentFrom?: string}} ref
+ * @returns {string|undefined}
+ */
+function templateRefSentFrom(ref) {
+  return typeof ref === 'string' ? undefined : ref.sentFrom;
+}
 
 /**
  * Returns the terminal outcomes for a given handler type as an object
@@ -289,7 +375,12 @@ function getArrangeVisitStatus(outcomeKey, visitType) {
 // Named-export form (exports.X = X) rather than module.exports = {...} so that
 // Rollup's CommonJS plugin can statically detect the named exports when this
 // module is imported from src/react/utils/handlerMeta.ts via Vite.
-exports.HANDLER_OUTCOMES      = HANDLER_OUTCOMES;
-exports.getTerminalStatusMap  = getTerminalStatusMap;
-exports.getTerminalKeys       = getTerminalKeys;
-exports.getArrangeVisitStatus = getArrangeVisitStatus;
+exports.HANDLER_OUTCOMES            = HANDLER_OUTCOMES;
+exports.ACTION_LEVEL_EMAIL_TEMPLATES = ACTION_LEVEL_EMAIL_TEMPLATES;
+exports.SYSTEM_EMAIL_TEMPLATES      = SYSTEM_EMAIL_TEMPLATES;
+exports.templateRefKey              = templateRefKey;
+exports.templateRefIsSystem         = templateRefIsSystem;
+exports.templateRefSentFrom         = templateRefSentFrom;
+exports.getTerminalStatusMap        = getTerminalStatusMap;
+exports.getTerminalKeys             = getTerminalKeys;
+exports.getArrangeVisitStatus       = getArrangeVisitStatus;
