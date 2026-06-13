@@ -12,7 +12,7 @@
  * side without the other, a test here will catch it immediately.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   broadcastLeadStatusChange,
   subscribeLeadStatusChange,
@@ -167,6 +167,50 @@ describe('broadcastLeadStatusChange → subscribeLeadStatusChange round-trip', (
     window.removeEventListener(LEAD_STATUS_WINDOW_EVENT, handler);
 
     expect(received).toEqual(['contact-007']);
+  });
+});
+
+// ── BroadcastChannel absent (guard path) ──────────────────────────────────────
+//
+// Verifies that both functions degrade gracefully when BroadcastChannel is not
+// available in the environment (e.g. some SSR contexts or older browsers).
+// If the typeof guard were accidentally removed, these tests would throw.
+
+describe('BroadcastChannel absent — graceful degradation', () => {
+  beforeEach(() => {
+    vi.stubGlobal('BroadcastChannel', undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('broadcastLeadStatusChange does not throw when BroadcastChannel is undefined', () => {
+    expect(() => {
+      broadcastLeadStatusChange('contact-absent-01', { hs_lead_status: 'VISIT_BOOKED' });
+    }).not.toThrow();
+  });
+
+  it('subscribeLeadStatusChange returns a callable no-op cleanup when BroadcastChannel is undefined', () => {
+    let cleanup!: () => void;
+    expect(() => {
+      cleanup = subscribeLeadStatusChange(() => { /* no-op handler */ });
+    }).not.toThrow();
+
+    expect(typeof cleanup).toBe('function');
+    expect(() => cleanup()).not.toThrow();
+  });
+
+  it('same-tab window events still deliver when BroadcastChannel is undefined', () => {
+    const received: string[] = [];
+    const cleanup = subscribeLeadStatusChange((contactId) => {
+      received.push(contactId);
+    });
+
+    broadcastLeadStatusChange('contact-absent-02', { hs_lead_status: 'SURVEY_SENT' });
+    cleanup();
+
+    expect(received).toEqual(['contact-absent-02']);
   });
 });
 
