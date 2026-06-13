@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
@@ -32,6 +33,8 @@ interface Props {
 interface LinkStatus {
   hasActiveLink: boolean;
   expiresAt?: string;
+  formLink?: string;
+  token?: string;
 }
 
 interface GeneratedLink {
@@ -119,6 +122,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const [checkError, setCheckError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
   const [copyAndClosing, setCopyAndClosing] = useState(false);
 
@@ -235,6 +239,45 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     }
   }
 
+  async function handleResend() {
+    if (demo) return;
+    // Derive token: prefer the explicit field; fall back to extracting the
+    // last path segment of formLink (same logic the server uses).
+    const token =
+      linkStatus?.token ||
+      (linkStatus?.formLink ? linkStatus.formLink.split('/').pop() : '');
+    if (!token) {
+      showToast(
+        'Cannot re-send: link token is unavailable. Try generating a new link.',
+        true,
+      );
+      return;
+    }
+    setResending(true);
+    try {
+      const r = await fetch(
+        `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/resend`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        }
+      );
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || d.message || 'Failed to re-send');
+      showToast('Email re-sent to customer', false);
+    } catch (e) {
+      showToast((e as Error).message || 'Could not re-send email', true);
+    } finally {
+      setResending(false);
+    }
+  }
+
+  function handleManualUpload(url: string) {
+    if (demo) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   const handleCopyAndClose = useCallback(() => {
     if (!generatedLink?.formLink) return;
     navigator.clipboard.writeText(generatedLink.formLink).catch(() => {
@@ -260,6 +303,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setCheckError('');
     setLinkStatus(null);
     setCopyAndClosing(false);
+    setResending(false);
     onClose();
   }
 
@@ -302,6 +346,26 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       const expiryNote = linkStatus?.expiresAt
         ? ` It ${formatExpiry(linkStatus.expiresAt)}.`
         : '';
+
+      // Manager/admin view: formLink is available — show link actions panel
+      if (linkStatus?.formLink) {
+        return (
+          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            <Stack spacing={0.5}>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Existing customer link:
+              </Typography>
+              <CopyLinkField url={linkStatus.formLink} />
+            </Stack>
+            <Alert severity="warning" icon={<WarningAmberIcon fontSize="inherit" />} sx={{ py: 0.5 }}>
+              <strong>{ctx.contactName || 'This contact'}</strong> already has an active
+              link.{expiryNote} Generating a new link will immediately expire this one.
+            </Alert>
+          </Stack>
+        );
+      }
+
+      // Member view (no formLink): warning-only layout
       return (
         <Stack spacing={1.5} sx={{ mt: 0.5 }}>
           <Alert severity="warning" icon={<WarningAmberIcon fontSize="inherit" />}>
@@ -381,6 +445,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             ) : (
               <CopyLinkField url={generatedLink.formLink} />
             )}
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              Or open the form yourself and submit it on the customer's behalf using "Manually Upload".
+            </Typography>
           </Stack>
         )}
 
@@ -420,6 +487,43 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     }
 
     if (phase === 'confirming') {
+      // Manager/admin view: full action set when formLink is available
+      if (linkStatus?.formLink) {
+        return (
+          <>
+            <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
+            <Button
+              color="warning"
+              onClick={() => generateLink(ctx.contactId)}
+              data-testid="cah-confirm-generate"
+            >
+              Generate new link
+            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                onClick={handleResend}
+                disabled={resending || demo}
+                startIcon={resending ? <CircularProgress size={16} color="inherit" /> : undefined}
+              >
+                {resending ? 'Sending…' : 'Re-send link'}
+              </Button>
+            </DemoActionTooltip>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                variant="contained"
+                onClick={() => handleManualUpload(linkStatus.formLink!)}
+                disabled={demo}
+                startIcon={<OpenInNewIcon fontSize="small" />}
+                data-testid="cah-manual-upload"
+              >
+                Manually Upload
+              </Button>
+            </DemoActionTooltip>
+          </>
+        );
+      }
+
+      // Member view (no formLink): warning-only with generate/cancel
       return (
         <>
           <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
@@ -449,14 +553,26 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       <>
         <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
         {generatedLink?.formLink && !linkError && (
-          <Button
-            onClick={handleCopyAndClose}
-            disabled={submitting || copyAndClosing}
-            startIcon={copyAndClosing ? <CircularProgress size={16} color="inherit" /> : <ContentCopyIcon fontSize="small" />}
-            data-testid="cah-copy-close"
-          >
-            {copyAndClosing ? 'Copying…' : 'Copy & close'}
-          </Button>
+          <>
+            <Button
+              onClick={handleCopyAndClose}
+              disabled={submitting || copyAndClosing}
+              startIcon={copyAndClosing ? <CircularProgress size={16} color="inherit" /> : <ContentCopyIcon fontSize="small" />}
+              data-testid="cah-copy-close"
+            >
+              {copyAndClosing ? 'Copying…' : 'Copy & close'}
+            </Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                onClick={() => handleManualUpload(generatedLink.formLink!)}
+                disabled={demo}
+                startIcon={<OpenInNewIcon fontSize="small" />}
+                data-testid="cah-manual-upload"
+              >
+                Manually Upload
+              </Button>
+            </DemoActionTooltip>
+          </>
         )}
         <DemoActionTooltip demo={demo}>
           <Button

@@ -520,7 +520,7 @@ router.get('/api/customer-info/by-contact/:contactId/link-status',
     }
 
     const { rows } = await pool.query(
-      `SELECT expires_at FROM customer_info_submissions
+      `SELECT expires_at, form_link FROM customer_info_submissions
        WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 1`,
@@ -531,7 +531,29 @@ router.get('/api/customer-info/by-contact/:contactId/link-status',
       return res.json({ hasActiveLink: false });
     }
 
-    return res.json({ hasActiveLink: true, expiresAt: rows[0].expires_at });
+    const responseBody = { hasActiveLink: true, expiresAt: rows[0].expires_at };
+
+    // Only managers and admins may receive the raw bearer URL.
+    // Members can trigger email sends via POST card-actions but must not be
+    // able to copy the link and impersonate the customer on the public form.
+    const userId = req.user?.claims?.sub;
+    let canReceiveLink = false;
+    try {
+      const privR = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+      const level = privR.rows[0]?.privilege_level || 'member';
+      canReceiveLink = level === 'manager' || level === 'admin';
+    } catch {
+      // Default to not exposing the bearer link if the privilege lookup fails.
+    }
+
+    if (canReceiveLink && rows[0].form_link) {
+      const formLink = rows[0].form_link;
+      const token = formLink.split('/').pop() || null;
+      responseBody.formLink = formLink;
+      if (token) responseBody.token = token;
+    }
+
+    return res.json(responseBody);
   }
 );
 

@@ -92,6 +92,7 @@ const FAKE_USER_JSON = JSON.stringify(FAKE_USER_OBJ);
 
 function buildStubMap(contactId) {
   const contactApiPath    = `/api/contacts/${contactId}`;
+  const linkStatusPath    = `/api/customer-info/by-contact/${contactId}/link-status`;
   const generateLinkPath  = `/api/customer-info/by-contact/${contactId}/generate-link`;
   const generateLinkBody  = JSON.stringify({
     formLink:  MOCK_LINK,
@@ -130,6 +131,7 @@ function buildStubMap(contactId) {
     [`${contactApiPath}/tasks`]:       '{"results":[]}',
     [`${contactApiPath}/google`]:      '{"connected":false,"emails":[]}',
     [`${contactApiPath}/whatsapp`]:    '{"enabled":false,"messages":[]}',
+    [linkStatusPath]:                  JSON.stringify({ hasActiveLink: false }),
     [generateLinkPath]:                generateLinkBody,
   };
 }
@@ -193,6 +195,8 @@ async function openCustomerDetail(browser, base, contactId) {
   });
 
   // Stub clipboard API so writeText resolves even in headless Chrome.
+  // Also stub window.open so Manually Upload can be verified without
+  // actually opening a new tab.
   await page.evaluateOnNewDocument(() => {
     window.__moHeaderUser = null; // overridden below
     Object.defineProperty(navigator, 'clipboard', {
@@ -202,6 +206,11 @@ async function openCustomerDetail(browser, base, contactId) {
         readText:  () => Promise.resolve(''),
       },
     });
+    window.__muOpenCalled = null;
+    window.open = function(url) {
+      window.__muOpenCalled = String(url || '');
+      return null;
+    };
   });
 
   await page.evaluateOnNewDocument((fakeUserJson) => {
@@ -258,6 +267,13 @@ async function writeReport(runId) {
     '  `MuiDialog-root` element leaves the DOM within the polling window.',
     '  `navigator.clipboard.writeText` is stubbed to resolve immediately so the',
     '  `.finally()` path that calls `onClose()` is always reached.',
+    '- **[MU-A] Manually Upload button visible**: Asserts',
+    '  `[data-testid="cah-manual-upload"]` is present and enabled in the ready',
+    '  phase alongside the Copy & close button.',
+    '- **[MU-B] Manually Upload calls window.open**: Clicks the button and',
+    '  asserts that `window.open` was called with the expected `formLink` URL.',
+    '  `window.open` is stubbed via `evaluateOnNewDocument` to capture the call',
+    '  without actually opening a new tab.',
     '',
     '## Relevant files',
     '',
@@ -299,6 +315,8 @@ async function main() {
     '[CC-A] Copy & close button appears once link is ready',
     '[CC-A2] Copy & close button is not disabled',
     '[CC-B] Clicking Copy & close closes the modal',
+    '[MU-A] Manually Upload button appears in the ready phase',
+    '[MU-B] Clicking Manually Upload calls window.open with the correct link URL',
   ];
 
   if (!puppeteer) {
@@ -401,7 +419,7 @@ async function main() {
       );
 
       if (btnFound) {
-        // ── [CC-A] Button must not be disabled ──────────────────────────────
+        // ── [CC-A2] Button must not be disabled ─────────────────────────────
 
         const btnEnabled = await page.evaluate(() => {
           const btn = document.querySelector('[data-testid="cah-copy-close"]');
@@ -415,6 +433,52 @@ async function main() {
             ? 'Copy & close button is enabled'
             : 'Copy & close button is disabled (unexpected)',
         );
+
+        // ── [MU-A] Manually Upload button appears in the ready phase ─────────
+
+        console.log('\n  [MU-A] Checking for Manually Upload button in ready phase…');
+
+        const muBtn = await page.evaluate(() => {
+          const btn = document.querySelector('[data-testid="cah-manual-upload"]');
+          return btn ? { found: true, disabled: btn.disabled } : null;
+        });
+
+        record(
+          PROBE_LABELS[3],
+          !!(muBtn && !muBtn.disabled),
+          muBtn
+            ? muBtn.disabled
+              ? '[data-testid="cah-manual-upload"] found but is disabled'
+              : '[data-testid="cah-manual-upload"] found and enabled in ready phase'
+            : '[data-testid="cah-manual-upload"] not found in ready phase',
+        );
+
+        // ── [MU-B] Clicking Manually Upload calls window.open ────────────────
+
+        console.log('\n  [MU-B] Clicking Manually Upload and checking window.open…');
+
+        if (muBtn) {
+          await page.evaluate(() => {
+            const btn = document.querySelector('[data-testid="cah-manual-upload"]');
+            if (btn) btn.click();
+          });
+
+          await new Promise(r => setTimeout(r, 300));
+
+          const openResult = await page.evaluate(() => window.__muOpenCalled);
+
+          record(
+            PROBE_LABELS[4],
+            openResult === MOCK_LINK,
+            openResult === MOCK_LINK
+              ? `window.open called with correct link: ${openResult}`
+              : openResult
+                ? `window.open called with wrong URL: ${openResult}`
+                : 'window.open was not called — Manually Upload did not open a tab',
+          );
+        } else {
+          record(PROBE_LABELS[4], false, 'skipped — Manually Upload button not found in probe MU-A');
+        }
 
         // ── [CC-B] Click and verify modal closes ─────────────────────────────
 
@@ -440,6 +504,8 @@ async function main() {
       } else {
         record(PROBE_LABELS[1], false, 'skipped — button not found in probe A');
         record(PROBE_LABELS[2], false, 'skipped — button not found in probe A');
+        record(PROBE_LABELS[3], false, 'skipped — Copy & close button not found in probe A');
+        record(PROBE_LABELS[4], false, 'skipped — Copy & close button not found in probe A');
       }
 
       await page.__ctx.close().catch(() => {});

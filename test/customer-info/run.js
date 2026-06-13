@@ -13,6 +13,8 @@ const { makeSkip3 } = require('../helpers/report');
 //   (CI-R1) POST /api/customer-info/by-contact/:contactId/resend (admin) → 200, new DB row, old rows preserved
 //   (CI-R2) POST /api/customer-info/by-contact/:contactId/resend (viewer) → 403
 //   (CI-R3) POST /api/customer-info/by-contact/not-a-number/resend → 400
+//   (CI-LS-1) GET /api/customer-info/by-contact/:contactId/link-status (admin) → hasActiveLink + formLink + token
+//   (CI-LS-2) GET /api/customer-info/by-contact/:contactId/link-status (member) → hasActiveLink only, no formLink
 //   (CI-6)  GET  /api/customer-info/:token (expired) → 410 status:expired
 //   (CI-7)  GET  /api/customer-info/:token (already submitted) → 410 status:submitted
 //   (CI-8)  POST /api/customer-info/:token (expired) → 410 status:expired
@@ -645,6 +647,34 @@ async function main() {
       badIdResend400
         ? `non-numeric contactId correctly received 400`
         : `status=${badIdResendRes.status} body=${badIdResendRes.text.slice(0, 200)}`);
+
+    // ── CI-LS-1: link-status (admin) → hasActiveLink + formLink + token ──────
+    // At this point CI-R1 has created a fresh unsubmitted row so link-status
+    // should report hasActiveLink: true with bearer details for admin/manager.
+    const lsAdminRes = await adminClient.get(`/api/customer-info/by-contact/${contactId}/link-status`);
+    const lsAdminBody = lsAdminRes.json;
+    const lsAdminOk = lsAdminRes.status === 200
+      && lsAdminBody?.hasActiveLink === true
+      && typeof lsAdminBody?.formLink === 'string' && lsAdminBody.formLink.length > 0
+      && typeof lsAdminBody?.token === 'string'    && lsAdminBody.token.length > 0;
+    record('CI-LS-1.admin-gets-form-link', lsAdminOk,
+      lsAdminOk
+        ? `GET 200 hasActiveLink=true formLink present token present`
+        : `status=${lsAdminRes.status} hasActiveLink=${lsAdminBody?.hasActiveLink} `
+          + `formLink=${JSON.stringify(lsAdminBody?.formLink)} token=${JSON.stringify(lsAdminBody?.token)}`);
+
+    // ── CI-LS-2: link-status (member) → hasActiveLink only, no formLink ──────
+    const lsMemberRes = await client.get(`/api/customer-info/by-contact/${contactId}/link-status`);
+    const lsMemberBody = lsMemberRes.json;
+    const lsMemberOk = lsMemberRes.status === 200
+      && lsMemberBody?.hasActiveLink === true
+      && lsMemberBody?.formLink === undefined
+      && lsMemberBody?.token === undefined;
+    record('CI-LS-2.member-no-form-link', lsMemberOk,
+      lsMemberOk
+        ? `GET 200 hasActiveLink=true formLink absent token absent (as expected for member)`
+        : `status=${lsMemberRes.status} hasActiveLink=${lsMemberBody?.hasActiveLink} `
+          + `formLink=${JSON.stringify(lsMemberBody?.formLink)} token=${JSON.stringify(lsMemberBody?.token)}`);
 
     // ── CI-6: Expired token → 410 status:expired (GET) ──────────────────────
     const expiredToken = await insertExpiredRow(pool, `${contactId}-exp`);

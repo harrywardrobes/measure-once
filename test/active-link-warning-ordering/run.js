@@ -58,7 +58,8 @@ const skip = makeSkip3(findings);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const MOCK_LINK    = 'https://measureonce.replit.app/customer-info/alw-testtoken';
+const MOCK_LINK       = 'https://measureonce.replit.app/customer-info/alw-testtoken';
+const MOCK_ACTIVE_TOKEN = 'alw-testtoken';
 const FUTURE_EXPIRY = new Date(Date.now() + 14 * 86400000).toISOString();
 
 const FAKE_USER_OBJ = {
@@ -115,6 +116,8 @@ function buildStubMap(contactId) {
     [linkStatusPath]: JSON.stringify({
       hasActiveLink: true,
       expiresAt:     FUTURE_EXPIRY,
+      formLink:      MOCK_LINK,
+      token:         MOCK_ACTIVE_TOKEN,
     }),
     [generateLinkPath]: JSON.stringify({
       formLink:  MOCK_LINK,
@@ -256,6 +259,18 @@ function writeReport(runId) {
     '  be called (count remains 0) and the dialog must no longer be visible.',
     '  Regression guard for the cancel/dismiss path — a bug here would silently',
     '  expire the active link even when the staff member chose to keep it.',
+    '- **(E) manager-view actions visible**: When link-status returns `formLink`',
+    '  and `token`, the confirming phase renders the manager/admin variant: a',
+    '  read-only copy field for the existing link, a Re-send link button, and a',
+    '  [data-testid="cah-manual-upload"] Manually Upload button. The Generate',
+    '  new link button is still present but visually secondary.',
+    '- **(F) Manually Upload calls window.open**: Clicking the Manually Upload',
+    '  button invokes `window.open(formLink, "_blank", "noopener,noreferrer")`.',
+    '  `window.open` is stubbed in-page; the captured URL must equal the',
+    '  `formLink` from the link-status response.',
+    '- **(G) Re-send posts to /resend**: Clicking Re-send link issues a POST to',
+    '  `/api/customer-info/by-contact/:id/resend` (counted via Node-side',
+    '  request interception). Does not call generate-link.',
     '',
     '## Relevant files',
     '',
@@ -300,6 +315,9 @@ async function main() {
     '(C) confirm-triggers — generate-link called exactly once after clicking confirm',
     '(D) cancel-no-call — generate-link not called after clicking Cancel',
     '(D) cancel-closes — dialog is no longer visible after clicking Cancel',
+    '(E) manager-view — Copy link field, Re-send, and Manually Upload buttons visible',
+    '(F) manager-view — Manually Upload calls window.open with the active formLink URL',
+    '(G) manager-view — Re-send button posts to /resend endpoint',
   ];
 
   if (!puppeteer) {
@@ -575,6 +593,212 @@ async function main() {
 
       await pageD.__ctx.close().catch(() => {});
     }
+
+    // ── Probes E, F, G: manager/admin view (formLink present) ─────────────────
+    //
+    // The link-status stub now returns formLink + token, which causes the modal
+    // to render the manager/admin variant of the confirming phase: a CopyLinkField
+    // for the existing link, Re-send, Manually Upload, and a secondary Generate
+    // new link button.
+
+    console.log('\n  [E] Opening fresh page for manager-view probes (E, F, G)…');
+
+    const resendCounter  = { count: 0 };
+    const ctxE = await (browser.createBrowserContext
+      ? browser.createBrowserContext()
+      : browser.createIncognitoBrowserContext());
+    const pageE = await ctxE.newPage();
+    pageE.__ctx = ctxE;
+    await pageE.setCacheEnabled(false);
+
+    const ePageLogs = [];
+    pageE.on('console',   m => { if (m.type() === 'error') ePageLogs.push(`[console.error] ${m.text()}`); });
+    pageE.on('pageerror', e => ePageLogs.push(`[pageerror] ${e.message}`));
+
+    const stubMapE = buildStubMap(contactId);
+    const resendPathE = `/api/customer-info/by-contact/${contactId}/resend`;
+
+    await pageE.setRequestInterception(true);
+    pageE.on('request', req => {
+      const urlObj   = new URL(req.url());
+      const pathname = urlObj.pathname;
+
+      if (req.isNavigationRequest() && pathname === '/login') {
+        req.abort('aborted').catch(() => {});
+        return;
+      }
+
+      if (req.method() === 'POST' && pathname === resendPathE) {
+        resendCounter.count += 1;
+        req.respond({
+          status:  200,
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ ok: true }),
+        }).catch(() => {});
+        return;
+      }
+
+      if (req.method() === 'POST' &&
+          pathname === `/api/customer-info/by-contact/${contactId}/generate-link`) {
+        req.respond({
+          status:  200,
+          headers: { 'Content-Type': 'application/json' },
+          body:    stubMapE[`/api/customer-info/by-contact/${contactId}/generate-link`],
+        }).catch(() => {});
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(stubMapE, pathname)) {
+        req.respond({
+          status:  200,
+          headers: { 'Content-Type': 'application/json' },
+          body:    stubMapE[pathname],
+        }).catch(() => {});
+        return;
+      }
+
+      for (const p of PREFIX_STUBS) {
+        if (pathname.startsWith(p.prefix)) {
+          req.respond({
+            status:  200,
+            headers: { 'Content-Type': 'application/json' },
+            body:    p.body,
+          }).catch(() => {});
+          return;
+        }
+      }
+
+      req.continue().catch(() => {});
+    });
+
+    // Stub window.open in-page so Manually Upload can be verified without
+    // actually opening a new tab.
+    await pageE.evaluateOnNewDocument(() => {
+      window.__muOpenCalled = null;
+      const origOpen = window.open;
+      window.open = function(url, target, features) {
+        window.__muOpenCalled = String(url || '');
+        return null;
+      };
+    });
+
+    await pageE.evaluateOnNewDocument((fakeUserJson) => {
+      window.__moHeaderUser = JSON.parse(fakeUserJson);
+    }, FAKE_USER_JSON);
+
+    await pageE.goto(`${BASE}/customers/${contactId}`, {
+      waitUntil: 'domcontentloaded', timeout: 30000,
+    });
+
+    const bridgeReadyE = await pollPage(pageE, () =>
+      typeof window.openCardActionModal === 'function' ? 'ok' : null,
+    20000);
+
+    if (!bridgeReadyE) {
+      const msg = 'window.openCardActionModal not available within 20 s (probe E)';
+      record(PROBE_LABELS[6], false, msg);
+      record(PROBE_LABELS[7], false, msg);
+      record(PROBE_LABELS[8], false, msg);
+    } else {
+      await pageE.evaluate((cid) => {
+        window.openCardActionModal(
+          { id: 1, type: 'upload_photos_and_info', config: {}, bindings: [] },
+          {
+            contactId:    cid,
+            contactName:  'ActiveLink WarningTest',
+            contactEmail: 'alw-test@privtest.local',
+          },
+        );
+      }, contactId);
+
+      const titleFoundE = await pollPage(pageE, () => {
+        const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+        return titleEl && titleEl.textContent.trim() === 'Active link exists'
+          ? 'found'
+          : null;
+      }, 15000);
+
+      if (!titleFoundE) {
+        const msg = 'Dialog title "Active link exists" not found within 15 s — cannot run manager probes';
+        record(PROBE_LABELS[6], false, msg);
+        record(PROBE_LABELS[7], false, msg);
+        record(PROBE_LABELS[8], false, msg);
+      } else {
+        // ── (E) Manager-view actions visible ──────────────────────────────────
+
+        console.log('\n  [E] Checking manager-view actions (Re-send, Manually Upload)…');
+
+        const managerActions = await pageE.evaluate(() => {
+          const resendBtn      = Array.from(document.querySelectorAll('button'))
+            .find(b => (b.textContent || '').trim() === 'Re-send link');
+          const manualUploadBtn = document.querySelector('[data-testid="cah-manual-upload"]');
+          const textField       = document.querySelector('input[readonly]');
+          return {
+            hasResend:       !!resendBtn,
+            hasManualUpload: !!manualUploadBtn,
+            hasCopyField:    !!textField,
+          };
+        });
+
+        record(
+          PROBE_LABELS[6],
+          managerActions.hasResend && managerActions.hasManualUpload && managerActions.hasCopyField,
+          managerActions.hasResend && managerActions.hasManualUpload && managerActions.hasCopyField
+            ? 'Copy link field, Re-send, and Manually Upload all visible in manager confirming view'
+            : `hasResend=${managerActions.hasResend} hasManualUpload=${managerActions.hasManualUpload} hasCopyField=${managerActions.hasCopyField}`,
+        );
+
+        // ── (F) Manually Upload calls window.open ─────────────────────────────
+
+        console.log('\n  [F] Clicking Manually Upload and checking window.open…');
+
+        await pageE.evaluate(() => {
+          const btn = document.querySelector('[data-testid="cah-manual-upload"]');
+          if (btn) btn.click();
+        });
+
+        await new Promise(r => setTimeout(r, 300));
+
+        const openResult = await pageE.evaluate(() => window.__muOpenCalled);
+
+        record(
+          PROBE_LABELS[7],
+          openResult === MOCK_LINK,
+          openResult === MOCK_LINK
+            ? `window.open called with correct formLink: ${openResult}`
+            : openResult
+              ? `window.open called with wrong URL: ${openResult} (expected ${MOCK_LINK})`
+              : 'window.open was not called — Manually Upload did not open a tab',
+        );
+
+        // ── (G) Re-send posts to /resend ──────────────────────────────────────
+
+        console.log('\n  [G] Clicking Re-send link and checking /resend POST…');
+
+        const resendBefore = resendCounter.count;
+
+        await pageE.evaluate(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => (b.textContent || '').trim() === 'Re-send link');
+          if (btn) btn.click();
+        });
+
+        const deadline = Date.now() + 5000;
+        while (resendCounter.count <= resendBefore && Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+
+        record(
+          PROBE_LABELS[8],
+          resendCounter.count > resendBefore,
+          resendCounter.count > resendBefore
+            ? `POST /resend intercepted (count=${resendCounter.count})`
+            : 'POST /resend was not called within 5 s after clicking Re-send link',
+        );
+      }
+    }
+
+    await pageE.__ctx.close().catch(() => {});
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
     const failed = findings.filter(f => !f.ok && !f.skipped).length;

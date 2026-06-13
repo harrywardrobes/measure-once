@@ -37,6 +37,7 @@ const noEmailCtx: CardActionContext = {
 };
 
 const MOCK_LINK = 'https://measureonce.replit.app/customer-info/abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
+const MOCK_TOKEN = 'abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
 
 function Demo({
   ctx,
@@ -58,6 +59,13 @@ function Demo({
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 
+      if (url.includes('/link-status')) {
+        return new Response(JSON.stringify({ hasActiveLink: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       if (url.includes('/generate-link')) {
         await new Promise(r => setTimeout(r, generateDelay));
         if (generateError) {
@@ -67,7 +75,7 @@ function Demo({
           });
         }
         return new Response(
-          JSON.stringify({ formLink: MOCK_LINK, token: 'abc123', expiresAt: new Date(Date.now() + 28 * 86400000).toISOString() }),
+          JSON.stringify({ formLink: MOCK_LINK, token: MOCK_TOKEN, expiresAt: new Date(Date.now() + 28 * 86400000).toISOString() }),
           { status: 201, headers: { 'Content-Type': 'application/json' } }
         );
       }
@@ -107,6 +115,112 @@ function Demo({
   );
 }
 
+function ActiveLinkManagerDemo({ ctx }: { ctx: CardActionContext }) {
+  const [open, setOpen] = useState(false);
+  const expiresAt = new Date(Date.now() + 14 * 86400000).toISOString();
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const origFetch = window.fetch;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/link-status')) {
+        return new Response(JSON.stringify({
+          hasActiveLink: true,
+          expiresAt,
+          formLink: MOCK_LINK,
+          token: MOCK_TOKEN,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url.includes('/resend') && method === 'POST') {
+        await new Promise(r => setTimeout(r, 400));
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/generate-link') && method === 'POST') {
+        await new Promise(r => setTimeout(r, 600));
+        return new Response(
+          JSON.stringify({ formLink: MOCK_LINK, token: MOCK_TOKEN, expiresAt }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return origFetch(input, init);
+    };
+
+    return () => { window.fetch = origFetch; };
+  }, [open, expiresAt]);
+
+  return (
+    <Box>
+      <Button variant="contained" onClick={() => setOpen(true)}>
+        Open (active link — manager/admin)
+      </Button>
+      <UploadPhotosModal
+        handler={mockHandler}
+        ctx={ctx}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </Box>
+  );
+}
+
+function ActiveLinkMemberDemo({ ctx }: { ctx: CardActionContext }) {
+  const [open, setOpen] = useState(false);
+  const expiresAt = new Date(Date.now() + 14 * 86400000).toISOString();
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const origFetch = window.fetch;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/link-status')) {
+        return new Response(JSON.stringify({
+          hasActiveLink: true,
+          expiresAt,
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      if (url.includes('/generate-link') && method === 'POST') {
+        await new Promise(r => setTimeout(r, 600));
+        return new Response(
+          JSON.stringify({ expiresAt }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return origFetch(input, init);
+    };
+
+    return () => { window.fetch = origFetch; };
+  }, [open, expiresAt]);
+
+  return (
+    <Box>
+      <Button variant="contained" onClick={() => setOpen(true)}>
+        Open (active link — member view)
+      </Button>
+      <UploadPhotosModal
+        handler={mockHandler}
+        ctx={ctx}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </Box>
+  );
+}
+
 export const Default: Story = {
   name: 'Normal — link generates, then send email or copy & close',
   render: () => <Demo ctx={mockCtx} generateDelay={800} />,
@@ -115,6 +229,21 @@ export const Default: Story = {
 export const CopyAndClose: Story = {
   name: 'Copy & close — link ready, no email sent',
   render: () => <Demo ctx={mockCtx} generateDelay={300} />,
+};
+
+export const ManuallyUpload: Story = {
+  name: 'Manually Upload — button visible in ready phase',
+  render: () => <Demo ctx={mockCtx} generateDelay={300} />,
+};
+
+export const ActiveLinkManager: Story = {
+  name: 'Active link — manager/admin view (Copy, Re-send, Manually Upload)',
+  render: () => <ActiveLinkManagerDemo ctx={mockCtx} />,
+};
+
+export const ActiveLinkMember: Story = {
+  name: 'Active link — member view (warning only, generate or cancel)',
+  render: () => <ActiveLinkMemberDemo ctx={mockCtx} />,
 };
 
 export const LinkGenerating: Story = {
@@ -144,6 +273,14 @@ export const AllStates: Story = {
       <Box>
         <Typography variant="subtitle2" gutterBottom>Normal (link loads then send)</Typography>
         <Demo ctx={mockCtx} generateDelay={800} />
+      </Box>
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Active link — manager/admin</Typography>
+        <ActiveLinkManagerDemo ctx={mockCtx} />
+      </Box>
+      <Box>
+        <Typography variant="subtitle2" gutterBottom>Active link — member</Typography>
+        <ActiveLinkMemberDemo ctx={mockCtx} />
       </Box>
       <Box>
         <Typography variant="subtitle2" gutterBottom>Link generating (slow)</Typography>
