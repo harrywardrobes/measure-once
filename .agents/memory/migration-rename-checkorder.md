@@ -39,3 +39,15 @@ If one migration's file is renamed to a HIGHER timestamp, every migration that w
 
 ## Reference
 The `applyMigrationRenames` function in `db-migrate.js` runs idempotently before `runner()` — it uses `UPDATE … WHERE name = $1 AND NOT EXISTS (SELECT 1 … WHERE name = $2)` so double-boots are safe.
+
+## Cross-task timestamp collision (dev DB emergency fix)
+When two task agents independently pick timestamps, one can land a migration at e.g. `1782900000000` while another task agent (merged later) renames its files to `1782900000001`/`1782900000002`. The dev DB may have applied `1782900000000` after the 00001/00002 entries (different DB IDs), so the filename sort order disagrees with DB insertion order → checkOrder fails.
+
+**Emergency dev-DB fix (no code change needed if MIGRATION_RENAMES already handles prod):**
+1. Check which migrations are in DB but with a filename that now sorts in the wrong position relative to their DB ID.
+2. If the out-of-order file is NOT YET RUN on prod (i.e. it's a dev-only issue), rename the file to a timestamp that puts it AFTER the already-applied ones, then update the pgmigrations name to match:
+   ```
+   UPDATE pgmigrations SET name = '<new_name>' WHERE name = '<old_name>';
+   ```
+3. If the file IS already tracked by `MIGRATION_RENAMES` in `db-migrate.js`, just update the dev DB row manually — the rename will self-heal on prod at boot.
+4. Verify file-sort order matches DB insertion-id order before restarting.
