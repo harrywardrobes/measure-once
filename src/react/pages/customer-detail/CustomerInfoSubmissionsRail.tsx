@@ -510,10 +510,11 @@ function SubmissionPhoto({ url, index }: { url: string; index: number }) {
 
 type ConflictTarget = 'copy' | 'open';
 
-function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSuperseded, autoExpand, pendingReview }: {
+function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSuperseded, autoExpand, pendingReview }: {
   sub: Submission;
   contactId: string;
-  canResend: boolean;
+  /** Manager/admin: shows the inline labeled-action row (Copy link, Re-send, Open for customer). */
+  canManageLink: boolean;
   onResendSuccess: () => void;
   isSuperseded?: boolean;
   autoExpand?: boolean;
@@ -719,7 +720,8 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
                 <Chip label="Superseded" size="small" variant="outlined" data-testid="superseded-chip" />
               </Tooltip>
             </Box>
-          ) : (
+          ) : canManageLink ? null : (
+            // Member view: compact icon buttons only (no Re-send)
             <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: 'center' }}>
               {sub.form_link && (
                 <>
@@ -743,11 +745,49 @@ function SubmissionCard({ sub, contactId, canResend, onResendSuccess, isSupersed
                   </Tooltip>
                 </>
               )}
-              {canResend && <ResendButton contactId={contactId} onSuccess={onResendSuccess} />}
             </Stack>
           )
         ) : null}
       </Box>
+
+      {/* Manager/admin inline link actions — only for the active, non-superseded card */}
+      {canManageLink && isActive && !isSuperseded && sub.form_link && (
+        <Box
+          sx={{ px: 2, pb: 1.5, pt: 0, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}
+          data-testid="inline-link-actions"
+        >
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={
+              isChecking && !conflictTarget
+                ? <CircularProgress size={13} color="inherit" />
+                : copied
+                  ? <CheckIcon fontSize="small" />
+                  : <ContentCopyIcon fontSize="small" />
+            }
+            onClick={() => checkThenAct('copy')}
+            disabled={isChecking && !conflictTarget}
+            color={copied ? 'success' : 'primary'}
+            sx={{ fontSize: '0.75rem', py: 0.4 }}
+            data-testid="copy-link-inline-btn"
+          >
+            {copied ? 'Copied!' : 'Copy link'}
+          </Button>
+          <ResendButton contactId={contactId} onSuccess={onResendSuccess} />
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<OpenInNewIcon fontSize="small" />}
+            onClick={() => checkThenAct('open')}
+            disabled={isChecking && !conflictTarget}
+            sx={{ fontSize: '0.75rem', py: 0.4 }}
+            data-testid="open-link-inline-btn"
+          >
+            Open for customer
+          </Button>
+        </Box>
+      )}
 
       {/* Failed photo-review — inline retry / discard */}
       {pendingReview && pendingReview.status === 'failed' && (
@@ -1101,7 +1141,7 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
                 key={sub.id}
                 sub={sub}
                 contactId={contactId}
-                canResend={isManager || isAdmin}
+                canManageLink={isManager || isAdmin}
                 onResendSuccess={loadSubmissions}
                 isSuperseded={activeIds.has(sub.id) && index > 0}
                 autoExpand={sub.id === deepLinkId}
