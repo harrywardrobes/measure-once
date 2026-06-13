@@ -44,6 +44,19 @@ const MIGRATION_RENAMES = [
   ['1781900000000_remove-delivery-installation-handlers', '1782500000000_remove-delivery-installation-handlers'],
   ['1782000000000_open-deal-decline-guard', '1782600000000_open-deal-decline-guard'],
   ['1782100000000_lead-status-sort-order-dedup', '1782700000000_lead-status-sort-order-dedup'],
+  // The two structured-address migrations were recorded under 1782800000000/
+  // 1782800000001 timestamps but were renamed to 1782900000001/1782900000002
+  // when they landed in the repo (to avoid colliding with existing 1782800000000
+  // contact-attempt-log-note and leave room for contact-attempt-history-notes
+  // at 1782900000000). Without these renames checkOrder aborts because
+  // 1782900000000_contact-attempt-history-notes (not yet run) appears before
+  // the already-run structured-address rows in file-sort order.
+  ['1782800000000_customer-info-structured-address', '1782900000001_customer-info-structured-address'],
+  ['1782800000001_design-visits-structured-address', '1782900000002_design-visits-structured-address'],
+  // contact-attempt-history-notes was applied to the DB under timestamp
+  // 1782900000000, then its file was bumped to 1782900000003 to sit after the
+  // structured-address migrations in file-sort order.
+  ['1782900000000_contact-attempt-history-notes', '1782900000003_contact-attempt-history-notes'],
 ];
 
 /**
