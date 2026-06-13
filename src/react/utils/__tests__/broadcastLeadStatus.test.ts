@@ -16,6 +16,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   broadcastLeadStatusChange,
   subscribeLeadStatusChange,
+  LEAD_STATUS_CHANNEL,
   LEAD_STATUS_WINDOW_EVENT,
 } from '../broadcastLeadStatus';
 
@@ -166,5 +167,77 @@ describe('broadcastLeadStatusChange → subscribeLeadStatusChange round-trip', (
     window.removeEventListener(LEAD_STATUS_WINDOW_EVENT, handler);
 
     expect(received).toEqual(['contact-007']);
+  });
+});
+
+// ── BroadcastChannel path (cross-tab) ─────────────────────────────────────────
+//
+// jsdom does not implement BroadcastChannel, so we stub it with a vi.fn()
+// factory and restore the global after each test.
+
+describe('BroadcastChannel cross-tab path', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('postMessage is called with the correct LeadStatusMessage shape', () => {
+    // Vitest requires a proper class (or function) for constructor mocks —
+    // an arrow-function factory does not satisfy the requirement.
+    let constructedWith: string | undefined;
+    const postMessage = vi.fn();
+    const close = vi.fn();
+
+    class MockBroadcastChannel {
+      onmessage: ((e: MessageEvent) => void) | null = null;
+      postMessage = postMessage;
+      close = close;
+      constructor(channelName: string) {
+        constructedWith = channelName;
+      }
+    }
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
+
+    broadcastLeadStatusChange('contact-bc-01', { hs_lead_status: 'VISIT_BOOKED' });
+
+    expect(constructedWith).toBe(LEAD_STATUS_CHANNEL);
+    expect(postMessage).toHaveBeenCalledOnce();
+    expect(postMessage).toHaveBeenCalledWith({
+      contactId: 'contact-bc-01',
+      props: { hs_lead_status: 'VISIT_BOOKED' },
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it('inbound onmessage from another tab calls the subscribed handler', () => {
+    // Capture the BroadcastChannel instance created by subscribeLeadStatusChange
+    // via `this` in the constructor so we can fire a synthetic inbound message.
+    class MockBroadcastChannel {
+      onmessage: ((e: MessageEvent) => void) | null = null;
+      close = vi.fn();
+      constructor(_channelName: string) {
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        capturedInstance = this;
+      }
+    }
+    let capturedInstance: MockBroadcastChannel | null = null;
+    vi.stubGlobal('BroadcastChannel', MockBroadcastChannel);
+
+    const received: Array<{ contactId: string; props: Record<string, string | undefined> }> = [];
+    const cleanup = subscribeLeadStatusChange((contactId, props) => {
+      received.push({ contactId, props });
+    });
+
+    expect(capturedInstance).not.toBeNull();
+    expect(capturedInstance!.onmessage).toBeTypeOf('function');
+
+    // Simulate a message arriving from another tab.
+    const msg = { contactId: 'contact-bc-02', props: { hs_lead_status: 'SURVEY_SENT' } };
+    capturedInstance!.onmessage!({ data: msg } as MessageEvent);
+
+    cleanup();
+
+    expect(received).toHaveLength(1);
+    expect(received[0].contactId).toBe('contact-bc-02');
+    expect(received[0].props.hs_lead_status).toBe('SURVEY_SENT');
   });
 });
