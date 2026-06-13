@@ -6011,6 +6011,10 @@ app.post('/api/card-actions/contact-customer',
            FROM contact_attempt_log cal
            LEFT JOIN users u ON u.id = cal.attempted_by
            WHERE cal.hubspot_contact_id = $1
+             AND cal.attempted_at > COALESCE(
+               (SELECT MAX(attempted_at) FROM contact_attempt_history_log
+                 WHERE hubspot_contact_id = $1),
+               '-infinity'::timestamptz)
            ORDER BY cal.attempted_at DESC`,
           [contactId]
         ),
@@ -6119,6 +6123,10 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
          FROM contact_attempt_log cal
          LEFT JOIN users u ON u.id = cal.attempted_by
          WHERE cal.hubspot_contact_id = $1
+           AND cal.attempted_at > COALESCE(
+             (SELECT MAX(attempted_at) FROM contact_attempt_history_log
+               WHERE hubspot_contact_id = $1),
+             '-infinity'::timestamptz)
          ORDER BY cal.attempted_at DESC`,
         [contactId]
       );
