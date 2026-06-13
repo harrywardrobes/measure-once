@@ -170,6 +170,31 @@ describe('broadcastLeadStatusChange → subscribeLeadStatusChange round-trip', (
   });
 });
 
+// ── window.dispatchEvent throws — silent failure guard ────────────────────────
+//
+// Verifies that the try/catch around window.dispatchEvent is load-bearing:
+// if it were removed, a throwing dispatchEvent would propagate to the caller.
+// This test will fail if the try/catch is ever accidentally deleted.
+
+describe('window.dispatchEvent throws — broadcastLeadStatusChange stays silent', () => {
+  let originalDispatchEvent: typeof window.dispatchEvent;
+
+  beforeEach(() => {
+    originalDispatchEvent = window.dispatchEvent;
+    window.dispatchEvent = () => { throw new Error('dispatchEvent stubbed to throw'); };
+  });
+
+  afterEach(() => {
+    window.dispatchEvent = originalDispatchEvent;
+  });
+
+  it('does not re-throw when window.dispatchEvent throws', () => {
+    expect(() => {
+      broadcastLeadStatusChange('contact-throw-01', { hs_lead_status: 'VISIT_BOOKED' });
+    }).not.toThrow();
+  });
+});
+
 // ── BroadcastChannel absent (guard path) ──────────────────────────────────────
 //
 // Verifies that both functions degrade gracefully when BroadcastChannel is not
