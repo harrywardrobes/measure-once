@@ -462,6 +462,24 @@ async function verifyTurnstileForResend(token, ip) {
   }
 }
 
+// ── In-memory cooldown for the staff resend endpoint ──────────────────────────
+// Rejects a second resend for the same contactId within 10 seconds to prevent
+// duplicate emails from rapid double-taps on a slow network.
+// Map: contactId (string) → timestamp of last successful resend (ms).
+const _staffResendCooldown = new Map();
+const STAFF_RESEND_COOLDOWN_MS = 10 * 1000;
+function checkStaffResendCooldown(contactId) {
+  const now = Date.now();
+  const last = _staffResendCooldown.get(contactId);
+  if (last !== undefined && now - last < STAFF_RESEND_COOLDOWN_MS) return false;
+  // Stamp now to block concurrent duplicate requests; clear on failure so retries are allowed.
+  _staffResendCooldown.set(contactId, now);
+  return true;
+}
+function clearStaffResendCooldown(contactId) {
+  _staffResendCooldown.delete(contactId);
+}
+
 // ── In-memory IP rate limiter for the public resend endpoint ──────────────────
 // Max 5 requests per IP per hour. Map: ip → array of timestamps.
 const _resendIpLog = new Map();
@@ -1223,97 +1241,110 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
       return res.status(400).json({ error: 'Invalid contactId.' });
     }
 
+    if (!checkStaffResendCooldown(cid)) {
+      return res.status(429).json({ error: 'Re-send cooldown active — please wait a moment before trying again.' });
+    }
+
     const preToken = req.body && typeof req.body.token === 'string' ? req.body.token : null;
 
-    // If a pre-generated token is provided, use it — no new DB row
-    if (preToken) {
-      const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
-      const { rows } = await pool.query(
-        `SELECT contact_email, masked_email, contact_name, form_link FROM customer_info_submissions
-         WHERE token_hash = $1 AND contact_id = $2`,
-        [tokenHash, cid]
-      );
-      if (!rows.length) {
-        return res.status(404).json({ error: 'Pre-generated link not found.' });
-      }
-      const row = rows[0];
-      const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
-      // Back-populate form_link for rows created before the column was added
-      // (pre-migration rows have form_link = NULL; raw token is available here
-      // so we can reconstruct and persist the URL now).
-      if (!row.form_link) {
-        await pool.query(
-          `UPDATE customer_info_submissions SET form_link = $1 WHERE token_hash = $2`,
-          [formLink, tokenHash]
+    try {
+      // If a pre-generated token is provided, use it — no new DB row
+      if (preToken) {
+        const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
+        const { rows } = await pool.query(
+          `SELECT contact_email, masked_email, contact_name, form_link FROM customer_info_submissions
+           WHERE token_hash = $1 AND contact_id = $2`,
+          [tokenHash, cid]
         );
-      }
-      await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
-      logger.info(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
-      return res.json({ ok: true });
-    }
-
-    // Original flow: fetch from HubSpot, generate token, create row, send email
-    let contact;
-    try {
-      contact = await fetchContactFromHubSpot(cid);
-    } catch (err) {
-      logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
-      return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
-    }
-
-    const props = contact.properties || {};
-    const email = (props.email || '').trim();
-    if (!email) {
-      return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
-    }
-    const phone     = (props.mobilephone || props.phone || '').trim();
-    const firstName = (props.firstname || '').trim();
-    const lastName  = (props.lastname  || '').trim();
-    const name = [firstName, lastName].filter(Boolean).join(' ') || email;
-
-    const rawToken  = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
-    const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
-
-    // Atomically expire any existing active links and insert the new one so
-    // concurrent staff resend requests cannot leave two live bearer tokens.
-    const staffResendClient = await pool.connect();
-    try {
-      await staffResendClient.query('BEGIN');
-      await staffResendClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
-
-      const staffExpireResult = await staffResendClient.query(
-        `UPDATE customer_info_submissions
-         SET expires_at = NOW()
-         WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
-        [cid]
-      );
-      if (staffExpireResult.rowCount > 0) {
-        logger.info(`[customer-info] Resend: expired ${staffExpireResult.rowCount} active link(s) for contact ${cid} before inserting new one`);
+        if (!rows.length) {
+          clearStaffResendCooldown(cid);
+          return res.status(404).json({ error: 'Pre-generated link not found.' });
+        }
+        const row = rows[0];
+        const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
+        // Back-populate form_link for rows created before the column was added
+        // (pre-migration rows have form_link = NULL; raw token is available here
+        // so we can reconstruct and persist the URL now).
+        if (!row.form_link) {
+          await pool.query(
+            `UPDATE customer_info_submissions SET form_link = $1 WHERE token_hash = $2`,
+            [formLink, tokenHash]
+          );
+        }
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+        logger.info(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
+        return res.json({ ok: true });
       }
 
-      await staffResendClient.query(
-        `INSERT INTO customer_info_submissions
-           (contact_id, contact_name, contact_email, token_hash, expires_at,
-            masked_email, masked_phone, form_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [cid, name, email, tokenHash, expiresAt.toISOString(),
-         maskEmail(email), maskPhone(phone), formLink]
-      );
+      // Original flow: fetch from HubSpot, generate token, create row, send email
+      let contact;
+      try {
+        contact = await fetchContactFromHubSpot(cid);
+      } catch (err) {
+        logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
+        clearStaffResendCooldown(cid);
+        return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
+      }
 
-      await staffResendClient.query('COMMIT');
+      const props = contact.properties || {};
+      const email = (props.email || '').trim();
+      if (!email) {
+        clearStaffResendCooldown(cid);
+        return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
+      }
+      const phone     = (props.mobilephone || props.phone || '').trim();
+      const firstName = (props.firstname || '').trim();
+      const lastName  = (props.lastname  || '').trim();
+      const name = [firstName, lastName].filter(Boolean).join(' ') || email;
+
+      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+      const formLink  = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
+
+      // Atomically expire any existing active links and insert the new one so
+      // concurrent staff resend requests cannot leave two live bearer tokens.
+      const staffResendClient = await pool.connect();
+      try {
+        await staffResendClient.query('BEGIN');
+        await staffResendClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
+
+        const staffExpireResult = await staffResendClient.query(
+          `UPDATE customer_info_submissions
+           SET expires_at = NOW()
+           WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+          [cid]
+        );
+        if (staffExpireResult.rowCount > 0) {
+          logger.info(`[customer-info] Resend: expired ${staffExpireResult.rowCount} active link(s) for contact ${cid} before inserting new one`);
+        }
+
+        await staffResendClient.query(
+          `INSERT INTO customer_info_submissions
+             (contact_id, contact_name, contact_email, token_hash, expires_at,
+              masked_email, masked_phone, form_link)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [cid, name, email, tokenHash, expiresAt.toISOString(),
+           maskEmail(email), maskPhone(phone), formLink]
+        );
+
+        await staffResendClient.query('COMMIT');
+      } catch (err) {
+        await staffResendClient.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        staffResendClient.release();
+      }
+
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink);
+
+      logger.info(`[customer-info] Resent invite link for contact ${cid}`);
+      res.json({ ok: true });
     } catch (err) {
-      await staffResendClient.query('ROLLBACK').catch(() => {});
+      // Clear the cooldown so staff can retry immediately after a transient error.
+      clearStaffResendCooldown(cid);
       throw err;
-    } finally {
-      staffResendClient.release();
     }
-
-    await sendCustomerInviteEmail(email, maskEmail(email), formLink);
-
-    logger.info(`[customer-info] Resent invite link for contact ${cid}`);
-    res.json({ ok: true });
   }
 );
 

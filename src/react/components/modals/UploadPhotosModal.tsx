@@ -123,6 +123,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const [linkError, setLinkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(false);
+  const resendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState('');
   const [copyAndClosing, setCopyAndClosing] = useState(false);
 
@@ -266,6 +268,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to re-send');
       showToast('Email re-sent to customer', false);
+      setResendCooldown(true);
+      if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
+      resendCooldownRef.current = setTimeout(() => setResendCooldown(false), 3000);
     } catch (e) {
       showToast((e as Error).message || 'Could not re-send email', true);
     } finally {
@@ -294,8 +299,11 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setCopyAndClosing(true);
   }, [generatedLink, onClose]);
 
+  useEffect(() => () => { if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current); }, []);
+
   function handleClose() {
     generateAbortRef.current?.abort();
+    if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
     setPhase('checking');
     setError('');
     setGeneratedLink(null);
@@ -304,6 +312,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setLinkStatus(null);
     setCopyAndClosing(false);
     setResending(false);
+    setResendCooldown(false);
     onClose();
   }
 
@@ -502,10 +511,10 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             <DemoActionTooltip demo={demo}>
               <Button
                 onClick={handleResend}
-                disabled={resending || demo}
+                disabled={resending || resendCooldown || demo}
                 startIcon={resending ? <CircularProgress size={16} color="inherit" /> : undefined}
               >
-                {resending ? 'Sending…' : 'Re-send link'}
+                {resending ? 'Sending…' : resendCooldown ? 'Sent' : 'Re-send link'}
               </Button>
             </DemoActionTooltip>
             <DemoActionTooltip demo={demo}>
