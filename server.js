@@ -19,7 +19,7 @@ const {
   quickbooksReadWriteLimiter,
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
-const { router: googleMapsRouter } = require('./google-maps');
+const { router: googleMapsRouter, schedulePruneOldUsage } = require('./google-maps');
 const {
   ARRANGE_VISIT_KEYS    : _ARRANGE_VISIT_KEYS,
   DVF_STATUS_MAP        : _DVF_STATUS_MAP,
@@ -7134,6 +7134,11 @@ async function cleanupStaleHubSpotCredentialRows() {
   } else {
     logger.info('  Skipping boot-time migrations in production (schema managed by Replit publish-time diff)');
   }
+
+  // Schedule the google_maps_usage pruner now that the schema is guaranteed to
+  // exist.  Running it here (post-migration) prevents the spurious
+  // "relation does not exist" warning that occurred when it ran at module load.
+  schedulePruneOldUsage();
 
   try {
     const ok = await setupAuth(app);

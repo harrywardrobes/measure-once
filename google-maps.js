@@ -155,7 +155,7 @@ function keyMeta() {
 // where period is either an ISO date (YYYY-MM-DD) for daily counts or an
 // ISO year-month (YYYY-MM) for monthly counts. Atomic DB increments make the
 // figures correct across multiple server instances. Old rows (>62 days) are
-// pruned on startup so the table stays small.
+// pruned once on startup (post-migration) and then daily so the table stays small.
 //
 // The recent-errors ring buffer is stored in app_settings under the key
 // `google_maps_diagnostics_errors` as a JSON array. Read-modify-write is
@@ -169,8 +169,7 @@ function _periodKeys(d = new Date()) {
   return { day, month };
 }
 
-// Prune usage rows older than 62 days. Called once on startup; failures are
-// non-fatal since they only affect table tidiness.
+// Prune usage rows older than 62 days. Non-fatal; only affects table tidiness.
 async function _pruneOldUsage() {
   try {
     const cutoff = new Date();
@@ -189,7 +188,19 @@ async function _pruneOldUsage() {
     logger.warn({ err: e.message }, 'google-maps: _pruneOldUsage failed (non-fatal)');
   }
 }
-_pruneOldUsage();
+
+/**
+ * Start the usage-pruner schedule.  Call this once after migrations have
+ * completed so the first prune never races table creation.  Runs immediately
+ * and then every 24 hours thereafter.  Idempotent — subsequent calls are no-ops.
+ */
+let _pruneScheduled = false;
+function schedulePruneOldUsage() {
+  if (_pruneScheduled) return;
+  _pruneScheduled = true;
+  _pruneOldUsage();
+  setInterval(_pruneOldUsage, 24 * 60 * 60 * 1000).unref();
+}
 
 // Atomically increment counters for both the day and month periods.
 // Both upserts run inside a single transaction so the two rows stay in sync
@@ -490,4 +501,5 @@ module.exports = {
   DEFAULT_SETTINGS,
   SURFACE_IDS,
   readSettings,
+  schedulePruneOldUsage,
 };
