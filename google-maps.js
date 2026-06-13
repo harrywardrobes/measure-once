@@ -11,9 +11,11 @@
  *    browser. It exposes the browser API key (Google JS keys are referrer-
  *    restricted public keys) plus the client-relevant runtime flags, but only
  *    when the master switch is on and a key is configured.
- *  - In-memory server-side request counters + a recent-errors ring buffer,
- *    incremented by the server-side Google REST calls used for connection
- *    testing.
+ *  - DB-persisted server-side request counters (in `google_maps_usage` table)
+ *    and a recent-errors ring buffer (in `app_settings` as JSON). Counters
+ *    survive server restarts and are consistent across multiple instances.
+ *    Incremented by the server-side Google REST calls used for connection
+ *    testing and by the public client usage beacon.
  *
  * The browser API key lives in the GOOGLE_PLACES_API_KEY secret (never stored
  * in the database). The admin UI only ever sees the last 4 characters.
@@ -143,19 +145,23 @@ function keyMeta() {
   };
 }
 
-// ── Diagnostics (in-memory counters + recent-errors ring buffer) ─────────────
+// ── Diagnostics (DB-persisted counters + recent-errors ring buffer) ───────────
 // Counters are incremented both by the server-side REST wrapper (connection
 // tests) and by the public client usage beacon (`POST /api/google-maps/usage`),
 // so the figures reflect real autocomplete / place-details / static-map traffic
 // performed directly by the browser.
+//
+// Counters are stored in the `google_maps_usage` table keyed by (period, api)
+// where period is either an ISO date (YYYY-MM-DD) for daily counts or an
+// ISO year-month (YYYY-MM) for monthly counts. Atomic DB increments make the
+// figures correct across multiple server instances. Old rows (>62 days) are
+// pruned on startup so the table stays small.
+//
+// The recent-errors ring buffer is stored in app_settings under the key
+// `google_maps_diagnostics_errors` as a JSON array. Read-modify-write is
+// acceptable here because error entries are informational and low-frequency.
 const RING_SIZE = 20;
-const diag = {
-  dayKey: '',
-  monthKey: '',
-  today: {}, // { autocomplete: n, details: n, geocode: n, staticmap: n, mapsjs: n }
-  month: {},
-  errors: [], // ring buffer of { timestamp, api, surface, errorCode, message }
-};
+const ERRORS_KEY = 'google_maps_diagnostics_errors';
 
 function _periodKeys(d = new Date()) {
   const day = d.toISOString().slice(0, 10);
@@ -163,41 +169,111 @@ function _periodKeys(d = new Date()) {
   return { day, month };
 }
 
-function _rollPeriods() {
+// Prune usage rows older than 62 days. Called once on startup; failures are
+// non-fatal since they only affect table tidiness.
+async function _pruneOldUsage() {
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 62);
+    const cutoffDay = cutoff.toISOString().slice(0, 10);
+    await pool.query(
+      "DELETE FROM google_maps_usage WHERE period < $1 AND length(period) = 10",
+      [cutoffDay],
+    );
+    const cutoffMonth = cutoff.toISOString().slice(0, 7);
+    await pool.query(
+      "DELETE FROM google_maps_usage WHERE period < $1 AND length(period) = 7",
+      [cutoffMonth],
+    );
+  } catch (e) {
+    logger.warn({ err: e.message }, 'google-maps: _pruneOldUsage failed (non-fatal)');
+  }
+}
+_pruneOldUsage();
+
+// Atomically increment counters for both the day and month periods.
+// Both upserts run inside a single transaction so the two rows stay in sync
+// even if there is a partial failure.
+// Fire-and-forget — callers do not await this so hot paths stay fast.
+async function recordRequest(api) {
   const { day, month } = _periodKeys();
-  if (diag.dayKey !== day) {
-    diag.dayKey = day;
-    diag.today = {};
-  }
-  if (diag.monthKey !== month) {
-    diag.monthKey = month;
-    diag.month = {};
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO google_maps_usage (period, api, count) VALUES ($1, $2, 1)
+       ON CONFLICT (period, api) DO UPDATE SET count = google_maps_usage.count + 1`,
+      [day, api],
+    );
+    await client.query(
+      `INSERT INTO google_maps_usage (period, api, count) VALUES ($1, $2, 1)
+       ON CONFLICT (period, api) DO UPDATE SET count = google_maps_usage.count + 1`,
+      [month, api],
+    );
+    await client.query('COMMIT');
+  } catch (e) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
+    }
+    logger.warn({ err: e.message, api }, 'google-maps: recordRequest DB write failed');
+  } finally {
+    if (client) client.release();
   }
 }
 
-function recordRequest(api) {
-  _rollPeriods();
-  diag.today[api] = (diag.today[api] || 0) + 1;
-  diag.month[api] = (diag.month[api] || 0) + 1;
-}
-
-function recordError(api, info = {}) {
-  diag.errors.unshift({
+// Prepend a new entry to the errors ring buffer stored in app_settings.
+// Fire-and-forget — callers do not await this so hot paths stay fast.
+async function recordError(api, info = {}) {
+  const entry = {
     timestamp: new Date().toISOString(),
     api,
     surface: info.surface || null,
     errorCode: info.errorCode ? String(info.errorCode).slice(0, 60) : null,
     message: info.message ? String(info.message).slice(0, 300) : null,
-  });
-  if (diag.errors.length > RING_SIZE) diag.errors.length = RING_SIZE;
+  };
+  try {
+    const { rows } = await pool.query(
+      'SELECT value FROM app_settings WHERE key = $1',
+      [ERRORS_KEY],
+    );
+    const errors = rows[0] ? JSON.parse(rows[0].value) : [];
+    errors.unshift(entry);
+    if (errors.length > RING_SIZE) errors.length = RING_SIZE;
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [ERRORS_KEY, JSON.stringify(errors)],
+    );
+  } catch (e) {
+    logger.warn({ err: e.message, api }, 'google-maps: recordError DB write failed');
+  }
 }
 
-function diagnosticsSnapshot() {
-  _rollPeriods();
+// Read counters for today + this month from the DB, plus the stored error ring.
+async function diagnosticsSnapshot() {
+  const { day, month } = _periodKeys();
+  const [usageRes, errorsRes] = await Promise.all([
+    pool.query(
+      'SELECT period, api, count FROM google_maps_usage WHERE period = $1 OR period = $2',
+      [day, month],
+    ),
+    pool.query('SELECT value FROM app_settings WHERE key = $1', [ERRORS_KEY]),
+  ]);
+
+  const today = {};
+  const monthCounts = {};
+  for (const row of usageRes.rows) {
+    const n = Number(row.count);
+    if (row.period === day) today[row.api] = n;
+    else if (row.period === month) monthCounts[row.api] = n;
+  }
+
+  const errors = errorsRes.rows[0] ? JSON.parse(errorsRes.rows[0].value) : [];
   return {
-    today: { ...diag.today },
-    month: { ...diag.month },
-    recentErrors: diag.errors.slice(0, RING_SIZE),
+    today,
+    month: monthCounts,
+    recentErrors: errors.slice(0, RING_SIZE),
   };
 }
 
@@ -345,9 +421,14 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
   res.json({ ok, keyPresent: true, keyLast4: key.slice(-4), checks });
 });
 
-// Admin: usage diagnostics (server-side counters + recent errors).
-router.get('/api/admin/google-maps/diagnostics', isAuthenticated, requireAdmin, (_req, res) => {
-  res.json(diagnosticsSnapshot());
+// Admin: usage diagnostics (DB-persisted counters + recent errors).
+router.get('/api/admin/google-maps/diagnostics', isAuthenticated, requireAdmin, async (_req, res) => {
+  try {
+    res.json(await diagnosticsSnapshot());
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/google-maps/diagnostics error');
+    res.status(500).json({ error: 'Could not load diagnostics.' });
+  }
 });
 
 // Public: client runtime config. Exposes the browser key ONLY when the master
@@ -383,8 +464,8 @@ router.get('/api/google-maps/config', async (_req, res) => {
 // Public: lightweight client usage beacon. Autocomplete, place-details and
 // static-map requests are made directly by the browser against Google, so the
 // server never sees them otherwise. The client posts a tiny record here so the
-// usage diagnostics reflect real traffic. In-memory only (no DB writes, no
-// outbound calls), strictly validated, and naturally bounded by the counters /
+// usage diagnostics reflect real traffic. Counter writes go to the DB
+// (fire-and-forget), strictly validated, and naturally bounded by the counters /
 // ring buffer — safe to expose on the unauthenticated customer-info surface.
 const usageSchema = z.object({
   api: z.enum(['autocomplete', 'details', 'staticmap']),
