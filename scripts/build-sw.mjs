@@ -51,7 +51,6 @@ const { count, size, warnings } = await generateSW({
   globPatterns: [
     'react/main.js',
     'react/chunks/**/*.js',
-    'react/assets/**/*.{js,css,woff,woff2,ttf,otf,png,jpg,jpeg,svg}',
     'fonts/**/*.{ttf,woff,woff2}',
     'assets/**/*.png',
     'icons/**/*.png',
