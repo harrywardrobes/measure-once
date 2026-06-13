@@ -1,0 +1,125 @@
+# Update UploadPhotosModal: add "Manually Upload" + full action set for active links
+
+## Goal
+In `src/react/components/modals/UploadPhotosModal.tsx`, let a staff user upload
+photos that a customer sent in by another channel (email/WhatsApp) **on the
+customer's behalf**, by opening the same customer link the customer would use
+and completing + submitting that form themselves. Add this as a **third action**
+("Manually Upload") alongside the existing "Send email" and "Copy & close".
+
+Crucially, when the contact **already has an active link**, the modal must stop
+being a dead-end warning screen and instead let the user **copy the link**,
+**re-send the link to the customer**, and **Manually Upload** — all **against the
+existing active link, without generating a new one** (generating a new link
+expires the customer's current link, which we must not do here).
+
+## Background (how it works today — don't break these)
+- The customer-facing form lives at `/customer-info/:token` (`CustomerInfoPage.tsx`).
+  The customer confirms contact details + address, sets room count, uploads
+  photos (`POST /api/customer-info/:token/photos`), then submits
+  (`POST /api/customer-info/:token`). **Photos only persist to the record at
+  submit time**, via the `photoKeys` array. The submit flow already enforces
+  Turnstile, validation, and link expiry.
+- On open, the modal calls `GET /api/customer-info/by-contact/:contactId/link-status`.
+  - If `hasActiveLink === false` → it auto-calls
+    `POST /.../generate-link` and shows the "ready" screen (Send email / Copy & close).
+  - If `hasActiveLink === true` → it currently shows a **warning-only**
+    "confirming" screen offering "Cancel" or "Generate new link" (which **expires**
+    the existing link). This is the screen we are upgrading.
+- **Security model — keep it exactly:** the raw bearer link/token is only ever
+  returned to **manager/admin** users. `generate-link` returns `formLink`+`token`
+  only when `privilege_level` is `manager`/`admin` (see customer-info.js ~line 627).
+  Members can still Send email / Resend (server uses the token internally) but
+  must never receive the URL. The same rule must apply to everything we add.
+- Resend already supports reusing an existing token without expiring it:
+  `POST /api/customer-info/by-contact/:contactId/resend` with `{ token }` re-sends
+  that exact link. (Calling it **without** a token regenerates+expires — do NOT
+  use the no-token path here.)
+
+## Required backend change (minimal)
+The modal's "active link exists" state has no URL today, so it cannot copy,
+resend-by-token, or open the form. Fix this by exposing the existing active
+link's URL from `link-status`:
+
+- In `customer-info.js`, update `GET /api/customer-info/by-contact/:contactId/link-status`
+  so that, when an active link exists, it also selects the row's `form_link` and
+  returns it as `formLink` **only for manager/admin users** (reuse the exact
+  privilege-check pattern already used in `generate-link` ~line 627–645; default
+  to omitting the link if the lookup fails). Members continue to get just
+  `{ hasActiveLink, expiresAt }`.
+- The raw token is the last path segment of `form_link`
+  (`/customer-info/<token>`); the modal can derive it from `formLink` to pass to
+  the resend endpoint. (If you prefer, also return `token` alongside `formLink`
+  for manager/admin — but do not store or expose it to members.)
+- Do **not** change the submit or photos endpoints. Manual upload reuses the
+  real public form, so all existing protections apply automatically.
+
+## Frontend changes (`UploadPhotosModal.tsx`)
+1. **`LinkStatus` type / `checkStatus`:** capture the new `formLink` (and `token`
+   if returned) from the `link-status` response.
+
+2. **"ready" screen (no pre-existing link → freshly generated):** add a third
+   action **"Manually Upload"** next to "Send email" and "Copy & close". Keep
+   labels/`data-testid`s of the existing buttons unchanged
+   (`cah-primary`, `cah-copy-close`). Give the new button a stable testid
+   (e.g. `cah-manual-upload`).
+
+3. **Active-link state (was the warning-only "confirming" screen):** redesign so
+   that when `hasActiveLink === true` **and** a `formLink` is available
+   (manager/admin), the user can:
+   - **Copy link** — copy the existing `formLink` (reuse the `CopyLinkField` /
+     copy logic already in this file).
+   - **Re-send link** — `POST /.../resend` with the token derived from `formLink`,
+     so the **existing** link is re-emailed (no new link, no expiry). Show the
+     existing toast on success.
+   - **Manually Upload** — see below.
+   - Keep the existing destructive **"Generate new link"** as a clearly secondary
+     option (it still expires the current link); preserve its warning copy and
+     `data-testid="cah-confirm-generate"`. Keep `cah-cancel-confirming` for Cancel.
+   - Members (no `formLink`) keep today's behaviour: warning + Generate new / Cancel
+     (plus Re-send is fine for members since it doesn't expose the URL).
+
+4. **"Manually Upload" behaviour (both states):** open the customer form URL
+   (`formLink` — the existing active link when present, otherwise the just-
+   generated link) in a **new browser tab** (`window.open(formLink, '_blank',
+   'noopener,noreferrer')`). The staff member completes and submits that form on
+   the customer's behalf (uploading the photos the customer sent by email/WhatsApp).
+   No new submission API is needed — submission persists the photos via the
+   normal flow. After opening, keep the modal usable (don't force-close); a short
+   helper line like "Opens the customer's upload form in a new tab — complete and
+   submit it on their behalf." is good UX. Disable/hide "Manually Upload" when no
+   `formLink` is available (e.g. member users).
+
+5. **Demo mode:** preserve existing demo handling. In demo, "Manually Upload"
+   should be inert/disabled (wrap with `DemoActionTooltip` like the primary
+   button); do not open a real tab.
+
+6. **Edge cases:** if `link-status` reports an active link but returns no
+   `formLink` (member, or back-populated NULL `form_link`), gracefully fall back
+   to the current warning-only behaviour for the affected actions. Preserve all
+   existing abort/cleanup logic and error handling.
+
+## Tests
+Follow the existing suites in `test/` (`upload-photos-modal-emitter`,
+`upload-photos-modal-labels`, `upload-photos-resend-mode`,
+`upload-photos-copyable-link`, `active-link-warning-ordering`) and the Storybook
+file `UploadPhotosModal.stories.tsx`. Add/extend coverage for:
+- "Manually Upload" appears on the ready screen and calls `window.open` with the
+  correct `formLink`.
+- Active-link state for a manager/admin shows Copy / Re-send / Manually Upload and
+  does **not** call `generate-link` (i.e. the existing link is not expired).
+- Re-send in the active-link state posts to `/resend` with the token derived from
+  `formLink` (not the regenerating no-token path).
+- Member / no-`formLink` users fall back to the existing warning behaviour and
+  never see the bearer URL.
+- Backend: `link-status` returns `formLink` for manager/admin and omits it for
+  members.
+
+## Acceptance criteria
+- Existing "Send email" / "Copy & close" behaviour and testids unchanged.
+- With an active link, a manager/admin can copy it, re-send it, or manually
+  upload **without** the existing link being expired.
+- "Manually Upload" opens the real customer form in a new tab and relies on the
+  normal submit flow to persist photos — no changes to the photos/submit endpoints.
+- The bearer link/token is never exposed to member users anywhere in the new flow.
+- Demo mode never opens a real tab or hits real endpoints.

@@ -1,0 +1,111 @@
+# Fix: Customer card action bar must be driven by lead status (not room stage)
+
+## Problem
+On the Customers list page (`/customers`, `src/react/pages/CustomersPage.tsx`), the
+per-card "action bar" (the coloured action strip + the modal it opens on click) keeps
+silently reverting to the wrong action whenever stage/binding code is touched.
+
+Concrete repro: a contact whose `hs_lead_status = DESIGN_INVITED` currently shows
+**"Call customer"** (the `contact_customer` handler). It SHOULD show
+**"Confirm | Re-Send Invite"**, which opens the **Design Visit Follow Up**
+(`design_visit_followup`) handler/modal.
+
+## Root cause (please verify before changing)
+The action strip is resolved by TWO independent systems inside `CustomerCard` in
+`CustomersPage.tsx`:
+
+1. The **handler/modal** (what the click does):
+   `handler = cardActionHandlerFor(primaryStageKey, leadStatusKey)`
+   — looks up `card_action_handlers` bindings keyed by `` `${stage}|${status}` ``
+   (`src/react/hooks/useCardActionHandlers.ts`).
+2. The **label** (the text shown):
+   `cahName` (handler `config.action_name`) → else "Continue designing" for a draft →
+   else `resolveActionLabel(primaryStageKey, leadStatusKey, undefined)`
+   (`src/react/utils/resolveActionLabel.mjs`, reading the `stage_action_labels` table).
+
+The bug: `primaryStageKey` is derived from the contact's **room** stage
+(`primaryRoom?.stageKey || 'sales'`), NOT from the lead status. A `DESIGN_INVITED`
+contact whose room is still in `sales` resolves the lookup as `sales|design_invited`,
+which falls through to the sales-stage default → "Call customer". Any change to room
+or stage logic re-breaks this.
+
+## Required behaviour — lead status is the single source of truth
+- The action bar (both the handler it dispatches AND the label it shows) must be
+  resolved **from the lead status alone**.
+- The **stage** used for the binding/label lookup must also be **derived from the
+  lead status**, not from the room. Each lead status already carries its owning stage:
+  `/api/lead-statuses` returns a `stage` field per row (see `CustomerDetailPage.fetchLeadStatuses`
+  which maps `r.stage`). Use that.
+
+## Changes
+
+### 1. Carry `stage` on the lead status in CustomersPage
+In `src/react/pages/CustomersPage.tsx`:
+- Add `stage?: string | null;` to the local `LeadStatus` type (currently ~line 64).
+- `loadLeadStatuses()` already stores the raw `/api/lead-statuses` rows, so `stage`
+  will flow through once the type includes it — confirm the `statusMap` keeps it.
+
+### 2. Resolve the action bar by lead status in `CustomerCard`
+Replace the room-derived stage used for the action bar with a stage derived from the
+lead status. Around the current lines:
+
+```ts
+const primaryStageKey = primaryRoom?.stageKey || 'sales';
+const leadStatusKey = contact.properties?.hs_lead_status;
+const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey);
+...
+|| resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
+```
+
+Introduce an explicit `actionStageKey` derived from the lead status and use it for
+BOTH `cardActionHandlerFor(...)` and `resolveActionLabel(...)`:
+
+```ts
+const leadStatusKey = contact.properties?.hs_lead_status;
+// Lead status is the source of truth: derive the stage from the lead status,
+// not from the room. Fall back to the room stage only when the lead status has
+// no stage (e.g. null/unconfigured status).
+const leadStatusStage = leadStatusKey ? (statusMap.get(leadStatusKey)?.stage ?? null) : null;
+const actionStageKey = leadStatusStage || primaryRoom?.stageKey || 'sales';
+
+const handler = cardActionHandlerFor(actionStageKey, leadStatusKey);
+// ...and below:
+|| resolveActionLabel(actionStageKey, leadStatusKey, undefined);
+```
+
+Keep `primaryStageKey` (room-derived) for the stage *colour* pills only — do not let
+it drive the action bar.
+
+### 3. Verify the DESIGN_INVITED binding/label data exists
+Confirm there is a `card_action_handlers` row of type `design_visit_followup` bound to
+the `design_invited` lead status under its own stage (likely `designvisit`), and that
+the `stage_action_labels` / `action_name` for that slot is "Confirm | Re-Send Invite".
+If the binding is missing or bound to the wrong stage, fix the binding/seed so it sits
+on the lead status's real stage. Check the relevant migration/seed files (search for
+`design_visit_followup` and `design_invited`). The lead status config must define
+`stage` for `DESIGN_INVITED` (= its design-visit stage) for derivation to work.
+
+## Regression guard (required)
+Add an automated test that fails loudly if the action bar ever stops being driven by
+lead status. Prefer extending the existing pure-resolver/unit coverage so it runs in CI
+without a browser:
+- Assert that for `hs_lead_status = DESIGN_INVITED`, regardless of the contact's room
+  stage (e.g. room still `sales`), the resolved handler type is `design_visit_followup`
+  and the resolved label is "Confirm | Re-Send Invite".
+- Add a complementary case proving room stage does NOT override it (a `sales`-room +
+  `DESIGN_INVITED` contact must still resolve to design-visit-followup, never
+  "Call customer").
+Look at `test/customer-card-action-strip/run.js` and the resolver tests around
+`src/react/utils/resolveActionLabel.mjs` for the existing patterns; reuse whichever is
+lighter weight. Also re-run the existing `test:customer-card-action-strip` and
+`test:design-visit-followup` suites and keep them green.
+
+## Acceptance criteria
+- A `DESIGN_INVITED` contact on `/customers` shows "Confirm | Re-Send Invite" and
+  clicking it opens the Design Visit Follow Up modal — even when its room stage is
+  `sales`.
+- The action bar's handler AND label are both resolved from the lead status's stage,
+  never the room stage.
+- New regression test added and passing; existing action-strip / design-visit-followup
+  tests still pass.
+- No change to stage-colour pills (those may stay room-derived).
