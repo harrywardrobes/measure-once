@@ -173,6 +173,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:retired-tokens',               'static-lint — binary retired CSS token scan'],
   ['test:tokens-css',                   'static-lint — binary tokens.css naming convention check'],
   ['test:ls-keys',                      'static-lint — binary localStorage/sessionStorage key registry scan'],
+  ['test:slot-constants-drift',         'static-lint — binary slot-constant registry drift check; pass/fail only, no named probes'],
   // -- static / build checks ------------------------------------------------
   ['test:stale-bundle',                 'static-check — binary build artifact check'],
   ['test:storybook-output-clean',       'static-check — binary Storybook output guard'],
