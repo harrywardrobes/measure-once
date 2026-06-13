@@ -34,6 +34,7 @@ import {
   type QueueMethod,
 } from './offlineQueue';
 import { detectConflict, type ConflictDecision } from './conflictDetection';
+import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 
 
 // ── Tunables ────────────────────────────────────────────────────────────────────
@@ -128,26 +129,22 @@ function surfaceConflict(entry: QueueEntry): void {
 /**
  * After a successful replay of any queued write, broadcast the resulting
  * lead-status change so any open Projects board tabs update without a manual
- * refresh. Fired whenever the response body carries `hs_lead_status` —
- * covers arrange-visit/outcome and any future modal that changes lead status.
+ * refresh. Fired whenever the response body carries `hs_lead_status` or
+ * `setsLeadStatus` — covers arrange-visit/outcome, photo-review, and any
+ * future modal that changes lead status.
  *
- * The contact ID is read from `body.contactId` (ArrangeVisitModal) or
- * `body.customerId` (GenericVisitEditModal), both of which hold the HubSpot
- * contact ID.
+ * The contact ID is read from `body.contactId` (ArrangeVisitModal,
+ * ReviewCustomerPhotosDrawer) or `body.customerId` (GenericVisitEditModal),
+ * both of which hold the HubSpot contact ID.
  */
 function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void {
-  const d = data as { hs_lead_status?: string } | null | undefined;
-  if (!d?.hs_lead_status) return;
+  const d = data as { hs_lead_status?: string; setsLeadStatus?: string | null } | null | undefined;
+  const leadStatus = d?.hs_lead_status || d?.setsLeadStatus || null;
+  if (!leadStatus) return;
   const body = entry.body as { contactId?: string; customerId?: string } | null | undefined;
   const contactId = body?.contactId ?? body?.customerId;
   if (!contactId) return;
-  const hs_lead_status = d.hs_lead_status ?? '';
-  if (typeof BroadcastChannel === 'undefined') return;
-  try {
-    const ch = new BroadcastChannel('contact_properties_changed');
-    ch.postMessage({ contactId, props: { hs_lead_status } });
-    ch.close();
-  } catch { /* non-fatal */ }
+  broadcastLeadStatusChange(contactId, { hs_lead_status: leadStatus });
 }
 
 // ── Replay primitives ────────────────────────────────────────────────────────────
