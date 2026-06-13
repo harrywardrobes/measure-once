@@ -1,4 +1,18 @@
 'use strict';
+
+const PROBE_LABELS = [
+  '(A) Loader: invoice fully paid → paymentState=\'paid\'',
+  '(B) Loader: invoice unpaid → paymentState=\'unpaid\'',
+  '(C) Loader: QB not connected → qbConnected=false, paymentState=\'unknown\'',
+  '(D) Loader: stored invoiceId on design_visit used (no QB search needed)',
+  '(E) Resend: valid → QB send called, 200 ok',
+  '(F) Resend: rate limit hit → 429',
+  '(G) Resend: invoice belongs to different contact → 403',
+  '(H) Not-proceeding: sets DECLINED_DEAL; no thank-you email when skipped',
+  '(I) Not-proceeding: sends thank-you email when requested',
+  '(J) Template: deposit_invoice_payment_reminder renders expected variables',
+];
+
 // test/deposit-invoice-followup/run.js
 //
 // Integration tests for the deposit_invoice_followup card-action handler routes.
