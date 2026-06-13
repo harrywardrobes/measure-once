@@ -144,6 +144,7 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  *   contacts         – array of contact objects for /api/contacts-all
  *   handlers         – array for /api/card-action-handlers
  *   inProgress       – array for /api/design-visits/in-progress
+ *   leadStatuses     – array for /api/lead-statuses (default [])
  *   qbConnected      – boolean; when true, stubs QB status as connected + returns qbInvoices
  *   qbInvoices       – array of invoice summary objects returned by /api/quickbooks/invoices
  *   qbInvoiceDetails – map of id → detail object for /api/quickbooks/invoice/:id stubs
@@ -159,6 +160,7 @@ function buildFetchInterceptScript(opts) {
     contacts,
     handlers,
     inProgress,
+    leadStatuses = [],
     qbConnected = false,
     qbInvoices = [],
     qbInvoiceDetails = {},
@@ -173,7 +175,7 @@ function buildFetchInterceptScript(opts) {
     '/api/card-action-handlers':      JSON.stringify(handlers),
     '/api/stage-action-labels':       JSON.stringify([]),
     '/api/lead-substatuses':          JSON.stringify([]),
-    '/api/lead-statuses':             JSON.stringify([]),
+    '/api/lead-statuses':             JSON.stringify(leadStatuses),
     '/api/workflow':                  JSON.stringify({ stages: { sales: { label: 'Sales' } } }),
     '/api/localdata/all':             JSON.stringify({}),
     '/api/contacts-lead-status-counts': JSON.stringify({}),
@@ -446,6 +448,9 @@ async function main() {
     '(H1) UploadPhotosModal confirming + future expiresAt: body contains expiry text',
     '(H2) UploadPhotosModal confirming + past expiresAt: body contains expiry text',
     '(H3) UploadPhotosModal confirming + invalid expiresAt: body contains "expiry date unavailable"',
+    '(I) DESIGN_INVITED + sales-stage room: action strip resolves to design_visit_followup handler',
+    '(I) DESIGN_INVITED + sales-stage room: strip does not show "Call customer"',
+    '(I) unbound lead-status + sales-stage room: no strip rendered',
   ];
 
   if (!puppeteer) {
@@ -1136,6 +1141,159 @@ async function main() {
         : 'cah-confirm-generate button not found (confirming phase not reached)',
       h3State.buttonFound && h3State.bodyText.includes('expiry date unavailable'),
     );
+
+    // ── Probe I: DESIGN_INVITED + sales-stage room uses lead-status stage ─────
+    //
+    // Regression guard: when a contact has hs_lead_status=DESIGN_INVITED and
+    // that lead status carries stage=designvisit, the action strip must resolve
+    // using the lead status's own stage (designvisit), NOT the room stage
+    // (sales).  Without the fix, cardActionHandlerFor('sales', 'DESIGN_INVITED')
+    // finds no binding and falls back to the sales-stage default, showing
+    // "Call customer" instead of the design_visit_followup handler label.
+    console.log('\n  [I] DESIGN_INVITED lead-status stage resolution probe');
+
+    const CONTACT_I1_ID     = 'privtest-ccas-contact-i1';
+    const CONTACT_I2_ID     = 'privtest-ccas-contact-i2';
+    const DESIGN_INVITED_STATUS = 'DESIGN_INVITED';
+    const UNBOUND_I_STATUS      = 'privtest_ccas_nomatch_i';
+    // action_name title-cases to "Confirm Re Send Invite".
+    const I_ACTION_NAME         = 'confirm_re_send_invite';
+    const I_EXPECTED_LABEL      = 'Confirm Re Send Invite';
+
+    const handlerForI = {
+      id: 1009,
+      type: 'design_visit_followup',
+      config: { action_name: I_ACTION_NAME },
+      bindings: [{ stage_key: 'designvisit', status_key: DESIGN_INVITED_STATUS }],
+    };
+
+    // DESIGN_INVITED lead status carries stage='DESIGN_VISIT' — the real
+    // format stored in lead_status_config (uppercase+underscore).  The fix
+    // normalises this to 'designvisit' before calling cardActionHandlerFor so
+    // this stub accurately exercises the production code path.
+    const designInvitedLeadStatus = {
+      key: DESIGN_INVITED_STATUS,
+      label: 'Design Invited',
+      stage: 'DESIGN_VISIT',
+    };
+
+    // Contact I1: DESIGN_INVITED status, no rooms attached (defaults to sales
+    // stage at room level — this is the regression scenario).
+    const contactI1 = {
+      id: CONTACT_I1_ID,
+      properties: {
+        firstname: 'India',
+        lastname:  'PrivTest',
+        email:     'india@privtest.invalid',
+        hs_lead_status: DESIGN_INVITED_STATUS,
+      },
+    };
+
+    // Contact I2: an unbound lead status, no rooms — complementary check that
+    // absence of a handler binding still produces no strip.
+    const contactI2 = {
+      id: CONTACT_I2_ID,
+      properties: {
+        firstname: 'Juliet',
+        lastname:  'PrivTest',
+        email:     'juliet@privtest.invalid',
+        hs_lead_status: UNBOUND_I_STATUS,
+      },
+    };
+
+    const pageI = await openCustomers(browser, memberClient.cookie, {
+      contacts:     [contactI1, contactI2],
+      handlers:     [handlerForI],
+      inProgress:   [],
+      leadStatuses: [designInvitedLeadStatus],
+    });
+
+    // Wait for at least two cards.
+    await pollPage(pageI, () => {
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
+      return cards.length >= 2 ? 'ok' : null;
+    }, null, 15000);
+
+    // Wait for the handler to load and the strip to appear (or time out).
+    await pollPage(pageI, () => {
+      const strips = document.querySelectorAll('#customers-results [role="button"]');
+      return strips.length > 0 ? 'ok' : null;
+    }, null, 8000).catch(() => 'timeout');
+
+    const iState = await pageI.evaluate((i1Name, i2Name, expectedLabel) => {
+      const cards = Array.from(document.querySelectorAll('#customers-results [data-testid="customer-card"]'));
+
+      function stripText(nameFragment) {
+        const card = cards.find(c => (c.textContent || '').includes(nameFragment));
+        if (!card) return null;
+        const strip = card.querySelector('[role="button"]');
+        return strip ? (strip.textContent || '').trim() : null;
+      }
+
+      // Verify handler type directly via the window shim exposed by
+      // useCardActionHandlers.  The normalised lookup key must be
+      // 'designvisit|DESIGN_INVITED' for the handler to resolve.
+      var resolvedHandler = null;
+      var resolvedHandlerType = null;
+      if (typeof window.cardActionHandlerFor === 'function') {
+        resolvedHandler = window.cardActionHandlerFor('designvisit', 'DESIGN_INVITED');
+        resolvedHandlerType = resolvedHandler ? resolvedHandler.type : null;
+      }
+
+      return {
+        i1StripText:          stripText(i1Name),
+        i2StripText:          stripText(i2Name),
+        totalCards:           cards.length,
+        resolvedHandlerType:  resolvedHandlerType,
+        intercepted:          window.__ccasIntercepted || [],
+      };
+    }, 'India PrivTest', 'Juliet PrivTest', I_EXPECTED_LABEL);
+
+    if (iState.i1StripText === null) {
+      const iLogs = (pageI.__logs || []).filter(l =>
+        l.includes('error') || l.includes('Error') || l.includes('handler') || l.includes('stage'),
+      );
+      console.log(`  [I] debug: totalCards=${iState.totalCards} i1StripText="${iState.i1StripText}" i2StripText="${iState.i2StripText}" resolvedHandlerType="${iState.resolvedHandlerType}"`);
+      console.log(`  [I] intercepted=${JSON.stringify(iState.intercepted)}`);
+      if (iLogs.length) console.log(`  [I] page logs:\n    ${iLogs.join('\n    ')}`);
+    }
+
+    // (I) strip is present AND handler type is design_visit_followup — proves
+    // the lead-status stage (DESIGN_VISIT → designvisit after normalisation)
+    // was used for lookup rather than the room stage (sales).
+    const i1HandlerOk = iState.i1StripText !== null
+      && iState.i1StripText.includes(I_EXPECTED_LABEL)
+      && iState.resolvedHandlerType === 'design_visit_followup';
+    record(
+      PROBE_LABELS[13],
+      `strip present with label="${I_EXPECTED_LABEL}" and handler type=design_visit_followup`,
+      iState.i1StripText !== null
+        ? `strip="${iState.i1StripText}" handlerType="${iState.resolvedHandlerType}"`
+        : `no strip found, handlerType="${iState.resolvedHandlerType}"`,
+      i1HandlerOk,
+    );
+
+    // (I) strip does NOT show the sales-stage default "Call customer"
+    record(
+      PROBE_LABELS[14],
+      'strip text does not contain "Call customer"',
+      iState.i1StripText !== null
+        ? `strip text="${iState.i1StripText}"`
+        : 'no strip found',
+      iState.i1StripText !== null && !iState.i1StripText.includes('Call customer'),
+    );
+
+    // (I) complementary: unbound status still shows no strip
+    record(
+      PROBE_LABELS[15],
+      'no action strip inside Juliet card (unbound lead-status)',
+      iState.i2StripText !== null
+        ? `strip found unexpectedly, text="${iState.i2StripText}"`
+        : 'no strip (correct)',
+      iState.i2StripText === null,
+    );
+
+    await pageI.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);

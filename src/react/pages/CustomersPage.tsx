@@ -67,6 +67,7 @@ type LeadStatus = {
   excluded_from_sales?: boolean;
   is_null_row?: boolean;
   sort_order?: number;
+  stage?: string | null;
 };
 
 type Contact = {
@@ -672,7 +673,23 @@ function CustomerCard({
   const primaryStageKey = primaryRoom?.stageKey || 'sales';
   const leadStatusKey = contact.properties?.hs_lead_status;
 
-  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey);
+  // Use the stage carried by the lead status itself as the lookup key for
+  // card-action-handler resolution.  This ensures that e.g. a DESIGN_INVITED
+  // contact whose room is still in "sales" resolves to the designvisit-stage
+  // handler rather than falling through to the sales-stage default.
+  // Fall back to the room-derived primaryStageKey only when the lead status
+  // carries no stage of its own.
+  //
+  // Stage values in lead_status_config are stored as uppercase+underscore
+  // (e.g. 'DESIGN_VISIT', 'SALES') while handler binding stage_key values
+  // use lowercase without underscores (e.g. 'designvisit', 'sales').
+  // Normalize by lowercasing and stripping underscores.
+  const rawActionStage = statusMap.get(leadStatusKey ?? '')?.stage;
+  const actionStageKey = rawActionStage
+    ? rawActionStage.toLowerCase().replace(/_/g, '')
+    : primaryStageKey;
+
+  const handler = cardActionHandlerFor(actionStageKey, leadStatusKey);
 
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
@@ -683,7 +700,7 @@ function CustomerCard({
   const hasDraft = !!draftVisitId && isDesignHandler;
   const actionLabel = cahName
     || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
+    || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const hasNoLeadStatus = !leadStatusKey;
   const stageColors = STAGE_COLORS[primaryStageKey];
@@ -1470,7 +1487,7 @@ export function CustomersPage(): React.ReactElement {
     const m = new Map<string, LeadStatus>();
     for (const s of store.statuses) m.set(s.key, s);
     return m;
-  }, []);
+  }, [store.statuses]);
 
   // Build the stage tab list: All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
