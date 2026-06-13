@@ -4,15 +4,19 @@ const { makeSkip } = require('../helpers/report');
 //
 // Regression guard for the resend-mode detection in UploadPhotosModal.tsx.
 //
-// The modal fetches GET /api/customer-info/by-contact/:contactId on open and
-// switches between two modes based on whether an active (non-submitted,
-// non-expired) submission already exists for the contact.
+// The modal calls GET /api/customer-info/by-contact/:contactId/link-status on
+// open and switches between two phases based on whether an active link already
+// exists for the contact:
+//   - hasActiveLink: true  → 'confirming' phase (warns about existing link)
+//   - hasActiveLink: false → auto-generates immediately → 'ready' phase
 //
 // Probes:
-//   (A) Pending row present  → title "Resend photo upload link", button "Resend link"
-//   (B) No pending rows      → title "Send photo upload link",   button "Send email"
-//   (C) Network error on GET → falls back to send mode:
-//                              title "Send photo upload link",   button "Send email"
+//   (A) Pending row present  → link-status returns hasActiveLink:true
+//                              → title "Active link exists", "Generate new link" button
+//   (B) No pending rows      → link-status returns hasActiveLink:false
+//                              → title "Send photo upload link", button "Send email"
+//   (C) Network error on GET → 'check-error' phase:
+//                              title "Send photo upload link", "Generate anyway" button
 //
 // Strategy: boots a disposable test server, drives /customers with
 // Puppeteer, stubs ALL customers-page API calls via evaluateOnNewDocument
@@ -102,13 +106,15 @@ function writeReport(runId) {
     '',
     '## Coverage',
     '',
-    '- **(A) Resend mode**: GET /api/customer-info/by-contact/:contactId returns a row',
-    '  with submitted_at=null and expires_at in the future. Modal title must read',
-    '  "Resend photo upload link" and the primary button must read "Resend link".',
-    '- **(B) Send mode**: same endpoint returns an empty array. Modal title must read',
-    '  "Send photo upload link" and the primary button must read "Send email".',
-    '- **(C) Network error fallback**: endpoint throws a network error. Modal falls',
-    '  back to send mode — title "Send photo upload link", button "Send email".',
+    '- **(A) Confirming mode**: GET /api/customer-info/by-contact/:contactId/link-status',
+    '  returns { hasActiveLink: true }. Modal enters confirming phase — title must',
+    '  read "Active link exists" and the "Generate new link" button must be visible.',
+    '- **(B) Send mode**: link-status returns { hasActiveLink: false }. Modal',
+    '  auto-generates and enters ready phase — title must read "Send photo upload link"',
+    '  and primary button must read "Send email".',
+    '- **(C) Network error / check-error phase**: link-status fetch throws a network',
+    '  error. Modal enters check-error phase — title must read "Send photo upload link"',
+    '  and "Generate anyway" button must be visible.',
     '',
     'All customers-page API calls are stubbed via evaluateOnNewDocument fetch',
     'interception so no HubSpot token or real contact data is required.',
@@ -144,8 +150,9 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  * Build a fetch-interceptor script that stubs all customers-page API calls
  * and the customer-info/by-contact endpoint.
  *
- * `byContactResponse` controls the stub:
- *   - An array → returned as JSON with status 200
+ * `byContactResponse` controls the link-status stub:
+ *   - An array with items → link-status returns { hasActiveLink: true }
+ *   - An empty array      → link-status returns { hasActiveLink: false }
  *   - The string 'network-error' → the fetch rejects with a TypeError
  */
 function buildFetchInterceptScript(byContactResponse) {
@@ -205,15 +212,30 @@ function buildFetchInterceptScript(byContactResponse) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     }
 
-    // GET by-contact — returns pending rows, empty array, or a network error.
+    // GET by-contact/link-status — returns { hasActiveLink } derived from the
+    // stub rows array, or rejects with a network error.
+    if (
+      (!init || !init.method || init.method === 'GET') &&
+      pathname.includes('/by-contact/') &&
+      pathname.includes('/link-status')
+    ) {
+      window.__upmIntercepted.push('link-status:GET');
+      if (IS_ERROR) {
+        return Promise.reject(new TypeError('Network error (stubbed by test)'));
+      }
+      var rows = JSON.parse(BY_CONTACT_JSON);
+      var hasActive = Array.isArray(rows) && rows.length > 0;
+      return Promise.resolve(new Response(JSON.stringify({ hasActiveLink: hasActive }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+
+    // GET by-contact (other sub-paths) — return stub rows directly.
     if (
       (!init || !init.method || init.method === 'GET') &&
       pathname.includes('/by-contact/')
     ) {
       window.__upmIntercepted.push('by-contact:GET');
-      if (IS_ERROR) {
-        return Promise.reject(new TypeError('Network error (stubbed by test)'));
-      }
       return Promise.resolve(new Response(BY_CONTACT_JSON, {
         status: 200, headers: { 'Content-Type': 'application/json' },
       }));
@@ -300,12 +322,15 @@ async function openModal(page) {
 }
 
 /**
- * Read the dialog title text and primary button label from the open modal.
+ * Read the dialog title text and a named action button label from the open
+ * modal.  `primaryTestId` defaults to 'cah-primary' but can be overridden
+ * to probe other phase-specific buttons (e.g. 'cah-confirm-generate' in the
+ * confirming phase, 'cah-proceed-anyway' in the check-error phase).
  */
-async function readModal(page) {
-  return page.evaluate(() => {
+async function readModal(page, primaryTestId = 'cah-primary') {
+  return page.evaluate((testId) => {
     const titleEl   = document.querySelector('[data-testid="upload-photos-dialog-title"]');
-    const primaryEl = document.querySelector('[data-testid="cah-primary"]');
+    const primaryEl = document.querySelector(`[data-testid="${testId}"]`);
 
     // The title element contains a Typography child — grab the first text node
     // (the first direct text content of the DialogTitle, not the subtitle).
@@ -327,7 +352,7 @@ async function readModal(page) {
       title:   titleText,
       primary: primaryEl ? primaryEl.textContent.trim() : '',
     };
-  });
+  }, primaryTestId);
 }
 
 /**
@@ -407,12 +432,12 @@ async function main() {
 
   // ── Puppeteer ─────────────────────────────────────────────────────────────
   const PROBE_LABELS = [
-    '(A) pending row → title "Resend photo upload link"',
-    '(A) pending row → primary button "Resend link"',
+    '(A) pending row → title "Active link exists"',
+    '(A) pending row → "Generate new link" button visible',
     '(B) no pending rows → title "Send photo upload link"',
     '(B) no pending rows → primary button "Send email"',
-    '(C) network error → title "Send photo upload link" (fallback)',
-    '(C) network error → primary button "Send email" (fallback)',
+    '(C) network error → title "Send photo upload link" (check-error phase)',
+    '(C) network error → "Generate anyway" button visible',
   ];
 
   if (!puppeteer) {
@@ -444,35 +469,32 @@ async function main() {
   }
 
   try {
-    // ── Probe A: pending row → resend mode ───────────────────────────────────
-    console.log('\n  [A] Pending row → expect "Resend photo upload link" / "Resend link"');
+    // ── Probe A: pending row → confirming phase ───────────────────────────────
+    console.log('\n  [A] Pending row → expect "Active link exists" / "Generate new link"');
 
     const pendingRows = [{ submitted_at: null, expires_at: FUTURE_EXPIRES }];
     const pageA = await openCustomersPage(browser, memberClient.cookie, pendingRows);
     await openModal(pageA);
 
-    // Poll until the primary button shows the expected resend-mode label.
+    // Poll until the confirming-phase button appears (hasActiveLink: true path).
     await pollPage(
       pageA,
-      () => {
-        const btn = document.querySelector('[data-testid="cah-primary"]');
-        return btn ? btn.textContent.trim() : '';
-      },
+      () => !!document.querySelector('[data-testid="cah-confirm-generate"]'),
       null, 8000,
     ).catch(() => {});
 
-    const modalA = await readModal(pageA);
+    const modalA = await readModal(pageA, 'cah-confirm-generate');
     record(
       PROBE_LABELS[0],
-      'Resend photo upload link',
+      'Active link exists',
       modalA.title,
-      modalA.title === 'Resend photo upload link',
+      modalA.title === 'Active link exists',
     );
     record(
       PROBE_LABELS[1],
-      'Resend link',
+      'Generate new link',
       modalA.primary,
-      modalA.primary === 'Resend link',
+      modalA.primary === 'Generate new link',
     );
 
     await pageA.__ctx.close();
@@ -509,24 +531,21 @@ async function main() {
 
     await pageB.__ctx.close();
 
-    // ── Probe C: network error → fallback to send mode ───────────────────────
-    console.log('\n  [C] Network error → expect fallback "Send photo upload link" / "Send email"');
+    // ── Probe C: network error → check-error phase ───────────────────────────
+    console.log('\n  [C] Network error → expect check-error phase "Send photo upload link" / "Generate anyway"');
 
     const pageC = await openCustomersPage(browser, memberClient.cookie, 'network-error');
     await openModal(pageC);
 
-    // Network error causes the effect to resolve quickly (falls back immediately).
-    // Poll until the primary button is present and stable.
+    // Network error makes the link-status fetch reject immediately; modal enters
+    // check-error phase. Poll until the "Generate anyway" button appears.
     await pollPage(
       pageC,
-      () => {
-        const btn = document.querySelector('[data-testid="cah-primary"]');
-        return btn ? btn.textContent.trim() : '';
-      },
+      () => !!document.querySelector('[data-testid="cah-proceed-anyway"]'),
       null, 8000,
     ).catch(() => {});
 
-    const modalC = await readModal(pageC);
+    const modalC = await readModal(pageC, 'cah-proceed-anyway');
     record(
       PROBE_LABELS[4],
       'Send photo upload link',
@@ -535,9 +554,9 @@ async function main() {
     );
     record(
       PROBE_LABELS[5],
-      'Send email',
+      'Generate anyway',
       modalC.primary,
-      modalC.primary === 'Send email',
+      modalC.primary === 'Generate anyway',
     );
 
     await pageC.__ctx.close();
