@@ -60,6 +60,7 @@ const STATIC_SUITES = [
   'test:privilege-reads',
   'test:test-only-guards',
   'test:ls-keys',
+  'test:migration-renames',
   'test:retired-tokens',
   'test:mount-ids',
   'test:public-island-bootstrap',
@@ -98,6 +99,7 @@ const STATIC_SUITES = [
  * gets its own temporary PostgreSQL database and can safely run in parallel.
  */
 const DB_SUITES = [
+  'test:migration-renames:ci',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
   'test:lead-status-counts-rate-limit:ci',
