@@ -14,6 +14,6 @@
 - [Deploy publish failed after build OK](deploy-promote-vs-build.md) — build commands succeeding + image pushed but status=failed means promote/health-check failed; on this app it's the empty-pgmigrations + HEAD-schema migration replay on boot.
 - [Boot migrations vs publish flow](boot-migrations-vs-publish-flow.md) — prod crash-loops when pgmigrations is empty + schema externally provisioned; every migration must survive a full re-run against an arbitrary historical schema.
 - [Rate-limit migrations table](rate-limit-migrations-table.md) — public.migrations is owned by @acpr/rate-limit-postgresql (not Replit); never drop it; db-migrate.js self-heals it on boot.
-- [Migration rename + checkOrder](migration-rename-checkorder.md) — checkOrder is a positional match (DB id order vs file-sort); renaming one file's timestamp can cascade to require renaming all siblings inserted after it.
+- [Migration rename + checkOrder](migration-rename-checkorder.md) — **every** migration file rename requires a `MIGRATION_RENAMES` entry in `db-migrate.js`; renaming one timestamp can cascade to require renaming all siblings inserted after it.
 - [CJS/ESM shared module boundary](cjs-esm-shared-boundary.md) — Vite resolves .js before .ts; use .cjs for server CJS + .ts for canonical ESM; require() callers must use explicit .cjs extension.
 - [HANDLER_OUTCOMES in main bundle](handler-outcomes-in-main-bundle.md) — the outcome registry literal ships in main.js; enriching its data / re-exporting page-only helpers can trip the main.js gzip cap.
