@@ -8,6 +8,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import EmailIcon from '@mui/icons-material/Email';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import { AddressMapPreview } from '../AddressMapPreview';
 
 interface Props {
   name?: string;
@@ -78,9 +79,12 @@ export function ModalContactHeader({ name, phone, mobile, whatsapp, email, addre
               </Box>
             )}
             {address && (
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
-                <LocationOnIcon fontSize="small" sx={{ color: 'text.secondary', mt: '2px' }} />
-                <Typography variant="body2" color="text.secondary">{address}</Typography>
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+                  <LocationOnIcon fontSize="small" sx={{ color: 'text.secondary', mt: '2px' }} />
+                  <Typography variant="body2" color="text.secondary">{address}</Typography>
+                </Box>
+                <AddressMapPreview address={address} surface="contactEdit" height={140} />
               </Box>
             )}
           </Stack>

@@ -8,6 +8,7 @@ import { LeadStatusPicker } from '../../components/pickers/LeadStatusPicker';
 import { PhotosReceivedBadge } from '../../components/PhotosReceivedBadge';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { DepositInvoiceBadge, type DepositPaymentState } from '../../components/DepositInvoiceBadge';
+import { AddressMapPreview } from '../../components/AddressMapPreview';
 
 interface Props {
   contact: Contact;
@@ -112,6 +113,11 @@ export function CustomerDetailHeader({
                 {addressText.split('\n').map((line, i) => (
                   <div key={i} className="text-sm" style={{ color: 'var(--ink-4)' }}>{line}</div>
                 ))}
+                <AddressMapPreview
+                  address={addressText.replace(/\n/g, ', ')}
+                  surface="contactEdit"
+                  height={160}
+                />
               </div>
             )}
 

@@ -51,6 +51,7 @@ const SetPasswordPage    = React.lazy(() => import('./pages/auth/SetPasswordPage
 const OnboardingPage     = React.lazy(() => import('./pages/auth/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const TradesPage         = React.lazy(() => import('./pages/TradesPage').then(m => ({ default: m.TradesPage })));
 const SearchSettingsPage = React.lazy(() => import('./pages/SearchSettingsPage').then(m => ({ default: m.SearchSettingsPage })));
+const GoogleMapsPage     = React.lazy(() => import('./pages/admin/GoogleMapsPage').then(m => ({ default: m.GoogleMapsPage })));
 const CustomersPage      = React.lazy(() => import('./pages/CustomersPage').then(m => ({ default: m.CustomersPage })));
 const HomePage           = React.lazy(() => import('./pages/HomePage').then(m => ({ default: m.HomePage })));
 const ProfilePage        = React.lazy(() => import('./pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
@@ -193,6 +194,7 @@ const MOUNTS: Array<{
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
+  { id: 'tab-maps',             render: () => <GoogleMapsPage /> },
   { id: 'tab-offline',          render: () => <OfflineSupportPage /> },
   { id: 'tab-emailtemplates',   render: () => <EmailTemplatesPage /> },
   { id: 'tab-workflow',         render: () => <WorkflowPage /> },

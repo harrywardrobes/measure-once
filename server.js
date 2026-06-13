@@ -19,6 +19,7 @@ const {
   quickbooksReadWriteLimiter,
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
+const { router: googleMapsRouter } = require('./google-maps');
 const {
   ARRANGE_VISIT_KEYS    : _ARRANGE_VISIT_KEYS,
   DVF_STATUS_MAP        : _DVF_STATUS_MAP,
@@ -421,6 +422,9 @@ function requireHubspotToken(req, res, next) {
 }
 // QuickBooks routes (auth enforced inside the router)
 app.use(quickbooksRoutes);
+// Google Maps / Places settings + public config (auth enforced inside the
+// router; the public /api/google-maps/config endpoint is intentionally open).
+app.use(googleMapsRouter);
 // Enforce onboarding completion for scoped routers that are mounted before the
 // global /api auth gate.  requireOnboardingComplete already calls next() when
 // req.user is absent, so public/token-gated routes inside these routers are
@@ -439,6 +443,10 @@ const AUTH_WHITELIST = new Set([
   '/login', '/auth/user', '/request-access', '/check-email',
   '/set-password', '/set-password/validate',
   '/forgot-password', '/turnstile-config',
+  // Public Google Maps client config (browser key + runtime flags)
+  '/google-maps/config',
+  // Public Google Maps client usage beacon (in-memory diagnostics counters)
+  '/google-maps/usage',
   // Public design-visit sign-off (token-gated, not session-gated)
 ]);
 // Endpoints a logged-in user can still reach while in `more_info_required`

@@ -1,21 +1,35 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   COUNTRIES,
   HOME_COUNTRY_CODE,
   MAX_ADDRESS_LINES,
   emptyAddress,
+  googleComponentsToAddress,
   type StructuredAddress,
 } from '../../../shared/address';
+import {
+  loadGoogleMapsConfig,
+  loadPlacesScript,
+  isAutocompleteEnabled,
+  reportGoogleMapsUsage,
+  type GoogleMapsConfig,
+  type GoogleMapsSurface,
+} from '../lib/googleMapsConfig';
 
 /**
  * Per-country labels for the locality / administrative-area / postal fields.
@@ -43,6 +57,11 @@ function labelsFor(countryCode: string): AddressLabels {
   return LABELS_BY_COUNTRY[(countryCode || '').toUpperCase()] || DEFAULT_LABELS;
 }
 
+interface PlacePrediction {
+  place_id: string;
+  description: string;
+}
+
 export interface AddressInputProps {
   /** The controlled structured-address value. */
   value: StructuredAddress;
@@ -54,12 +73,24 @@ export interface AddressInputProps {
   disabled?: boolean;
   /** Optional id prefix so multiple inputs on a page keep unique labels. */
   idPrefix?: string;
+  /**
+   * Which surface this input lives on. When provided and Google Places
+   * autocomplete is enabled (master switch + this surface), a search box is
+   * shown above the fields. Omit to disable autocomplete entirely.
+   */
+  surface?: GoogleMapsSurface;
 }
 
 /**
  * Structured address entry: 1–5 dynamic street lines, locality, administrative
  * area, postal code and a country selector (defaults to GB). Field labels adapt
  * to the selected country. Fully controlled — the parent owns the value.
+ *
+ * When a `surface` is supplied and Google Places autocomplete is enabled at
+ * runtime, a search box is rendered above the manual fields. Selecting a
+ * prediction fills every field. The component degrades silently to manual
+ * entry when the feature is off, the API key is missing, or the Places library
+ * fails to load.
  */
 export function AddressInput({
   value,
@@ -67,6 +98,7 @@ export function AddressInput({
   required = false,
   disabled = false,
   idPrefix = 'address',
+  surface,
 }: AddressInputProps) {
   // Normalise the incoming value so there is always at least one line to edit.
   const addr: StructuredAddress = {
@@ -107,8 +139,203 @@ export function AddressInput({
     [addr.addressLines, emit],
   );
 
+  // ── Google Places autocomplete (optional) ──────────────────────────────────
+  const [cfg, setCfg] = useState<GoogleMapsConfig | null>(null);
+  const [acReady, setAcReady] = useState(false);
+  const [acFailed, setAcFailed] = useState(false);
+  const [options, setOptions] = useState<PlacePrediction[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
+
+  const autoServiceRef = useRef<any>(null);
+  const placesServiceRef = useRef<any>(null);
+  const sessionTokenRef = useRef<any>(null);
+  const debounceRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    if (!surface) return;
+    let cancelled = false;
+    loadGoogleMapsConfig().then((c) => {
+      if (cancelled) return;
+      setCfg(c);
+      if (!isAutocompleteEnabled(c, surface) || !c.apiKey) return;
+      loadPlacesScript(c.apiKey, c.autocomplete.language)
+        .then(() => {
+          if (cancelled) return;
+          const g = (window as any).google;
+          if (!g?.maps?.places) {
+            setAcFailed(true);
+            return;
+          }
+          autoServiceRef.current = new g.maps.places.AutocompleteService();
+          placesServiceRef.current = new g.maps.places.PlacesService(document.createElement('div'));
+          setAcReady(true);
+        })
+        .catch(() => {
+          if (!cancelled) setAcFailed(true);
+        });
+    });
+    return () => {
+      cancelled = true;
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [surface]);
+
+  const newSessionToken = useCallback(() => {
+    const g = (window as any).google;
+    if (g?.maps?.places?.AutocompleteSessionToken && cfg?.autocomplete.sessionTokens) {
+      sessionTokenRef.current = new g.maps.places.AutocompleteSessionToken();
+    } else {
+      sessionTokenRef.current = null;
+    }
+    return sessionTokenRef.current;
+  }, [cfg]);
+
+  const fetchPredictions = useCallback(
+    (text: string) => {
+      if (!autoServiceRef.current || !cfg) return;
+      const minChars = cfg.autocomplete.minChars;
+      if (text.trim().length < minChars) {
+        setOptions([]);
+        return;
+      }
+      if (!sessionTokenRef.current) newSessionToken();
+      setLoadingPredictions(true);
+      const request: Record<string, unknown> = {
+        input: text,
+        types: [cfg.autocomplete.types],
+        language: cfg.autocomplete.language,
+      };
+      const countries = cfg.autocomplete.countries
+        .map((c) => c.toLowerCase())
+        .slice(0, 5);
+      if (countries.length) request.componentRestrictions = { country: countries };
+      if (sessionTokenRef.current) request.sessionToken = sessionTokenRef.current;
+
+      autoServiceRef.current.getPlacePredictions(request, (preds: any[], status: string) => {
+        setLoadingPredictions(false);
+        const g = (window as any).google;
+        const S = g?.maps?.places?.PlacesServiceStatus;
+        const ok = !S || status === S.OK || status === S.ZERO_RESULTS;
+        if (surface) reportGoogleMapsUsage('autocomplete', surface, ok, ok ? undefined : String(status));
+        setOptions(
+          (preds || []).map((p) => ({ place_id: p.place_id, description: p.description })),
+        );
+      });
+    },
+    [cfg, newSessionToken, surface],
+  );
+
+  const handleInputChange = useCallback(
+    (text: string) => {
+      setInputText(text);
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      const delay = cfg?.autocomplete.debounceMs ?? 300;
+      debounceRef.current = window.setTimeout(() => fetchPredictions(text), delay);
+    },
+    [cfg, fetchPredictions],
+  );
+
+  const handleSelect = useCallback(
+    (prediction: PlacePrediction | null) => {
+      if (!prediction || !placesServiceRef.current) return;
+      placesServiceRef.current.getDetails(
+        {
+          placeId: prediction.place_id,
+          fields: ['address_components'],
+          ...(sessionTokenRef.current ? { sessionToken: sessionTokenRef.current } : {}),
+        },
+        (place: any, status: string) => {
+          // A details request always ends the billing session token.
+          sessionTokenRef.current = null;
+          const g = (window as any).google;
+          const okStatus = g?.maps?.places?.PlacesServiceStatus?.OK ?? 'OK';
+          const ok = status === okStatus && !!place?.address_components;
+          if (surface) reportGoogleMapsUsage('details', surface, ok, ok ? undefined : String(status));
+          if (!ok) return;
+          const next = googleComponentsToAddress(place.address_components);
+          onChange(next);
+          setInputText('');
+          setOptions([]);
+        },
+      );
+    },
+    [onChange, surface],
+  );
+
+  const showAutocomplete = !!surface && acReady && !acFailed;
+  const showNotice =
+    !!surface &&
+    !!cfg &&
+    isAutocompleteEnabled(cfg, surface) &&
+    acFailed &&
+    cfg.fallback.mode === 'notice';
+
   return (
     <Box>
+      {showAutocomplete && (
+        <Autocomplete<PlacePrediction, false, false, true>
+          freeSolo
+          disabled={disabled}
+          filterOptions={(x) => x}
+          options={options}
+          loading={loadingPredictions}
+          inputValue={inputText}
+          getOptionLabel={(o) => (typeof o === 'string' ? o : o.description)}
+          onInputChange={(_e, v, reason) => {
+            if (reason === 'input') handleInputChange(v);
+            else if (reason === 'clear') {
+              setInputText('');
+              setOptions([]);
+            }
+          }}
+          onChange={(_e, v) => {
+            if (v && typeof v !== 'string') handleSelect(v);
+          }}
+          noOptionsText={
+            inputText.trim().length < (cfg?.autocomplete.minChars ?? 3)
+              ? 'Keep typing…'
+              : 'No matches'
+          }
+          renderInput={(params) => {
+            const inputProps =
+              (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
+            return (
+              <TextField
+                {...params}
+                label="Search for an address"
+                placeholder="Start typing an address…"
+                size="small"
+                fullWidth
+                sx={{ mb: 1.5 }}
+                slotProps={{
+                  input: {
+                    ...inputProps,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" color="action" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <>
+                        {loadingPredictions ? <CircularProgress color="inherit" size={16} /> : null}
+                        {inputProps.endAdornment as React.ReactNode}
+                      </>
+                    ),
+                  },
+                }}
+              />
+            );
+          }}
+        />
+      )}
+
+      {showNotice && (
+        <FormHelperText sx={{ mb: 1 }}>
+          Address search is unavailable right now — please enter the address manually.
+        </FormHelperText>
+      )}
+
       {addr.addressLines.map((line, i) => (
         <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: '6px', mb: 1 }}>
           <TextField

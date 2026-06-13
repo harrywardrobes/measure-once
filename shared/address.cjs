@@ -186,6 +186,43 @@ function addressToHubspot(addr) {
   };
 }
 
+function googleComponentsToAddress(components) {
+  const list = components || [];
+  const get = (type) => list.find((c) => Array.isArray(c.types) && c.types.includes(type));
+
+  const streetNumber = (get('street_number') || {}).long_name || '';
+  const route = (get('route') || {}).long_name || '';
+  const premise = (get('premise') || {}).long_name || '';
+  const subpremise = (get('subpremise') || {}).long_name || '';
+  const line1 = [streetNumber, route].filter(Boolean).join(' ').trim();
+
+  const lines = [];
+  if (subpremise) lines.push(subpremise);
+  if (premise && premise !== line1) lines.push(premise);
+  if (line1) lines.push(line1);
+
+  const locality =
+    (get('postal_town') || {}).long_name ||
+    (get('locality') || {}).long_name ||
+    (get('sublocality') || {}).long_name ||
+    '';
+  const postalCode = (get('postal_code') || {}).long_name || '';
+  const countryCode = ((get('country') || {}).short_name || HOME_COUNTRY_CODE).toUpperCase();
+
+  const adminLevel1 = (get('administrative_area_level_1') || {}).long_name || '';
+  const adminLevel2 = (get('administrative_area_level_2') || {}).long_name || '';
+  const administrativeArea =
+    countryCode === 'GB' ? adminLevel2 || adminLevel1 : adminLevel1 || adminLevel2;
+
+  return {
+    addressLines: lines.length ? lines : [''],
+    locality: locality || undefined,
+    administrativeArea: administrativeArea || undefined,
+    postalCode: postalCode || undefined,
+    countryCode,
+  };
+}
+
 module.exports = {
   MAX_ADDRESS_LINES,
   HOME_COUNTRY_CODE,
@@ -198,4 +235,5 @@ module.exports = {
   formatAddress,
   hubspotToAddress,
   addressToHubspot,
+  googleComponentsToAddress,
 };

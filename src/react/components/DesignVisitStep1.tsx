@@ -149,6 +149,7 @@ export function DesignVisitStep1({
             value={data.structuredAddress}
             onChange={(next) => update({ structuredAddress: next })}
             idPrefix="dv-step1-address"
+            surface="designVisit"
           />
         </Box>
 

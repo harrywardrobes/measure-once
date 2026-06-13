@@ -623,6 +623,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   onChange={setStructuredAddress}
                   disabled={submitting}
                   idPrefix="av-booked-address"
+                  surface="arrangeVisit"
                 />
                 {actionError && (
                   <Alert severity="error">{actionError}</Alert>

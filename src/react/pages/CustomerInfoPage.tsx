@@ -688,6 +688,7 @@ export function CustomerInfoPage() {
                   required
                   disabled={submitting}
                   idPrefix="ci-address"
+                  surface="customerInfo"
                 />
               </Stack>
             </SectionCard>

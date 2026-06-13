@@ -39,6 +39,7 @@ import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import EmailIcon from '@mui/icons-material/Email';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
+import MapIcon from '@mui/icons-material/Map';
 
 declare global {
   interface Window {
@@ -94,6 +95,7 @@ const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-tab-settings',        label: 'Admin · Settings',            hint: 'Application settings and configuration',       category: 'Admin', icon: <SettingsIcon fontSize="small" /> },
   { id: 'go-admin-tab-devenv',          label: 'Admin · Dev Environment',     hint: 'View dev-only features and environment info',  category: 'Admin', icon: <BugReportIcon fontSize="small" /> },
   { id: 'go-admin-tab-search',          label: 'Admin · Search',              hint: 'Configure search and command palette settings', category: 'Admin', icon: <SearchIcon fontSize="small" /> },
+  { id: 'go-admin-tab-maps',            label: 'Admin · Google Maps',         hint: 'Configure Google Places autocomplete and map previews', category: 'Admin', icon: <MapIcon fontSize="small" /> },
   { id: 'go-admin-tab-offline',         label: 'Admin · Offline Support',     hint: 'Manage offline mode and cached data',          category: 'Admin', icon: <WifiOffIcon fontSize="small" /> },
 ];
 
@@ -183,6 +185,7 @@ const DEVELOPER_TAB_ACTION_IDS = new Set([
   'go-admin-tab-settings',
   'go-admin-tab-devenv',
   'go-admin-tab-search',
+  'go-admin-tab-maps',
   'go-admin-tab-offline',
 ]);
 
@@ -290,6 +293,7 @@ export function CommandPalette() {
       'go-admin-tab-settings':        () => adminTabNav('settings',       'developer'),
       'go-admin-tab-devenv':          () => adminTabNav('devenv',         'developer'),
       'go-admin-tab-search':          () => adminTabNav('search',         'developer'),
+      'go-admin-tab-maps':            () => adminTabNav('maps',           'developer'),
       'go-admin-tab-offline':         () => adminTabNav('offline',        'developer'),
     };
 

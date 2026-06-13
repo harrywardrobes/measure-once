@@ -28,7 +28,7 @@ export const TAB_GROUPS: TabGroup[] = [
   {
     id: 'developer',
     label: 'Developer',
-    tabIds: ['settings', 'devenv', 'search', 'offline'],
+    tabIds: ['settings', 'devenv', 'search', 'maps', 'offline'],
   },
 ];
 

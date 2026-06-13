@@ -37,6 +37,15 @@ If one migration's file is renamed to a HIGHER timestamp, every migration that w
 5. Delete old migration files.
 6. Add all rename pairs to `MIGRATION_RENAMES` in `db-migrate.js`.
 
+## runNames is ordered by (run_on, id) — renaming is NOT always enough
+`getRunMigrations` issues `SELECT name FROM pgmigrations ORDER BY run_on, id`. So `runNames` is the **application order**, not raw id order. When several rows share an identical `run_on` (e.g. a batch applied in one transaction), the `id` tiebreak decides — and that can disagree with the filename sort order even when every name is already correct.
+
+**Symptom:** boot aborts with `Not run migration <A> is preceding already run migration <B>` where BOTH rows already exist in pgmigrations with correct names. Renaming can't fix this because the names are fine; the **run order** is wrong.
+
+**This codebase's chosen remedy is to RENAME the file/record, not touch `run_on`.** When a migration was applied last (highest id / latest in run order) but its filename sorts earlier, bump its filename timestamp so file-sort order matches the actual run order, and add the rename pair to `MIGRATION_RENAMES`. Example: `contact-attempt-history-notes` was applied after the structured-address migrations, so its file was renamed `1782900000000 → 1782900000003` to sit after them.
+
+Avoid hacking `run_on` to reorder rows — it competes with the file-rename approach and a later upstream rename can invert the two, re-breaking checkOrder. Keep one source of truth: filename order == run order, healed via `MIGRATION_RENAMES`.
+
 ## Reference
 The `applyMigrationRenames` function in `db-migrate.js` runs idempotently before `runner()` — it uses `UPDATE … WHERE name = $1 AND NOT EXISTS (SELECT 1 … WHERE name = $2)` so double-boots are safe.
 

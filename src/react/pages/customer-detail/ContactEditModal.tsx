@@ -270,6 +270,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             onChange={handleAddressChange}
             disabled={saving}
             idPrefix="contact-edit-address"
+            surface="contactEdit"
           />
         </Stack>
       </DialogContent>
