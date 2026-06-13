@@ -7112,14 +7112,27 @@ async function cleanupStaleHubSpotCredentialRows() {
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {
   // Run database migrations FIRST so the full schema exists before auth/session
-  // setup or any route handling. A migration failure is fatal — the process must
+  // setup or any route handling.  A migration failure is fatal — the process must
   // not start serving against an unknown/partial schema.
-  try {
-    await runMigrations();
-    logger.info('  Database migrations applied');
-  } catch (e) {
-    logger.error({ err: e }, '  Database migrations failed — aborting startup');
-    process.exit(1);
+  //
+  // In production, Replit's publish-time schema diff owns the production schema
+  // (it diffs dev→prod and applies the delta as part of every publish).  Running
+  // node-pg-migrate at boot would race the schema diff: migrations commit schema
+  // changes (e.g. drop a column) that the diff then also tries to apply, causing
+  // a "column/constraint does not exist" failure that aborts the publish.
+  // Skipping boot-time migrations in production eliminates that conflict; the
+  // schema is guaranteed to be up-to-date by the time the app starts because
+  // Replit applies the diff BEFORE the new app version is deployed.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      await runMigrations();
+      logger.info('  Database migrations applied');
+    } catch (e) {
+      logger.error({ err: e }, '  Database migrations failed — aborting startup');
+      process.exit(1);
+    }
+  } else {
+    logger.info('  Skipping boot-time migrations in production (schema managed by Replit publish-time diff)');
   }
 
   try {

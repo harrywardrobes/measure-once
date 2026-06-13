@@ -50,7 +50,8 @@ Project management dashboard (HubSpot CRM integration).
 - PostgreSQL accessed with raw `pg`. Schema is owned by ordered, versioned
   `node-pg-migrate` files in `migrations/` (no `ensureXTable()`/`CREATE TABLE`
   in app code). `runMigrations()` in `db-migrate.js` runs pending migrations on
-  boot before auth/session setup.
+  boot before auth/session setup — **development only** (`NODE_ENV !== 'production'`).
+  In production the schema is managed by Replit's publish-time dev→prod diff.
 
 ## Database migrations
 - Apply: `npm run db:migrate` (also auto-runs on boot). Roll back one:

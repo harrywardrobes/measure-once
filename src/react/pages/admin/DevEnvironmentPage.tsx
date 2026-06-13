@@ -105,6 +105,23 @@ const DEV_ONLY_FEATURES: Array<{
     ),
   },
   {
+    name: 'Boot-time database migrations',
+    location: 'server.js — startup IIFE / runMigrations()',
+    description: (
+      <>
+        <code className="adm-inline-code">runMigrations()</code> (node-pg-migrate) only runs when{' '}
+        <code className="adm-inline-code">NODE_ENV !== &apos;production&apos;</code>. In production the
+        schema is owned by Replit&apos;s publish-time dev→prod schema diff, which applies DDL changes
+        before the new app version starts. Running migrations at boot in production would race the
+        schema diff — migrations can drop a column or constraint before the diff&apos;s own DROP
+        statement runs, causing a &quot;does not exist&quot; failure that aborts the publish. Skipping
+        boot-time migrations in production eliminates that race. Data-seeding statements inside
+        migrations do not run in production; seed data is expected to already be present from the
+        original setup or handled with ON CONFLICT DO NOTHING guards.
+      </>
+    ),
+  },
+  {
     name: 'HubSpot webhook — signature verification bypass',
     location: 'Settings tab → HubSpot Webhooks panel / POST /api/hubspot/webhook',
     description: (

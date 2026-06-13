@@ -1,45 +1,55 @@
 ---
 name: Boot migrations vs Replit publish-diff flow
-description: Why prod can crash-loop on boot-time node-pg-migrate, and why every migration must survive a full re-run.
+description: Why prod migrations are now skipped at boot, and what the Replit publish-time diff owns.
 ---
 
-# Boot-time migrations conflict with Replit's publish-time schema diff
+# Boot-time migrations — production is now skipped
 
-This app runs `runMigrations()` (node-pg-migrate, `singleTransaction`) on every
-server boot (`db-migrate.js`). Replit ALSO manages the production schema via its
-publish-time dev→prod schema-diff flow. These two systems fight each other.
+## Resolved: `NODE_ENV === 'production'` gates `runMigrations()` in `server.js`
 
-## The failure signature
-- Production `pgmigrations` tracker is **empty** while the schema is already
-  provisioned (by the publish diff) and frozen at an OLD point (whatever dev's
-  schema was at the last publish — not necessarily HEAD).
-- Because the tracker is empty, every boot re-runs the ENTIRE migration set
-  against an already-populated schema. Any non-idempotent statement aborts the
-  single transaction → port never opens → healthcheck fails → restart loop.
-- Real instance: a migration's `ADD CONSTRAINT ... UNIQUE` collided with a
-  pre-existing same-named index (`relation "..." already exists`) because its
-  guard only checked `table_constraints`, not the index relation.
+`runMigrations()` is now guarded with `if (process.env.NODE_ENV !== 'production')`.
+In production the schema is owned exclusively by Replit's publish-time dev→prod schema diff.
 
-**Why:** prod was frozen mid-history (e.g. substatus columns still present
-because the migration that drops them keeps rolling back). The read replica
-(read-only, `executeSql environment:"production"`) is the way to learn prod's
-true current schema state before reasoning about what the next boot will do.
+**Why the guard was added:**
+- Production `pgmigrations` was always **empty** (Replit provisions schema externally, not via node-pg-migrate).
+- Every prod boot re-ran all 42 migrations against an already-provisioned schema.
+- node-pg-migrate dropped columns/constraints (e.g. `DROP COLUMN IF EXISTS substatus_id` cascades the FK) BEFORE Replit's schema diff ran.
+- Replit's diff then tried a bare `ALTER TABLE … DROP CONSTRAINT card_action_handler_bindings_substatus_id_fkey` (no IF EXISTS) — constraint was already gone → publish failed.
+- Skipping migrations at boot removes the race entirely.
 
-## How to apply
-- Treat EVERY migration as potentially re-run from scratch against an existing
-  schema at an arbitrary historical point. Use `IF [NOT] EXISTS`, promote
-  existing indexes via `ADD CONSTRAINT ... USING INDEX` (scope the lookup to the
-  target table + unique + non-partial), and guard column-dependent statements on
-  `information_schema.columns` so a column dropped by a LATER migration doesn't
-  crash an EARLIER one on replay.
-- Editing already-merged migrations is justified ONLY when they never succeeded
-  on prod and a new migration can't help (the batch aborts before reaching it).
-  Such edits are inert on dev (recorded by name, never re-run).
-- Verify by simulating prod: build a temp DB to the suspected prod state, then
-  `TRUNCATE pgmigrations` and run the full set forward (`scripts/with-test-db.js`
-  pattern). Cannot write to prod — fix lands only on next publish/deploy.
-- The skill `database/references/database-migrations-on-publish.md` says the
-  "right" answer is re-publish and that boot-time self-heal DDL is an
-  anti-pattern. This codebase is architecturally committed to boot migrations,
-  so the durable fix is to reconcile that conflict (baseline `pgmigrations`, or
-  stop schema migrations at boot in prod) — not more idempotency whack-a-mole.
+## What Replit's publish diff does
+
+When the user clicks Publish, Replit:
+1. Snapshots dev schema and prod schema.
+2. Computes a SQL diff (additive + destructive DDL, but WITHOUT data-migration statements).
+3. Applies the diff to the production database **before** the new app version starts.
+4. Deploys the new app — which boots without running migrations.
+
+Replit's diff handles: CREATE/DROP TABLE, ADD/DROP COLUMN, CREATE/DROP INDEX, ADD/DROP CONSTRAINT.
+
+Replit's diff does NOT handle: INSERT/UPDATE/DELETE data seeding, custom trigger installs, or migration-order-dependent logic.
+
+## How to apply going forward
+
+- **New migrations in dev** → run normally via node-pg-migrate (which only runs in dev/test).
+  On next Publish, Replit's diff picks up the structural change and applies it to prod.
+- **Data migrations** (INSERT … ON CONFLICT DO NOTHING, UPDATE backfills, etc.):
+  These will NOT run automatically in prod. Either:
+  a) Accept that prod data is already seeded from the original setup, OR
+  b) Make the migration a no-op on an already-seeded DB (ON CONFLICT DO NOTHING is safe).
+  New seed data inserted by migrations will be absent in prod until the next time prod DB is reset.
+- **Never re-introduce `runMigrations()` in production** without first resolving the race
+  with Replit's schema diff.
+
+## Diagnosing prod schema state
+
+Use `executeSql({ environment: 'production' })` (read-only) to inspect the prod schema.
+Key indicators seen historically:
+- `pgmigrations` empty → schema provisioned by Replit, not node-pg-migrate
+- `lead_substatuses` present → remove-substatuses migration never committed
+- `contact_attempt_tracking` missing → migrations 16+ never committed
+
+## Dev/test behavior unchanged
+
+In dev (`NODE_ENV=development`) and test (`NODE_ENV=test` or unset), `runMigrations()`
+still runs on boot exactly as before.
