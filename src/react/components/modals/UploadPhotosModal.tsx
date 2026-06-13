@@ -125,6 +125,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
   const resendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [sendCooldown, setSendCooldown] = useState(false);
+  const sendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState('');
   const [copyAndClosing, setCopyAndClosing] = useState(false);
 
@@ -234,6 +236,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to send');
       setPhase('sent');
       showToast('Email sent to customer', false);
+      setSendCooldown(true);
+      if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
+      sendCooldownRef.current = setTimeout(() => setSendCooldown(false), 3000);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -299,11 +304,15 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setCopyAndClosing(true);
   }, [generatedLink, onClose]);
 
-  useEffect(() => () => { if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current); }, []);
+  useEffect(() => () => {
+    if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
+    if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
+  }, []);
 
   function handleClose() {
     generateAbortRef.current?.abort();
     if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
+    if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
     setPhase('checking');
     setError('');
     setGeneratedLink(null);
@@ -313,6 +322,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setCopyAndClosing(false);
     setResending(false);
     setResendCooldown(false);
+    setSendCooldown(false);
     onClose();
   }
 
@@ -587,11 +597,11 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
           <Button
             variant="contained"
             onClick={handleSend}
-            disabled={submitting || !!linkError || copyAndClosing || demo}
+            disabled={submitting || sendCooldown || !!linkError || copyAndClosing || demo}
             startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
             data-testid="cah-primary"
           >
-            {submitting ? 'Sending…' : sendLabel}
+            {submitting ? 'Sending…' : sendCooldown ? 'Sent' : sendLabel}
           </Button>
         </DemoActionTooltip>
       </>

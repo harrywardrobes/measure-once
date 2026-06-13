@@ -462,6 +462,23 @@ async function verifyTurnstileForResend(token, ip) {
   }
 }
 
+// ── In-memory cooldown for the initial send (upload-photos-and-info) ──────────
+// Rejects a second send for the same contactId within 10 seconds to prevent
+// duplicate emails from rapid double-taps on a slow network.
+// Map: contactId (string) → timestamp of last successful send (ms).
+const _staffSendCooldown = new Map();
+const STAFF_SEND_COOLDOWN_MS = 10 * 1000;
+function checkStaffSendCooldown(contactId) {
+  const now = Date.now();
+  const last = _staffSendCooldown.get(contactId);
+  if (last !== undefined && now - last < STAFF_SEND_COOLDOWN_MS) return false;
+  _staffSendCooldown.set(contactId, now);
+  return true;
+}
+function clearStaffSendCooldown(contactId) {
+  _staffSendCooldown.delete(contactId);
+}
+
 // ── In-memory cooldown for the staff resend endpoint ──────────────────────────
 // Rejects a second resend for the same contactId within 10 seconds to prevent
 // duplicate emails from rapid double-taps on a slow network.
@@ -703,85 +720,97 @@ router.post('/api/card-actions/upload-photos-and-info',
     }
     const cid = String(contactId).trim();
 
-    // If a pre-generated token is provided, use it — no new DB row
-    if (preToken && typeof preToken === 'string') {
-      const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
-      const { rows } = await pool.query(
-        `SELECT contact_email, masked_email, contact_name FROM customer_info_submissions
-         WHERE token_hash = $1 AND contact_id = $2`,
-        [tokenHash, cid]
-      );
-      if (!rows.length) {
-        return res.status(404).json({ error: 'Pre-generated link not found.' });
-      }
-      const row = rows[0];
-      const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
-      await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
-      return res.status(200).json({ ok: true });
+    if (!checkStaffSendCooldown(cid)) {
+      return res.status(429).json({ error: 'Email was just sent for this contact. Please wait before sending again.' });
     }
 
-    // Original flow: fetch from HubSpot, generate token, create row, send email
-    let contact;
     try {
-      contact = await fetchContactFromHubSpot(cid);
-    } catch (err) {
-      logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
-      return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
-    }
-
-    const props = contact.properties || {};
-    const email = (props.email || '').trim();
-    if (!email) {
-      return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
-    }
-    const phone   = (props.mobilephone || props.phone || '').trim();
-    const firstName = (props.firstname || '').trim();
-    const lastName  = (props.lastname  || '').trim();
-    const name = [firstName, lastName].filter(Boolean).join(' ') || email;
-
-    const rawToken  = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-    const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
-
-    // Atomically expire any existing active links and insert the new one so
-    // concurrent send-invite requests cannot leave two live bearer tokens.
-    const uploadClient = await pool.connect();
-    try {
-      await uploadClient.query('BEGIN');
-      await uploadClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
-
-      const expireResult = await uploadClient.query(
-        `UPDATE customer_info_submissions
-         SET expires_at = NOW()
-         WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
-        [cid]
-      );
-      if (expireResult.rowCount > 0) {
-        logger.info(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
+      // If a pre-generated token is provided, use it — no new DB row
+      if (preToken && typeof preToken === 'string') {
+        const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
+        const { rows } = await pool.query(
+          `SELECT contact_email, masked_email, contact_name FROM customer_info_submissions
+           WHERE token_hash = $1 AND contact_id = $2`,
+          [tokenHash, cid]
+        );
+        if (!rows.length) {
+          clearStaffSendCooldown(cid);
+          return res.status(404).json({ error: 'Pre-generated link not found.' });
+        }
+        const row = rows[0];
+        const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+        return res.status(200).json({ ok: true });
       }
 
-      await uploadClient.query(
-        `INSERT INTO customer_info_submissions
-           (contact_id, contact_name, contact_email, token_hash, expires_at,
-            masked_email, masked_phone, form_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [cid, name, email, tokenHash, expiresAt.toISOString(),
-         maskEmail(email), maskPhone(phone), formLink]
-      );
+      // Original flow: fetch from HubSpot, generate token, create row, send email
+      let contact;
+      try {
+        contact = await fetchContactFromHubSpot(cid);
+      } catch (err) {
+        logger.error({ err: err.message }, '[customer-info] Failed to fetch contact from HubSpot:');
+        clearStaffSendCooldown(cid);
+        return res.status(502).json({ error: 'Could not fetch contact from HubSpot.' });
+      }
 
-      await uploadClient.query('COMMIT');
+      const props = contact.properties || {};
+      const email = (props.email || '').trim();
+      if (!email) {
+        clearStaffSendCooldown(cid);
+        return res.status(400).json({ error: 'Contact has no email address in HubSpot.' });
+      }
+      const phone   = (props.mobilephone || props.phone || '').trim();
+      const firstName = (props.firstname || '').trim();
+      const lastName  = (props.lastname  || '').trim();
+      const name = [firstName, lastName].filter(Boolean).join(' ') || email;
+
+      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+      const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(rawToken)}`;
+
+      // Atomically expire any existing active links and insert the new one so
+      // concurrent send-invite requests cannot leave two live bearer tokens.
+      const uploadClient = await pool.connect();
+      try {
+        await uploadClient.query('BEGIN');
+        await uploadClient.query('SELECT pg_advisory_xact_lock(hashtext($1))', [cid]);
+
+        const expireResult = await uploadClient.query(
+          `UPDATE customer_info_submissions
+           SET expires_at = NOW()
+           WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+          [cid]
+        );
+        if (expireResult.rowCount > 0) {
+          logger.info(`[customer-info] Expired ${expireResult.rowCount} active link(s) for contact ${cid} before sending new one`);
+        }
+
+        await uploadClient.query(
+          `INSERT INTO customer_info_submissions
+             (contact_id, contact_name, contact_email, token_hash, expires_at,
+              masked_email, masked_phone, form_link)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [cid, name, email, tokenHash, expiresAt.toISOString(),
+           maskEmail(email), maskPhone(phone), formLink]
+        );
+
+        await uploadClient.query('COMMIT');
+      } catch (err) {
+        await uploadClient.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        uploadClient.release();
+      }
+
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink);
+
+      res.status(201).json({ ok: true });
     } catch (err) {
-      await uploadClient.query('ROLLBACK').catch(() => {});
+      clearStaffSendCooldown(cid);
       throw err;
-    } finally {
-      uploadClient.release();
     }
-
-    await sendCustomerInviteEmail(email, maskEmail(email), formLink);
-
-    res.status(201).json({ ok: true });
   }
 );
 
