@@ -1008,22 +1008,43 @@ export function ProjectsPage() {
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
 
   // ── Lead-status stage map ─────────────────────────────────────────────────
-  // Fetch once so ProjectCard can derive actionStageKey from the lead status's
-  // own stage rather than the room's stage (mirrors the CustomerCard fix).
+  // Fetch once on mount, then re-fetch whenever an admin renames/reorders
+  // statuses (BroadcastChannel) or the user tabs back in (visibilitychange),
+  // so action-strip resolution never resolves to stale stage mappings.
   const [statusMap, setStatusMap] = useState<Map<string, { stage?: string | null }>>(new Map());
-  useEffect(() => {
-    let cancelled = false;
+  const fetchStatusMap = useCallback(() => {
     fetch('/api/lead-statuses')
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: Array<{ key: string; stage?: string | null }>) => {
-        if (cancelled || !Array.isArray(rows)) return;
+        if (!Array.isArray(rows)) return;
         const m = new Map<string, { stage?: string | null }>();
         for (const row of rows) m.set(row.key, { stage: row.stage });
         setStatusMap(m);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    fetchStatusMap();
+  }, [fetchStatusMap]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchStatusMap();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel('lead_statuses_changed');
+      bc.addEventListener('message', () => fetchStatusMap());
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (bc) bc.close();
+    };
+  }, [fetchStatusMap]);
 
   const showToast = useToast();
 
