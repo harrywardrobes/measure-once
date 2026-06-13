@@ -467,6 +467,7 @@ function ProjectCard({
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
+  statusMap,
   onOpenFitterPicker,
   onNavigate,
   onOpenInvoice,
@@ -491,6 +492,7 @@ function ProjectCard({
     substageId: string | undefined,
   ) => string;
   draftVisitId?: number | string | null;
+  statusMap: Map<string, { stage?: string | null }>;
   onOpenFitterPicker: (contactId: string, roomIdx: number) => void;
   onNavigate: (contactId: string, roomIdx: number) => void;
   onOpenInvoice: (firstId: string, allIds: string[]) => void;
@@ -509,8 +511,24 @@ function ProjectCard({
   const primaryStageKey = rooms[0]?.stageKey || '';
   const leadStatusKey = contact.properties?.hs_lead_status;
 
+  // Use the stage carried by the lead status itself as the lookup key for
+  // card-action-handler resolution.  This ensures that e.g. a DESIGN_INVITED
+  // contact whose room is still in "sales" resolves to the designvisit-stage
+  // handler rather than falling through to the sales-stage default.
+  // Fall back to the room-derived primaryStageKey only when the lead status
+  // carries no stage of its own.
+  //
+  // Stage values in lead_status_config are stored as uppercase+underscore
+  // (e.g. 'DESIGN_VISIT', 'SALES') while handler binding stage_key values
+  // use lowercase without underscores (e.g. 'designvisit', 'sales').
+  // Normalize by lowercasing and stripping underscores.
+  const rawActionStage = statusMap.get(leadStatusKey ?? '')?.stage;
+  const actionStageKey = rawActionStage
+    ? rawActionStage.toLowerCase().replace(/_/g, '')
+    : primaryStageKey;
+
   // Only show a strip when a matching handler is actually configured.
-  const handler = cardActionHandlerFor(primaryStageKey, leadStatusKey);
+  const handler = cardActionHandlerFor(actionStageKey, leadStatusKey);
 
   const cahName = handler?.config?.action_name
     ? handler.config.action_name
@@ -523,7 +541,7 @@ function ProjectCard({
   const hasDraft = !!draftVisitId && isDesignHandler;
   const actionLabel = cahName
     || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(primaryStageKey, leadStatusKey, undefined);
+    || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const stageColors = STAGE_COLORS[primaryStageKey];
   const actionTint = hasDraft ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
@@ -988,6 +1006,24 @@ export function ProjectsPage() {
   } = useProjectsData();
 
   const { cardActionHandlerFor, resolveActionLabel } = useCardActionHandlers();
+
+  // ── Lead-status stage map ─────────────────────────────────────────────────
+  // Fetch once so ProjectCard can derive actionStageKey from the lead status's
+  // own stage rather than the room's stage (mirrors the CustomerCard fix).
+  const [statusMap, setStatusMap] = useState<Map<string, { stage?: string | null }>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/lead-statuses')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ key: string; stage?: string | null }>) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const m = new Map<string, { stage?: string | null }>();
+        for (const row of rows) m.set(row.key, { stage: row.stage });
+        setStatusMap(m);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const showToast = useToast();
 
@@ -1460,6 +1496,7 @@ export function ProjectsPage() {
                     cardActionHandlerFor={cardActionHandlerFor}
                     resolveActionLabel={resolveActionLabel}
                     draftVisitId={draftVisitIds[contact.id] ?? null}
+                    statusMap={statusMap}
                     onOpenFitterPicker={handleOpenPicker}
                     onNavigate={handleNavigate}
                     onOpenInvoice={handleOpenInvoice}
@@ -1490,6 +1527,7 @@ export function ProjectsPage() {
             cardActionHandlerFor={cardActionHandlerFor}
             resolveActionLabel={resolveActionLabel}
             draftVisitId={draftVisitIds[contact.id] ?? null}
+            statusMap={statusMap}
             onOpenFitterPicker={handleOpenPicker}
             onNavigate={handleNavigate}
             onOpenInvoice={handleOpenInvoice}
