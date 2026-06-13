@@ -167,6 +167,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:handler-meta',                'static-lint — binary handler-type coverage check across lookup tables'],
   ['test:handler-outcomes-drift',      'static-check — binary CJS↔TS registry parity and server contract drift guard'],
   ['test:golden-schema',               'schema-diff — golden-vs-dev DB comparison; pass/fail is the result itself'],
+  ['test:migration-renames',           'db-check — DB-backed detection guard; pass/fail, no named probes'],
   ['test:lead-status-keys',            'static-lint — binary forward/reverse lead-status key sync check'],
   ['test:status-key-fields',            'static-lint — binary cross-check of handler config props'],
   ['test:bottom-nav-lint',              'static-lint — binary Icon/IconOutlined completeness check'],
