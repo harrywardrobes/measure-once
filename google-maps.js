@@ -262,12 +262,24 @@ async function recordError(api, info = {}) {
 }
 
 // Read counters for today + this month from the DB, plus the stored error ring.
-async function diagnosticsSnapshot() {
+// `days` controls how many daily rows to return in `history` (7 or 30).
+async function diagnosticsSnapshot(days = 7) {
   const { day, month } = _periodKeys();
-  const [usageRes, errorsRes] = await Promise.all([
+
+  const histStart = new Date();
+  histStart.setDate(histStart.getDate() - (days - 1));
+  const startDay = histStart.toISOString().slice(0, 10);
+
+  const [usageRes, historyRes, errorsRes] = await Promise.all([
     pool.query(
       'SELECT period, api, count FROM google_maps_usage WHERE period = $1 OR period = $2',
       [day, month],
+    ),
+    pool.query(
+      `SELECT period, api, count FROM google_maps_usage
+       WHERE period >= $1 AND period <= $2 AND length(period) = 10
+       ORDER BY period ASC`,
+      [startDay, day],
     ),
     pool.query('SELECT value FROM app_settings WHERE key = $1', [ERRORS_KEY]),
   ]);
@@ -280,10 +292,25 @@ async function diagnosticsSnapshot() {
     else if (row.period === month) monthCounts[row.api] = n;
   }
 
+  // Pivot history rows into { date, counts } objects, one per day in the range.
+  const historyMap = {};
+  for (const row of historyRes.rows) {
+    if (!historyMap[row.period]) historyMap[row.period] = {};
+    historyMap[row.period][row.api] = Number(row.count);
+  }
+  const history = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    history.push({ date: dateStr, counts: historyMap[dateStr] || {} });
+  }
+
   const errors = errorsRes.rows[0] ? JSON.parse(errorsRes.rows[0].value) : [];
   return {
     today,
     month: monthCounts,
+    history,
     recentErrors: errors.slice(0, RING_SIZE),
   };
 }
@@ -433,9 +460,11 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
 });
 
 // Admin: usage diagnostics (DB-persisted counters + recent errors).
-router.get('/api/admin/google-maps/diagnostics', isAuthenticated, requireAdmin, async (_req, res) => {
+// Accepts ?range=7d (default) or ?range=30d to control the history window.
+router.get('/api/admin/google-maps/diagnostics', isAuthenticated, requireAdmin, async (req, res) => {
   try {
-    res.json(await diagnosticsSnapshot());
+    const days = req.query.range === '30d' ? 30 : 7;
+    res.json(await diagnosticsSnapshot(days));
   } catch (e) {
     logger.error({ err: e.message }, 'GET /api/admin/google-maps/diagnostics error');
     res.status(500).json({ error: 'Could not load diagnostics.' });

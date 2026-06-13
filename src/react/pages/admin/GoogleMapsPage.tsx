@@ -24,6 +24,8 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
@@ -88,9 +90,15 @@ interface TestResponse {
   checks: Record<string, CheckResult>;
 }
 
+interface DiagnosticsHistoryDay {
+  date: string;
+  counts: Record<string, number>;
+}
+
 interface Diagnostics {
   today: Record<string, number>;
   month: Record<string, number>;
+  history: DiagnosticsHistoryDay[];
   recentErrors: Array<{
     timestamp: string;
     api: string;
@@ -126,6 +134,7 @@ export function GoogleMapsPage() {
   const [testResult, setTestResult] = useState<TestResponse | null>(null);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
+  const [historyRange, setHistoryRange] = useState<'7d' | '30d'>('7d');
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -145,18 +154,21 @@ export function GoogleMapsPage() {
   const fetchDiagnostics = useCallback(async () => {
     setDiagLoading(true);
     try {
-      setDiag(await GET<Diagnostics>('/api/admin/google-maps/diagnostics'));
+      setDiag(await GET<Diagnostics>(`/api/admin/google-maps/diagnostics?range=${historyRange}`));
     } catch {
       /* non-fatal */
     } finally {
       setDiagLoading(false);
     }
-  }, []);
+  }, [historyRange]);
 
   useEffect(() => {
     fetchSettings();
+  }, [fetchSettings]);
+
+  useEffect(() => {
     fetchDiagnostics();
-  }, [fetchSettings, fetchDiagnostics]);
+  }, [fetchDiagnostics]);
 
   const patch = useCallback((updater: (d: GoogleMapsSettings) => GoogleMapsSettings) => {
     setDraft((prev) => (prev ? updater(prev) : prev));
@@ -635,6 +647,87 @@ export function GoogleMapsPage() {
               ) : null}
             </TableBody>
           </Table>
+
+          {/* Daily history breakdown */}
+          {(() => {
+            const historyDays = diag?.history ?? [];
+            const apiKeys = Array.from(
+              new Set(historyDays.flatMap((d) => Object.keys(d.counts))),
+            ).sort();
+            const hasAnyData = historyDays.some((d) => Object.keys(d.counts).length > 0);
+            return (
+              <>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>Daily history</Typography>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={historyRange}
+                    onChange={(_e, v) => { if (v) setHistoryRange(v as '7d' | '30d'); }}
+                  >
+                    <ToggleButton value="7d">7 days</ToggleButton>
+                    <ToggleButton value="30d">30 days</ToggleButton>
+                  </ToggleButtonGroup>
+                </Stack>
+                <Box sx={{ overflowX: 'auto', mb: 2 }}>
+                  <Table size="small" sx={{ minWidth: apiKeys.length > 0 ? 360 : 'auto' }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        {apiKeys.length > 0 ? (
+                          apiKeys.map((api) => (
+                            <TableCell key={api} align="right" sx={{ textTransform: 'capitalize' }}>{api}</TableCell>
+                          ))
+                        ) : (
+                          <TableCell align="right">Requests</TableCell>
+                        )}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {historyDays.map((row) => {
+                        const label = new Date(row.date + 'T00:00:00').toLocaleDateString(undefined, {
+                          month: 'short', day: 'numeric',
+                        });
+                        const total = Object.values(row.counts).reduce((s, n) => s + n, 0);
+                        const isToday = row.date === new Date().toISOString().slice(0, 10);
+                        return (
+                          <TableRow key={row.date} sx={isToday ? { fontWeight: 'bold' } : {}}>
+                            <TableCell>
+                              <Typography variant="caption" sx={isToday ? { fontWeight: 700 } : {}}>
+                                {label}{isToday ? ' (today)' : ''}
+                              </Typography>
+                            </TableCell>
+                            {apiKeys.length > 0 ? (
+                              apiKeys.map((api) => (
+                                <TableCell key={api} align="right">
+                                  <Typography variant="caption" color={row.counts[api] ? 'text.primary' : 'text.disabled'}>
+                                    {row.counts[api] ?? 0}
+                                  </Typography>
+                                </TableCell>
+                              ))
+                            ) : (
+                              <TableCell align="right">
+                                <Typography variant="caption" color={total ? 'text.primary' : 'text.disabled'}>
+                                  {total}
+                                </Typography>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })}
+                      {!hasAnyData ? (
+                        <TableRow>
+                          <TableCell colSpan={Math.max(apiKeys.length, 1) + 1}>
+                            <Typography variant="body2" color="text.secondary">No history recorded for this period.</Typography>
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                </Box>
+              </>
+            );
+          })()}
 
           <Typography variant="subtitle2" gutterBottom>Recent errors</Typography>
           {diag && diag.recentErrors.length > 0 ? (
