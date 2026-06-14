@@ -609,7 +609,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       if (linkStatus?.formLink) {
         return (
           <>
-            <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
+            <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
             <DemoActionTooltip demo={demo}>
               <Button
                 color="error"
@@ -655,7 +655,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       // Member view (no formLink): warning-only with generate/cancel
       return (
         <>
-          <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
+          <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
           <Button
             variant="contained"
             color="warning"

@@ -255,7 +255,7 @@ function writeReport(runId) {
     '  confirming the call only fires after explicit staff confirmation.',
     '- **(D) cancel-no-call / cancel-closes**: Opens a fresh page, opens the',
     '  modal, waits for the confirming phase, then clicks',
-    '  [data-testid="cah-cancel-confirming"] ("Cancel"). generate-link must NOT',
+    '  [data-testid="cah-cancel"] ("Cancel"). generate-link must NOT',
     '  be called (count remains 0) and the dialog must no longer be visible.',
     '  Regression guard for the cancel/dismiss path — a bug here would silently',
     '  expire the active link even when the staff member chose to keep it.',
@@ -542,17 +542,17 @@ async function main() {
           record(PROBE_LABELS[5], false, msg);
         } else {
           const cancelBtn = await pageD.evaluate(() => {
-            const btn = document.querySelector('[data-testid="cah-cancel-confirming"]');
+            const btn = document.querySelector('[data-testid="cah-cancel"]');
             return btn ? 'found' : null;
           });
 
           if (!cancelBtn) {
-            const msg = '[data-testid="cah-cancel-confirming"] not found — cannot proceed';
+            const msg = '[data-testid="cah-cancel"] not found — cannot proceed';
             record(PROBE_LABELS[4], false, msg);
             record(PROBE_LABELS[5], false, msg);
           } else {
             await pageD.evaluate(() => {
-              document.querySelector('[data-testid="cah-cancel-confirming"]').click();
+              document.querySelector('[data-testid="cah-cancel"]').click();
             });
 
             // Brief settle delay so any in-flight POST (the bug) has time to fire.
