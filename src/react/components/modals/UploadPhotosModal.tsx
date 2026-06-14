@@ -543,6 +543,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             </Button>
             <DemoActionTooltip demo={demo}>
               <Button
+                data-testid="cah-resend-link"
                 onClick={handleResend}
                 disabled={resending || resendCooldown || demo}
                 startIcon={resending ? <CircularProgress size={16} color="inherit" /> : undefined}

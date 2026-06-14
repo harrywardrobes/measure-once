@@ -538,8 +538,7 @@ async function main() {
       null, 8000,
     ).catch(() => {});
 
-    // Title comes from readModal; Re-send link has no data-testid so we check
-    // for it separately by button text content.
+    // Title comes from readModal; Re-send link is targeted via data-testid.
     const modalA2Title = await pageA2.evaluate(() => {
       const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
       if (!titleEl) return '';
@@ -552,11 +551,8 @@ async function main() {
     });
 
     const { resendVisible, noPrimary } = await pageA2.evaluate(() => {
-      const btns = Array.from(
-        document.querySelectorAll('[data-testid="upload-photos-dialog"] button'),
-      );
       return {
-        resendVisible: btns.some(b => b.textContent.trim() === 'Re-send link'),
+        resendVisible: !!document.querySelector('[data-testid="cah-resend-link"]'),
         noPrimary: !document.querySelector('[data-testid="cah-primary"]'),
       };
     });
