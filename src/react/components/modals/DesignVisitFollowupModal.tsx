@@ -21,10 +21,8 @@ import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmatio
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -38,7 +36,8 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DEMO_CONTACT } from './demoData';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 import { ModalContactHeader } from './ModalContactHeader';
 import { ScheduleVisitModal } from './ScheduleVisitModal';
 
@@ -461,15 +460,18 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <>
-        <Dialog open={hubDialogOpen} onClose={step === 'hub' ? handleClose : undefined} maxWidth="sm" fullWidth>
-          <DemoDialogTitle demo={demo}>{dialogTitle}</DemoDialogTitle>
-          <DialogContent sx={{ pt: 2 }}>
-            {renderContent()}
-          </DialogContent>
-          {renderActions() && (
-            <DialogActions>{renderActions()}</DialogActions>
-          )}
-        </Dialog>
+        <FullScreenModal
+          open={hubDialogOpen}
+          onClose={handleClose}
+          disableClose={step !== 'hub'}
+          title={dialogTitle}
+          headerActions={
+            demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+          }
+          footer={renderActions() || undefined}
+        >
+          {renderContent()}
+        </FullScreenModal>
 
         <ScheduleVisitModal
           handler={handler}

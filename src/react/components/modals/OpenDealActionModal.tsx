@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { OPEN_DEAL_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import { DEMO_CONTACT } from './demoData';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
@@ -1208,29 +1206,34 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
   const actions        = renderActions();
 
   return (
-    <Dialog open={open} onClose={isSubmitting ? undefined : handleClose} maxWidth="sm" fullWidth>
-      <DemoDialogTitle demo={demo} sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
-        {showBackHeader && (
-          <IconButton size="small" onClick={() => {
-            if (step === 'amend_hub')       navigateTo('hub');
-            else if (step === 'accept_pick')     navigateTo('hub');
-            else if (step === 'accept_confirm')  navigateTo('accept_pick');
-            else if (step === 'decline_confirm') navigateTo('hub');
-            else if (step === 'decline_email')   navigateTo('decline_confirm');
-          }} sx={{ mr: 0.5 }}>
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-        )}
-        {getTitle()}
-      </DemoDialogTitle>
-      <DialogContent dividers>
-        {renderContent()}
-      </DialogContent>
-      {actions && (
-        <DialogActions sx={{ display: 'flex', px: 2, py: 1.5 }}>
-          {actions}
-        </DialogActions>
-      )}
-    </Dialog>
+    <FullScreenModal
+      open={open}
+      onClose={handleClose}
+      disableClose={isSubmitting}
+      title={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {showBackHeader && (
+            <IconButton size="small" onClick={() => {
+              if (step === 'amend_hub')       navigateTo('hub');
+              else if (step === 'accept_pick')     navigateTo('hub');
+              else if (step === 'accept_confirm')  navigateTo('accept_pick');
+              else if (step === 'decline_confirm') navigateTo('hub');
+              else if (step === 'decline_email')   navigateTo('decline_confirm');
+            }} sx={{ mr: 0.5 }}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
+          <Typography variant="h4" component="h2" sx={{ wordBreak: 'break-word' }}>
+            {getTitle()}
+          </Typography>
+        </Box>
+      }
+      headerActions={
+        demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+      }
+      footer={actions || undefined}
+    >
+      {renderContent()}
+    </FullScreenModal>
   );
 }

@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
 import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -14,7 +11,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 
 interface FollowUpProps {
   handler: CardActionHandlerData;
@@ -50,18 +48,22 @@ function FollowUpEmailModal({ handler, ctx, summary, open, onClose }: FollowUpPr
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Draft a follow-up email?</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          We can open your email composer pre-filled with this call summary.
-        </Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Not now</Button>
-        <Button variant="contained" onClick={handleDraft}>Draft email</Button>
-      </DialogActions>
-    </Dialog>
+    <FullScreenModal
+      open={open}
+      onClose={onClose}
+      title="Draft a follow-up email?"
+      centerContent
+      footer={
+        <>
+          <Button onClick={onClose}>Not now</Button>
+          <Button variant="contained" onClick={handleDraft}>Draft email</Button>
+        </>
+      }
+    >
+      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+        We can open your email composer pre-filled with this call summary.
+      </Typography>
+    </FullScreenModal>
   );
 }
 
@@ -127,45 +129,50 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose, demo }: Props) 
 
   return (
     <>
-      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DemoDialogTitle demo={demo}>
-          {ctx.contactName ? `Phone call summary — ${ctx.contactName}` : 'Phone call summary'}
-        </DemoDialogTitle>
-        <DialogContent>
-          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
-            <TextField
-              id="cah-pc-summary"
-              label="What did you discuss?"
-              value={summary}
-              onChange={e => setSummary(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 8000 } }}
-              placeholder="Outcome, next steps, agreed timeline…"
-              multiline
-              minRows={4}
-              fullWidth
-              size="small"
-              autoFocus
-            />
-            {error && (
-              <Typography variant="caption" color="error">{error}</Typography>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <DemoActionTooltip demo={demo}>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={submitting || demo}
-              data-testid="cah-primary"
-            >
-              {submitting ? 'Saving…' : 'Save note'}
-            </Button>
-          </DemoActionTooltip>
-        </DialogActions>
-      </Dialog>
+      <FullScreenModal
+        open={open}
+        onClose={handleRequestClose}
+        disableClose={submitting}
+        title={ctx.contactName ? `Phone call summary — ${ctx.contactName}` : 'Phone call summary'}
+        headerActions={
+          demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+        }
+        footer={
+          <>
+            <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={submitting || demo}
+                data-testid="cah-primary"
+              >
+                {submitting ? 'Saving…' : 'Save note'}
+              </Button>
+            </DemoActionTooltip>
+          </>
+        }
+      >
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+          <TextField
+            id="cah-pc-summary"
+            label="What did you discuss?"
+            value={summary}
+            onChange={e => setSummary(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 8000 } }}
+            placeholder="Outcome, next steps, agreed timeline…"
+            multiline
+            minRows={4}
+            fullWidth
+            size="small"
+            autoFocus
+          />
+          {error && (
+            <Typography variant="caption" color="error">{error}</Typography>
+          )}
+        </Stack>
+      </FullScreenModal>
       <FollowUpEmailModal
         handler={handler}
         ctx={ctx}

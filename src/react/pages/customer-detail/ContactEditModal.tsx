@@ -1,9 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { CONTACT_EDIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Stack from '@mui/material/Stack';
@@ -14,6 +10,7 @@ import { emptyAddress, type StructuredAddress } from '../../../../shared/address
 import { updateRecentCustomer } from '../../utils/formatters';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
+import { FullScreenModal } from '../../components/modals/FullScreenModal';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -197,9 +194,20 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
 
   return (
     <>
-    <Dialog open={open} onClose={handleRequestClose} fullWidth maxWidth="sm">
-      <DialogTitle>Edit contact</DialogTitle>
-      <DialogContent>
+    <FullScreenModal
+      open={open}
+      onClose={handleRequestClose}
+      disableClose={saving}
+      title="Edit contact"
+      footer={
+        <>
+          <Button onClick={handleRequestClose} disabled={saving}>Cancel</Button>
+          <Button onClick={() => void handleSave()} variant="contained" disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
         <Stack spacing={2.5} sx={{ pt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
 
@@ -273,14 +281,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             surface="contactEdit"
           />
         </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleRequestClose} disabled={saving}>Cancel</Button>
-        <Button onClick={() => void handleSave()} variant="contained" disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    </FullScreenModal>
     <DiscardConfirmDialog
       open={confirmDiscardOpen}
       onKeepEditing={handleKeepEditing}

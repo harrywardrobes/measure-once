@@ -2,10 +2,6 @@ import { useState } from 'react';
 import { SYNC_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
@@ -19,6 +15,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import DownloadIcon from '@mui/icons-material/Download';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
+import { FullScreenModal } from './modals/FullScreenModal';
 import { useOfflineQueue } from '../hooks/useOfflineQueue';
 import { useOfflineFailures } from '../hooks/useOfflineFailures';
 import { useToast } from '../contexts/ToastContext';
@@ -272,110 +269,115 @@ export default function SyncPill(props: SyncPillProps) {
       <Tooltip title={tooltip}>{pill}</Tooltip>
 
       {interactive && (
-        <Dialog
+        <FullScreenModal
           open={open}
           onClose={() => setOpen(false)}
-          maxWidth="sm"
-          fullWidth
+          title="Changes that failed to sync"
           data-testid="failed-sync-dialog"
-        >
-          <DialogTitle>Changes that failed to sync</DialogTitle>
-          <DialogContent dividers>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-              These changes are still saved on this device but couldn&apos;t be sent to the server
-              after several automatic attempts. Retry one to send it again now, or discard it if you
-              no longer need it.
-            </Typography>
-            {failures.length === 0 ? (
-              <Alert severity="success" icon={<CheckCircleOutlineIcon fontSize="small" />}>
-                Nothing left to retry — all changes have been sent or discarded.
-              </Alert>
-            ) : (
-              <Stack spacing={2}>
-                {failures.map((entry) => (
-                  <FailedCard
-                    key={entry.id}
-                    entry={entry}
-                    onRetry={(id) => void retry(id)}
-                    onDiscard={(id) => void discard(id)}
-                  />
-                ))}
+          footer={
+            <Box
+              sx={{
+                width: '100%',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 1,
+                justifyContent: 'space-between',
+              }}
+            >
+              <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
+                {failures.length > 0 && (
+                  <>
+                    <Button
+                      size="small"
+                      color="inherit"
+                      startIcon={<DownloadIcon />}
+                      onClick={downloadPdf}
+                      data-testid="failed-sync-download-pdf"
+                    >
+                      Download as PDF
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      startIcon={<DeleteSweepIcon />}
+                      onClick={() => setConfirmDiscardAll(true)}
+                      data-testid="failed-sync-discard-all"
+                    >
+                      Discard all
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<RefreshIcon />}
+                      onClick={() => void retryAll()}
+                      data-testid="failed-sync-retry-all"
+                    >
+                      Retry all
+                    </Button>
+                  </>
+                )}
               </Stack>
-            )}
-          </DialogContent>
-          <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'space-between' }}>
-            <Stack direction="row" sx={{ gap: 1, flexWrap: 'wrap' }}>
-              {failures.length > 0 && (
-                <>
-                  <Button
-                    size="small"
-                    color="inherit"
-                    startIcon={<DownloadIcon />}
-                    onClick={downloadPdf}
-                    data-testid="failed-sync-download-pdf"
-                  >
-                    Download as PDF
-                  </Button>
-                  <Button
-                    size="small"
-                    color="error"
-                    startIcon={<DeleteSweepIcon />}
-                    onClick={() => setConfirmDiscardAll(true)}
-                    data-testid="failed-sync-discard-all"
-                  >
-                    Discard all
-                  </Button>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    startIcon={<RefreshIcon />}
-                    onClick={() => void retryAll()}
-                    data-testid="failed-sync-retry-all"
-                  >
-                    Retry all
-                  </Button>
-                </>
-              )}
+              <Button onClick={() => setOpen(false)}>Close</Button>
+            </Box>
+          }
+        >
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+            These changes are still saved on this device but couldn&apos;t be sent to the server
+            after several automatic attempts. Retry one to send it again now, or discard it if you
+            no longer need it.
+          </Typography>
+          {failures.length === 0 ? (
+            <Alert severity="success" icon={<CheckCircleOutlineIcon fontSize="small" />}>
+              Nothing left to retry — all changes have been sent or discarded.
+            </Alert>
+          ) : (
+            <Stack spacing={2}>
+              {failures.map((entry) => (
+                <FailedCard
+                  key={entry.id}
+                  entry={entry}
+                  onRetry={(id) => void retry(id)}
+                  onDiscard={(id) => void discard(id)}
+                />
+              ))}
             </Stack>
-            <Button onClick={() => setOpen(false)}>Close</Button>
-          </DialogActions>
-        </Dialog>
+          )}
+        </FullScreenModal>
       )}
 
       {interactive && (
-        <Dialog
+        <FullScreenModal
           open={confirmDiscardAll}
           onClose={() => setConfirmDiscardAll(false)}
-          maxWidth="xs"
-          fullWidth
+          title="Discard all failed changes?"
+          centerContent
           data-testid="failed-sync-discard-all-confirm"
+          footer={
+            <>
+              <Button color="inherit" onClick={() => setConfirmDiscardAll(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<DeleteSweepIcon />}
+                onClick={() => {
+                  void discardAll();
+                  setConfirmDiscardAll(false);
+                }}
+                data-testid="failed-sync-discard-all-confirm-btn"
+              >
+                Discard all
+              </Button>
+            </>
+          }
         >
-          <DialogTitle>Discard all failed changes?</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              This permanently removes all {failures.length} failed change
-              {failures.length === 1 ? '' : 's'} from this device. They can&apos;t be recovered.
-              Consider downloading a PDF first if you may need to re-enter them.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button color="inherit" onClick={() => setConfirmDiscardAll(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<DeleteSweepIcon />}
-              onClick={() => {
-                void discardAll();
-                setConfirmDiscardAll(false);
-              }}
-              data-testid="failed-sync-discard-all-confirm-btn"
-            >
-              Discard all
-            </Button>
-          </DialogActions>
-        </Dialog>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            This permanently removes all {failures.length} failed change
+            {failures.length === 1 ? '' : 's'} from this device. They can&apos;t be recovered.
+            Consider downloading a PDF first if you may need to re-enter them.
+          </Typography>
+        </FullScreenModal>
       )}
     </>
   );

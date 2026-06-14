@@ -2,10 +2,6 @@ import React, { useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -21,6 +17,7 @@ import { POST, isGoogleAuthError } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { PlacesLocationField } from '../PlacesLocationField';
+import { FullScreenModal } from './FullScreenModal';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -207,74 +204,78 @@ export function GenericVisitEditModal(props: Props) {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={props.open} onClose={handleRequestClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            {isLegacyAppointment && (
-              <Alert severity="warning">
-                This appointment was created before the Google Calendar migration and cannot be edited here.
-                Please delete it and create a new one from the shared calendar.
-              </Alert>
-            )}
-            <TextField
-              label="Title"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 120 } }}
-              fullWidth
-              size="small"
-            />
-            <DateTimeRangePicker
-              value={range}
-              onChange={(v: DateRange<Dayjs>) => setRange(v)}
-              localeText={{ start: 'Start', end: 'End' }}
-              slotProps={{ textField: { size: 'small', fullWidth: true } }}
-            />
-            <PlacesLocationField
-              surface="genericVisit"
-              label="Location (optional)"
-              value={location}
-              onChange={setLocation}
-              maxLength={300}
-              fullWidth
-              size="small"
-            />
-            <TextField
-              label="Notes (optional)"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 4000 } }}
-              multiline
-              minRows={3}
-              fullWidth
-              size="small"
-            />
-            <Typography variant="caption" color="text.secondary">
-              {isCreate
-                ? 'This visit is added to the shared Measure Once Google Calendar.'
-                : 'Changes are saved to the shared Measure Once Google Calendar.'}
-            </Typography>
-            {error && (
-              <Typography variant="caption" color="error">{error}</Typography>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleSubmit}
-            disabled={submitting || isLegacyAppointment}
-            startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
-            data-testid="generic-visit-save"
-          >
-            {submitting
-              ? (isCreate ? 'Scheduling…' : 'Saving…')
-              : (isCreate ? 'Schedule' : 'Save changes')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <FullScreenModal
+        open={props.open}
+        onClose={handleRequestClose}
+        disableClose={submitting}
+        title={dialogTitle}
+        footer={
+          <>
+            <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={submitting || isLegacyAppointment}
+              startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
+              data-testid="generic-visit-save"
+            >
+              {submitting
+                ? (isCreate ? 'Scheduling…' : 'Saving…')
+                : (isCreate ? 'Schedule' : 'Save changes')}
+            </Button>
+          </>
+        }
+      >
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          {isLegacyAppointment && (
+            <Alert severity="warning">
+              This appointment was created before the Google Calendar migration and cannot be edited here.
+              Please delete it and create a new one from the shared calendar.
+            </Alert>
+          )}
+          <TextField
+            label="Title"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            fullWidth
+            size="small"
+          />
+          <DateTimeRangePicker
+            value={range}
+            onChange={(v: DateRange<Dayjs>) => setRange(v)}
+            localeText={{ start: 'Start', end: 'End' }}
+            slotProps={{ textField: { size: 'small', fullWidth: true } }}
+          />
+          <PlacesLocationField
+            surface="genericVisit"
+            label="Location (optional)"
+            value={location}
+            onChange={setLocation}
+            maxLength={300}
+            fullWidth
+            size="small"
+          />
+          <TextField
+            label="Notes (optional)"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 4000 } }}
+            multiline
+            minRows={3}
+            fullWidth
+            size="small"
+          />
+          <Typography variant="caption" color="text.secondary">
+            {isCreate
+              ? 'This visit is added to the shared Measure Once Google Calendar.'
+              : 'Changes are saved to the shared Measure Once Google Calendar.'}
+          </Typography>
+          {error && (
+            <Typography variant="caption" color="error">{error}</Typography>
+          )}
+        </Stack>
+      </FullScreenModal>
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}

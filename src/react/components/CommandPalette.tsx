@@ -9,7 +9,7 @@ import { clearOfflineData } from '../lib/registerServiceWorker';
 import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
-import Dialog from '@mui/material/Dialog';
+import { FullScreenModal } from './modals/FullScreenModal';
 import Box from '@mui/material/Box';
 import InputBase from '@mui/material/InputBase';
 import Typography from '@mui/material/Typography';
@@ -423,38 +423,26 @@ export function CommandPalette() {
     : (recentCustomers.length > 0 || filteredActions.length > 0);
 
   return (
-    <Dialog
+    <FullScreenModal
       open={open}
       onClose={doClose}
-      maxWidth={false}
-      slotProps={{
-        paper: {
-          sx: {
-            width: '100%',
-            maxWidth: 560,
-            m: { xs: 1, sm: 2 },
-            borderRadius: '12px',
-            overflow: 'hidden',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-          },
-        },
-      }}
-      sx={{
-        '& .MuiBackdrop-root': { backdropFilter: 'blur(2px)', backgroundColor: 'rgba(0,0,0,0.4)' },
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', gap: 1 }}>
-        <SearchIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
-        <InputBase
-          inputRef={inputRef}
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={hintPlaceholder}
-          fullWidth
-          inputProps={{ 'aria-label': 'Command palette search', autoComplete: 'off', autoCorrect: 'off', spellCheck: false }}
-          sx={{ fontSize: '0.9375rem', '& input': { py: 0.25 } }}
-        />
+      ariaLabel="Command palette"
+      title={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SearchIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
+          <InputBase
+            inputRef={inputRef}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={hintPlaceholder}
+            fullWidth
+            inputProps={{ 'aria-label': 'Command palette search', autoComplete: 'off', autoCorrect: 'off', spellCheck: false }}
+            sx={{ fontSize: '0.9375rem', '& input': { py: 0.25 } }}
+          />
+        </Box>
+      }
+      headerActions={
         <Box
           component="kbd"
           sx={{
@@ -477,11 +465,11 @@ export function CommandPalette() {
         >
           Esc
         </Box>
-      </Box>
-
+      }
+    >
       <Box
         ref={listRef}
-        sx={{ maxHeight: 420, overflowY: 'auto', py: 0.5 }}
+        sx={{ mx: -3, my: -2.5, py: 0.5 }}
       >
         {q && (
           <>
@@ -638,7 +626,7 @@ export function CommandPalette() {
           </Box>
         )}
       </Box>
-    </Dialog>
+    </FullScreenModal>
   );
 }
 

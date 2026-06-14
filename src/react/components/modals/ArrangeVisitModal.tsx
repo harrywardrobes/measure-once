@@ -3,11 +3,8 @@ import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -29,7 +26,8 @@ import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { ARRANGE_VISIT_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { AddressInput } from '../AddressInput';
 import { emptyAddress, formatAddress, type StructuredAddress } from '../../../../shared/address';
@@ -498,30 +496,128 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const mobile = contactInfo?.contactMobilePhone || '';
   const whatsapp = contactInfo?.contactWhatsAppPhone || '';
 
+  const titleStr =
+    step === 'loading' ? `Arrange ${label}`
+    : step === 'call' ? `Call ${displayName}`
+    : step === 'booked' ? `Book ${label} for ${displayName}`
+    : step === 'email' ? `Ask ${displayName} for availability`
+    : '';
+
+  let footerNode: React.ReactNode = null;
+  if (step === 'loading') {
+    footerNode = <Button onClick={handleRequestClose}>Cancel</Button>;
+  } else if (step === 'call') {
+    footerNode = (
+      <>
+        <Button
+          disabled={submitting}
+          onClick={() => {
+            setActionError('');
+            setProposedEmailDate(null);
+            setProposedEmailTime(null);
+            if (!emailSubject && !emailBody) {
+              if (noAnswerTemplate) {
+                setEmailSubject(noAnswerTemplate.subject);
+                setEmailBody(noAnswerTemplate.body_text);
+              } else {
+                fetchEmailTemplate(null, null, contactInfo);
+              }
+            }
+            setMadeProgress(true); setStep('email');
+          }}
+          variant="outlined"
+          data-testid="av-outcome-no-answer"
+        >
+          No answer
+        </Button>
+        <Button
+          disabled={submitting}
+          onClick={() => handleOutcome('call_back_later')}
+          variant="outlined"
+          data-testid="av-outcome-call-back"
+        >
+          Call back later
+        </Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            disabled={submitting || demo}
+            onClick={() => handleOutcome('not_proceeding')}
+            color="error"
+            variant="outlined"
+            data-testid="av-outcome-not-proceeding"
+          >
+            {submitting ? <CircularProgress size={18} /> : 'Not proceeding'}
+          </Button>
+        </DemoActionTooltip>
+        <Button
+          disabled={submitting}
+          onClick={() => { setActionError(''); setMadeProgress(true); setStep('booked'); }}
+          variant="contained"
+          color="success"
+          data-testid="av-outcome-booked"
+        >
+          Booked
+        </Button>
+      </>
+    );
+  } else if (step === 'booked') {
+    footerNode = (
+      <>
+        <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            variant="contained"
+            onClick={handleBooked}
+            disabled={submitting || demo}
+            data-testid="av-booked-confirm"
+          >
+            {submitting ? <CircularProgress size={18} color="inherit" /> : 'Confirm booking'}
+          </Button>
+        </DemoActionTooltip>
+      </>
+    );
+  } else if (step === 'email') {
+    footerNode = (
+      <>
+        <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            variant="contained"
+            onClick={handleEmailSent}
+            disabled={submitting || demo || emailLoading}
+            data-testid="av-email-send"
+          >
+            {submitting ? <CircularProgress size={18} color="inherit" /> : 'Send email'}
+          </Button>
+        </DemoActionTooltip>
+      </>
+    );
+  }
+
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
+      <FullScreenModal
+        open={open}
+        onClose={handleRequestClose}
+        disableClose={submitting}
+        title={titleStr}
+        headerActions={
+          demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+        }
+        footer={footerNode || undefined}
+      >
         {step === 'loading' && (
           <>
-            <DialogTitle>Arrange {label}</DialogTitle>
-            <DialogContent>
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress size={36} />
-              </Box>
-              {loadError && (
-                <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
-              )}
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleRequestClose}>Cancel</Button>
-            </DialogActions>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={36} />
+            </Box>
+            {loadError && (
+              <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
+            )}
           </>
         )}
 
         {step === 'call' && (
-          <>
-            <DemoDialogTitle demo={demo}>Call {displayName}</DemoDialogTitle>
-            <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
@@ -538,65 +634,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   <Alert severity="error">{actionError}</Alert>
                 )}
               </Stack>
-            </DialogContent>
-            <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', pb: 2, px: 2 }}>
-              <Button
-                disabled={submitting}
-                onClick={() => {
-                  setActionError('');
-                  setProposedEmailDate(null);
-                  setProposedEmailTime(null);
-                  if (!emailSubject && !emailBody) {
-                    if (noAnswerTemplate) {
-                      setEmailSubject(noAnswerTemplate.subject);
-                      setEmailBody(noAnswerTemplate.body_text);
-                    } else {
-                      fetchEmailTemplate(null, null, contactInfo);
-                    }
-                  }
-                  setMadeProgress(true); setStep('email');
-                }}
-                variant="outlined"
-                data-testid="av-outcome-no-answer"
-              >
-                No answer
-              </Button>
-              <Button
-                disabled={submitting}
-                onClick={() => handleOutcome('call_back_later')}
-                variant="outlined"
-                data-testid="av-outcome-call-back"
-              >
-                Call back later
-              </Button>
-              <DemoActionTooltip demo={demo}>
-                <Button
-                  disabled={submitting || demo}
-                  onClick={() => handleOutcome('not_proceeding')}
-                  color="error"
-                  variant="outlined"
-                  data-testid="av-outcome-not-proceeding"
-                >
-                  {submitting ? <CircularProgress size={18} /> : 'Not proceeding'}
-                </Button>
-              </DemoActionTooltip>
-              <Button
-                disabled={submitting}
-                onClick={() => { setActionError(''); setMadeProgress(true); setStep('booked'); }}
-                variant="contained"
-                color="success"
-                data-testid="av-outcome-booked"
-              >
-                Booked
-              </Button>
-            </DialogActions>
-          </>
         )}
 
         {step === 'booked' && (
-          <>
-            <DemoDialogTitle demo={demo}>Book {label} for {displayName}</DemoDialogTitle>
-            <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
@@ -629,27 +669,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   <Alert severity="error">{actionError}</Alert>
                 )}
               </Stack>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
-              <DemoActionTooltip demo={demo}>
-                <Button
-                  variant="contained"
-                  onClick={handleBooked}
-                  disabled={submitting || demo}
-                  data-testid="av-booked-confirm"
-                >
-                  {submitting ? <CircularProgress size={18} color="inherit" /> : 'Confirm booking'}
-                </Button>
-              </DemoActionTooltip>
-            </DialogActions>
-          </>
         )}
 
         {step === 'email' && (
-          <>
-            <DemoDialogTitle demo={demo}>Ask {displayName} for availability</DemoDialogTitle>
-            <DialogContent>
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
@@ -714,23 +736,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                     : <Alert severity="error">{actionError}</Alert>
                 )}
               </Stack>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => { setActionError(''); setStep('call'); }} disabled={submitting}>Back</Button>
-              <DemoActionTooltip demo={demo}>
-                <Button
-                  variant="contained"
-                  onClick={handleEmailSent}
-                  disabled={submitting || demo || emailLoading}
-                  data-testid="av-email-send"
-                >
-                  {submitting ? <CircularProgress size={18} color="inherit" /> : 'Send email'}
-                </Button>
-              </DemoActionTooltip>
-            </DialogActions>
-          </>
         )}
-      </Dialog>
+      </FullScreenModal>
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}

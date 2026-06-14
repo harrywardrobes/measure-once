@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
+import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Stack from '@mui/material/Stack';
@@ -24,7 +21,8 @@ import {
 } from '../../utils/broadcastCustomerInfoLink';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 
 const resendCooldownExpiry = new Map<string, number>();
 
@@ -745,15 +743,24 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth data-testid="upload-photos-dialog">
-      <DemoDialogTitle demo={demo} data-testid="upload-photos-dialog-title">{title}</DemoDialogTitle>
-      <DialogContent>
-        {phase !== 'sent' && (
-          <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
-        )}
-        {renderContent()}
-      </DialogContent>
-      <DialogActions>{renderActions()}</DialogActions>
-    </Dialog>
+    <FullScreenModal
+      open={open}
+      onClose={handleClose}
+      data-testid="upload-photos-dialog"
+      title={
+        <Typography variant="h4" component="h2" data-testid="upload-photos-dialog-title" sx={{ wordBreak: 'break-word' }}>
+          {title}
+        </Typography>
+      }
+      headerActions={
+        demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+      }
+      footer={renderActions()}
+    >
+      {phase !== 'sent' && (
+        <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+      )}
+      {renderContent()}
+    </FullScreenModal>
   );
 }

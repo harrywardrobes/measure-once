@@ -2,10 +2,6 @@ import { useState } from 'react';
 import { CONFLICT_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
@@ -19,6 +15,7 @@ import MergeTypeIcon from '@mui/icons-material/MergeType';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { FullScreenModal } from './modals/FullScreenModal';
 import { useOfflineConflicts } from '../hooks/useOfflineConflicts';
 import type { ConflictEntry, OfflineArea, ResolveConflictResult } from '../lib/offlineQueue';
 import { resolveConflictRoute } from '../lib/conflictRoute';
@@ -1238,15 +1235,26 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
         </Box>
       </Tooltip>
 
-      <Dialog
+      <FullScreenModal
         open={open}
         onClose={() => setOpen(false)}
-        maxWidth="sm"
-        fullWidth
+        title="Sync conflicts"
         data-testid="conflicts-dialog"
+        footer={
+          <>
+            <Button
+              color="inherit"
+              onClick={() => void dismissAll()}
+              data-testid="conflicts-dismiss-all"
+            >
+              Keep all my edits
+            </Button>
+            <Button variant="contained" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+          </>
+        }
       >
-        <DialogTitle>Sync conflicts</DialogTitle>
-        <DialogContent dividers>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
             These records changed on the server while your offline edits were waiting to sync.
             {' '}{introOutcome} For each conflict, keep your edit or restore the
@@ -1280,20 +1288,7 @@ export default function ConflictsReview(props: ConflictsReviewProps) {
               />
             ))}
           </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            color="inherit"
-            onClick={() => void dismissAll()}
-            data-testid="conflicts-dismiss-all"
-          >
-            Keep all my edits
-          </Button>
-          <Button variant="contained" onClick={() => setOpen(false)}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+      </FullScreenModal>
     </>
   );
 }

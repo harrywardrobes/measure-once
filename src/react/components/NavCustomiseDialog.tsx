@@ -2,14 +2,11 @@ import { useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormGroup from '@mui/material/FormGroup';
 import Typography from '@mui/material/Typography';
 
+import { FullScreenModal } from './modals/FullScreenModal';
 import type { NavItem } from './BottomNav';
 
 const BAR_SIZE = 3;
@@ -78,79 +75,77 @@ export function NavCustomiseDialog({ open, onClose, availableItems, currentKeys,
     selected.every((k) => defaultSet.has(k));
 
   return (
-    <Dialog
+    <FullScreenModal
       open={open}
       onClose={onClose}
-      fullWidth
-      maxWidth="xs"
-      slotProps={{ paper: { sx: { borderRadius: 3 }, ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'nav-customise-dialog'); } } }}
-    >
-      <DialogTitle sx={{ pb: 0.5 }}>Customise navigation</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Choose exactly {BAR_SIZE} tabs to show in the main bar. The rest will appear in the More
-          drawer.
-        </Typography>
-        {isCustomized === false && (
-          <Alert severity="info" sx={{ mb: 2 }} data-testid="nav-customise-inherit-banner">
-            This role currently inherits the default layout. Saving will create a custom layout for
-            this role.
-          </Alert>
-        )}
-        <FormGroup>
-          {availableItems.map((n) => {
-            const checked = selected.includes(n.key);
-            return (
-              <FormControlLabel
-                key={n.key}
-                data-testid={`nav-customise-item-${n.key}`}
-                data-nav-label={n.label}
-                control={
-                  <Checkbox
-                    checked={checked}
-                    disabled={!checked && atLimit}
-                    onChange={() => toggle(n.key)}
-                    size="small"
-                  />
-                }
-                label={n.label}
-              />
-            );
-          })}
-        </FormGroup>
-        {atLimit && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            {BAR_SIZE} selected — uncheck one to change your selection.
-          </Typography>
-        )}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        {onReset ? (
+      data-testid="nav-customise-dialog"
+      title="Customise navigation"
+      footer={
+        <>
+          {onReset ? (
+            <Button
+              onClick={onReset}
+              color="inherit"
+              disabled={!isCustomized}
+              sx={{ mr: 'auto' }}
+              title={isCustomized ? 'Clear custom layout and inherit default' : 'Already using default'}
+            >
+              Reset to default
+            </Button>
+          ) : (
+            <Button onClick={handleReset} color="inherit" disabled={isAtDefaults} sx={{ mr: 'auto' }}>
+              Reset to defaults
+            </Button>
+          )}
+          <Button onClick={onClose} color="inherit">
+            Cancel
+          </Button>
           <Button
-            onClick={onReset}
-            color="inherit"
-            disabled={!isCustomized}
-            sx={{ mr: 'auto' }}
-            title={isCustomized ? 'Clear custom layout and inherit default' : 'Already using default'}
+            onClick={handleSave}
+            variant="contained"
+            disabled={selected.length !== BAR_SIZE}
           >
-            Reset to default
+            Save
           </Button>
-        ) : (
-          <Button onClick={handleReset} color="inherit" disabled={isAtDefaults} sx={{ mr: 'auto' }}>
-            Reset to defaults
-          </Button>
-        )}
-        <Button onClick={onClose} color="inherit">
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSave}
-          variant="contained"
-          disabled={selected.length !== BAR_SIZE}
-        >
-          Save
-        </Button>
-      </DialogActions>
-    </Dialog>
+        </>
+      }
+    >
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Choose exactly {BAR_SIZE} tabs to show in the main bar. The rest will appear in the More
+        drawer.
+      </Typography>
+      {isCustomized === false && (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="nav-customise-inherit-banner">
+          This role currently inherits the default layout. Saving will create a custom layout for
+          this role.
+        </Alert>
+      )}
+      <FormGroup>
+        {availableItems.map((n) => {
+          const checked = selected.includes(n.key);
+          return (
+            <FormControlLabel
+              key={n.key}
+              data-testid={`nav-customise-item-${n.key}`}
+              data-nav-label={n.label}
+              control={
+                <Checkbox
+                  checked={checked}
+                  disabled={!checked && atLimit}
+                  onChange={() => toggle(n.key)}
+                  size="small"
+                />
+              }
+              label={n.label}
+            />
+          );
+        })}
+      </FormGroup>
+      {atLimit && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          {BAR_SIZE} selected — uncheck one to change your selection.
+        </Typography>
+      )}
+    </FullScreenModal>
   );
 }

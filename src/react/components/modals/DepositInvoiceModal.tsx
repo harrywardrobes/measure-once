@@ -6,10 +6,6 @@ import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
@@ -35,7 +31,8 @@ import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 import { DEMO_DEPOSIT_INVOICE } from './demoData';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
@@ -897,28 +894,33 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
   const actions = renderActions();
 
   return (
-    <Dialog open={open} onClose={isSubmittingStep ? undefined : handleClose} maxWidth="sm" fullWidth>
-      <DemoDialogTitle demo={demo} sx={{ display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
-        {showBackInTitle && (
-          <IconButton size="small" onClick={() => {
-            if (step === 'resend')                  navigateTo('hub');
-            else if (step === 'reminder')           navigateTo('hub');
-            else if (step === 'not_proceeding_confirm') navigateTo('hub');
-            else if (step === 'not_proceeding_email')   navigateTo('not_proceeding_confirm');
-          }} sx={{ mr: 0.5 }}>
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-        )}
-        {getTitle()}
-      </DemoDialogTitle>
-      <DialogContent dividers>
-        {renderContent()}
-      </DialogContent>
-      {actions && (
-        <DialogActions sx={{ display: 'flex', px: 2, py: 1.5 }}>
-          {actions}
-        </DialogActions>
-      )}
-    </Dialog>
+    <FullScreenModal
+      open={open}
+      onClose={handleClose}
+      disableClose={isSubmittingStep}
+      title={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {showBackInTitle && (
+            <IconButton size="small" onClick={() => {
+              if (step === 'resend')                  navigateTo('hub');
+              else if (step === 'reminder')           navigateTo('hub');
+              else if (step === 'not_proceeding_confirm') navigateTo('hub');
+              else if (step === 'not_proceeding_email')   navigateTo('not_proceeding_confirm');
+            }} sx={{ mr: 0.5 }}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
+          <Typography variant="h4" component="h2" sx={{ wordBreak: 'break-word' }}>
+            {getTitle()}
+          </Typography>
+        </Box>
+      }
+      headerActions={
+        demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+      }
+      footer={actions || undefined}
+    >
+      {renderContent()}
+    </FullScreenModal>
   );
 }

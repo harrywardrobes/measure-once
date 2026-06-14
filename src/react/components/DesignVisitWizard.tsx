@@ -6,15 +6,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import CloseIcon from '@mui/icons-material/Close';
+import { FullScreenModal } from './modals/FullScreenModal';
 import { useToastContext } from '../contexts/ToastContext';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
@@ -586,117 +580,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                   : 'Step 3 of 3 — Review & submit';
 
   return (
-    <Drawer
-      anchor="right"
+    <>
+    <FullScreenModal
       open={open}
       onClose={handleClose}
-      slotProps={{ paper: { sx: { width: 'min(680px, 100vw)', display: 'flex', flexDirection: 'column' }, className: 'dv-wizard' } }}
-    >
-      {/* Header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: '24px',
-          pt: '18px',
-          pb: '14px',
-          borderBottom: '1px solid var(--neutral-200)',
-          flexShrink: 0,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--neutral-800)' }}>
-            {title}
-          </Typography>
-          {demo && <Chip label="Demo preview" size="small" color="info" variant="outlined" sx={{ flexShrink: 0 }} />}
-        </Box>
-        <IconButton onClick={handleClose} size="small" aria-label="Close" sx={{ color: 'var(--neutral-400)', ml: 1 }}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      {/* Body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', p: '20px 24px' }}>
-        <ModalContactHeader
-          name={contactName}
-          email={contactEmail}
-          loading={catalogueLoading}
-        />
-        {showDraftNotice && (
-          <Alert
-            severity="info"
-            onClose={() => setShowDraftNotice(false)}
-            sx={{ mb: '16px', fontSize: '.82rem' }}
-          >
-            Restoring your draft from last time.
-          </Alert>
-        )}
-        {catalogueLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
-            <CircularProgress size={28} />
-          </Box>
-        ) : (
-          <>
-            <StepIndicator current={step} total={3} />
-            <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-500)', mb: '16px' }}>
-              {stepLabel}
-            </Typography>
-
-            {step === 1 && (
-              <DesignVisitStep1
-                initialData={step1}
-                handles={handles}
-                furnitureRanges={furnitureRanges}
-                termsText={termsText}
-                termsVersionNumber={termsVersionNumber}
-                onDataChange={setStep1}
-              />
-            )}
-
-            {step === 2 && (
-              <DesignVisitRoomsStep
-                initialRooms={rooms}
-                doorStyles={doorStyles}
-                onRoomsChange={setRooms}
-                onUploadingChange={setUploading}
-                onNewUpload={key => pendingUploadKeysRef.current.add(key)}
-                onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
-                demo={demo}
-              />
-            )}
-
-            {step === 3 && (
-              <DesignVisitStep3
-                step1Data={step1}
-                rooms={rooms}
-                handles={handles}
-                furnitureRanges={furnitureRanges}
-                doorStyles={doorStyles}
-                termsText={termsText}
-                termsVersionNumber={termsVersionNumber}
-              />
-            )}
-          </>
-        )}
-      </Box>
-
-      {/* Footer */}
-      {!catalogueLoading && (
-        <Box
-          sx={{
-            display: 'flex',
-            gap: '10px',
-            justifyContent: 'flex-end',
-            px: '24px',
-            py: '14px',
-            borderTop: '1px solid var(--neutral-200)',
-            flexShrink: 0,
-            bgcolor: 'background.paper',
-            flexDirection: 'column',
-            alignItems: 'stretch',
-          }}
-        >
+      title={title}
+      headerActions={demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" sx={{ flexShrink: 0 }} /> : undefined}
+      footer={!catalogueLoading ? (
+        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
           {(s1Error && step === 1) && (
             <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s1Error}</Typography>
           )}
@@ -783,25 +674,79 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             )}
           </Box>
         </Box>
+      ) : undefined}
+    >
+      <ModalContactHeader
+        name={contactName}
+        email={contactEmail}
+        loading={catalogueLoading}
+      />
+      {showDraftNotice && (
+        <Alert
+          severity="info"
+          onClose={() => setShowDraftNotice(false)}
+          sx={{ mb: '16px', fontSize: '.82rem' }}
+        >
+          Restoring your draft from last time.
+        </Alert>
       )}
-      {/* Discard draft confirmation */}
-      <Dialog
-        open={showDiscardDialog}
-        onClose={() => setShowDiscardDialog(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem' }}>
-          {editMode ? 'Discard your changes?' : 'Discard your draft?'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: '.9rem', color: 'var(--neutral-700)' }}>
-            {editMode
-              ? 'You have unsaved changes. If you close now your edits will be lost.'
-              : 'You have unsaved room data. If you close now your draft will be lost.'}
+      {catalogueLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+          <CircularProgress size={28} />
+        </Box>
+      ) : (
+        <>
+          <StepIndicator current={step} total={3} />
+          <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-500)', mb: '16px' }}>
+            {stepLabel}
           </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+
+          {step === 1 && (
+            <DesignVisitStep1
+              initialData={step1}
+              handles={handles}
+              furnitureRanges={furnitureRanges}
+              termsText={termsText}
+              termsVersionNumber={termsVersionNumber}
+              onDataChange={setStep1}
+            />
+          )}
+
+          {step === 2 && (
+            <DesignVisitRoomsStep
+              initialRooms={rooms}
+              doorStyles={doorStyles}
+              onRoomsChange={setRooms}
+              onUploadingChange={setUploading}
+              onNewUpload={key => pendingUploadKeysRef.current.add(key)}
+              onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
+              demo={demo}
+            />
+          )}
+
+          {step === 3 && (
+            <DesignVisitStep3
+              step1Data={step1}
+              rooms={rooms}
+              handles={handles}
+              furnitureRanges={furnitureRanges}
+              doorStyles={doorStyles}
+              termsText={termsText}
+              termsVersionNumber={termsVersionNumber}
+            />
+          )}
+        </>
+      )}
+    </FullScreenModal>
+
+    {/* Discard draft confirmation */}
+    <FullScreenModal
+      open={showDiscardDialog}
+      onClose={() => setShowDiscardDialog(false)}
+      title={editMode ? 'Discard your changes?' : 'Discard your draft?'}
+      centerContent
+      footer={
+        <>
           <Button
             onClick={() => setShowDiscardDialog(false)}
             variant="outlined"
@@ -883,9 +828,16 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           >
             Discard
           </Button>
-        </DialogActions>
-      </Dialog>
-    </Drawer>
+        </>
+      }
+    >
+      <Typography sx={{ fontSize: '.9rem', color: 'var(--neutral-700)' }}>
+        {editMode
+          ? 'You have unsaved changes. If you close now your edits will be lost.'
+          : 'You have unsaved room data. If you close now your draft will be lost.'}
+      </Typography>
+    </FullScreenModal>
+    </>
   );
 }
 

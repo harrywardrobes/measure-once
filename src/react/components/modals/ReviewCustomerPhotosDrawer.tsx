@@ -5,13 +5,14 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
-import Drawer from '@mui/material/Drawer';
+import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import { FullScreenModal } from './FullScreenModal';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
@@ -324,47 +325,128 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
   // Show masked email in the UI; the actual send target is resolved server-side from the submission record
   const emailDisplay    = submission?.maskedEmail || ctx.contactEmail || '';
 
+  const titleStr =
+    step === 'not_suitable'   ? 'Not Suitable — confirm email' :
+    step === 'rough_estimate' ? 'Send Rough Estimate' :
+    step === 'done'           ? 'Review sent' :
+    'Review customer photos';
+
+  const titleNode = (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+        {(step === 'not_suitable' || step === 'rough_estimate') && (
+          <IconButton
+            size="small"
+            onClick={() => { setStep('review'); setSubmitError(''); }}
+            aria-label="Back"
+            sx={{ ml: -0.5 }}
+          >
+            <ArrowBackIcon fontSize="small" />
+          </IconButton>
+        )}
+        <Typography variant="h4" component="h2" sx={{ wordBreak: 'break-word' }}>
+          {titleStr}
+        </Typography>
+      </Box>
+      {step === 'review' && submission && (
+        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
+          {contactDisplay}
+          {emailDisplay ? ` · ${emailDisplay}` : ''}
+        </Typography>
+      )}
+    </Box>
+  );
+
+  let footerNode: React.ReactNode = null;
+  if (step === 'review') {
+    footerNode = (
+      <>
+        <Button onClick={handleRequestClose} color="inherit">
+          Cancel
+        </Button>
+        <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+          <span>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleNotSuitableClick}
+              disabled={!!demo}
+              data-testid="cah-not-suitable"
+            >
+              Not Suitable
+            </Button>
+          </span>
+        </Tooltip>
+        <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+          <span>
+            <Button
+              variant="contained"
+              onClick={handleRoughEstimateClick}
+              disabled={!!demo}
+              data-testid="cah-rough-estimate"
+            >
+              Send Rough Estimate
+            </Button>
+          </span>
+        </Tooltip>
+      </>
+    );
+  } else if (step === 'not_suitable') {
+    footerNode = (
+      <>
+        <Button onClick={() => { setStep('review'); setSubmitError(''); }} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          color="error"
+          onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.not_suitable)}
+          disabled={submitting}
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+          data-testid="cah-primary"
+        >
+          {submitting ? 'Sending…' : 'Confirm & Send'}
+        </Button>
+      </>
+    );
+  } else if (step === 'rough_estimate') {
+    footerNode = (
+      <>
+        <Button onClick={() => { setStep('review'); setSubmitError(''); }} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.rough_estimate_sent)}
+          disabled={submitting}
+          startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+          data-testid="cah-primary"
+        >
+          {submitting ? 'Sending…' : 'Confirm & Send'}
+        </Button>
+      </>
+    );
+  } else if (step === 'done') {
+    footerNode = (
+      <Button variant="contained" onClick={handleClose}>
+        Done
+      </Button>
+    );
+  }
+
   return (
     <>
-    <Drawer
-      anchor="right"
+    <FullScreenModal
       open={open}
       onClose={handleRequestClose}
-      slotProps={{ paper: { sx: { width: { xs: '100%', sm: 480 }, p: 0 } } }}
+      disableClose={submitting}
+      title={titleNode}
+      ariaLabel={titleStr}
+      headerActions={
+        demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+      }
+      footer={footerNode || undefined}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-
-        {/* Header */}
-        <Box sx={{ px: 3, pt: 3, pb: 2, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0 }}>
-          {(step === 'not_suitable' || step === 'rough_estimate') ? (
-            <Button
-              size="small"
-              startIcon={<ArrowBackIcon />}
-              onClick={() => { setStep('review'); setSubmitError(''); }}
-              sx={{ mb: 1, ml: -0.5, color: 'text.secondary' }}
-            >
-              Back
-            </Button>
-          ) : null}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-              {step === 'not_suitable'   ? 'Not Suitable — confirm email' :
-               step === 'rough_estimate' ? 'Send Rough Estimate' :
-               step === 'done'           ? 'Review sent' :
-               'Review customer photos'}
-            </Typography>
-            {demo && <Chip label="Demo preview" size="small" color="info" variant="outlined" />}
-          </Box>
-          {step === 'review' && submission && (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-              {contactDisplay}
-              {emailDisplay ? ` · ${emailDisplay}` : ''}
-            </Typography>
-          )}
-        </Box>
-
-        {/* Body */}
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2.5 }}>
           <ModalContactHeader
             name={submission?.contactName ?? ctx.contactName}
             email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
@@ -584,99 +666,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
               )}
             </Stack>
           )}
-        </Box>
-
-        {/* Footer actions */}
-        {(step === 'review' || step === 'not_suitable' || step === 'rough_estimate' || step === 'done') && (
-          <Box
-            sx={{
-              px: 3,
-              py: 2,
-              borderTop: '1px solid',
-              borderColor: 'divider',
-              flexShrink: 0,
-              bgcolor: 'background.paper',
-            }}
-          >
-            {step === 'review' && (
-              <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
-                <Button onClick={handleRequestClose} color="inherit">
-                  Cancel
-                </Button>
-                <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
-                  <span>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      onClick={handleNotSuitableClick}
-                      disabled={!!demo}
-                      data-testid="cah-not-suitable"
-                    >
-                      Not Suitable
-                    </Button>
-                  </span>
-                </Tooltip>
-                <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
-                  <span>
-                    <Button
-                      variant="contained"
-                      onClick={handleRoughEstimateClick}
-                      disabled={!!demo}
-                      data-testid="cah-rough-estimate"
-                    >
-                      Send Rough Estimate
-                    </Button>
-                  </span>
-                </Tooltip>
-              </Stack>
-            )}
-
-            {step === 'not_suitable' && (
-              <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
-                <Button onClick={() => { setStep('review'); setSubmitError(''); }} disabled={submitting}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  color="error"
-                  onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.not_suitable)}
-                  disabled={submitting}
-                  startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-                  data-testid="cah-primary"
-                >
-                  {submitting ? 'Sending…' : 'Confirm & Send'}
-                </Button>
-              </Stack>
-            )}
-
-            {step === 'rough_estimate' && (
-              <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
-                <Button onClick={() => { setStep('review'); setSubmitError(''); }} disabled={submitting}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={() => handleConfirm(REVIEW_PHOTOS_OUTCOME_KEY.rough_estimate_sent)}
-                  disabled={submitting}
-                  startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-                  data-testid="cah-primary"
-                >
-                  {submitting ? 'Sending…' : 'Confirm & Send'}
-                </Button>
-              </Stack>
-            )}
-
-            {step === 'done' && (
-              <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-                <Button variant="contained" onClick={handleClose}>
-                  Done
-                </Button>
-              </Stack>
-            )}
-          </Box>
-        )}
-      </Box>
-    </Drawer>
+    </FullScreenModal>
 
     <DiscardConfirmDialog
       open={confirmDiscardOpen}

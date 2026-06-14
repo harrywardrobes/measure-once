@@ -20,11 +20,8 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import Collapse from '@mui/material/Collapse';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import InputLabel from '@mui/material/InputLabel';
@@ -46,7 +43,8 @@ import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 
 const VISIT_TYPES = [
   { value: 'design', label: 'Design visit' },
@@ -308,23 +306,48 @@ export function ScheduleVisitModal({
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog open={pastConfirmOpen} onClose={() => setPastConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Schedule in the past?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">This time has already passed — schedule anyway?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPastConfirmOpen(false)}>Go back</Button>
-          <Button variant="contained" color="warning" data-testid="cah-past-confirm"
-            onClick={() => { setPastConfirmOpen(false); void doSubmit(); }}>
-            Schedule anyway
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <FullScreenModal
+        open={pastConfirmOpen}
+        onClose={() => setPastConfirmOpen(false)}
+        title="Schedule in the past?"
+        centerContent
+        footer={
+          <>
+            <Button onClick={() => setPastConfirmOpen(false)}>Go back</Button>
+            <Button variant="contained" color="warning" data-testid="cah-past-confirm"
+              onClick={() => { setPastConfirmOpen(false); void doSubmit(); }}>
+              Schedule anyway
+            </Button>
+          </>
+        }
+      >
+        <Typography variant="body2">This time has already passed — schedule anyway?</Typography>
+      </FullScreenModal>
 
-      <Dialog open={open} onClose={handleRequestClose} maxWidth="xs" fullWidth>
-        <DemoDialogTitle demo={demo}>{modalTitle}</DemoDialogTitle>
-        <DialogContent>
+      <FullScreenModal
+        open={open}
+        onClose={handleRequestClose}
+        disableClose={submitting}
+        title={modalTitle}
+        headerActions={
+          demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+        }
+        footer={
+          <>
+            <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={submitting || demo || (sendEmail && emailLoading)}
+                data-testid="cah-primary"
+              >
+                {submitting ? 'Scheduling…' : 'Schedule'}
+              </Button>
+            </DemoActionTooltip>
+          </>
+        }
+      >
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
 
@@ -467,21 +490,7 @@ export function ScheduleVisitModal({
             </Collapse>
             {error && <Box><Typography variant="caption" color="error">{error}</Typography></Box>}
           </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-          <DemoActionTooltip demo={demo}>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={submitting || demo || (sendEmail && emailLoading)}
-              data-testid="cah-primary"
-            >
-              {submitting ? 'Scheduling…' : 'Schedule'}
-            </Button>
-          </DemoActionTooltip>
-        </DialogActions>
-      </Dialog>
+      </FullScreenModal>
 
       <DiscardConfirmDialog
         open={confirmDiscardOpen}

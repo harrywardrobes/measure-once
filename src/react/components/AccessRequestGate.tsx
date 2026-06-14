@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -11,6 +9,7 @@ import DoNotDisturbAltIcon from '@mui/icons-material/DoNotDisturbAlt';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { BRAND_COLORS } from '../theme';
+import { FullScreenModal } from './modals/FullScreenModal';
 import type { GalleryEmbedded } from '../types/gallery';
 
 type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
@@ -509,15 +508,17 @@ export function AccessRequestGate({ forceNoTurnstile, open: openProp, onClose, i
   }
 
   return (
-    <Dialog
+    <FullScreenModal
       open={open}
-      onClose={handleClose}
-      slotProps={{ paper: { sx: { width: '100%', maxWidth: 420, borderRadius: 3, p: 1 } } }}
+      onClose={handleClose ?? (() => {})}
+      disableClose={!handleClose}
+      centerContent
+      ariaLabel="Request access"
     >
-      <DialogContent sx={{ pt: 3 }}>
+      <Box sx={{ width: '100%', maxWidth: 420, mx: 'auto' }}>
         {content}
-      </DialogContent>
-    </Dialog>
+      </Box>
+    </FullScreenModal>
   );
 }
 

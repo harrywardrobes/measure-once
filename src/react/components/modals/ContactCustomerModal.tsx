@@ -2,11 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -20,7 +17,8 @@ import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useAuth } from '../../contexts/AuthContext';
 import { ModalContactHeader } from './ModalContactHeader';
-import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
+import { DemoActionTooltip } from './demoMode';
+import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
 
@@ -330,29 +328,91 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     whatsapp: whatsappSent,
   };
 
+  const titleStr =
+    phase === 'loading' ? 'Contact Customer'
+    : phase === 'contact' ? `Call ${displayName}`
+    : phase === 'no_response_confirm' ? 'Mark as No Response?'
+    : phase === 'advancing' ? 'Updating status…'
+    : 'Done';
+
+  let footerNode: React.ReactNode = null;
+  if (phase === 'loading') {
+    footerNode = <Button onClick={onClose}>Cancel</Button>;
+  } else if (phase === 'contact') {
+    footerNode = (
+      <>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            onClick={handleSendUploadLink}
+            variant="outlined"
+            disabled={demo}
+            data-testid="cc-send-upload-link"
+          >
+            Send Upload Link
+          </Button>
+        </DemoActionTooltip>
+        <Button
+          onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
+          variant="outlined"
+          color="warning"
+          data-testid="cc-no-response"
+        >
+          No Response
+        </Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            onClick={handleDone}
+            variant="contained"
+            disabled={demo}
+            data-testid="cc-done"
+          >
+            Done
+          </Button>
+        </DemoActionTooltip>
+      </>
+    );
+  } else if (phase === 'no_response_confirm') {
+    footerNode = (
+      <>
+        <Button onClick={() => setPhase('contact')}>Cancel</Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            onClick={handleConfirmNoResponse}
+            variant="contained"
+            color="warning"
+            disabled={demo}
+            data-testid="cc-confirm-no-response"
+          >
+            Confirm
+          </Button>
+        </DemoActionTooltip>
+      </>
+    );
+  }
+
   return (
-    <Dialog open onClose={() => { if (phase !== 'advancing') onClose(); }} maxWidth="xs" fullWidth>
+    <FullScreenModal
+      open
+      onClose={onClose}
+      disableClose={phase === 'advancing'}
+      title={titleStr}
+      headerActions={
+        demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
+      }
+      footer={footerNode || undefined}
+    >
       {phase === 'loading' && (
         <>
-          <DemoDialogTitle demo={demo}>Contact Customer</DemoDialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress size={36} />
-            </Box>
-            {loadError && (
-              <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={onClose}>Cancel</Button>
-          </DialogActions>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={36} />
+          </Box>
+          {loadError && (
+            <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
+          )}
         </>
       )}
 
       {phase === 'contact' && (
-        <>
-          <DemoDialogTitle demo={demo}>Call {displayName}</DemoDialogTitle>
-          <DialogContent>
             <Stack spacing={2} sx={{ mt: 0.5 }}>
               {loadError && (
                 <Alert severity="warning">{loadError}</Alert>
@@ -794,38 +854,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 <Alert severity="error">{advanceError}</Alert>
               )}
             </Stack>
-          </DialogContent>
-          <DialogActions sx={{ flexWrap: 'wrap', gap: 1, justifyContent: 'flex-end', pb: 2, px: 2 }}>
-            <DemoActionTooltip demo={demo}>
-              <Button
-                onClick={handleSendUploadLink}
-                variant="outlined"
-                disabled={demo}
-                data-testid="cc-send-upload-link"
-              >
-                Send Upload Link
-              </Button>
-            </DemoActionTooltip>
-            <Button
-              onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
-              variant="outlined"
-              color="warning"
-              data-testid="cc-no-response"
-            >
-              No Response
-            </Button>
-            <DemoActionTooltip demo={demo}>
-              <Button
-                onClick={handleDone}
-                variant="contained"
-                disabled={demo}
-                data-testid="cc-done"
-              >
-                Done
-              </Button>
-            </DemoActionTooltip>
-          </DialogActions>
-        </>
       )}
 
       {phase === 'no_response_confirm' && (() => {
@@ -837,74 +865,45 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         const everWhatsapped = historyEverWhatsapped || whatsappSent;
         const anyEver        = everCalled || everEmailed || everWhatsapped;
         return (
-          <>
-            <DemoDialogTitle demo={demo}>Mark as No Response?</DemoDialogTitle>
-            <DialogContent>
-              <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-                {!loadError && (
-                  <ModalContactHeader
-                    name={displayName}
-                    phone={phone}
-                    mobile={mobile}
-                    whatsapp={whatsapp}
-                    email={contactData?.contactEmail || contactEmail}
-                  />
-                )}
-                <Typography variant="body2">
-                  This will advance the lead status to <strong>No Response</strong>.
-                </Typography>
-                {anyEver ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {totalAttempts} attempt{totalAttempts === 1 ? '' : 's'} recorded across{' '}
-                    {totalSessions} session{totalSessions === 1 ? '' : 's'} —{' '}
-                    Called {everCalled ? '✓' : '✗'} · Emailed {everEmailed ? '✓' : '✗'} · WhatsApp {everWhatsapped ? '✓' : '✗'}
-                  </Typography>
-                ) : (
-                  <Alert severity="warning" sx={{ py: 0 }}>
-                    No contact methods have been recorded. You can cancel and tick the boxes before continuing.
-                  </Alert>
-                )}
-              </Stack>
-            </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setPhase('contact')}>Cancel</Button>
-            <DemoActionTooltip demo={demo}>
-              <Button
-                onClick={handleConfirmNoResponse}
-                variant="contained"
-                color="warning"
-                disabled={demo}
-                data-testid="cc-confirm-no-response"
-              >
-                Confirm
-              </Button>
-            </DemoActionTooltip>
-          </DialogActions>
-        </>
+          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            {!loadError && (
+              <ModalContactHeader
+                name={displayName}
+                phone={phone}
+                mobile={mobile}
+                whatsapp={whatsapp}
+                email={contactData?.contactEmail || contactEmail}
+              />
+            )}
+            <Typography variant="body2">
+              This will advance the lead status to <strong>No Response</strong>.
+            </Typography>
+            {anyEver ? (
+              <Typography variant="body2" color="text.secondary">
+                {totalAttempts} attempt{totalAttempts === 1 ? '' : 's'} recorded across{' '}
+                {totalSessions} session{totalSessions === 1 ? '' : 's'} —{' '}
+                Called {everCalled ? '✓' : '✗'} · Emailed {everEmailed ? '✓' : '✗'} · WhatsApp {everWhatsapped ? '✓' : '✗'}
+              </Typography>
+            ) : (
+              <Alert severity="warning" sx={{ py: 0 }}>
+                No contact methods have been recorded. You can cancel and tick the boxes before continuing.
+              </Alert>
+            )}
+          </Stack>
         );
       })()}
 
       {phase === 'advancing' && (
-        <>
-          <DialogTitle>Updating status…</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress size={36} />
-            </Box>
-          </DialogContent>
-        </>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={36} />
+        </Box>
       )}
 
       {phase === 'done' && (
-        <>
-          <DialogTitle>Done</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2" color="text.secondary">
-              {confirmMessage || 'Contact record updated.'}
-            </Typography>
-          </DialogContent>
-        </>
+        <Typography variant="body2" color="text.secondary">
+          {confirmMessage || 'Contact record updated.'}
+        </Typography>
       )}
-    </Dialog>
+    </FullScreenModal>
   );
 }

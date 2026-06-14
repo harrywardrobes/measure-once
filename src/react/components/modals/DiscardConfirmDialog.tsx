@@ -1,10 +1,7 @@
 import React from 'react';
 import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Typography from '@mui/material/Typography';
+import { FullScreenModal } from './FullScreenModal';
 
 interface Props {
   open: boolean;
@@ -18,17 +15,23 @@ interface Props {
  */
 export function DiscardConfirmDialog({ open, onKeepEditing, onDiscard }: Props) {
   return (
-    <Dialog open={open} onClose={onKeepEditing} maxWidth="xs" fullWidth>
-      <DialogTitle>Discard changes?</DialogTitle>
-      <DialogContent>
-        <Typography variant="body2">
-          You have unsaved changes — are you sure you want to discard them?
-        </Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onKeepEditing}>Keep editing</Button>
-        <Button color="error" onClick={onDiscard}>Discard changes</Button>
-      </DialogActions>
-    </Dialog>
+    <FullScreenModal
+      open={open}
+      onClose={onKeepEditing}
+      title="Discard changes?"
+      centerContent
+      footer={
+        <>
+          <Button onClick={onKeepEditing}>Keep editing</Button>
+          <Button color="error" onClick={onDiscard}>
+            Discard changes
+          </Button>
+        </>
+      }
+    >
+      <Typography variant="body2">
+        You have unsaved changes — are you sure you want to discard them?
+      </Typography>
+    </FullScreenModal>
   );
 }

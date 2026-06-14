@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  Drawer,
   IconButton,
   Stack,
   Table,
@@ -21,11 +20,11 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import CloseIcon from '@mui/icons-material/Close';
 import DownloadIcon from '@mui/icons-material/Download';
 import EmailIcon from '@mui/icons-material/Email';
+import { FullScreenModal } from './modals/FullScreenModal';
 
-type _Icons = typeof ArrowBackIcon | typeof ArrowForwardIcon | typeof CloseIcon |
+type _Icons = typeof ArrowBackIcon | typeof ArrowForwardIcon |
   typeof DownloadIcon | typeof EmailIcon;
 
 // ── API types (camelCase from server) ─────────────────────────────────────────
@@ -312,78 +311,69 @@ export function InvoiceDetailDrawer({
     '& .MuiOutlinedInput-root': { borderColor: 'primary.main', boxShadow: 'inset 2px 0 0 currentColor' },
   } : {};
 
-  return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={handleClose}
-      data-testid="invoice-detail-drawer"
-      slotProps={{ paper: { sx: { width: { xs: '100vw', sm: 520 }, display: 'flex', flexDirection: 'column' }, ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'invoice-drawer-paper'); } } }}
-    >
-      {/* Header */}
-      <Box sx={{
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-        px: 3, pt: 2.5, pb: 2, borderBottom: '1px solid', borderColor: 'divider', flexShrink: 0,
-      }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          {allIds.length > 1 ? (
-            <>
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                <Tooltip title="Previous invoice">
-                  <span>
-                    <IconButton size="small" onClick={() => handleNavigate(-1)} disabled={!hasPrev}>
-                      <ArrowBackIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Invoice {currentIdx + 1} of {allIds.length}
-                </Typography>
-                <Tooltip title="Next invoice">
-                  <span>
-                    <IconButton size="small" onClick={() => handleNavigate(1)} disabled={!hasNext}>
-                      <ArrowForwardIcon fontSize="small" />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </Stack>
-              {inv && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  #{inv.docNumber || inv.id}
-                </Typography>
-              )}
-            </>
-          ) : (
+  const titleNode = (
+    <Box sx={{ minWidth: 0 }}>
+      {allIds.length > 1 ? (
+        <>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+            <Tooltip title="Previous invoice">
+              <span>
+                <IconButton size="small" onClick={() => handleNavigate(-1)} disabled={!hasPrev}>
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              {inv ? `Invoice #${inv.docNumber || inv.id}` : 'Invoice'}
+              Invoice {currentIdx + 1} of {allIds.length}
+            </Typography>
+            <Tooltip title="Next invoice">
+              <span>
+                <IconButton size="small" onClick={() => handleNavigate(1)} disabled={!hasNext}>
+                  <ArrowForwardIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Stack>
+          {inv && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              #{inv.docNumber || inv.id}
             </Typography>
           )}
-          {inv && (
-            <Typography variant="caption" color="text.secondary">{inv.customerName}</Typography>
-          )}
-        </Box>
-        <IconButton onClick={handleClose} size="small" sx={{ ml: 1, mt: 0.5 }} aria-label="Close">
-          <CloseIcon fontSize="small" />
-        </IconButton>
-      </Box>
+        </>
+      ) : (
+        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+          {inv ? `Invoice #${inv.docNumber || inv.id}` : 'Invoice'}
+        </Typography>
+      )}
+      {inv && (
+        <Typography variant="caption" color="text.secondary">{inv.customerName}</Typography>
+      )}
+    </Box>
+  );
 
-      {/* Body */}
-      <Box sx={{ flex: 1, overflowY: 'auto', pb: 5 }}>
+  return (
+    <FullScreenModal
+      open={open}
+      onClose={handleClose}
+      title={titleNode}
+      ariaLabel={inv ? `Invoice #${inv.docNumber || inv.id}` : 'Invoice'}
+      data-testid="invoice-detail-drawer"
+    >
         {loading && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 3, color: 'text.secondary' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, color: 'text.secondary' }}>
             <CircularProgress size={18} />
             <Typography variant="body2">Loading…</Typography>
           </Box>
         )}
         {error && (
-          <Typography sx={{ p: 3, color: 'error.main', fontSize: '0.875rem' }}>
+          <Typography sx={{ py: 1, color: 'error.main', fontSize: '0.875rem' }}>
             Failed to load invoice: {error}
           </Typography>
         )}
         {inv && !loading && (
           <>
             {/* Meta grid */}
-            <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ mx: -3, px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
                 {([
                   { label: 'Invoice date', value: fmtDate(inv.txnDate) },
@@ -407,7 +397,7 @@ export function InvoiceDetailDrawer({
             </Box>
 
             {/* Line items */}
-            <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ mx: -3, px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, mb: 1.5, display: 'block' }}>
                 Line items
               </Typography>
@@ -444,7 +434,7 @@ export function InvoiceDetailDrawer({
 
             {/* Edit section (admin only) */}
             {isAdmin && (
-              <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Box sx={{ mx: -3, px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, mb: 1.5, display: 'block' }}>
                   Edit invoice
                 </Typography>
@@ -497,7 +487,7 @@ export function InvoiceDetailDrawer({
             )}
 
             {/* Actions */}
-            <Box sx={{ px: 3, py: 2.5 }}>
+            <Box sx={{ mx: -3, px: 3, py: 2.5 }}>
               <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, mb: 1.5, display: 'block' }}>
                 Actions
               </Typography>
@@ -535,7 +525,6 @@ export function InvoiceDetailDrawer({
             </Box>
           </>
         )}
-      </Box>
-    </Drawer>
+    </FullScreenModal>
   );
 }

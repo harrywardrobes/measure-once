@@ -5,10 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Stack,
   TextField,
   Typography,
@@ -20,6 +16,9 @@ import {
   StrengthMeterErrorBoundary,
 } from '../utils/passwordStrength';
 import { useToast } from '../contexts/ToastContext';
+import { FullScreenModal } from './modals/FullScreenModal';
+
+const FORM_ID = 'change-password-form';
 
 type Profile = {
   email?: string;
@@ -115,63 +114,68 @@ export function ChangePasswordCard({ profile }: { profile: Profile }) {
         </CardContent>
       </Card>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth data-testid="change-password-dialog">
-        <DialogTitle>Change password</DialogTitle>
-        <Box component="form" onSubmit={onSubmit} autoComplete="off">
-          <DialogContent sx={{ pt: 1 }}>
-            <Stack spacing={1.5}>
+      <FullScreenModal
+        open={open}
+        onClose={handleClose}
+        disableClose={submitting}
+        data-testid="change-password-dialog"
+        title="Change password"
+        footer={
+          <>
+            <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button type="submit" form={FORM_ID} variant="contained" disabled={submitting}>
+              {submitting ? 'Updating…' : 'Update password'}
+            </Button>
+          </>
+        }
+      >
+        <Box component="form" id={FORM_ID} onSubmit={onSubmit} autoComplete="off">
+          <Stack spacing={1.5}>
+            <TextField
+              label="Current password"
+              type="password"
+              size="small"
+              fullWidth
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => { setCurrent(e.target.value); if (errors.current) setErrors({ ...errors, current: undefined }); }}
+              error={!!errors.current}
+              helperText={errors.current || ' '}
+            />
+            <Box>
               <TextField
-                label="Current password"
-                type="password"
-                size="small"
-                fullWidth
-                autoComplete="current-password"
-                value={current}
-                onChange={(e) => { setCurrent(e.target.value); if (errors.current) setErrors({ ...errors, current: undefined }); }}
-                error={!!errors.current}
-                helperText={errors.current || ' '}
-              />
-              <Box>
-                <TextField
-                  label="New password"
-                  type="password"
-                  size="small"
-                  fullWidth
-                  autoComplete="new-password"
-                  value={next}
-                  onChange={(e) => { setNext(e.target.value); if (errors.next) setErrors({ ...errors, next: undefined }); }}
-                  error={!!errors.next}
-                  helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
-                />
-                <StrengthMeterErrorBoundary key={openNonce}>
-                  <StrengthMeter value={next} userInputs={userInputs} />
-                </StrengthMeterErrorBoundary>
-              </Box>
-              <TextField
-                label="Confirm new password"
+                label="New password"
                 type="password"
                 size="small"
                 fullWidth
                 autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => { setConfirm(e.target.value); if (errors.confirm) setErrors({ ...errors, confirm: undefined }); }}
-                error={!!errors.confirm}
-                helperText={errors.confirm || ' '}
+                value={next}
+                onChange={(e) => { setNext(e.target.value); if (errors.next) setErrors({ ...errors, next: undefined }); }}
+                error={!!errors.next}
+                helperText={errors.next || 'At least 8 characters, with letters and numbers.'}
               />
-              {errors.form && <Alert severity="error">{errors.form}</Alert>}
-              <Typography variant="caption" color="text.secondary">
-                You'll be signed out of any other devices.
-              </Typography>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
-            <Button type="submit" variant="contained" disabled={submitting}>
-              {submitting ? 'Updating…' : 'Update password'}
-            </Button>
-          </DialogActions>
+              <StrengthMeterErrorBoundary key={openNonce}>
+                <StrengthMeter value={next} userInputs={userInputs} />
+              </StrengthMeterErrorBoundary>
+            </Box>
+            <TextField
+              label="Confirm new password"
+              type="password"
+              size="small"
+              fullWidth
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => { setConfirm(e.target.value); if (errors.confirm) setErrors({ ...errors, confirm: undefined }); }}
+              error={!!errors.confirm}
+              helperText={errors.confirm || ' '}
+            />
+            {errors.form && <Alert severity="error">{errors.form}</Alert>}
+            <Typography variant="caption" color="text.secondary">
+              You'll be signed out of any other devices.
+            </Typography>
+          </Stack>
         </Box>
-      </Dialog>
+      </FullScreenModal>
     </>
   );
 }
