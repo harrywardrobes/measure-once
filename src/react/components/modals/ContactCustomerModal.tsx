@@ -140,10 +140,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [showHiddenSessions,    setShowHiddenSessions]    = useState(false);
 
   // Note panel state — one panel open at a time
-  const [openPanel,   setOpenPanel]   = useState<Method | null>(null);
-  const [noteText,    setNoteText]    = useState('');
-  const [submitting,  setSubmitting]  = useState(false);
-  const [submitError, setSubmitError] = useState('');
+  const [openPanel,          setOpenPanel]          = useState<Method | null>(null);
+  const [noteText,           setNoteText]           = useState('');
+  const [submitting,         setSubmitting]         = useState(false);
+  const [submitError,        setSubmitError]        = useState('');
+  const [submitErrorRetry,   setSubmitErrorRetry]   = useState(false);
 
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -192,12 +193,14 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setOpenPanel(method);
     setNoteText('');
     setSubmitError('');
+    setSubmitErrorRetry(false);
   }
 
   function closeNotePanel() {
     setOpenPanel(null);
     setNoteText('');
     setSubmitError('');
+    setSubmitErrorRetry(false);
   }
 
   async function handleConfirmAttempt(method: Method) {
@@ -234,8 +237,13 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       const err = e as ApiError;
       if (err.status === 400) {
         setSubmitError(err.message || 'Please check your input and try again.');
+        setSubmitErrorRetry(false);
+      } else if (err.status != null && err.status >= 500) {
+        setSubmitError('Something went wrong on our end.');
+        setSubmitErrorRetry(true);
       } else {
-        setSubmitError('Something went wrong on our end. Please try again.');
+        setSubmitError(err.message || 'Could not save this attempt. Please try again.');
+        setSubmitErrorRetry(false);
       }
     } finally {
       setSubmitting(false);
@@ -434,6 +442,30 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                             {submitError && (
                               <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
                                 {submitError}
+                                {submitErrorRetry && (
+                                  <>
+                                    {' '}
+                                    <Box
+                                      component="button"
+                                      onClick={() => handleConfirmAttempt(method)}
+                                      disabled={submitting}
+                                      sx={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        cursor: 'pointer',
+                                        color: 'error.main',
+                                        fontWeight: 600,
+                                        fontSize: 'inherit',
+                                        textDecoration: 'underline',
+                                        '&:hover': { color: 'error.dark' },
+                                        '&:disabled': { opacity: 0.5, cursor: 'default' },
+                                      }}
+                                    >
+                                      Try again
+                                    </Box>
+                                  </>
+                                )}
                               </Typography>
                             )}
                             <Box sx={{ display: 'flex', gap: 1, mt: 0.75 }}>
