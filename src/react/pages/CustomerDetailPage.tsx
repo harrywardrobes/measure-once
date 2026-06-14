@@ -15,7 +15,7 @@ import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
-  Contact, Room, HubSpotTask, LeadStatus,
+  Contact, Room, HubSpotTask,
   DesignVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
@@ -73,6 +73,12 @@ async function apiFetch<T>(url: string): Promise<T> {
 export function CustomerDetailPage() {
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
+  const {
+    leadStatuses,
+    nullLsLabel,
+    lsLoaded,
+    refreshLeadStatuses,
+  } = useWorkflowData();
   const contactId = getContactId();
   const now = useNowTick();
 
@@ -92,9 +98,6 @@ export function CustomerDetailPage() {
   const [notes,        setNotes]        = useState('');
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
 
-  const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
-  const [nullLsLabel,  setNullLsLabel]  = useState('No status');
-  const [lsLoaded,     setLsLoaded]     = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(0);
   const [workflow,     setWorkflow]     = useState<{ stages?: Record<string, { label: string }> } | null>(null);
   const qb = useQBInvoices();
@@ -128,34 +131,6 @@ export function CustomerDetailPage() {
   const [lastAttempt, setLastAttempt] = useState<LastAttemptEntry>(null);
 
   // ── Data fetchers ─────────────────────────────────────────────────────────
-
-  const fetchLeadStatuses = useCallback(async () => {
-    try {
-      const rows = await apiFetch<Array<{
-        key: string; label: string; is_null_row?: boolean;
-        excluded_from_sales?: boolean; stage?: string; sort_order?: number;
-      }>>('/api/lead-statuses');
-      if (!Array.isArray(rows)) return;
-      const nullRow = rows.find(r => r.is_null_row);
-      const nullLabel = nullRow?.label || 'No status';
-      const opts: LeadStatus[] = rows
-        .filter(r => !r.is_null_row)
-        .map(r => ({
-          value: r.key, label: r.label,
-          excluded_from_sales: !!r.excluded_from_sales,
-          stage: r.stage || null,
-        }));
-      // Keep globals in sync
-      const g = window as unknown as Record<string, unknown>;
-      g.LEAD_STATUS_OPTIONS    = opts;
-      g.LEAD_STATUSES_LOADED   = true;
-      g.NULL_LEAD_STATUS_LABEL = nullLabel;
-      setLeadStatuses(opts);
-      setNullLsLabel(nullLabel);
-      setLsLoaded(true);
-    } catch { setLsLoaded(true); }
-  }, []);
-
 
   const fetchContact = useCallback(async (): Promise<Contact | null> => {
     let c: Contact | null = null;
@@ -276,7 +251,7 @@ export function CustomerDetailPage() {
     setFromCache(false);
     try {
       const [, c] = await Promise.all([
-        fetchLeadStatuses(),
+        refreshLeadStatuses(),
         fetchContact().catch(e => { throw e; }),
       ]);
       if (!c) { setError('Customer not found.'); setLoading(false); return; }
@@ -328,7 +303,7 @@ export function CustomerDetailPage() {
       setLoading(false);
     }
   }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLastAttempt,
-      fetchLeadStatuses, fetchWhatsApp, notifyApiError]);
+      refreshLeadStatuses, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat) ──────────────────────────────────────
 
@@ -388,7 +363,7 @@ export function CustomerDetailPage() {
     // WorkflowDataContext now owns LEAD_STATUS_OPTIONS and LEAD_SUBSTATUSES
     // globally; these window shims are kept for the vanilla-JS picker popup
     // that still reads them directly.
-    g.loadLeadStatuses    = () => fetchLeadStatuses();
+    g.loadLeadStatuses    = () => refreshLeadStatuses();
 
     return () => {
       delete g.renderWorkflowHeader;
@@ -396,33 +371,8 @@ export function CustomerDetailPage() {
       delete g.renderDesignVisits;
       delete g.loadLeadStatuses;
     };
-  }, [contactId, fetchContact, fetchDesignVisits, fetchLeadStatuses]);
+  }, [contactId, fetchContact, fetchDesignVisits, refreshLeadStatuses]);
 
-
-  // ── BroadcastChannel + visibilitychange subscriptions ─────────────────────
-
-  useEffect(() => {
-    let lsCh: BroadcastChannel | null = null;
-
-    if (typeof BroadcastChannel !== 'undefined') {
-      lsCh = new BroadcastChannel('lead_statuses_changed');
-      lsCh.addEventListener('message', () => {
-        void fetchLeadStatuses();
-      });
-    }
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void fetchLeadStatuses();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      lsCh?.close();
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, [fetchLeadStatuses]);
 
   // ── Patch contact properties when renamed in another tab ───────────────────
 

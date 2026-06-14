@@ -28,6 +28,7 @@ export interface WorkflowDataContextValue {
   contactStageCache: Record<string, Room[]>;
   leadStatuses: LeadStatusOption[];
   nullLsLabel: string;
+  lsLoaded: boolean;
   workflow: WorkflowDef | null;
   roomAssignmentsStale: boolean;
   openLeadsStale: boolean;
@@ -41,6 +42,7 @@ const WorkflowDataContext = createContext<WorkflowDataContextValue>({
   contactStageCache: {},
   leadStatuses: [],
   nullLsLabel: 'No status',
+  lsLoaded: false,
   workflow: null,
   roomAssignmentsStale: false,
   openLeadsStale: false,
@@ -60,6 +62,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   const [contactStageCache, setContactStageCache] = useState<Record<string, Room[]>>({});
   const [leadStatuses, setLeadStatuses] = useState<LeadStatusOption[]>([]);
   const [nullLsLabel, setNullLsLabel] = useState('No status');
+  const [lsLoaded, setLsLoaded] = useState(false);
   const [workflow, setWorkflow] = useState<WorkflowDef | null>(null);
   const [roomAssignmentsStale, setRoomAssignmentsStale] = useState(false);
   const [openLeadsStale, setOpenLeadsStale] = useState(false);
@@ -131,6 +134,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
 
       setLeadStatuses(opts);
       setNullLsLabel(label);
+      setLsLoaded(true);
 
       // Keep window globals in sync for vanilla-JS interop
       const g = window as unknown as Record<string, unknown>;
@@ -139,6 +143,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       g.LEAD_STATUSES_LOADED   = true;
     } catch (e) {
       console.warn('[WorkflowDataContext] leadStatuses fetch error:', (e as Error).message);
+      setLsLoaded(true);
     }
   }, []);
 
@@ -373,6 +378,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     contactStageCache,
     leadStatuses,
     nullLsLabel,
+    lsLoaded,
     workflow,
     roomAssignmentsStale,
     openLeadsStale,
