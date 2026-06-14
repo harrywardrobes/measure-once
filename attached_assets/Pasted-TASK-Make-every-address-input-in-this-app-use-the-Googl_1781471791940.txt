@@ -1,0 +1,106 @@
+TASK: Make every address input in this app use the Google Places API, and fix the
+existing Places integration so it actually works with modern API keys.
+
+CONTEXT (already in the codebase — read before changing):
+- There is a reusable address component at src/react/components/AddressInput.tsx that
+  renders a Google Places autocomplete search box above structured address fields.
+- It is gated by a `surface` prop + runtime config fetched from GET /api/google-maps/config.
+- The client runtime helpers live in src/react/lib/googleMapsConfig.ts.
+- The server config/diagnostics live in google-maps.js (Express router).
+- The shared address model + Google component mapping live in shared/address.ts
+  (and its CJS mirror shared/address.cjs — keep them in sync).
+- Currently 4 surfaces are wired and working in principle:
+  customerInfo (CustomerInfoPage.tsx), designVisit (DesignVisitStep1.tsx),
+  arrangeVisit (ArrangeVisitModal.tsx), contactEdit (ContactEditModal.tsx).
+
+There are THREE problems to fix. Do all three.
+
+────────────────────────────────────────────────────────
+PROBLEM 1 — The integration uses Google's DEPRECATED legacy Places API.
+AddressInput.tsx uses google.maps.places.AutocompleteService and
+google.maps.places.PlacesService (PlacesService.getDetails). Google no longer enables
+the legacy Places API on API keys created after March 2025, so on a modern key the
+search box appears but returns ZERO predictions (REQUEST_DENIED) — making every surface
+look broken.
+
+FIX: Migrate the client autocomplete to the NEW Places API:
+- Replace AutocompleteService with google.maps.places.AutocompleteSuggestion
+  (AutocompleteSuggestion.fetchAutocompleteSuggestions).
+- Replace PlacesService.getDetails with the new Place class:
+  new google.maps.places.Place({ id }).fetchFields({ fields: ['addressComponents'] }).
+- Load the library with google.maps.importLibrary('places') (and update
+  loadPlacesScript in googleMapsConfig.ts to use the modern async loader, e.g.
+  the inline bootstrap loader or ...&loading=async&v=weekly, importing 'places').
+- Map the NEW Place addressComponents shape (componentType / longText / shortText)
+  to StructuredAddress. NOTE: shared/address.ts googleComponentsToAddress() expects the
+  OLD shape (types / long_name / short_name). Add a small adapter so the new
+  addressComponents are converted correctly (street_number, route, premise, subpremise,
+  postal_town, locality, postal_code, administrative_area_level_1/2, country), or add a
+  new mapping function. Keep behaviour identical to today's mapping.
+- PRESERVE all existing behaviour: per-surface gating (isAutocompleteEnabled),
+  debounce (cfg.autocomplete.debounceMs), minChars, country restriction
+  (cfg.autocomplete.countries), language, session tokens (use the new
+  AutocompleteSessionToken with fetchAutocompleteSuggestions and pass it through to the
+  Place details fetch), the usage beacons via reportGoogleMapsUsage('autocomplete'|'details', ...),
+  and graceful silent fallback to manual entry on any error (acFailed path + fallback.mode 'notice').
+- Update google-maps.js test-connection to use a Places API (New) endpoint
+  (POST https://places.googleapis.com/v1/places:autocomplete) instead of the legacy
+  /maps/api/place/autocomplete/json, so the admin "Test connection" reflects reality.
+  Keep the usage counters/recent-errors behaviour intact.
+
+────────────────────────────────────────────────────────
+PROBLEM 2 — One editable address field bypasses Google entirely.
+src/react/components/modals/GenericVisitEditModal.tsx has a plain free-text
+"Location (optional)" TextField (around lines 233–240) bound to a `location` string.
+It has no autocomplete.
+
+FIX: Give that Location field Google Places autocomplete too.
+- This field stores a single free-text location string on a Google Calendar event
+  (NOT a structured HubSpot address), so DO NOT change its data shape. Instead, add a
+  Places-backed autocomplete that, when the user picks a suggestion, fills `location`
+  with the selected place's formatted address string (use formatAddress() from
+  shared/address.ts on the converted components, or the place's formatted address).
+  The user must still be able to type a free-text location manually (freeSolo).
+- Introduce a new surface id 'genericVisit' and gate this on it, exactly like the other
+  surfaces. To add a surface you MUST update ALL of these consistently:
+    * src/react/lib/googleMapsConfig.ts  -> GoogleMapsSurface union + DISABLED_CONFIG.surfaces
+    * google-maps.js -> SURFACE_IDS, DEFAULT_SETTINGS.surfaces, settingsSchema.surfaces,
+      and the usageSchema surface enum
+    * the admin settings UI (src/react/pages/admin/GoogleMapsPage.tsx) so the new surface
+      has its own enable/disable toggle like the others
+  Consider extracting the autocomplete logic from AddressInput so it can be reused by a
+  single-line location field, OR build a small dedicated PlacesTextField — your call, but
+  keep it DRY and consistent with the existing implementation.
+
+────────────────────────────────────────────────────────
+PROBLEM 3 — Confirm the feature is actually switched on.
+The autocomplete only works when: the master switch settings.enabled is true AND the
+GOOGLE_PLACES_API_KEY secret is set AND that key has "Places API (New)" enabled in Google
+Cloud. After the code changes:
+- Verify GOOGLE_PLACES_API_KEY exists in Replit Secrets (do not print it).
+- In the admin Google Maps settings page, ensure the master switch is ON and run "Test
+  connection"; it must pass against the new Places API.
+- Add a note to replit.md documenting that the key needs "Places API (New)" (and Maps
+  JavaScript API) enabled, and that all address surfaces — customerInfo, designVisit,
+  arrangeVisit, contactEdit, and the new genericVisit — use Google Places autocomplete.
+
+────────────────────────────────────────────────────────
+ALSO:
+- Audit the whole app for any OTHER editable address/street/city/postcode/location input
+  that does not go through the Places integration, and wire it up the same way. Read-only
+  address displays (e.g. DesignVisitsList location, ModalContactHeader/AddressMapPreview,
+  DepositInvoiceModal header) do NOT need autocomplete — leave displays alone.
+- Keep shared/address.ts and shared/address.cjs in sync.
+- Update or add tests where the repo already has them for address handling, and make sure
+  the build (vite/tsc) and existing test suite still pass.
+
+ACCEPTANCE CRITERIA:
+1. With a modern Google key that only has "Places API (New)" enabled, typing in ANY
+   address field (customer info, design visit, arrange visit, contact edit, AND the
+   generic visit Location field) returns live Google suggestions and selecting one fills
+   the address.
+2. No code path still calls AutocompleteService or PlacesService (legacy).
+3. The generic visit Location field offers autocomplete but still allows free-text entry.
+4. Admin "Test connection" passes; usage diagnostics still record autocomplete/details.
+5. When the feature is disabled or the key is missing, all fields degrade gracefully to
+   manual entry (no crashes, no empty broken search boxes).
