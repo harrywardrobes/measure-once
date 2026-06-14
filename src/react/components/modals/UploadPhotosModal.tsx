@@ -22,6 +22,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
 
+const resendCooldownExpiry = new Map<string, number>();
+
 interface Props {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
@@ -199,6 +201,22 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
 
   useEffect(() => {
     if (!open) return;
+
+    // Restore resend cooldown if it's still active for this contact
+    if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
+    const storedExpiry = resendCooldownExpiry.get(ctx.contactId);
+    const remaining = storedExpiry ? storedExpiry - Date.now() : 0;
+    if (remaining > 0) {
+      setResendCooldown(true);
+      resendCooldownRef.current = setTimeout(() => {
+        setResendCooldown(false);
+        resendCooldownExpiry.delete(ctx.contactId);
+      }, remaining);
+    } else {
+      setResendCooldown(false);
+      if (storedExpiry !== undefined) resendCooldownExpiry.delete(ctx.contactId);
+    }
+
     if (demo) {
       setGeneratedLink({
         formLink: `${window.location.origin}/customer-info/demo-token`,
@@ -273,9 +291,14 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || d.message || 'Failed to re-send');
       showToast('Email re-sent to customer', false);
+      const expiry = Date.now() + 3000;
+      resendCooldownExpiry.set(ctx.contactId, expiry);
       setResendCooldown(true);
       if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
-      resendCooldownRef.current = setTimeout(() => setResendCooldown(false), 3000);
+      resendCooldownRef.current = setTimeout(() => {
+        setResendCooldown(false);
+        resendCooldownExpiry.delete(ctx.contactId);
+      }, 3000);
     } catch (e) {
       showToast((e as Error).message || 'Could not re-send email', true);
     } finally {
