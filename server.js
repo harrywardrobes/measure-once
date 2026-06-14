@@ -6109,12 +6109,6 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
     try {
       await client.query('BEGIN');
 
-      await client.query(
-        `INSERT INTO contact_attempt_log (hubspot_contact_id, method, attempted_by, note)
-         VALUES ($1, $2, $3, $4)`,
-        [contactId, method, userId || null, note]
-      );
-
       const { rows } = await client.query(
         `INSERT INTO contact_attempt_tracking
            (hubspot_contact_id, ${col}, attempted_at, attempted_by, updated_at)
@@ -6123,6 +6117,12 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
          SET ${col} = TRUE, attempted_at = NOW(), attempted_by = $2, updated_at = NOW()
          RETURNING call_attempted, email_sent, whatsapp_sent, attempted_at`,
         [contactId, userId || null]
+      );
+
+      await client.query(
+        `INSERT INTO contact_attempt_log (hubspot_contact_id, method, attempted_by, note)
+         VALUES ($1, $2, $3, $4)`,
+        [contactId, method, userId || null, note]
       );
 
       const { rows: logRows } = await client.query(
