@@ -13,6 +13,9 @@ const { makeSkip } = require('../helpers/report');
 // Probes:
 //   (A) Pending row present  → link-status returns hasActiveLink:true
 //                              → title "Active link exists", "Generate new link" button
+//   (A2) Manager/admin view  → link-status returns hasActiveLink:true + formLink + token
+//                              → title "Active link exists", "Re-send link" button visible
+//                              (no cah-primary; different action set from member view)
 //   (B) No pending rows      → link-status returns hasActiveLink:false
 //                              → title "Send photo upload link", button "Send email"
 //   (C) Network error on GET → 'check-error' phase:
@@ -106,9 +109,13 @@ function writeReport(runId) {
     '',
     '## Coverage',
     '',
-    '- **(A) Confirming mode**: GET /api/customer-info/by-contact/:contactId/link-status',
-    '  returns { hasActiveLink: true }. Modal enters confirming phase — title must',
-    '  read "Active link exists" and the "Generate new link" button must be visible.',
+    '- **(A) Confirming mode (member view)**: link-status returns { hasActiveLink: true }.',
+    '  Modal enters confirming phase — title must read "Active link exists" and the',
+    '  "Generate new link" button must be visible.',
+    '- **(A2) Confirming mode (manager/admin view)**: link-status returns',
+    '  { hasActiveLink: true, formLink, token }. Modal enters confirming phase with the',
+    '  full manager action set — title must read "Active link exists" and the "Re-send',
+    '  link" button must be visible (no cah-primary; different layout from member view).',
     '- **(B) Send mode**: link-status returns { hasActiveLink: false }. Modal',
     '  auto-generates and enters ready phase — title must read "Send photo upload link"',
     '  and primary button must read "Send email".',
@@ -154,10 +161,14 @@ async function pollPage(page, fn, arg, timeoutMs = 12000, intervalMs = 150) {
  *   - An array with items → link-status returns { hasActiveLink: true }
  *   - An empty array      → link-status returns { hasActiveLink: false }
  *   - The string 'network-error' → the fetch rejects with a TypeError
+ *   - A plain object (e.g. { hasActiveLink, formLink, token }) → returned
+ *     verbatim as the link-status response (manager/admin view override)
  */
 function buildFetchInterceptScript(byContactResponse) {
   const isError = byContactResponse === 'network-error';
-  const byContactJson = isError ? '[]' : JSON.stringify(byContactResponse);
+  const isStatusObj = !isError && typeof byContactResponse === 'object' && !Array.isArray(byContactResponse);
+  const statusOverride = isStatusObj ? JSON.stringify(byContactResponse) : null;
+  const byContactJson = (isError || isStatusObj) ? '[]' : JSON.stringify(byContactResponse);
 
   // A minimal contact to populate the customers grid.
   const contacts = [{
@@ -189,6 +200,7 @@ function buildFetchInterceptScript(byContactResponse) {
   var STUBS = ${JSON.stringify(stubs)};
   var IS_ERROR = ${JSON.stringify(isError)};
   var BY_CONTACT_JSON = ${JSON.stringify(byContactJson)};
+  var STATUS_OVERRIDE = ${JSON.stringify(statusOverride)};
   var CONTACT_ID = ${JSON.stringify(CONTACT_ID)};
 
   var originalFetch = window.fetch;
@@ -213,7 +225,8 @@ function buildFetchInterceptScript(byContactResponse) {
     }
 
     // GET by-contact/link-status — returns { hasActiveLink } derived from the
-    // stub rows array, or rejects with a network error.
+    // stub rows array, or rejects with a network error.  When STATUS_OVERRIDE
+    // is set (manager-view probe) it is returned verbatim.
     if (
       (!init || !init.method || init.method === 'GET') &&
       pathname.includes('/by-contact/') &&
@@ -222,6 +235,11 @@ function buildFetchInterceptScript(byContactResponse) {
       window.__upmIntercepted.push('link-status:GET');
       if (IS_ERROR) {
         return Promise.reject(new TypeError('Network error (stubbed by test)'));
+      }
+      if (STATUS_OVERRIDE) {
+        return Promise.resolve(new Response(STATUS_OVERRIDE, {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        }));
       }
       var rows = JSON.parse(BY_CONTACT_JSON);
       var hasActive = Array.isArray(rows) && rows.length > 0;
@@ -434,6 +452,8 @@ async function main() {
   const PROBE_LABELS = [
     '(A) pending row → title "Active link exists"',
     '(A) pending row → "Generate new link" button visible',
+    '(A2) manager view → title "Active link exists"',
+    '(A2) manager view → "Re-send link" button visible',
     '(B) no pending rows → title "Send photo upload link"',
     '(B) no pending rows → primary button "Send email"',
     '(C) network error → title "Send photo upload link" (check-error phase)',
@@ -499,6 +519,63 @@ async function main() {
 
     await pageA.__ctx.close();
 
+    // ── Probe A2: manager/admin view → confirming phase with formLink ─────────
+    console.log('\n  [A2] Manager view (formLink present) → expect "Active link exists" / "Re-send link"');
+
+    const managerStatus = {
+      hasActiveLink: true,
+      formLink: 'https://example.invalid/customer-info/test-form-token',
+      token: 'test-form-token',
+    };
+    const pageA2 = await openCustomersPage(browser, memberClient.cookie, managerStatus);
+    await openModal(pageA2);
+
+    // Poll until the confirming-phase confirm-generate button appears (same
+    // button exists in both member and manager confirming views).
+    await pollPage(
+      pageA2,
+      () => !!document.querySelector('[data-testid="cah-confirm-generate"]'),
+      null, 8000,
+    ).catch(() => {});
+
+    // Title comes from readModal; Re-send link has no data-testid so we check
+    // for it separately by button text content.
+    const modalA2Title = await pageA2.evaluate(() => {
+      const titleEl = document.querySelector('[data-testid="upload-photos-dialog-title"]');
+      if (!titleEl) return '';
+      for (const node of titleEl.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+          return node.textContent.trim();
+        }
+      }
+      return (titleEl.textContent || '').trim().split('\n')[0].trim();
+    });
+
+    const { resendVisible, noPrimary } = await pageA2.evaluate(() => {
+      const btns = Array.from(
+        document.querySelectorAll('[data-testid="upload-photos-dialog"] button'),
+      );
+      return {
+        resendVisible: btns.some(b => b.textContent.trim() === 'Re-send link'),
+        noPrimary: !document.querySelector('[data-testid="cah-primary"]'),
+      };
+    });
+
+    record(
+      PROBE_LABELS[2],
+      'Active link exists',
+      modalA2Title,
+      modalA2Title === 'Active link exists',
+    );
+    record(
+      PROBE_LABELS[3],
+      'Re-send link button visible, no cah-primary',
+      resendVisible && noPrimary ? 'Re-send link visible, cah-primary absent' : `resend=${resendVisible} noPrimary=${noPrimary}`,
+      resendVisible === true && noPrimary === true,
+    );
+
+    await pageA2.__ctx.close();
+
     // ── Probe B: no pending rows → send mode ─────────────────────────────────
     console.log('\n  [B] Empty array → expect "Send photo upload link" / "Send email"');
 
@@ -517,13 +594,13 @@ async function main() {
 
     const modalB = await readModal(pageB);
     record(
-      PROBE_LABELS[2],
+      PROBE_LABELS[4],
       'Send photo upload link',
       modalB.title,
       modalB.title === 'Send photo upload link',
     );
     record(
-      PROBE_LABELS[3],
+      PROBE_LABELS[5],
       'Send email',
       modalB.primary,
       modalB.primary === 'Send email',
@@ -547,13 +624,13 @@ async function main() {
 
     const modalC = await readModal(pageC, 'cah-proceed-anyway');
     record(
-      PROBE_LABELS[4],
+      PROBE_LABELS[6],
       'Send photo upload link',
       modalC.title,
       modalC.title === 'Send photo upload link',
     );
     record(
-      PROBE_LABELS[5],
+      PROBE_LABELS[7],
       'Generate anyway',
       modalC.primary,
       modalC.primary === 'Generate anyway',
