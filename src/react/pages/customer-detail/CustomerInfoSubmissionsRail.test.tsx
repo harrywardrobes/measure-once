@@ -217,8 +217,25 @@ describe('CustomerInfoSubmissionsRail — inline Re-send button', () => {
     expect(screen.queryByTestId('resend-link-btn')).toBeNull();
   });
 
-  it('shows error state when /resend returns an error', async () => {
+  it('shows "On cooldown" label when /resend returns 429', async () => {
     restoreFetch = mockFetch([ACTIVE_SUBMISSION], { resendStatus: 429 });
+    stubPrivilege('manager');
+
+    const user = userEvent.setup();
+    render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const resendBtn = await screen.findByTestId('resend-link-btn');
+    await user.click(resendBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('resend-link-btn')).toBeTruthy();
+      expect(screen.getByText('On cooldown')).toBeTruthy();
+    });
+    expect(screen.queryByText('Retry')).toBeNull();
+  });
+
+  it('shows "Retry" label (not "On cooldown") when /resend returns a non-429 error', async () => {
+    restoreFetch = mockFetch([ACTIVE_SUBMISSION], { resendStatus: 500 });
     stubPrivilege('manager');
 
     const user = userEvent.setup();
@@ -231,5 +248,6 @@ describe('CustomerInfoSubmissionsRail — inline Re-send button', () => {
       expect(screen.getByTestId('resend-link-btn')).toBeTruthy();
       expect(screen.getByText('Retry')).toBeTruthy();
     });
+    expect(screen.queryByText('On cooldown')).toBeNull();
   });
 });

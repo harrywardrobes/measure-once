@@ -214,7 +214,7 @@ function CopyLinkButton({
 
 // ── Resend button ─────────────────────────────────────────────────────────────
 
-type ResendState = 'idle' | 'loading' | 'sent' | 'error';
+type ResendState = 'idle' | 'loading' | 'sent' | 'error' | 'cooldown';
 
 function ResendButton({
   contactId,
@@ -237,7 +237,16 @@ function ResendButton({
       );
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `HTTP ${r.status}`);
+        const msg = (body as { error?: string }).error || `HTTP ${r.status}`;
+        if (r.status === 429) {
+          setState('cooldown');
+          showToast('Email sent recently — please wait before re-sending', true);
+        } else {
+          setErrorMsg(msg);
+          setState('error');
+          showToast(msg, true);
+        }
+        return;
       }
       setState('sent');
       showToast('A fresh link has been sent to the customer');
@@ -262,9 +271,16 @@ function ResendButton({
     );
   }
 
+  const tooltipTitle =
+    state === 'cooldown'
+      ? 'Email sent recently — please wait before re-sending'
+      : state === 'error'
+        ? errorMsg
+        : '';
+
   return (
     <Tooltip
-      title={state === 'error' ? errorMsg : ''}
+      title={tooltipTitle}
       placement="top"
       arrow
     >
@@ -272,7 +288,7 @@ function ResendButton({
         <Button
           size="small"
           variant="outlined"
-          color={state === 'error' ? 'error' : 'primary'}
+          color={state === 'error' || state === 'cooldown' ? 'error' : 'primary'}
           startIcon={state === 'loading'
             ? <CircularProgress size={13} color="inherit" />
             : <SendIcon fontSize="small" />
@@ -282,7 +298,7 @@ function ResendButton({
           sx={{ fontSize: '0.75rem', py: 0.4 }}
           data-testid="resend-link-btn"
         >
-          {state === 'error' ? 'Retry' : 'Resend link'}
+          {state === 'cooldown' ? 'On cooldown' : state === 'error' ? 'Retry' : 'Resend link'}
         </Button>
       </span>
     </Tooltip>
