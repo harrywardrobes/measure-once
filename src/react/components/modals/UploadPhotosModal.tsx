@@ -18,7 +18,10 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { broadcastCustomerInfoLinkChanged } from '../../utils/broadcastCustomerInfoLink';
+import {
+  broadcastCustomerInfoLinkChanged,
+  subscribeCustomerInfoLinkChanged,
+} from '../../utils/broadcastCustomerInfoLink';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
@@ -138,6 +141,14 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   // (e.g. if the user clicks Cancel while generation is running).
   const generateAbortRef = useRef<AbortController | null>(null);
 
+  // Mirror of `phase` in a ref so the broadcast subscription (set up once per
+  // open) can read the current phase without re-subscribing on every change.
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+
+  // AbortController for a re-check triggered by a cross-tab broadcast.
+  const recheckAbortRef = useRef<AbortController | null>(null);
+
   function generateLink(contactId: string) {
     const controller = new AbortController();
     generateAbortRef.current = controller;
@@ -236,6 +247,28 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       generateAbortRef.current?.abort();
     };
   }, [open, ctx.contactId, checkStatus, demo]);
+
+  // While the modal is open, listen for link generate/revoke broadcasts from
+  // other tabs/windows. If one arrives for this contact while we're showing the
+  // existing-link warning ('confirming' phase), the link the user is looking at
+  // may have just been invalidated elsewhere — re-check status so the modal
+  // reflects the current server state (auto-generating or showing no active
+  // link) instead of acting on a stale link.
+  useEffect(() => {
+    if (!open || demo) return;
+    const unsubscribe = subscribeCustomerInfoLinkChanged((contactId) => {
+      if (contactId !== ctx.contactId) return;
+      if (phaseRef.current !== 'confirming') return;
+      recheckAbortRef.current?.abort();
+      const controller = new AbortController();
+      recheckAbortRef.current = controller;
+      checkStatus(ctx.contactId, controller.signal);
+    });
+    return () => {
+      unsubscribe();
+      recheckAbortRef.current?.abort();
+    };
+  }, [open, demo, ctx.contactId, checkStatus]);
 
   async function handleSend() {
     if (demo) return;
