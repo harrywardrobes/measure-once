@@ -1043,8 +1043,7 @@ export function CustomersPage(): React.ReactElement {
 
   const excludedStatusKeys = React.useMemo(
     () => new Set(store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key.toUpperCase())),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store.loaded],
+    [store.statuses],
   );
 
   const {
