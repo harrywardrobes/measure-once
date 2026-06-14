@@ -16,6 +16,17 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { TabBar } from '../../components/TabBar';
+import { QuestionnaireBuilder } from './QuestionnaireBuilder';
+import { ADMIN_VISITS_SUBTAB_KEY } from '../../constants/localStorageKeys';
+
+type VisitsSubtab = 'catalogues' | 'questionnaire' | 'designvisit' | 'survey';
+const VISITS_SUBTABS: { key: VisitsSubtab; label: string }[] = [
+  { key: 'catalogues',   label: 'Catalogues' },
+  { key: 'questionnaire', label: 'Questionnaire' },
+  { key: 'designvisit',  label: 'Design Visit' },
+  { key: 'survey',       label: 'Survey' },
+];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -44,9 +55,9 @@ function esc(s: unknown): string {
 
 function _broadcastDvCatalogueChange(type: string) {
   const chanMap: Record<string, string> = {
-    handle:       'design_visit_handles_changed',
-    furniture:    'design_visit_furniture_ranges_changed',
-    'door-style': 'design_visit_door_styles_changed',
+    handle:       'catalog_handles_changed',
+    furniture:    'catalog_ranges_changed',
+    'door-style': 'catalog_doors_changed',
   };
   const chanName = chanMap[type];
   if (!chanName) return;
@@ -101,9 +112,9 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
 
     setLoading(true);
     const listUrl: Record<string, string> = {
-      handle:       '/api/admin/design-visit-handles',
-      furniture:    '/api/admin/design-visit-furniture-ranges',
-      'door-style': '/api/admin/design-visit-door-styles',
+      handle:       '/api/admin/catalog/handles',
+      furniture:    '/api/admin/catalog/ranges',
+      'door-style': '/api/admin/catalog/doors',
     };
     GET(listUrl[type])
       .then((list) => {
@@ -130,8 +141,8 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
 
     if (hasFileUpload && imageFile) {
       const uploadUrlMap: Record<string, string> = {
-        handle:       '/api/admin/design-visit-handles/upload-image',
-        'door-style': '/api/admin/design-visit-door-styles/upload-image',
+        handle:       '/api/admin/catalog/handles/upload-image',
+        'door-style': '/api/admin/catalog/doors/upload-image',
       };
       const formData = new FormData();
       formData.append('image', imageFile);
@@ -176,9 +187,9 @@ function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }: DvItem
     }
 
     const urlMap: Record<string, string> = {
-      handle:       existingId ? `/api/admin/design-visit-handles/${existingId}` : '/api/admin/design-visit-handles',
-      furniture:    existingId ? `/api/admin/design-visit-furniture-ranges/${existingId}` : '/api/admin/design-visit-furniture-ranges',
-      'door-style': existingId ? `/api/admin/design-visit-door-styles/${existingId}` : '/api/admin/design-visit-door-styles',
+      handle:       existingId ? `/api/admin/catalog/handles/${existingId}` : '/api/admin/catalog/handles',
+      furniture:    existingId ? `/api/admin/catalog/ranges/${existingId}` : '/api/admin/catalog/ranges',
+      'door-style': existingId ? `/api/admin/catalog/doors/${existingId}` : '/api/admin/catalog/doors',
     };
     const body: Record<string, unknown> = { name: nameVal };
     if (hasStyleSelect) {
@@ -497,9 +508,20 @@ function TermsDisplay({ terms }: { terms: DvTerms[] }) {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function DesignVisitPage() {
-  usePageTitle('Design Visit · Measure Once');
+  usePageTitle('Visits · Measure Once');
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
+  const [subtab, setSubtab] = useState<VisitsSubtab>(() => {
+    try {
+      const saved = localStorage.getItem(ADMIN_VISITS_SUBTAB_KEY) as VisitsSubtab | null;
+      if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) return saved;
+    } catch { /* ignore */ }
+    return 'catalogues';
+  });
+  const handleSubtab = useCallback((key: string) => {
+    setSubtab(key as VisitsSubtab);
+    try { localStorage.setItem(ADMIN_VISITS_SUBTAB_KEY, key); } catch { /* ignore */ }
+  }, []);
   const [handles,    setHandles]    = useState<DvHandle[]>([]);
   const [furniture,  setFurniture]  = useState<DvFurniture[]>([]);
   const [doorStyles, setDoorStyles] = useState<DvDoorStyle[]>([]);
@@ -518,9 +540,9 @@ export function DesignVisitPage() {
 
   const fetchAll = useCallback(async () => {
     const [hR, fR, dR, tR] = await Promise.allSettled([
-      GET('/api/admin/design-visit-handles'),
-      GET('/api/admin/design-visit-furniture-ranges'),
-      GET('/api/admin/design-visit-door-styles'),
+      GET('/api/admin/catalog/handles'),
+      GET('/api/admin/catalog/ranges'),
+      GET('/api/admin/catalog/doors'),
       GET('/api/admin/design-visit-terms'),
     ]);
     const firstRejection = [hR, fR, dR, tR].find(r => r.status === 'rejected');
@@ -554,9 +576,9 @@ export function DesignVisitPage() {
   }, [fetchAll, openEditor]);
 
   const endpointFor = (type: string) => ({
-    handle:       '/api/admin/design-visit-handles',
-    furniture:    '/api/admin/design-visit-furniture-ranges',
-    'door-style': '/api/admin/design-visit-door-styles',
+    handle:       '/api/admin/catalog/handles',
+    furniture:    '/api/admin/catalog/ranges',
+    'door-style': '/api/admin/catalog/doors',
   }[type] ?? '');
 
   const setterFor = useCallback((type: string) => {
@@ -673,7 +695,14 @@ export function DesignVisitPage() {
 
   return (
     <>
-      <Stack spacing={2}>
+      <TabBar
+        tabs={VISITS_SUBTABS.map((t) => ({ key: t.key, label: t.label }))}
+        activeKey={subtab}
+        onSelect={handleSubtab}
+      />
+
+      {subtab === 'catalogues' && (
+      <Stack spacing={2} sx={{ mt: 2 }}>
         <Card variant="outlined">
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
@@ -755,7 +784,31 @@ export function DesignVisitPage() {
             </div>
           </CardContent>
         </Card>
+      </Stack>
+      )}
 
+      {subtab === 'questionnaire' && (
+        <Box sx={{ mt: 2 }}>
+          <QuestionnaireBuilder />
+        </Box>
+      )}
+
+      {subtab === 'survey' && (
+        <Box sx={{ mt: 2 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="h6">Survey Visit</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Survey visit configuration is coming soon. The shared catalogue and
+                questionnaire foundation already supports it.
+              </Typography>
+            </CardContent>
+          </Card>
+        </Box>
+      )}
+
+      {subtab === 'designvisit' && (
+      <Stack spacing={2} sx={{ mt: 2 }}>
         <Card variant="outlined" id="dv-terms-card">
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
@@ -806,6 +859,7 @@ export function DesignVisitPage() {
           </CardContent>
         </Card>
       </Stack>
+      )}
 
       <DvItemEditorDialog
         open={dialogState.open}

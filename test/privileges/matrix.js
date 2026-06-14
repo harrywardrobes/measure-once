@@ -94,6 +94,16 @@ const ROUTES = [
   { method: 'GET',    path: '/api/design-visit-handles',       level: 'auth' },
   { method: 'GET',    path: '/api/design-visit-furniture-ranges', level: 'auth' },
   { method: 'GET',    path: '/api/design-visit-door-styles',   level: 'auth' },
+  // Shared "Visits" catalogue reads (design-visits.js mountCatalogRead). The
+  // route is registered from a template literal `/api/catalog/${slug}`, so the
+  // audit detects that exact pattern; one row covers all slugs (identical
+  // isAuthenticated gate). Member questionnaire reads/writes live below.
+  { method: 'GET',    path: '/api/catalog/${slug}',            level: 'auth' },
+  { method: 'GET',    path: '/api/catalog/pairings',           level: 'auth' },
+  // Questionnaire engine (visit_questions/visit_answers) — member+ only.
+  { method: 'GET',    path: '/api/visit-questions?applies_to=design', level: 'member' },
+  { method: 'GET',    path: '/api/design-visits/0/answers',    level: 'member' },
+  { method: 'POST',   path: '/api/design-visits/0/answers',    level: 'member', body: { answers: [] } },
 
   // ── self-or-admin (foreign id picked at runtime) ──────────────────────────
   { method: 'GET',    path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin' },
@@ -301,6 +311,16 @@ const ROUTES = [
   { method: 'PATCH',  path: '/api/admin/design-visit-door-styles/0',           level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/design-visit-door-styles/0',           level: 'admin' },
   { method: 'POST',   path: '/api/admin/design-visit-door-styles/upload-image', level: 'admin', body: {} },
+  // Shared "Visits" catalogue + questionnaire admin endpoints (design-visits.js).
+  { method: 'GET',    path: '/api/admin/catalog/pairings',                     level: 'admin' },
+  { method: 'POST',   path: '/api/admin/catalog/pairings',                     level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/catalog/pairings/0',                   level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/catalog/pairings/0',                   level: 'admin' },
+  { method: 'GET',    path: '/api/admin/visit-questions',                      level: 'admin' },
+  { method: 'POST',   path: '/api/admin/visit-questions',                      level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/visit-questions/reorder',              level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/visit-questions/0',                    level: 'admin', body: {} },
+  { method: 'DELETE', path: '/api/admin/visit-questions/0',                    level: 'admin' },
   { method: 'GET',    path: '/api/admin/settings/design-visit-terms',          level: 'admin' },
   { method: 'PUT',    path: '/api/admin/settings/design-visit-terms',          level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/terms-conditions/versions',            level: 'admin' },

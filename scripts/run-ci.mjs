@@ -97,6 +97,8 @@ const STEPS = [
   'test:design-visit:ci',
   'test:design-visit-list:ci',
   'test:visit-edit-cancel:ci',
+  'test:catalog-migration:ci',
+  'test:questionnaire:ci',
   'test:dv-catalogue-admin:ci',
   'test:dv-catalogue-image-upload:ci',
   'test:dv-catalogue-reorder:ci',

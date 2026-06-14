@@ -13,6 +13,9 @@
 export const ADMIN_ACTIVE_GROUP_KEY = 'adminActiveGroup';
 export const ADMIN_ACTIVE_TAB_KEY   = 'adminActiveTab';
 
+/** Active sub-tab within the admin Visits tab (Catalogues/Questionnaire/etc.). */
+export const ADMIN_VISITS_SUBTAB_KEY = 'adminVisitsSubtab';
+
 // ── Recent customers cache ─────────────────────────────────────────────────────
 export const CP_RECENT_CUSTOMERS_KEY = 'cp_recent_customers';
 

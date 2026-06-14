@@ -23,6 +23,7 @@ import {
 } from './modals/demoData';
 import { ModalContactHeader } from './modals/ModalContactHeader';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
+import { QuestionnaireRenderer, missingRequired, type VisitQuestion, type AnswerMap } from './QuestionnaireRenderer';
 import { emptyAddress, isAddressEmpty, type StructuredAddress } from '../../../shared/address';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
 import { DesignVisitStep3 } from './DesignVisitStep3';
@@ -147,11 +148,11 @@ function draftKey(contactId: string, editId?: string | number | null): string {
   return DV_WIZARD_DRAFT_PREFIX + (contactId || 'new');
 }
 
-function saveDraft(key: string, step1: Step1Data, rooms: RoomData[]) {
-  try { sessionStorage.setItem(key, JSON.stringify({ step1, rooms })); } catch {}
+function saveDraft(key: string, step1: Step1Data, rooms: RoomData[], answers: AnswerMap) {
+  try { sessionStorage.setItem(key, JSON.stringify({ step1, rooms, answers })); } catch {}
 }
 
-function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[] } | null {
+function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[]; answers?: AnswerMap } | null {
   try {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
@@ -272,6 +273,20 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     return normaliseRooms(existingVisit);
   });
 
+  // Whole-visit questionnaire (scope='visit'). Questions are fetched from the
+  // shared questionnaire engine; answers travel inline with the submit payload
+  // so they survive the offline queue. Per-room questionnaire wiring is a
+  // deferred follow-up — the renderer/engine already support room scope.
+  const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>([]);
+  const [answers, setAnswers] = useState<AnswerMap>(() => {
+    if (demo) return {};
+    if (!editMode && orphanedDraftKeys.length === 0) {
+      const draft = loadDraft(storageKey);
+      if (draft?.answers) return draft.answers;
+    }
+    return {};
+  });
+
   const [handles, setHandles]               = useState<CatalogueItem[]>(demo ? DEMO_HANDLES : []);
   const [furnitureRanges, setFurnitureRanges] = useState<CatalogueItem[]>(demo ? DEMO_FURNITURE_RANGES : []);
   const [doorStyles, setDoorStyles]           = useState<DoorStyleOption[]>(demo ? DEMO_DOOR_STYLES : []);
@@ -280,6 +295,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [catalogueLoading, setCatalogueLoading] = useState(!demo);
 
   const [s1Error, setS1Error]       = useState('');
+  const [showAnswerValidation, setShowAnswerValidation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [uploading, setUploading]   = useState(false);
@@ -329,12 +345,32 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     async function load() {
       try {
         const [h, fr, ds] = await Promise.all([
-          fetch('/api/design-visit-handles').then(r => r.ok ? r.json() : []),
-          fetch('/api/design-visit-furniture-ranges').then(r => r.ok ? r.json() : []),
-          fetch('/api/design-visit-door-styles').then(r => r.ok ? r.json() : []),
+          fetch('/api/catalog/handles').then(r => r.ok ? r.json() : []),
+          fetch('/api/catalog/ranges').then(r => r.ok ? r.json() : []),
+          fetch('/api/catalog/doors').then(r => r.ok ? r.json() : []),
         ]);
         if (!cancelled) { setHandles(h); setFurnitureRanges(fr); setDoorStyles(ds); }
       } catch {}
+      try {
+        const qr = await fetch('/api/visit-questions?applies_to=design');
+        if (!cancelled && qr.ok) {
+          const all: VisitQuestion[] = await qr.json();
+          setVisitQuestions((Array.isArray(all) ? all : []).filter(q => q.scope === 'visit'));
+        }
+      } catch {}
+      if (editMode && editVisitId != null) {
+        try {
+          const ar = await fetch(`/api/design-visits/${encodeURIComponent(String(editVisitId))}/answers`);
+          if (!cancelled && ar.ok) {
+            const rows: Array<{ question_id: number; room_id: number | null; answer: AnswerMap[number] }> = await ar.json();
+            const map: AnswerMap = {};
+            for (const row of (Array.isArray(rows) ? rows : [])) {
+              if (row.room_id == null) map[row.question_id] = row.answer;
+            }
+            setAnswers(map);
+          }
+        } catch {}
+      }
       try {
         const tr = await fetch('/api/design-visit-terms');
         if (!cancelled && tr.ok) {
@@ -368,15 +404,15 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   useEffect(() => {
     const channels: BroadcastChannel[] = [];
-    for (const name of ['design_visit_handles_changed', 'design_visit_furniture_ranges_changed', 'design_visit_door_styles_changed']) {
+    for (const name of ['catalog_handles_changed', 'catalog_ranges_changed', 'catalog_doors_changed']) {
       try {
         const ch = new BroadcastChannel(name);
         ch.addEventListener('message', async () => {
           try {
             const [h, fr, ds] = await Promise.all([
-              fetch('/api/design-visit-handles').then(r => r.ok ? r.json() : handles),
-              fetch('/api/design-visit-furniture-ranges').then(r => r.ok ? r.json() : furnitureRanges),
-              fetch('/api/design-visit-door-styles').then(r => r.ok ? r.json() : doorStyles),
+              fetch('/api/catalog/handles').then(r => r.ok ? r.json() : handles),
+              fetch('/api/catalog/ranges').then(r => r.ok ? r.json() : furnitureRanges),
+              fetch('/api/catalog/doors').then(r => r.ok ? r.json() : doorStyles),
             ]);
             setHandles(h); setFurnitureRanges(fr); setDoorStyles(ds);
           } catch {}
@@ -408,8 +444,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!editMode && !demo) saveDraft(storageKey, step1, rooms);
-  }, [step1, rooms, editMode, demo, storageKey]);
+    if (!editMode && !demo) saveDraft(storageKey, step1, rooms, answers);
+  }, [step1, rooms, answers, editMode, demo, storageKey]);
 
   useEffect(() => {
     return () => {
@@ -476,6 +512,12 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       setS1Error('Please confirm the customer has accepted the terms and conditions.');
       return;
     }
+    if (!demo && missingRequired(visitQuestions, answers).length > 0) {
+      setShowAnswerValidation(true);
+      setS1Error('Please answer all required questions before continuing.');
+      return;
+    }
+    setShowAnswerValidation(false);
     setS1Error('');
     setStep(2);
   }
@@ -510,6 +552,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           })),
         })),
         handlerConfig: cfg,
+        // Whole-visit questionnaire answers (scope='visit', no room_id). Sent
+        // inline so they replay correctly through the offline queue.
+        answers: visitQuestions
+          .filter(q => answers[q.id] !== undefined)
+          .map(q => ({ question_id: q.id, answer: answers[q.id] })),
       };
       const url    = editMode ? `/api/design-visits/${encodeURIComponent(String(editVisitId))}` : '/api/design-visits';
       const method = editMode ? 'PUT' : 'POST';
@@ -709,14 +756,26 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           </Typography>
 
           {step === 1 && (
-            <DesignVisitStep1
-              initialData={step1}
-              handles={handles}
-              furnitureRanges={furnitureRanges}
-              termsText={termsText}
-              termsVersionNumber={termsVersionNumber}
-              onDataChange={setStep1}
-            />
+            <>
+              <DesignVisitStep1
+                initialData={step1}
+                handles={handles}
+                furnitureRanges={furnitureRanges}
+                termsText={termsText}
+                termsVersionNumber={termsVersionNumber}
+                onDataChange={setStep1}
+              />
+              {visitQuestions.length > 0 && (
+                <Box sx={{ mt: '24px' }}>
+                  <QuestionnaireRenderer
+                    questions={visitQuestions}
+                    answers={answers}
+                    onChange={(id, value) => setAnswers(prev => ({ ...prev, [id]: value }))}
+                    showValidation={showAnswerValidation}
+                  />
+                </Box>
+              )}
+            </>
           )}
 
           {step === 2 && (
@@ -773,6 +832,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               // can restore it if the user changes their mind.
               const savedStep1 = step1;
               const savedRooms = rooms;
+              const savedAnswers = answers;
 
               // In new-visit mode the draft lives in sessionStorage; clear it
               // now so a page reload doesn't resurrect it.  In edit mode there
@@ -810,7 +870,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                     if (!editMode) {
                       // Restore the draft to sessionStorage so it survives
                       // any future page reload, then re-open the drawer.
-                      saveDraft(storageKey, savedStep1, savedRooms);
+                      saveDraft(storageKey, savedStep1, savedRooms, savedAnswers);
                     } else {
                       // In edit mode state is already in React — just restore
                       // step1/rooms to what they were when the dialog opened
@@ -818,6 +878,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                       // re-open.  The refs are still live.
                       setStep1(savedStep1);
                       setRooms(savedRooms);
+                      setAnswers(savedAnswers);
                     }
                     setOpen(true);
                   },

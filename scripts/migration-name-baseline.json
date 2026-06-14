@@ -52,5 +52,7 @@
   "1782900000001_customer-info-structured-address",
   "1782900000002_design-visits-structured-address",
   "1782900000003_contact-attempt-history-notes",
-  "1783000000000_google-maps-usage-counters"
+  "1783000000000_google-maps-usage-counters",
+  "1783100000000_catalog-tables",
+  "1783200000000_questionnaire-tables"
 ]

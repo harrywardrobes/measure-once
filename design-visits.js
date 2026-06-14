@@ -42,92 +42,67 @@ let _patchContactProperties = async (_contactId, _props) => {
 };
 function setPatchContactProperties(fn) { _patchContactProperties = fn; }
 
-const HANDLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'handles');
-if (!fs.existsSync(HANDLES_UPLOAD_DIR)) fs.mkdirSync(HANDLES_UPLOAD_DIR, { recursive: true });
+// ── Catalogue image infra ─────────────────────────────────────────────────────
+// Generic per-subdirectory image upload + local-file cleanup, shared by every
+// catalogue table (handles, doors, finishes, ranges). The `door-styles` subdir
+// name is preserved so existing door image URLs keep resolving after the
+// design_visit_* -> catalog_* migration.
+function makeCatalogImageInfra(subdir) {
+  const uploadDir = path.join(__dirname, 'public', 'uploads', subdir);
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  const urlPrefix = `/uploads/${subdir}/`;
+  const matcher = new RegExp(`^/uploads/${subdir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/([^/\\\\]+)$`);
 
-const DOOR_STYLES_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'door-styles');
-if (!fs.existsSync(DOOR_STYLES_UPLOAD_DIR)) fs.mkdirSync(DOOR_STYLES_UPLOAD_DIR, { recursive: true });
+  function deleteLocal(imageUrl) {
+    if (!imageUrl || typeof imageUrl !== 'string') return;
+    const m = imageUrl.match(matcher);
+    if (!m) return;
+    const filename = m[1];
+    if (filename === '.' || filename === '..') return;
+    const resolved = path.resolve(path.join(uploadDir, filename));
+    if (path.dirname(resolved) !== path.resolve(uploadDir)) return;
+    fs.unlink(resolved, err => {
+      if (err && err.code !== 'ENOENT') {
+        logger.warn({ detail: resolved, err: err.message }, `[design-visits] Failed to delete ${subdir} image`);
+      }
+    });
+  }
 
-function _deleteLocalHandleImage(imageUrl) {
-  if (!imageUrl || typeof imageUrl !== 'string') return;
-  const m = imageUrl.match(/^\/uploads\/handles\/([^/\\]+)$/);
-  if (!m) return;
-  const filename = m[1];
-  if (filename === '.' || filename === '..') return;
-  const filePath = path.join(HANDLES_UPLOAD_DIR, filename);
-  const resolved = path.resolve(filePath);
-  if (path.dirname(resolved) !== path.resolve(HANDLES_UPLOAD_DIR)) return;
-  fs.unlink(resolved, err => {
-    if (err && err.code !== 'ENOENT') {
-      logger.warn({ detail: resolved, err: err.message }, '[design-visits] Failed to delete handle image');
-    }
+  const fileFilter = (_req, file, cb) => {
+    if (/^image\//i.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  };
+  const limits = { fileSize: 5 * 1024 * 1024 };
+
+  const idStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+      const id  = parseInt(req.params.id, 10);
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      cb(null, `${id}-${Date.now()}${ext}`);
+    },
   });
+  const preStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      cb(null, `pre-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    },
+  });
+
+  return {
+    uploadDir, urlPrefix, deleteLocal,
+    idUpload:  multer({ storage: idStorage,  limits, fileFilter }),
+    preUpload: multer({ storage: preStorage, limits, fileFilter }),
+  };
 }
 
-function _deleteLocalDoorStyleImage(imageUrl) {
-  if (!imageUrl || typeof imageUrl !== 'string') return;
-  const m = imageUrl.match(/^\/uploads\/door-styles\/([^/\\]+)$/);
-  if (!m) return;
-  const filename = m[1];
-  if (filename === '.' || filename === '..') return;
-  const filePath = path.join(DOOR_STYLES_UPLOAD_DIR, filename);
-  const resolved = path.resolve(filePath);
-  if (path.dirname(resolved) !== path.resolve(DOOR_STYLES_UPLOAD_DIR)) return;
-  fs.unlink(resolved, err => {
-    if (err && err.code !== 'ENOENT') {
-      logger.warn({ detail: resolved, err: err.message }, '[design-visits] Failed to delete door-style image');
-    }
-  });
-}
-
-const _handlesStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const id  = parseInt(req.params.id, 10);
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
-    cb(null, `${id}-${Date.now()}${ext}`);
-  },
-});
-const _handlesUpload = multer({
-  storage: _handlesStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (/^image\//i.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Only image files are allowed'));
-  },
-});
-
-const _handlesPreStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, HANDLES_UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
-    cb(null, `pre-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-  },
-});
-const _handlesPreUpload = multer({
-  storage: _handlesPreStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (/^image\//i.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Only image files are allowed'));
-  },
-});
-
-const _doorStylesStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, DOOR_STYLES_UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-  },
-});
-const _doorStylesUpload = multer({
-  storage: _doorStylesStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (/^image\//i.test(file.mimetype)) cb(null, true);
-    else cb(new Error('Only image files are allowed'));
-  },
-});
+const CATALOG_IMG = {
+  handles:  makeCatalogImageInfra('handles'),
+  doors:    makeCatalogImageInfra('door-styles'),
+  finishes: makeCatalogImageInfra('finishes'),
+  ranges:   makeCatalogImageInfra('ranges'),
+};
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
@@ -307,8 +282,8 @@ async function loadVisitWithRooms(id) {
            dvfr.name  AS furniture_range_name,
            tcv.version_number AS terms_version_number
     FROM design_visits dv
-    LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
-    LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+    LEFT JOIN catalog_handles               dvh  ON dvh.id  = dv.handle_id
+    LEFT JOIN catalog_ranges                dvfr ON dvfr.id = dv.furniture_range_id
     LEFT JOIN terms_conditions_versions     tcv  ON tcv.id  = dv.terms_condition_version_id
     WHERE dv.id = $1`, [id]);
   if (!vr.rows.length) return null;
@@ -316,7 +291,7 @@ async function loadVisitWithRooms(id) {
   const rooms = await pool.query(`
     SELECT dvr.*, dvds.name AS door_style_name
     FROM design_visit_rooms dvr
-    LEFT JOIN design_visit_door_styles dvds ON dvds.id = dvr.door_style_id
+    LEFT JOIN catalog_doors            dvds ON dvds.id = dvr.door_style_id
     WHERE dvr.design_visit_id = $1
     ORDER BY dvr.sort_order ASC, dvr.id ASC`, [id]);
   const images = await pool.query(`
@@ -774,296 +749,262 @@ function _esc(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// ── Admin: Handles CRUD ───────────────────────────────────────────────────────
-router.get('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT * FROM design_visit_handles ORDER BY sort_order ASC, id ASC`);
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+// ── Shared catalogue CRUD (handles / doors / finishes / ranges) ───────────────
+// Generic CRUD + image-upload routes mounted under /api/admin/catalog/<slug>.
+// Every catalogue table shares the same column set (plus a per-table extra such
+// as the handle `style`), so one factory wires them up consistently.
 
 const HANDLE_STYLE_VALUES = ['Cup', 'Bar', 'Knob', 'Pull', 'Finger Pull', 'Other'];
 
-router.post('/api/admin/design-visit-handles', isAuthenticated, requireAdmin, async (req, res) => {
-  const name = String(req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'name is required' });
-  const description = req.body?.description ? String(req.body.description).slice(0, 500) : null;
-  const image_url   = req.body?.image_url   ? String(req.body.image_url).slice(0, 500)  : null;
-  const sort_order  = parseInt(req.body?.sort_order, 10) || 0;
-  const styleRaw    = req.body?.style !== undefined && req.body?.style !== null ? String(req.body.style).trim() : '';
-  if (!styleRaw) {
-    return res.status(400).json({ error: 'style is required' });
-  }
-  if (!HANDLE_STYLE_VALUES.includes(styleRaw)) {
-    return res.status(400).json({ error: `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}` });
-  }
-  const style = styleRaw;
-  try {
-    const r = await pool.query(
-      `INSERT INTO design_visit_handles (name, description, image_url, sort_order, style)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [name, description, image_url, sort_order, style]
-    );
-    res.status(201).json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+// Optional string columns common to every catalogue table, with max lengths.
+const CATALOG_TEXT_COLS = {
+  description:   500,
+  image_url:     500,
+  supplier_name: 200,
+  supplier_code: 100,
+  notes:         2000,
+  colour:        100,
+  finish:        100,
+  material_type: 100,
+};
+const CATALOG_INT_COLS = ['sort_order', 'price_pence'];
 
-router.patch('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const name        = req.body?.name        !== undefined ? String(req.body.name).trim()               : undefined;
-  const description = req.body?.description !== undefined ? String(req.body.description).slice(0, 500) : undefined;
-  const image_url   = req.body?.image_url   !== undefined ? String(req.body.image_url).slice(0, 500)   : undefined;
-  const sort_order  = req.body?.sort_order  !== undefined ? parseInt(req.body.sort_order, 10) || 0     : undefined;
-  if (name !== undefined && !name) return res.status(400).json({ error: 'name cannot be empty' });
-  let style = undefined;
-  if (req.body?.style !== undefined) {
-    const styleRaw = req.body.style === null || req.body.style === '' ? null : String(req.body.style).trim();
-    if (styleRaw !== null && !HANDLE_STYLE_VALUES.includes(styleRaw)) {
-      return res.status(400).json({ error: `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}` });
+// Build INSERT column/value lists from a create body for the shared columns.
+function catalogInsertFields(body, extraCols) {
+  const cols = [], vals = [];
+  for (const [col, max] of Object.entries(CATALOG_TEXT_COLS)) {
+    if (body?.[col] !== undefined) {
+      cols.push(col);
+      vals.push(body[col] === null || body[col] === '' ? null : String(body[col]).slice(0, max));
     }
-    style = styleRaw;
   }
-  const styleIsSet = style !== undefined;
-  try {
-    const existing = image_url !== undefined
-      ? await pool.query(`SELECT image_url FROM design_visit_handles WHERE id=$1`, [id])
-      : null;
-    if (existing && !existing.rows.length) return res.status(404).json({ error: 'Not found' });
-    const oldImageUrl = existing?.rows[0]?.image_url ?? null;
-    const r = await pool.query(
-      `UPDATE design_visit_handles SET
-        name        = COALESCE($1, name),
-        description = COALESCE($2, description),
-        image_url   = COALESCE($3, image_url),
-        sort_order  = COALESCE($4, sort_order),
-        style       = CASE WHEN $6 THEN $5 ELSE style END,
-        updated_at  = NOW()
-       WHERE id = $7 RETURNING *`,
-      [name ?? null, description ?? null, image_url ?? null, sort_order ?? null, style ?? null, styleIsSet, id]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    if (oldImageUrl && image_url && oldImageUrl !== image_url) {
-      _deleteLocalHandleImage(oldImageUrl);
+  for (const col of CATALOG_INT_COLS) {
+    if (body?.[col] !== undefined) { cols.push(col); vals.push(parseInt(body[col], 10) || 0); }
+  }
+  for (const col of extraCols) {
+    if (body?.[col] !== undefined) {
+      cols.push(col);
+      vals.push(body[col] === null || body[col] === '' ? null : String(body[col]).trim());
     }
-    res.json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
   }
-});
+  return { cols, vals };
+}
 
-router.delete('/api/admin/design-visit-handles/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  try {
-    const r = await pool.query(`DELETE FROM design_visit_handles WHERE id=$1 RETURNING id, image_url`, [id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    _deleteLocalHandleImage(r.rows[0].image_url);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+// Append UPDATE SET fragments + values from a patch body for the shared columns
+// onto the provided sets/vals arrays (so the caller can prepend name first and
+// keep placeholder numbering sequential).
+function catalogUpdateFields(body, extraCols, sets, vals) {
+  const add = (col, v) => { vals.push(v); sets.push(`${col} = $${vals.length}`); };
+  for (const [col, max] of Object.entries(CATALOG_TEXT_COLS)) {
+    if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : String(body[col]).slice(0, max));
   }
-});
-
-router.post('/api/admin/design-visit-handles/upload-image', isAuthenticated, requireAdmin,
-  (req, res, next) => _handlesPreUpload.single('image')(req, res, err => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  }),
-  (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
-    res.json({ url: `/uploads/handles/${req.file.filename}` });
+  for (const col of CATALOG_INT_COLS) {
+    if (body?.[col] !== undefined) add(col, parseInt(body[col], 10) || 0);
   }
-);
+  for (const col of extraCols) {
+    if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : String(body[col]).trim());
+  }
+}
 
-router.post('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin,
-  (req, res, next) => _handlesUpload.single('image')(req, res, err => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  }),
-  async (req, res) => {
+function mountCatalogCrud(slug, table, opts = {}) {
+  const img = opts.imgKey ? CATALOG_IMG[opts.imgKey] : null;
+  const extraCols = opts.extraCols || [];
+  const validate = opts.validate || (() => null);
+  const base = `/api/admin/catalog/${slug}`;
+
+  router.get(base, isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT * FROM ${table} ORDER BY sort_order ASC, id ASC`);
+      res.json(r.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.post(base, isAuthenticated, requireAdmin, async (req, res) => {
+    const name = String(req.body?.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const verr = validate(req.body, true);
+    if (verr) return res.status(400).json({ error: verr });
+    const { cols, vals } = catalogInsertFields(req.body, extraCols);
+    const allCols = ['name', ...cols];
+    const allVals = [name, ...vals];
+    const placeholders = allVals.map((_, i) => `$${i + 1}`).join(', ');
+    try {
+      const r = await pool.query(
+        `INSERT INTO ${table} (${allCols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+        allVals,
+      );
+      res.status(201).json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  router.patch(`${base}/:id`, isAuthenticated, requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
-    const image_url = `/uploads/handles/${req.file.filename}`;
+    if (req.body?.name !== undefined && !String(req.body.name).trim()) {
+      return res.status(400).json({ error: 'name cannot be empty' });
+    }
+    const verr = validate(req.body, false);
+    if (verr) return res.status(400).json({ error: verr });
+    const { sets, vals } = catalogUpdateFields(req.body, extraCols);
+    if (req.body?.name !== undefined) { vals.unshift(String(req.body.name).trim()); sets.unshift('name = $0'); }
     try {
-      const existing = await pool.query(
-        `SELECT image_url FROM design_visit_handles WHERE id=$1`,
-        [id]
-      );
-      if (!existing.rows.length) {
-        fs.unlink(req.file.path, () => {});
-        return res.status(404).json({ error: 'Handle not found' });
+      const oldImg = (img && req.body?.image_url !== undefined)
+        ? (await pool.query(`SELECT image_url FROM ${table} WHERE id=$1`, [id])).rows[0]?.image_url ?? null
+        : null;
+      if (!sets.length) {
+        const cur = await pool.query(`SELECT * FROM ${table} WHERE id=$1`, [id]);
+        if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
+        return res.json(cur.rows[0]);
       }
-      const oldImageUrl = existing.rows[0].image_url;
+      // Re-number placeholders sequentially (name was unshifted with a $0 marker).
+      let n = 0;
+      const renumbered = sets.map(s => s.replace(/\$\d+/, () => `$${++n}`));
+      vals.push(id);
       const r = await pool.query(
-        `UPDATE design_visit_handles SET image_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
-        [image_url, id]
+        `UPDATE ${table} SET ${renumbered.join(', ')}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
+        vals,
       );
-      if (!r.rows.length) {
-        fs.unlink(req.file.path, () => {});
-        return res.status(404).json({ error: 'Handle not found' });
-      }
-      if (oldImageUrl && oldImageUrl !== image_url) {
-        _deleteLocalHandleImage(oldImageUrl);
-      }
-      res.json({ image_url });
-    } catch (e) {
-      fs.unlink(req.file.path, () => {});
-      res.status(500).json({ error: e.message });
-    }
-  }
-);
+      if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+      if (img && oldImg && req.body.image_url && oldImg !== req.body.image_url) img.deleteLocal(oldImg);
+      res.json(r.rows[0]);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
-// ── Admin: Furniture Ranges CRUD ──────────────────────────────────────────────
-router.get('/api/admin/design-visit-furniture-ranges', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT * FROM design_visit_furniture_ranges ORDER BY sort_order ASC, id ASC`);
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  router.delete(`${base}/:id`, isAuthenticated, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+    try {
+      const r = await pool.query(`DELETE FROM ${table} WHERE id=$1 RETURNING *`, [id]);
+      if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+      if (img) img.deleteLocal(r.rows[0].image_url);
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  if (img) {
+    // Pre-create upload (no id yet) — returns a URL to attach on save.
+    router.post(`${base}/upload-image`, isAuthenticated, requireAdmin,
+      (req, res, next) => img.preUpload.single('image')(req, res, err => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+      }),
+      (req, res) => {
+        if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+        res.json({ url: `${img.urlPrefix}${req.file.filename}` });
+      },
+    );
+    // Upload + attach to an existing row.
+    router.post(`${base}/:id/image`, isAuthenticated, requireAdmin,
+      (req, res, next) => img.idUpload.single('image')(req, res, err => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+      }),
+      async (req, res) => {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+        if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+        const image_url = `${img.urlPrefix}${req.file.filename}`;
+        try {
+          const existing = await pool.query(`SELECT image_url FROM ${table} WHERE id=$1`, [id]);
+          if (!existing.rows.length) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ error: 'Not found' }); }
+          const oldImg = existing.rows[0].image_url;
+          const r = await pool.query(`UPDATE ${table} SET image_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *`, [image_url, id]);
+          if (!r.rows.length) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ error: 'Not found' }); }
+          if (oldImg && oldImg !== image_url) img.deleteLocal(oldImg);
+          res.json({ image_url });
+        } catch (e) { fs.unlink(req.file.path, () => {}); res.status(500).json({ error: e.message }); }
+      },
+    );
   }
+}
+
+function validateHandleStyle(body, isCreate) {
+  if (isCreate) {
+    const styleRaw = body?.style !== undefined && body?.style !== null ? String(body.style).trim() : '';
+    if (!styleRaw) return 'style is required';
+    if (!HANDLE_STYLE_VALUES.includes(styleRaw)) return `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}`;
+    return null;
+  }
+  if (body?.style !== undefined && body.style !== null && body.style !== '') {
+    if (!HANDLE_STYLE_VALUES.includes(String(body.style).trim())) return `style must be one of: ${HANDLE_STYLE_VALUES.join(', ')}`;
+  }
+  return null;
+}
+
+mountCatalogCrud('handles',  'catalog_handles',  { imgKey: 'handles',  extraCols: ['style'], validate: validateHandleStyle });
+mountCatalogCrud('doors',    'catalog_doors',    { imgKey: 'doors' });
+mountCatalogCrud('finishes', 'catalog_finishes', { imgKey: 'finishes' });
+mountCatalogCrud('ranges',   'catalog_ranges',   { imgKey: 'ranges' });
+
+// ── Admin: catalogue pairings (door -> suggested handle/finish) ───────────────
+router.get('/api/admin/catalog/pairings', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM catalog_pairings ORDER BY sort_order ASC, id ASC`);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/api/admin/design-visit-furniture-ranges', isAuthenticated, requireAdmin, async (req, res) => {
-  const name = String(req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'name is required' });
-  const description = req.body?.description ? String(req.body.description).slice(0, 500) : null;
-  const sort_order  = parseInt(req.body?.sort_order, 10) || 0;
+router.post('/api/admin/catalog/pairings', isAuthenticated, requireAdmin, async (req, res) => {
+  const doorId = parseInt(req.body?.door_id, 10);
+  if (!Number.isFinite(doorId)) return res.status(400).json({ error: 'door_id is required' });
+  const handleId = req.body?.handle_id != null && req.body.handle_id !== '' ? parseInt(req.body.handle_id, 10) : null;
+  const finishId = req.body?.finish_id != null && req.body.finish_id !== '' ? parseInt(req.body.finish_id, 10) : null;
+  const sortOrder = parseInt(req.body?.sort_order, 10) || 0;
+  const notes = req.body?.notes ? String(req.body.notes).slice(0, 2000) : null;
   try {
     const r = await pool.query(
-      `INSERT INTO design_visit_furniture_ranges (name, description, sort_order)
-       VALUES ($1,$2,$3) RETURNING *`,
-      [name, description, sort_order]
+      `INSERT INTO catalog_pairings (door_id, handle_id, finish_id, sort_order, notes)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [doorId, handleId, finishId, sortOrder, notes],
     );
     res.status(201).json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.patch('/api/admin/design-visit-furniture-ranges/:id', isAuthenticated, requireAdmin, async (req, res) => {
+router.patch('/api/admin/catalog/pairings/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const name        = req.body?.name        !== undefined ? String(req.body.name).trim()               : undefined;
-  const description = req.body?.description !== undefined ? String(req.body.description).slice(0, 500) : undefined;
-  const sort_order  = req.body?.sort_order  !== undefined ? parseInt(req.body.sort_order, 10) || 0     : undefined;
-  if (name !== undefined && !name) return res.status(400).json({ error: 'name cannot be empty' });
+  const sets = [], vals = [];
+  const add = (c, v) => { vals.push(v); sets.push(`${c} = $${vals.length}`); };
+  if (req.body?.door_id !== undefined)   add('door_id', parseInt(req.body.door_id, 10));
+  if (req.body?.handle_id !== undefined) add('handle_id', req.body.handle_id != null && req.body.handle_id !== '' ? parseInt(req.body.handle_id, 10) : null);
+  if (req.body?.finish_id !== undefined) add('finish_id', req.body.finish_id != null && req.body.finish_id !== '' ? parseInt(req.body.finish_id, 10) : null);
+  if (req.body?.sort_order !== undefined) add('sort_order', parseInt(req.body.sort_order, 10) || 0);
+  if (req.body?.notes !== undefined)      add('notes', req.body.notes ? String(req.body.notes).slice(0, 2000) : null);
+  if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+  vals.push(id);
   try {
-    const r = await pool.query(
-      `UPDATE design_visit_furniture_ranges SET
-        name        = COALESCE($1, name),
-        description = COALESCE($2, description),
-        sort_order  = COALESCE($3, sort_order),
-        updated_at  = NOW()
-       WHERE id = $4 RETURNING *`,
-      [name ?? null, description ?? null, sort_order ?? null, id]
-    );
+    const r = await pool.query(`UPDATE catalog_pairings SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`, vals);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/api/admin/design-visit-furniture-ranges/:id', isAuthenticated, requireAdmin, async (req, res) => {
+router.delete('/api/admin/catalog/pairings/:id', isAuthenticated, requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
   try {
-    const r = await pool.query(`DELETE FROM design_visit_furniture_ranges WHERE id=$1 RETURNING id`, [id]);
+    const r = await pool.query(`DELETE FROM catalog_pairings WHERE id=$1 RETURNING id`, [id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Admin: Door Styles CRUD ───────────────────────────────────────────────────
-router.get('/api/admin/design-visit-door-styles', isAuthenticated, requireAdmin, async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT * FROM design_visit_door_styles ORDER BY sort_order ASC, id ASC`);
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+// ── Legacy admin catalogue route aliases (308 redirects) ──────────────────────
+// TODO remove after migration
+function catalogAdminAlias(legacyPrefix, newPrefix) {
+  router.all([legacyPrefix, `${legacyPrefix}/*`], isAuthenticated, requireAdmin, (req, res) => {
+    const rest = req.params[0] ? `/${req.params[0]}` : '';
+    res.redirect(308, `${newPrefix}${rest}`);
+  });
+}
+catalogAdminAlias('/api/admin/design-visit-handles',          '/api/admin/catalog/handles');  // TODO remove after migration
+catalogAdminAlias('/api/admin/design-visit-door-styles',      '/api/admin/catalog/doors');    // TODO remove after migration
+catalogAdminAlias('/api/admin/design-visit-furniture-ranges', '/api/admin/catalog/ranges');   // TODO remove after migration
+// Legacy existing-row handle image upload used a separate prefix. // TODO remove after migration
+router.all('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin, (req, res) => {
+  res.redirect(308, `/api/admin/catalog/handles/${req.params.id}/image`);  // TODO remove after migration
 });
-
-router.post('/api/admin/design-visit-door-styles', isAuthenticated, requireAdmin, async (req, res) => {
-  const name = String(req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'name is required' });
-  const image_url  = req.body?.image_url  ? String(req.body.image_url).slice(0, 500) : null;
-  const sort_order = parseInt(req.body?.sort_order, 10) || 0;
-  try {
-    const r = await pool.query(
-      `INSERT INTO design_visit_door_styles (name, image_url, sort_order)
-       VALUES ($1,$2,$3) RETURNING *`,
-      [name, image_url, sort_order]
-    );
-    res.status(201).json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.patch('/api/admin/design-visit-door-styles/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const name       = req.body?.name       !== undefined ? String(req.body.name).trim()             : undefined;
-  const image_url  = req.body?.image_url  !== undefined ? String(req.body.image_url).slice(0, 500) : undefined;
-  const sort_order = req.body?.sort_order !== undefined ? parseInt(req.body.sort_order, 10) || 0   : undefined;
-  if (name !== undefined && !name) return res.status(400).json({ error: 'name cannot be empty' });
-  try {
-    const existing = image_url !== undefined
-      ? await pool.query(`SELECT image_url FROM design_visit_door_styles WHERE id=$1`, [id])
-      : null;
-    if (existing && !existing.rows.length) return res.status(404).json({ error: 'Not found' });
-    const oldImageUrl = existing?.rows[0]?.image_url ?? null;
-    const r = await pool.query(
-      `UPDATE design_visit_door_styles SET
-        name       = COALESCE($1, name),
-        image_url  = COALESCE($2, image_url),
-        sort_order = COALESCE($3, sort_order),
-        updated_at = NOW()
-       WHERE id = $4 RETURNING *`,
-      [name ?? null, image_url ?? null, sort_order ?? null, id]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    if (oldImageUrl && image_url && oldImageUrl !== image_url) {
-      _deleteLocalDoorStyleImage(oldImageUrl);
-    }
-    res.json(r.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.delete('/api/admin/design-visit-door-styles/:id', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  try {
-    const r = await pool.query(`DELETE FROM design_visit_door_styles WHERE id=$1 RETURNING id, image_url`, [id]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-    _deleteLocalDoorStyleImage(r.rows[0].image_url);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post('/api/admin/design-visit-door-styles/upload-image', isAuthenticated, requireAdmin,
-  (req, res, next) => _doorStylesUpload.single('image')(req, res, err => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  }),
-  (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
-    res.json({ url: `/uploads/door-styles/${req.file.filename}` });
-  }
-);
 
 // ── Non-admin read of T&C text (any authenticated user — used by wizard) ─────
 router.get('/api/design-visit-terms', isAuthenticated, async (req, res) => {
@@ -1147,33 +1088,40 @@ router.post('/api/admin/terms-conditions/versions', isAuthenticated, requireAdmi
   }
 });
 
-// ── Public catalogue reads (for wizard) ───────────────────────────────────────
-router.get('/api/design-visit-handles', isAuthenticated, async (req, res) => {
+// ── Public catalogue reads (for wizard — any authenticated user) ──────────────
+function mountCatalogRead(slug, table, cols) {
+  router.get(`/api/catalog/${slug}`, isAuthenticated, async (req, res) => {
+    try {
+      const r = await pool.query(`SELECT ${cols} FROM ${table} ORDER BY sort_order ASC, id ASC`);
+      res.json(r.rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+}
+mountCatalogRead('handles',  'catalog_handles',  'id, name, description, image_url, style, sort_order, colour, finish, material_type, price_pence');
+mountCatalogRead('doors',    'catalog_doors',    'id, name, description, image_url, sort_order, colour, finish, material_type, price_pence');
+mountCatalogRead('finishes', 'catalog_finishes', 'id, name, description, image_url, sort_order, colour, finish, material_type, price_pence');
+mountCatalogRead('ranges',   'catalog_ranges',   'id, name, description, image_url, sort_order, colour, finish, material_type, price_pence');
+
+// Member-facing pairings read (suggested handle/finish for a selected door).
+router.get('/api/catalog/pairings', isAuthenticated, async (req, res) => {
   try {
-    const r = await pool.query(`SELECT id, name, description, image_url, sort_order FROM design_visit_handles ORDER BY sort_order ASC, id ASC`);
+    const doorId = req.query.door_id != null && req.query.door_id !== '' ? parseInt(req.query.door_id, 10) : null;
+    const params = [];
+    let where = '';
+    if (doorId != null && Number.isFinite(doorId)) { params.push(doorId); where = 'WHERE door_id = $1'; }
+    const r = await pool.query(
+      `SELECT id, door_id, handle_id, finish_id, sort_order, notes FROM catalog_pairings ${where} ORDER BY sort_order ASC, id ASC`,
+      params,
+    );
     res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/api/design-visit-furniture-ranges', isAuthenticated, async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT id, name, description, sort_order FROM design_visit_furniture_ranges ORDER BY sort_order ASC, id ASC`);
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.get('/api/design-visit-door-styles', isAuthenticated, async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT id, name, image_url, sort_order FROM design_visit_door_styles ORDER BY sort_order ASC, id ASC`);
-    res.json(r.rows);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
+// ── Legacy member catalogue read aliases (308 redirects) ──────────────────────
+// TODO remove after migration
+router.get('/api/design-visit-handles',          isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/handles'));  // TODO remove after migration
+router.get('/api/design-visit-furniture-ranges', isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/ranges'));   // TODO remove after migration
+router.get('/api/design-visit-door-styles',      isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/doors'));    // TODO remove after migration
 
 // ── Design Visits: CRUD ───────────────────────────────────────────────────────
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
@@ -1203,8 +1151,8 @@ router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), as
                WHERE dvr.design_visit_id = dv.id
              ), 0) AS estimate_total_pence
       FROM design_visits dv
-      LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
-      LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+      LEFT JOIN catalog_handles               dvh  ON dvh.id  = dv.handle_id
+      LEFT JOIN catalog_ranges                dvfr ON dvfr.id = dv.furniture_range_id
       LEFT JOIN terms_conditions_versions     tcv  ON tcv.id  = dv.terms_condition_version_id
       ${where}
       ORDER BY dv.created_at DESC LIMIT 500`, params);
@@ -1370,7 +1318,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     contactId, contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
     structuredAddress, location, notes, termsAccepted, rooms = [],
-    handlerConfig,
+    handlerConfig, answers,
   } = req.body;
 
   if (!contactId) return res.status(400).json({ error: 'contactId is required' });
@@ -1490,6 +1438,17 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
 
     await client.query('COMMIT');
 
+    // Persist questionnaire answers (whole-visit scope) carried inline with the
+    // submit so they survive the offline queue. Non-fatal — a failure here must
+    // not lose the saved visit.
+    if (Array.isArray(answers) && answers.length) {
+      try {
+        await saveAnswers('design', visitId, answers);
+      } catch (e) {
+        logger.error({ err: e.message }, '[design-visits] saveAnswers (create) error:');
+      }
+    }
+
     // Run the full side-effect chain (status → submitted, HubSpot, QB, email).
     // Non-fatal integration failures are caught inside; we await so the DB
     // status transition to 'submitted' is guaranteed before we respond.
@@ -1576,7 +1535,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
     structuredAddress, location, notes, termsAccepted, rooms = [],
-    handlerConfig,
+    handlerConfig, answers,
   } = req.body;
 
   if (!Array.isArray(rooms) || !rooms.length) return res.status(400).json({ error: 'At least one room is required' });
@@ -1733,6 +1692,16 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     }
 
     await client.query('COMMIT');
+
+    // Replace questionnaire answers (whole-visit scope) carried inline with the
+    // edit. Non-fatal — a failure must not lose the saved edit.
+    if (Array.isArray(answers)) {
+      try {
+        await saveAnswers('design', id, answers);
+      } catch (e) {
+        logger.error({ err: e.message }, '[design-visits] saveAnswers (update) error:');
+      }
+    }
 
     // Re-run the full submit pipeline (sets status back to 'submitted', mints a
     // new sign-off token, creates a new QB estimate, re-sends the customer
@@ -1908,8 +1877,8 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
              dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
              dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
       FROM design_visits dv
-      LEFT JOIN design_visit_handles          dvh  ON dvh.id  = dv.handle_id
-      LEFT JOIN design_visit_furniture_ranges dvfr ON dvfr.id = dv.furniture_range_id
+      LEFT JOIN catalog_handles               dvh  ON dvh.id  = dv.handle_id
+      LEFT JOIN catalog_ranges                dvfr ON dvfr.id = dv.furniture_range_id
       WHERE dv.signoff_token_hash = $1`, [tokenHash]);
     if (!vr.rows.length) {
       // No active token matched — check whether this is a superseded link.
@@ -1949,7 +1918,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
              dvr.unit_count, dvr.unit_price_pence, dvr.notes,
              dvds.name AS door_style_name
       FROM design_visit_rooms dvr
-      LEFT JOIN design_visit_door_styles dvds ON dvds.id = dvr.door_style_id
+      LEFT JOIN catalog_doors            dvds ON dvds.id = dvr.door_style_id
       WHERE dvr.design_visit_id = $1
       ORDER BY dvr.sort_order ASC, dvr.id ASC`, [visit.id]);
     // Load images per room
@@ -2343,4 +2312,204 @@ async function ensureStartDesignVisitHandlerBindings() {
   logger.info('[card-action-seeds] start_design_visit handler and bindings ensured.');
 }
 
-module.exports = { router: router, setPatchContactProperties, ensureStartDesignVisitHandlerBindings };
+// ── Questionnaire engine ──────────────────────────────────────────────────────
+// Shared question catalogue (admin-managed) + per-visit captured answers. Used
+// by the Design Visit wizard now and any future visit type (Survey Visit).
+
+const VISIT_QUESTION_SCOPES = ['room', 'visit'];
+const VISIT_QUESTION_TYPES  = ['yesno', 'choice', 'text', 'number'];
+
+function normaliseAppliesTo(v) {
+  if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+  if (typeof v === 'string' && v.trim()) return v.split(',').map(x => x.trim()).filter(Boolean);
+  return [];
+}
+function normaliseOptions(v) {
+  if (Array.isArray(v)) return v.map(x => String(x));
+  return [];
+}
+
+// Reusable server helpers — any visit type can load/save its answers.
+async function loadAnswers(visitType, visitId) {
+  const r = await pool.query(
+    `SELECT id, visit_type, visit_id, room_id, question_id, answer, created_at
+       FROM visit_answers
+      WHERE visit_type = $1 AND visit_id = $2
+      ORDER BY id ASC`,
+    [visitType, visitId],
+  );
+  return r.rows;
+}
+
+// Replace the full answer set for a visit atomically. `payload` is an array of
+// { question_id, room_id?, answer } entries; answers are stored as JSONB.
+async function saveAnswers(visitType, visitId, payload) {
+  const entries = Array.isArray(payload) ? payload : [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM visit_answers WHERE visit_type = $1 AND visit_id = $2`, [visitType, visitId]);
+    for (const e of entries) {
+      const qid = parseInt(e?.question_id, 10);
+      if (!Number.isFinite(qid)) continue;
+      const roomId = e?.room_id != null && e.room_id !== '' ? parseInt(e.room_id, 10) : null;
+      const answer = e?.answer === undefined ? null : e.answer;
+      await client.query(
+        `INSERT INTO visit_answers (visit_type, visit_id, room_id, question_id, answer)
+         VALUES ($1, $2, $3, $4, $5::jsonb)`,
+        [visitType, visitId, roomId, qid, JSON.stringify(answer)],
+      );
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return loadAnswers(visitType, visitId);
+}
+
+// Admin: list every question (active + inactive).
+router.get('/api/admin/visit-questions', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM visit_questions ORDER BY scope ASC, sort_order ASC, id ASC`);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: create a question.
+router.post('/api/admin/visit-questions', isAuthenticated, requireAdmin, async (req, res) => {
+  const label = String(req.body?.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'label is required' });
+  const scope = String(req.body?.scope || 'visit');
+  if (!VISIT_QUESTION_SCOPES.includes(scope)) return res.status(400).json({ error: `scope must be one of: ${VISIT_QUESTION_SCOPES.join(', ')}` });
+  const type = String(req.body?.type || 'text');
+  if (!VISIT_QUESTION_TYPES.includes(type)) return res.status(400).json({ error: `type must be one of: ${VISIT_QUESTION_TYPES.join(', ')}` });
+  const appliesTo = normaliseAppliesTo(req.body?.applies_to);
+  const options = normaliseOptions(req.body?.options);
+  const required = !!req.body?.required;
+  const active = req.body?.active === undefined ? true : !!req.body.active;
+  const sortOrder = parseInt(req.body?.sort_order, 10) || 0;
+  try {
+    const r = await pool.query(
+      `INSERT INTO visit_questions (scope, applies_to, label, type, options, required, active, sort_order)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) RETURNING *`,
+      [scope, appliesTo, label, type, JSON.stringify(options), required, active, sortOrder],
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: bulk reorder (array of { id, sort_order }). Must precede the :id route.
+router.patch('/api/admin/visit-questions/reorder', isAuthenticated, requireAdmin, async (req, res) => {
+  const items = Array.isArray(req.body?.order) ? req.body.order : Array.isArray(req.body) ? req.body : null;
+  if (!items) return res.status(400).json({ error: 'order array is required' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const it of items) {
+      const id = parseInt(it?.id, 10);
+      const so = parseInt(it?.sort_order, 10);
+      if (!Number.isFinite(id) || !Number.isFinite(so)) continue;
+      await client.query(`UPDATE visit_questions SET sort_order = $1, updated_at = NOW() WHERE id = $2`, [so, id]);
+    }
+    await client.query('COMMIT');
+    const r = await client.query(`SELECT * FROM visit_questions ORDER BY scope ASC, sort_order ASC, id ASC`);
+    res.json(r.rows);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin: update a question.
+router.patch('/api/admin/visit-questions/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const sets = [], vals = [];
+  const add = (c, v) => { vals.push(v); sets.push(`${c} = $${vals.length}`); };
+  if (req.body?.label !== undefined) {
+    const label = String(req.body.label).trim();
+    if (!label) return res.status(400).json({ error: 'label cannot be empty' });
+    add('label', label);
+  }
+  if (req.body?.scope !== undefined) {
+    if (!VISIT_QUESTION_SCOPES.includes(String(req.body.scope))) return res.status(400).json({ error: `scope must be one of: ${VISIT_QUESTION_SCOPES.join(', ')}` });
+    add('scope', String(req.body.scope));
+  }
+  if (req.body?.type !== undefined) {
+    if (!VISIT_QUESTION_TYPES.includes(String(req.body.type))) return res.status(400).json({ error: `type must be one of: ${VISIT_QUESTION_TYPES.join(', ')}` });
+    add('type', String(req.body.type));
+  }
+  if (req.body?.applies_to !== undefined) add('applies_to', normaliseAppliesTo(req.body.applies_to));
+  if (req.body?.options !== undefined) { vals.push(JSON.stringify(normaliseOptions(req.body.options))); sets.push(`options = $${vals.length}::jsonb`); }
+  if (req.body?.required !== undefined) add('required', !!req.body.required);
+  if (req.body?.active !== undefined) add('active', !!req.body.active);
+  if (req.body?.sort_order !== undefined) add('sort_order', parseInt(req.body.sort_order, 10) || 0);
+  if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
+  vals.push(id);
+  try {
+    const r = await pool.query(`UPDATE visit_questions SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: delete a question (cascades its answers).
+router.delete('/api/admin/visit-questions/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const r = await pool.query(`DELETE FROM visit_questions WHERE id=$1 RETURNING id`, [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Member: read active questions, optionally filtered by applies_to + scope.
+router.get('/api/visit-questions', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  try {
+    const params = [];
+    const where = ['active = TRUE'];
+    if (req.query.applies_to) { params.push(String(req.query.applies_to)); where.push(`$${params.length} = ANY(applies_to)`); }
+    if (req.query.scope && VISIT_QUESTION_SCOPES.includes(String(req.query.scope))) { params.push(String(req.query.scope)); where.push(`scope = $${params.length}`); }
+    const r = await pool.query(
+      `SELECT id, scope, applies_to, label, type, options, required, sort_order
+         FROM visit_questions
+        WHERE ${where.join(' AND ')}
+        ORDER BY scope ASC, sort_order ASC, id ASC`,
+      params,
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Member: load/save answers for a design visit.
+router.get('/api/design-visits/:id/answers', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    res.json(await loadAnswers('design', id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/design-visits/:id/answers', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const payload = Array.isArray(req.body?.answers) ? req.body.answers : Array.isArray(req.body) ? req.body : null;
+  if (!payload) return res.status(400).json({ error: 'answers array is required' });
+  try {
+    res.json(await saveAnswers('design', id, payload));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = {
+  router: router,
+  setPatchContactProperties,
+  ensureStartDesignVisitHandlerBindings,
+  loadAnswers,
+  saveAnswers,
+};
