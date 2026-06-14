@@ -20,6 +20,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, isGoogleAuthError } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { PlacesLocationField } from '../PlacesLocationField';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -230,11 +231,12 @@ export function GenericVisitEditModal(props: Props) {
               localeText={{ start: 'Start', end: 'End' }}
               slotProps={{ textField: { size: 'small', fullWidth: true } }}
             />
-            <TextField
+            <PlacesLocationField
+              surface="genericVisit"
               label="Location (optional)"
               value={location}
-              onChange={e => setLocation(e.target.value)}
-              slotProps={{ htmlInput: { maxLength: 300 } }}
+              onChange={setLocation}
+              maxLength={300}
               fullWidth
               size="small"
             />

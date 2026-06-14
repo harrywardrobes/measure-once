@@ -6,7 +6,10 @@ import {
   countryCodeToName,
   countryNameToCode,
   isAddressEmpty,
+  adaptNewPlaceComponents,
+  googleComponentsToAddress,
   type StructuredAddress,
+  type NewPlaceAddressComponent,
 } from '../address';
 
 describe('formatAddress', () => {
@@ -157,5 +160,66 @@ describe('isAddressEmpty', () => {
   it('detects non-empty addresses', () => {
     expect(isAddressEmpty({ addressLines: ['x'], countryCode: 'GB' })).toBe(false);
     expect(isAddressEmpty({ addressLines: [], postalCode: 'AB1', countryCode: 'GB' })).toBe(false);
+  });
+});
+
+describe('adaptNewPlaceComponents', () => {
+  it('converts longText/shortText to long_name/short_name', () => {
+    const input: NewPlaceAddressComponent[] = [
+      { longText: 'Baker Street', shortText: 'Baker St', types: ['route'] },
+      { longText: 'London', shortText: 'London', types: ['postal_town'] },
+      { longText: 'United Kingdom', shortText: 'GB', types: ['country', 'political'] },
+    ];
+    const result = adaptNewPlaceComponents(input);
+    expect(result).toEqual([
+      { long_name: 'Baker Street', short_name: 'Baker St', types: ['route'] },
+      { long_name: 'London', short_name: 'London', types: ['postal_town'] },
+      { long_name: 'United Kingdom', short_name: 'GB', types: ['country', 'political'] },
+    ]);
+  });
+
+  it('returns an empty array for null or undefined input', () => {
+    expect(adaptNewPlaceComponents(null)).toEqual([]);
+    expect(adaptNewPlaceComponents(undefined)).toEqual([]);
+  });
+
+  it('returns an empty array for an empty components list', () => {
+    expect(adaptNewPlaceComponents([])).toEqual([]);
+  });
+
+  it('falls back to empty strings when longText or shortText is missing', () => {
+    const input = [
+      { longText: '', shortText: '', types: ['street_number'] },
+    ] as NewPlaceAddressComponent[];
+    const [component] = adaptNewPlaceComponents(input);
+    expect(component.long_name).toBe('');
+    expect(component.short_name).toBe('');
+  });
+
+  it('preserves types arrays unchanged', () => {
+    const types = ['administrative_area_level_1', 'political'];
+    const [component] = adaptNewPlaceComponents([
+      { longText: 'England', shortText: 'England', types },
+    ]);
+    expect(component.types).toEqual(types);
+  });
+
+  describe('round-trip with googleComponentsToAddress', () => {
+    it('produces the same StructuredAddress as the legacy shape would', () => {
+      const newComponents: NewPlaceAddressComponent[] = [
+        { longText: '221B', shortText: '221B', types: ['street_number'] },
+        { longText: 'Baker Street', shortText: 'Baker St', types: ['route'] },
+        { longText: 'London', shortText: 'London', types: ['postal_town'] },
+        { longText: 'Greater London', shortText: 'Greater London', types: ['administrative_area_level_2', 'political'] },
+        { longText: 'NW1 6XE', shortText: 'NW1 6XE', types: ['postal_code'] },
+        { longText: 'United Kingdom', shortText: 'GB', types: ['country', 'political'] },
+      ];
+      const addr = googleComponentsToAddress(adaptNewPlaceComponents(newComponents));
+      expect(addr.addressLines).toEqual(['221B Baker Street']);
+      expect(addr.locality).toBe('London');
+      expect(addr.administrativeArea).toBe('Greater London');
+      expect(addr.postalCode).toBe('NW1 6XE');
+      expect(addr.countryCode).toBe('GB');
+    });
   });
 });

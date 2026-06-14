@@ -40,7 +40,7 @@ import { invalidateGoogleMapsConfig } from '../../lib/googleMapsConfig';
 const CLOUD_CONSOLE_CREDENTIALS_URL =
   'https://console.cloud.google.com/google/maps-apis/credentials';
 
-type SurfaceId = 'customerInfo' | 'designVisit' | 'arrangeVisit' | 'contactEdit';
+type SurfaceId = 'customerInfo' | 'designVisit' | 'arrangeVisit' | 'contactEdit' | 'genericVisit';
 
 interface SurfaceFlags {
   autocomplete: boolean;
@@ -113,6 +113,7 @@ const SURFACE_LABELS: Record<SurfaceId, string> = {
   designVisit: 'Design visit wizard',
   arrangeVisit: 'Arrange visit modal',
   contactEdit: 'Customer contact editor',
+  genericVisit: 'Generic visit (calendar event location)',
 };
 
 const W = window as unknown as Record<string, unknown>;

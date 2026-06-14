@@ -18,3 +18,4 @@
 - [Migration rename CI detection](migration-rename-ci-detection.md) — baseline manifest pattern (scripts/migration-name-baseline.json) enables static detection of missing MIGRATION_RENAMES entries; run migration:update-baseline after adding or renaming a migration file.
 - [CJS/ESM shared module boundary](cjs-esm-shared-boundary.md) — Vite resolves .js before .ts; use .cjs for server CJS + .ts for canonical ESM; require() callers must use explicit .cjs extension.
 - [HANDLER_OUTCOMES in main bundle](handler-outcomes-in-main-bundle.md) — the outcome registry literal ships in main.js; enriching its data / re-exporting page-only helpers can trip the main.js gzip cap.
+- [Places API (New) migration](places-api-new-migration.md) — new API uses importLibrary('places') not libraries=places; shape changed from long_name/short_name to longText/shortText; REST endpoints moved to places.googleapis.com/v1.

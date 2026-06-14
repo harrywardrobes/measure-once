@@ -18,8 +18,10 @@ import {
   COUNTRIES,
   HOME_COUNTRY_CODE,
   MAX_ADDRESS_LINES,
+  adaptNewPlaceComponents,
   emptyAddress,
   googleComponentsToAddress,
+  type NewPlaceAddressComponent,
   type StructuredAddress,
 } from '../../../shared/address';
 import {
@@ -57,9 +59,21 @@ function labelsFor(countryCode: string): AddressLabels {
   return LABELS_BY_COUNTRY[(countryCode || '').toUpperCase()] || DEFAULT_LABELS;
 }
 
+interface NewPlaceResult {
+  fetchFields(opts: { fields: string[]; sessionToken?: unknown }): Promise<void>;
+  addressComponents?: NewPlaceAddressComponent[];
+}
+
+interface PlacePredictionRaw {
+  placeId: string;
+  text?: { text: string };
+  toPlace(): NewPlaceResult;
+}
+
 interface PlacePrediction {
-  place_id: string;
+  placeId: string;
   description: string;
+  _raw: PlacePredictionRaw;
 }
 
 export interface AddressInputProps {
@@ -147,9 +161,7 @@ export function AddressInput({
   const [inputText, setInputText] = useState('');
   const [loadingPredictions, setLoadingPredictions] = useState(false);
 
-  const autoServiceRef = useRef<any>(null);
-  const placesServiceRef = useRef<any>(null);
-  const sessionTokenRef = useRef<any>(null);
+  const sessionTokenRef = useRef<unknown>(null);
   const debounceRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -163,12 +175,10 @@ export function AddressInput({
         .then(() => {
           if (cancelled) return;
           const g = (window as any).google;
-          if (!g?.maps?.places) {
+          if (!g?.maps?.places?.AutocompleteSuggestion) {
             setAcFailed(true);
             return;
           }
-          autoServiceRef.current = new g.maps.places.AutocompleteService();
-          placesServiceRef.current = new g.maps.places.PlacesService(document.createElement('div'));
           setAcReady(true);
         })
         .catch(() => {
@@ -193,7 +203,7 @@ export function AddressInput({
 
   const fetchPredictions = useCallback(
     (text: string) => {
-      if (!autoServiceRef.current || !cfg) return;
+      if (!cfg || !acReady) return;
       const minChars = cfg.autocomplete.minChars;
       if (text.trim().length < minChars) {
         setOptions([]);
@@ -201,29 +211,44 @@ export function AddressInput({
       }
       if (!sessionTokenRef.current) newSessionToken();
       setLoadingPredictions(true);
+
+      const g = (window as any).google;
+      const countries = cfg.autocomplete.countries
+        .map((c: string) => c.toLowerCase())
+        .slice(0, 5);
       const request: Record<string, unknown> = {
         input: text,
-        types: [cfg.autocomplete.types],
         language: cfg.autocomplete.language,
       };
-      const countries = cfg.autocomplete.countries
-        .map((c) => c.toLowerCase())
-        .slice(0, 5);
-      if (countries.length) request.componentRestrictions = { country: countries };
+      if (countries.length) request.includedRegionCodes = countries;
       if (sessionTokenRef.current) request.sessionToken = sessionTokenRef.current;
 
-      autoServiceRef.current.getPlacePredictions(request, (preds: any[], status: string) => {
-        setLoadingPredictions(false);
-        const g = (window as any).google;
-        const S = g?.maps?.places?.PlacesServiceStatus;
-        const ok = !S || status === S.OK || status === S.ZERO_RESULTS;
-        if (surface) reportGoogleMapsUsage('autocomplete', surface, ok, ok ? undefined : String(status));
-        setOptions(
-          (preds || []).map((p) => ({ place_id: p.place_id, description: p.description })),
-        );
-      });
+      (
+        g.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(
+          request,
+        ) as Promise<{ suggestions: Array<{ placePrediction?: PlacePredictionRaw }> }>
+      )
+        .then((result) => {
+          setLoadingPredictions(false);
+          const suggestions = result?.suggestions ?? [];
+          if (surface) reportGoogleMapsUsage('autocomplete', surface, true);
+          setOptions(
+            suggestions
+              .filter((s): s is { placePrediction: PlacePredictionRaw } => !!s?.placePrediction)
+              .map((s) => ({
+                placeId: s.placePrediction.placeId,
+                description: s.placePrediction.text?.text ?? s.placePrediction.placeId,
+                _raw: s.placePrediction,
+              })),
+          );
+        })
+        .catch((err: unknown) => {
+          setLoadingPredictions(false);
+          const code = String((err as { message?: string })?.message ?? err ?? 'ERROR');
+          if (surface) reportGoogleMapsUsage('autocomplete', surface, false, code);
+        });
     },
-    [cfg, newSessionToken, surface],
+    [cfg, acReady, newSessionToken, surface],
   );
 
   const handleInputChange = useCallback(
@@ -238,27 +263,31 @@ export function AddressInput({
 
   const handleSelect = useCallback(
     (prediction: PlacePrediction | null) => {
-      if (!prediction || !placesServiceRef.current) return;
-      placesServiceRef.current.getDetails(
-        {
-          placeId: prediction.place_id,
-          fields: ['address_components'],
-          ...(sessionTokenRef.current ? { sessionToken: sessionTokenRef.current } : {}),
-        },
-        (place: any, status: string) => {
-          // A details request always ends the billing session token.
-          sessionTokenRef.current = null;
-          const g = (window as any).google;
-          const okStatus = g?.maps?.places?.PlacesServiceStatus?.OK ?? 'OK';
-          const ok = status === okStatus && !!place?.address_components;
-          if (surface) reportGoogleMapsUsage('details', surface, ok, ok ? undefined : String(status));
+      if (!prediction) return;
+      const rawPrediction = prediction._raw;
+      if (!rawPrediction) return;
+      const place = rawPrediction.toPlace();
+      const sessionToken = sessionTokenRef.current;
+      // A details request always ends the billing session token.
+      sessionTokenRef.current = null;
+      place
+        .fetchFields({
+          fields: ['addressComponents'],
+          ...(sessionToken ? { sessionToken } : {}),
+        })
+        .then(() => {
+          const ok = Array.isArray(place.addressComponents);
+          if (surface) reportGoogleMapsUsage('details', surface, ok);
           if (!ok) return;
-          const next = googleComponentsToAddress(place.address_components);
+          const next = googleComponentsToAddress(adaptNewPlaceComponents(place.addressComponents));
           onChange(next);
           setInputText('');
           setOptions([]);
-        },
-      );
+        })
+        .catch((err: unknown) => {
+          const code = String((err as { message?: string })?.message ?? err ?? 'ERROR');
+          if (surface) reportGoogleMapsUsage('details', surface, false, code);
+        });
     },
     [onChange, surface],
   );

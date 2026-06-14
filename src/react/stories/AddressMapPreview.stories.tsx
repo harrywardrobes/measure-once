@@ -28,6 +28,7 @@ const ENABLED_CONFIG: GoogleMapsConfig = {
     designVisit: { autocomplete: true, mapPreview: true },
     arrangeVisit: { autocomplete: true, mapPreview: true },
     contactEdit: { autocomplete: true, mapPreview: true },
+    genericVisit: { autocomplete: true, mapPreview: false },
   },
   mapPreview: { enabled: true, zoom: 15, mapType: 'roadmap' },
   fallback: { mode: 'silent', allowManualEntry: true },

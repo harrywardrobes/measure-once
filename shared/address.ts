@@ -246,11 +246,37 @@ export function addressToHubspot(addr?: StructuredAddress | null): Required<Hubs
   };
 }
 
-/** A single Google Places `address_component`. */
+/** A single Google Places `address_component` (legacy API shape). */
 export interface GoogleAddressComponent {
   long_name: string;
   short_name: string;
   types: string[];
+}
+
+/**
+ * A single address component returned by the Places API (New).
+ * The new API uses `longText`/`shortText` instead of `long_name`/`short_name`.
+ */
+export interface NewPlaceAddressComponent {
+  longText: string;
+  shortText: string;
+  types: string[];
+}
+
+/**
+ * Convert `addressComponents` from the Places API (New) into the legacy
+ * `GoogleAddressComponent[]` shape so `googleComponentsToAddress` can be
+ * called unchanged.
+ */
+export function adaptNewPlaceComponents(
+  components?: NewPlaceAddressComponent[] | null,
+): GoogleAddressComponent[] {
+  if (!components) return [];
+  return components.map((c) => ({
+    long_name: c.longText ?? '',
+    short_name: c.shortText ?? '',
+    types: c.types ?? [],
+  }));
 }
 
 /**

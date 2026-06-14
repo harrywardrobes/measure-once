@@ -186,6 +186,23 @@ function addressToHubspot(addr) {
   };
 }
 
+/**
+ * Convert `addressComponents` from the Places API (New) into the legacy
+ * `GoogleAddressComponent[]` shape so `googleComponentsToAddress` can be
+ * called unchanged. The new API uses `longText`/`shortText` instead of
+ * `long_name`/`short_name`.
+ */
+function adaptNewPlaceComponents(components) {
+  if (!components) return [];
+  return components.map(function (c) {
+    return {
+      long_name: c.longText != null ? c.longText : '',
+      short_name: c.shortText != null ? c.shortText : '',
+      types: Array.isArray(c.types) ? c.types : [],
+    };
+  });
+}
+
 function googleComponentsToAddress(components) {
   const list = components || [];
   const get = (type) => list.find((c) => Array.isArray(c.types) && c.types.includes(type));
@@ -235,5 +252,6 @@ module.exports = {
   formatAddress,
   hubspotToAddress,
   addressToHubspot,
+  adaptNewPlaceComponents,
   googleComponentsToAddress,
 };

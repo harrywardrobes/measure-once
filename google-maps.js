@@ -33,7 +33,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const SETTINGS_KEY = 'google_maps_settings';
 
 // ── Defaults ────────────────────────────────────────────────────────────────
-const SURFACE_IDS = ['customerInfo', 'designVisit', 'arrangeVisit', 'contactEdit'];
+const SURFACE_IDS = ['customerInfo', 'designVisit', 'arrangeVisit', 'contactEdit', 'genericVisit'];
 
 const DEFAULT_SETTINGS = {
   enabled: false,
@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS = {
     designVisit: { autocomplete: true, mapPreview: true },
     arrangeVisit: { autocomplete: true, mapPreview: true },
     contactEdit: { autocomplete: true, mapPreview: true },
+    genericVisit: { autocomplete: true, mapPreview: false },
   },
   mapPreview: {
     enabled: true,
@@ -83,6 +84,7 @@ const settingsSchema = z.object({
     designVisit: surfaceSchema,
     arrangeVisit: surfaceSchema,
     contactEdit: surfaceSchema,
+    genericVisit: surfaceSchema,
   }),
   mapPreview: z.object({
     enabled: z.boolean(),
@@ -316,22 +318,24 @@ async function diagnosticsSnapshot(days = 7) {
 }
 
 // ── Server-side Google REST wrapper (used for connection testing) ────────────
-async function callGoogle(api, url, surface = 'admin-test') {
+async function callGoogle(api, url, surface = 'admin-test', fetchOpts = {}) {
   recordRequest(api);
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, ...fetchOpts });
     const latencyMs = Date.now() - started;
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const body = await res.json();
-      // Google REST APIs report logical errors via a `status` field.
+      // Legacy Google REST APIs report logical errors via a `status` field.
+      // The new Places API (New) uses HTTP status codes with a nested `error`
+      // object; there is no top-level `status` field on success.
       const status = body.status;
       const ok = res.ok && (status === undefined || status === 'OK' || status === 'ZERO_RESULTS');
       if (!ok) {
-        const msg = body.error_message || status || `HTTP ${res.status}`;
+        const msg = body.error_message || body.error?.message || status || `HTTP ${res.status}`;
         recordError(api, { surface, errorCode: status || `HTTP_${res.status}`, message: msg });
         return { ok: false, latencyMs, status: status || res.status, error: msg, body };
       }
@@ -407,22 +411,38 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
   const slim = (c) => ({ ok: c.ok, latencyMs: c.latencyMs, status: c.status, error: c.error });
   const checks = {};
 
-  // 1) Autocomplete — drives the address search box. Keep a prediction's
-  //    place_id so we can exercise the Place Details lookup below.
+  // 1) Places Autocomplete (New) — drives the address search box. Keep a
+  //    placeId from the first suggestion so we can exercise the details lookup.
   const ac = await callGoogle(
     'autocomplete',
-    `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${enc('10 Downing Street')}&types=address&components=country:gb&key=${enc(key)}`,
+    'https://places.googleapis.com/v1/places:autocomplete',
+    'admin-test',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+      },
+      body: JSON.stringify({
+        input: '10 Downing Street',
+        includedRegionCodes: ['gb'],
+      }),
+    },
   );
   checks.autocomplete = slim(ac);
   const placeId =
-    ac.body && Array.isArray(ac.body.predictions) ? ac.body.predictions[0]?.place_id : null;
+    ac.body && Array.isArray(ac.body.suggestions)
+      ? ac.body.suggestions[0]?.placePrediction?.placeId
+      : null;
 
-  // 2) Place Details — completes the autocomplete → details round-trip the
-  //    client performs when a prediction is chosen.
+  // 2) Place Details (New) — completes the autocomplete → details round-trip
+  //    the client performs when a prediction is chosen.
   if (placeId) {
     const det = await callGoogle(
       'details',
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${enc(placeId)}&fields=address_component&key=${enc(key)}`,
+      `https://places.googleapis.com/v1/places/${enc(placeId)}?fields=addressComponents`,
+      'admin-test',
+      { headers: { 'X-Goog-Api-Key': key } },
     );
     checks.placeDetails = slim(det);
   } else {
@@ -449,9 +469,10 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
   // 5) Maps JavaScript API — the library the browser injects for autocomplete.
   //    Server-side we can only confirm the bootstrap is reachable and not
   //    blocked; key/referer restrictions surface fully only in the browser.
+  //    Uses v=weekly&loading=async to match the new client loader.
   const js = await callGoogle(
     'mapsjs',
-    `https://maps.googleapis.com/maps/api/js?libraries=places&key=${enc(key)}`,
+    `https://maps.googleapis.com/maps/api/js?v=weekly&loading=async&key=${enc(key)}`,
   );
   checks.mapsJs = slim(js);
 
@@ -509,7 +530,7 @@ router.get('/api/google-maps/config', async (_req, res) => {
 // ring buffer — safe to expose on the unauthenticated customer-info surface.
 const usageSchema = z.object({
   api: z.enum(['autocomplete', 'details', 'staticmap']),
-  surface: z.enum(['customerInfo', 'designVisit', 'arrangeVisit', 'contactEdit']).optional(),
+  surface: z.enum(['customerInfo', 'designVisit', 'arrangeVisit', 'contactEdit', 'genericVisit']).optional(),
   ok: z.boolean().optional().default(true),
   errorCode: z.string().trim().max(60).optional(),
 });

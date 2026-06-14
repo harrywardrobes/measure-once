@@ -43,6 +43,11 @@ Project management dashboard (HubSpot CRM integration).
   system gallery is Storybook, accessible via the Design System card in the
   admin Settings tab or at `/storybook/`.
 
+## Google Places API
+- Secret: `GOOGLE_PLACES_API_KEY` must be present in Replit Secrets.
+- The key requires **"Places API (New)"** and **"Maps JavaScript API"** enabled in Google Cloud Console. The legacy Places API is no longer used.
+- Five autocomplete surfaces: `customerInfo`, `designVisit`, `arrangeVisit`, `contactEdit`, `genericVisit`. All are toggled individually in the admin Google Maps settings page.
+
 ## Stack
 - Node.js 20 + Express; single `server.js` serves API and static assets.
 - Static frontend in `public/` (vanilla JS + Tailwind CDN) being progressively

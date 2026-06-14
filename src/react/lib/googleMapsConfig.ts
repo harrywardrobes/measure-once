@@ -12,7 +12,8 @@ export type GoogleMapsSurface =
   | 'customerInfo'
   | 'designVisit'
   | 'arrangeVisit'
-  | 'contactEdit';
+  | 'contactEdit'
+  | 'genericVisit';
 
 export interface GoogleMapsSurfaceFlags {
   autocomplete: boolean;
@@ -58,6 +59,7 @@ const DISABLED_CONFIG: GoogleMapsConfig = {
     designVisit: { autocomplete: true, mapPreview: true },
     arrangeVisit: { autocomplete: true, mapPreview: true },
     contactEdit: { autocomplete: true, mapPreview: true },
+    genericVisit: { autocomplete: true, mapPreview: false },
   },
   mapPreview: { enabled: true, zoom: 15, mapType: 'roadmap' },
   fallback: { mode: 'silent', allowManualEntry: true },
@@ -138,41 +140,73 @@ export function isMapPreviewEnabled(cfg: GoogleMapsConfig, surface: GoogleMapsSu
 let _scriptPromise: Promise<void> | null = null;
 
 /**
- * Inject the Google Maps JS API (`places` library) once. Resolves when
+ * Inject the Google Maps JS API bootstrap (v=weekly, loading=async) once, then
+ * call `google.maps.importLibrary('places')` to pull in the new Places API
+ * (`AutocompleteSuggestion`, `Place`, etc.). Resolves when
  * `google.maps.places` is available; rejects on load error or timeout so
  * callers can degrade gracefully.
  */
 export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<void> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
-  const w = window as unknown as { google?: { maps?: { places?: unknown } } };
+  const w = window as unknown as {
+    google?: { maps?: { places?: unknown; importLibrary?: (lib: string) => Promise<unknown> } };
+  };
   if (w.google?.maps?.places) return Promise.resolve();
   if (_scriptPromise) return _scriptPromise;
 
   _scriptPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.getElementById('google-maps-places-js');
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Places JS failed to load')));
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'google-maps-places-js';
-    script.async = true;
-    script.defer = true;
-    const params = new URLSearchParams({
-      key: apiKey,
-      libraries: 'places',
-      language,
-    });
-    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
     const timeout = window.setTimeout(() => {
       reject(new Error('Places JS load timed out'));
     }, 12000);
-    script.onload = () => {
-      window.clearTimeout(timeout);
-      if (w.google?.maps?.places) resolve();
-      else reject(new Error('Places library unavailable after load'));
+
+    const importPlaces = () => {
+      const importLibrary = w.google?.maps?.importLibrary;
+      if (typeof importLibrary !== 'function') {
+        window.clearTimeout(timeout);
+        _scriptPromise = null;
+        reject(new Error('Places library unavailable after load'));
+        return;
+      }
+      importLibrary('places')
+        .then(() => {
+          window.clearTimeout(timeout);
+          resolve();
+        })
+        .catch(() => {
+          window.clearTimeout(timeout);
+          _scriptPromise = null;
+          reject(new Error('Places library failed to import'));
+        });
     };
+
+    // If the Maps bootstrap is already loaded by another script tag, jump
+    // straight to importing the library.
+    if (w.google?.maps?.importLibrary) {
+      importPlaces();
+      return;
+    }
+
+    const existing = document.getElementById('google-maps-places-js');
+    if (existing) {
+      existing.addEventListener('load', importPlaces);
+      existing.addEventListener('error', () => {
+        window.clearTimeout(timeout);
+        reject(new Error('Places JS failed to load'));
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-maps-places-js';
+    script.async = true;
+    const params = new URLSearchParams({
+      key: apiKey,
+      v: 'weekly',
+      loading: 'async',
+      language,
+    });
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+    script.onload = importPlaces;
     script.onerror = () => {
       window.clearTimeout(timeout);
       _scriptPromise = null;
