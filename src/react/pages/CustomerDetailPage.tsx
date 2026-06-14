@@ -78,6 +78,7 @@ export function CustomerDetailPage() {
     nullLsLabel,
     lsLoaded,
     refreshLeadStatuses,
+    workflow,
   } = useWorkflowData();
   const contactId = getContactId();
   const now = useNowTick();
@@ -99,7 +100,6 @@ export function CustomerDetailPage() {
   const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
 
   const [selectedRoom, setSelectedRoom] = useState(0);
-  const [workflow,     setWorkflow]     = useState<{ stages?: Record<string, { label: string }> } | null>(null);
   const qb = useQBInvoices();
   useEffect(() => { qb.triggerLoad(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -290,7 +290,6 @@ export function CustomerDetailPage() {
         }
       } catch { /* noop */ }
 
-      apiFetch<{ stages?: Record<string, { label: string }> }>('/api/workflow').then(setWorkflow).catch(() => {});
       fetchDesignVisits();
       if (c.properties.email) fetchGoogleEmails(c.properties.email);
       fetchWhatsApp();

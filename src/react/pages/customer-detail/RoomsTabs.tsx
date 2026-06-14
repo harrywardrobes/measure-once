@@ -4,16 +4,13 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { Room, RoomComment, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
-
-interface Workflow {
-  stages?: Record<string, { label: string; statuses?: Array<{ id: string; label: string }> }>;
-}
+import { WorkflowDef } from '../../lib/workflowConfig';
 
 interface Props {
   contactId: string;
   rooms: Room[];
   notes: string;
-  workflow: Workflow | null;
+  workflow: WorkflowDef | null;
   selectedRoomIdx: number;
   onRoomsChange: (rooms: Room[]) => void;
   onNotesChange: (notes: string) => void;

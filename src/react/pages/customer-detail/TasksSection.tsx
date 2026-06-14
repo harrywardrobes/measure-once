@@ -12,14 +12,12 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 
-interface Workflow {
-  stages?: Record<string, { label: string }>;
-}
+import { WorkflowDef } from '../../lib/workflowConfig';
 
 interface Props {
   contactId: string;
   tasks: HubSpotTask[];
-  workflow: Workflow | null;
+  workflow: WorkflowDef | null;
   onTasksChange: (tasks: HubSpotTask[]) => void;
 }
 
