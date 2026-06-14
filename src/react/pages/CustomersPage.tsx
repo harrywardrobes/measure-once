@@ -760,6 +760,19 @@ function CustomerCard({
     [handler, hasDraft, draftVisitId, dispatchingAction, contact, name],
   );
 
+  // Reset link cache whenever a new upload link is generated or revoked for this contact.
+  useEffect(() => {
+    if (handler?.type !== 'upload_photos_and_info' || !isManagerOrAdmin) return;
+    const handleLinkGenerated = (e: Event) => {
+      const detail = (e as CustomEvent<{ contactId: string }>).detail;
+      if (detail?.contactId !== contact.id) return;
+      setLinkFetchState('idle');
+      setActiveLinkUrl(null);
+    };
+    window.addEventListener('customer-info-link-generated', handleLinkGenerated);
+    return () => window.removeEventListener('customer-info-link-generated', handleLinkGenerated);
+  }, [handler?.type, isManagerOrAdmin, contact.id]);
+
   // Fetch link-status lazily on first hover (upload_photos_and_info + manager/admin only).
   useEffect(() => {
     if (!stripHovered || handler?.type !== 'upload_photos_and_info' || !isManagerOrAdmin || linkFetchState !== 'idle') return;
