@@ -144,6 +144,14 @@ function ActiveLinkManagerDemo({ ctx }: { ctx: CardActionContext }) {
         });
       }
 
+      if (url.includes('/revoke-link') && method === 'POST') {
+        await new Promise(r => setTimeout(r, 400));
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       if (url.includes('/generate-link') && method === 'POST') {
         await new Promise(r => setTimeout(r, 600));
         return new Response(

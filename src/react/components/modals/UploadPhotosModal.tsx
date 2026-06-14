@@ -54,6 +54,7 @@ type Phase =
   | 'checking'
   | 'check-error'
   | 'confirming'
+  | 'revoking-confirm'
   | 'generating'
   | 'ready'
   | 'sent';
@@ -408,7 +409,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const title =
     phase === 'confirming'
       ? 'Active link exists'
-      : generatedLink?.isResend
+      : phase === 'revoking-confirm'
+        ? 'Revoke this link?'
+        : generatedLink?.isResend
         ? 'Resend photo upload link'
         : 'Send photo upload link';
 
@@ -473,6 +476,25 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             You can still proceed — this is just a heads-up. If the customer
             hasn't submitted yet, they'll need to use the new link instead.
+          </Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'revoking-confirm') {
+      const expiryNote = linkStatus?.expiresAt
+        ? ` It currently ${formatExpiry(linkStatus.expiresAt)}.`
+        : '';
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }} data-testid="cah-revoke-confirm">
+          <Alert severity="error" icon={<WarningAmberIcon fontSize="inherit" />}>
+            This will immediately invalidate{' '}
+            <strong>{ctx.contactName || 'this contact'}</strong>'s active link.
+            {expiryNote} The customer won't be able to use it any more, and this
+            can't be undone.
+          </Alert>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            You can always generate a new link afterwards if needed.
           </Typography>
         </Stack>
       );
@@ -591,12 +613,11 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             <DemoActionTooltip demo={demo}>
               <Button
                 color="error"
-                onClick={handleRevoke}
+                onClick={() => setPhase('revoking-confirm')}
                 disabled={revoking || demo}
-                startIcon={revoking ? <CircularProgress size={16} color="inherit" /> : undefined}
                 data-testid="cah-revoke-link"
               >
-                {revoking ? 'Revoking…' : 'Revoke link'}
+                Revoke link
               </Button>
             </DemoActionTooltip>
             <Button
@@ -643,6 +664,32 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
           >
             Generate new link
           </Button>
+        </>
+      );
+    }
+
+    if (phase === 'revoking-confirm') {
+      return (
+        <>
+          <Button
+            onClick={() => setPhase('confirming')}
+            disabled={revoking}
+            data-testid="cah-cancel-revoke-confirm"
+          >
+            Cancel
+          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              color="error"
+              variant="contained"
+              onClick={handleRevoke}
+              disabled={revoking || demo}
+              startIcon={revoking ? <CircularProgress size={16} color="inherit" /> : undefined}
+              data-testid="cah-revoke-confirm-action"
+            >
+              {revoking ? 'Revoking…' : 'Revoke link'}
+            </Button>
+          </DemoActionTooltip>
         </>
       );
     }
