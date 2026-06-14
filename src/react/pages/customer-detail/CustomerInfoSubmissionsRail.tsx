@@ -226,12 +226,15 @@ function ResendButton({
 }) {
   const [state, setState] = useState<ResendState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState<number | null>(null);
   const showToast = useToast();
   const cooldownTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   React.useEffect(() => {
     return () => {
       if (cooldownTimerRef.current !== null) clearTimeout(cooldownTimerRef.current);
+      if (countdownIntervalRef.current !== null) clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
@@ -257,7 +260,20 @@ function ResendButton({
             })();
           if (retryAfterSeconds !== null && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
             if (cooldownTimerRef.current !== null) clearTimeout(cooldownTimerRef.current);
+            if (countdownIntervalRef.current !== null) clearInterval(countdownIntervalRef.current);
+            setCooldownSecondsLeft(Math.ceil(retryAfterSeconds));
+            countdownIntervalRef.current = setInterval(() => {
+              setCooldownSecondsLeft(prev => {
+                if (prev === null || prev <= 1) {
+                  if (countdownIntervalRef.current !== null) clearInterval(countdownIntervalRef.current);
+                  return null;
+                }
+                return prev - 1;
+              });
+            }, 1000);
             cooldownTimerRef.current = setTimeout(() => {
+              if (countdownIntervalRef.current !== null) clearInterval(countdownIntervalRef.current);
+              setCooldownSecondsLeft(null);
               setState(prev => prev === 'cooldown' ? 'idle' : prev);
             }, retryAfterSeconds * 1000);
           }
@@ -318,7 +334,9 @@ function ResendButton({
           sx={{ fontSize: '0.75rem', py: 0.4 }}
           data-testid="resend-link-btn"
         >
-          {state === 'cooldown' ? 'On cooldown' : state === 'error' ? 'Retry' : 'Resend link'}
+          {state === 'cooldown'
+            ? (cooldownSecondsLeft !== null ? `On cooldown (${cooldownSecondsLeft}s)` : 'On cooldown')
+            : state === 'error' ? 'Retry' : 'Resend link'}
         </Button>
       </span>
     </Tooltip>
