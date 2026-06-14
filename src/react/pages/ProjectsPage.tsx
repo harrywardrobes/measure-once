@@ -1635,8 +1635,8 @@ export function ProjectsPage() {
       {/* Stage filter tabs */}
       <PageFilterBar
         sx={{
-          px: 2,
-          py: 1,
+          px: 0,
+          py: 1.5,
           bgcolor: 'background.default',
           borderBottom: '1px solid',
           borderColor: 'divider',
@@ -1648,6 +1648,7 @@ export function ProjectsPage() {
           onChange={setFilter}
           tabs={stageTabs}
           stageColors={STAGE_COLORS}
+          fullWidth
         />
       </PageFilterBar>
 

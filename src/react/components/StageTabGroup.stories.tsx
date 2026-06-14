@@ -101,7 +101,28 @@ export const ManyTabs: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'All pipeline stages at once — wraps onto a second line via `flexWrap: wrap`.',
+        story: 'All pipeline stages at once — scrolls horizontally on small viewports rather than wrapping.',
+      },
+    },
+  },
+};
+
+export const FullWidth: Story = {
+  args: {
+    value: 'sales',
+    tabs: [
+      { key: '__all__', label: 'All' },
+      ...Object.keys(STAGE_COLORS).map((k) => ({ key: k, label: k === 'designvisit' ? 'Design Visit' : k[0].toUpperCase() + k.slice(1) })),
+    ],
+    stageColors: STAGE_COLORS,
+    fullWidth: true,
+    onChange: () => {},
+  },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story: 'With `fullWidth=true`: tabs stretch equally to fill available width on md+ screens and scroll horizontally on mobile. Used on the Customers and Projects pages.',
       },
     },
   },

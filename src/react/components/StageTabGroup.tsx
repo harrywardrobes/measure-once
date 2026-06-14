@@ -23,6 +23,11 @@ export interface StageTabGroupProps {
    * back to the brand plum token.
    */
   stageColors?: Record<string, StageColorEntry>;
+  /**
+   * When true, tabs stretch equally to fill available width on md+ screens.
+   * On smaller viewports the group scrolls horizontally (no wrapping).
+   */
+  fullWidth?: boolean;
 }
 
 /**
@@ -37,14 +42,17 @@ export interface StageTabGroupProps {
  * `onChange`) so that clicking the already-active tab still fires the handler
  * — important for filter-change side-effects such as resetting the page to 1.
  */
-export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGroupProps) {
+export function StageTabGroup({ value, onChange, tabs, stageColors, fullWidth }: StageTabGroupProps) {
   return (
     <ToggleButtonGroup
-      size="small"
       exclusive
       value={value}
       aria-label="Stage filter"
-      sx={{ flexWrap: 'wrap' }}
+      sx={{
+        display: 'flex',
+        flexWrap: 'nowrap',
+        ...(fullWidth && { width: { md: '100%' } }),
+      }}
     >
       {tabs.map((t) => {
         const colour = stageColors?.[t.key] ?? null;
@@ -58,8 +66,20 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
             data-tab-key={t.key}
             value={t.key}
             onClick={() => onChange(t.key)}
-            sx={
-              selected
+            sx={{
+              whiteSpace: 'nowrap',
+              textTransform: 'none',
+              fontWeight: selected ? 600 : 500,
+              fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+              letterSpacing: 0,
+              py: { xs: 1, sm: 1.25 },
+              px: { xs: 1.5, sm: 2 },
+              lineHeight: 1.4,
+              ...(fullWidth && {
+                flex: { md: 1 },
+                minWidth: { xs: 'max-content', md: 0 },
+              }),
+              ...(selected
                 ? {
                     bgcolor: activeBg,
                     color: 'common.white',
@@ -71,8 +91,11 @@ export function StageTabGroup({ value, onChange, tabs, stageColors }: StageTabGr
                       '&:hover': { bgcolor: activeBg, opacity: 0.9 },
                     },
                   }
-                : undefined
-            }
+                : {
+                    color: 'text.secondary',
+                    '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+                  }),
+            }}
           >
             {t.label}
           </ToggleButton>
