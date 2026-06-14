@@ -598,6 +598,30 @@ router.get('/api/customer-info/by-contact/:contactId/link-status',
   }
 );
 
+// Authenticated: revoke (immediately expire) any active link for a contact.
+// Manager/admin only — same privilege tier that can receive the raw bearer URL.
+// POST /api/customer-info/by-contact/:contactId/revoke-link
+router.post('/api/customer-info/by-contact/:contactId/revoke-link',
+  isAuthenticated,
+  requirePrivilege('manager'),
+  async (req, res) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!cid || !/^\d+$/.test(cid)) {
+      return res.status(400).json({ error: 'Invalid contactId.' });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE customer_info_submissions
+       SET expires_at = NOW()
+       WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL`,
+      [cid]
+    );
+
+    logger.info(`[customer-info] Revoked ${rowCount} active link(s) for contact ${cid}`);
+    return res.json({ ok: true, revokedCount: rowCount });
+  }
+);
+
 // Authenticated: generate a customer link without sending email
 // POST /api/customer-info/by-contact/:contactId/generate-link
 router.post('/api/customer-info/by-contact/:contactId/generate-link',

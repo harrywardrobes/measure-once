@@ -125,6 +125,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const [checkError, setCheckError] = useState('');
   const [linkError, setLinkError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(false);
   const resendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -305,6 +306,26 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     }
   }
 
+  async function handleRevoke() {
+    if (demo) return;
+    setRevoking(true);
+    try {
+      const r = await fetch(
+        `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/revoke-link`,
+        { method: 'POST' }
+      );
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || d.message || 'Failed to revoke link');
+      broadcastCustomerInfoLinkChanged(ctx.contactId);
+      showToast('Link revoked — the customer can no longer use it', false);
+      handleClose();
+    } catch (e) {
+      showToast((e as Error).message || 'Could not revoke link', true);
+    } finally {
+      setRevoking(false);
+    }
+  }
+
   function handleManualUpload(url: string) {
     if (demo) return;
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -342,6 +363,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setCheckError('');
     setLinkStatus(null);
     setCopyAndClosing(false);
+    setRevoking(false);
     setResending(false);
     setResendCooldown(false);
     setSendCooldown(false);
@@ -533,6 +555,17 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         return (
           <>
             <Button onClick={handleClose} data-testid="cah-cancel-confirming">Cancel</Button>
+            <DemoActionTooltip demo={demo}>
+              <Button
+                color="error"
+                onClick={handleRevoke}
+                disabled={revoking || demo}
+                startIcon={revoking ? <CircularProgress size={16} color="inherit" /> : undefined}
+                data-testid="cah-revoke-link"
+              >
+                {revoking ? 'Revoking…' : 'Revoke link'}
+              </Button>
+            </DemoActionTooltip>
             <Button
               color="warning"
               onClick={() => generateLink(ctx.contactId)}
