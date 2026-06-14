@@ -1,0 +1,99 @@
+GOAL
+Make every modal/dialog/drawer/overlay in this app visually and structurally consistent by routing them all through ONE shared full-screen modal component. Today they're inconsistent: some are small centered MUI Dialogs (maxWidth="xs"/"sm"), some are right-anchored MUI Drawers, some are confirmation dialogs, and some have custom styling. I want a single source of truth so there is no repeated Dialog/Drawer boilerplate.
+
+TECH CONTEXT (already in this repo — do not change the stack)
+- React 18 + TypeScript + Vite
+- Material-UI (MUI) v9 with Emotion, theme in src/react/theme.ts
+- Action modals live in src/react/components/modals/ and are orchestrated by
+  src/react/components/CardActionModalsHost.tsx (registry pattern, lazy-loaded).
+- Some overlays live outside that host (see full list below).
+
+DESIRED BEHAVIOR (decided — implement exactly this)
+1. Create ONE reusable component: src/react/components/modals/FullScreenModal.tsx
+   - Built on MUI <Dialog>.
+   - Responsive sizing:
+       * On mobile/tablet (theme.breakpoints.down('md')): TRUE edge-to-edge full screen
+         (use the Dialog `fullScreen` prop driven by useMediaQuery).
+       * On desktop (md and up): a large CENTERED panel, NOT edge-to-edge. Use a fixed
+         large size, e.g. PaperProps/sx => width: 'min(960px, 92vw)', height: '92vh',
+         maxWidth: 'none', borderRadius: 2. The panel should feel large and consistent
+         across every modal regardless of how little content it holds.
+   - Transition: FADE in/out (MUI's default Fade — do NOT use Slide/SwipeableDrawer).
+   - Standard internal layout, provided by the shared component so callers never
+     re-implement it:
+       * A header bar: title on the left (string or node via a `title` prop) and a
+         close (X) IconButton on the right (calls onClose). Optional `headerActions` slot.
+       * A scrollable content region (children) that fills the available height.
+       * An optional sticky footer actions region via a `footer` prop (for primary/
+         secondary buttons), pinned to the bottom and always visible.
+   - Props (at minimum): open, onClose, title, children, footer?, headerActions?,
+     disableClose? (to block close while submitting), maxWidthOnDesktop? (optional override),
+     and pass-through for aria labelling. Keep MUI accessibility semantics (role="dialog",
+     focus trap, Escape-to-close unless disableClose).
+   - Add a matching Storybook story (FullScreenModal.stories.tsx) showing it with short
+     content and long/scrolling content, on mobile and desktop viewports.
+
+2. MIGRATE EVERY overlay below to use FullScreenModal. Replace the raw <Dialog>/<Drawer>
+   wrappers and their bespoke header/title/close/footer markup with the shared component.
+   PRESERVE all existing functionality exactly: multi-step state machines, form fields,
+   draft persistence (localStorage/sessionStorage keys), demo mode (DemoDialogTitle /
+   DemoActionTooltip), email-preview sections, discard guards, validation, and callbacks.
+   Only the OUTER shell changes — inner logic/markup stays.
+
+   Card-action modals (src/react/components/modals/, hosted by CardActionModalsHost):
+   - MessagePopupModal
+   - ScheduleVisitModal
+   - PhoneSummaryModal
+   - UploadPhotosModal
+   - ReviewCustomerPhotosDrawer  -> convert from right Drawer to FullScreenModal
+   - ArrangeVisitModal
+   - DepositInvoiceModal
+   - OpenDealActionModal
+   - ContactCustomerModal
+   - DesignVisitFollowupModal (note: it can nest ScheduleVisitModal — keep nesting working)
+   - DiscardConfirmDialog  -> ALSO full-screen (see note in #3)
+
+   Standalone overlays (elsewhere in src/react/components/...):
+   - ChangePasswordDialog
+   - NavCustomiseDialog
+   - ContactEditModal (pages/customer-detail/)
+   - GenericVisitEditModal
+   - InvoiceDetailDrawer  -> convert from right Drawer to FullScreenModal
+   - DesignVisitWizard (multi-step; keep its internal per-room photo-upload sub-overlay
+     working, but render that sub-overlay through FullScreenModal too)
+   - CommandPalette (keep its search behavior and Cmd/Ctrl+K bridge; just standardize the shell)
+   - AccessRequestGate (only when it renders as a dialog; leave its `embedded` inline mode as-is)
+   - ConflictsReview
+   - SyncPill's failed-sync dialog
+
+3. CONFIRMATION DIALOGS: make these full-screen too (you chose total consistency).
+   DiscardConfirmDialog and any inline confirm steps (e.g. "Schedule in the past?",
+   "no response" confirms, "not proceeding" confirms) should render through FullScreenModal
+   as well. For a simple yes/no, center the short content and put the buttons in the footer.
+
+4. REMOVE the now-dead per-modal boilerplate: direct imports of Dialog/DialogTitle/
+   DialogActions/DialogContent/Drawer and their wrapper markup, anchor="right",
+   PaperProps width hacks, maxWidth props, per-modal close buttons/headers — wherever they
+   are fully replaced by FullScreenModal. Keep DialogContent/DialogActions usage ONLY if
+   you choose to reuse them internally inside FullScreenModal itself.
+
+CONSTRAINTS
+- Do not change any business logic, API calls, draft keys, handler types, or the
+  CardActionModalsHost registry/dispatch mechanism. Lazy-loading must still work.
+- Keep the MUI theme and ScopedCssBaseline usage intact.
+- Keep ModalContactHeader and the demo-mode utilities working inside the migrated modals.
+- Maintain accessibility (focus trap, aria-labelledby from the title, Escape to close
+  except while submitting).
+
+VERIFY BEFORE FINISHING
+- Run the test suite (vitest) and Storybook build; fix anything the refactor broke.
+- Update/adjust existing .stories.tsx and .test.tsx files that referenced the old
+  Dialog/Drawer structure so they target the new shared shell.
+- Manually confirm: open each modal on a narrow (mobile) and wide (desktop) viewport —
+  mobile is edge-to-edge full screen, desktop is a large centered fading panel, every
+  modal looks identical in chrome, and every flow (submit, multi-step, discard guard,
+  drafts, demo mode) still works.
+
+DELIVERABLE
+A single FullScreenModal component used by every overlay listed above, with all the
+old bespoke modal/drawer shells removed, tests/stories green.
