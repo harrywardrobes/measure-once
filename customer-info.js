@@ -485,13 +485,19 @@ function clearStaffSendCooldown(contactId) {
 // Map: contactId (string) → timestamp of last successful resend (ms).
 const _staffResendCooldown = new Map();
 const STAFF_RESEND_COOLDOWN_MS = 10 * 1000;
+/**
+ * Returns { allowed: true } when the caller may proceed, or
+ * { allowed: false, remainingMs: number } when the cooldown is still active.
+ */
 function checkStaffResendCooldown(contactId) {
   const now = Date.now();
   const last = _staffResendCooldown.get(contactId);
-  if (last !== undefined && now - last < STAFF_RESEND_COOLDOWN_MS) return false;
+  if (last !== undefined && now - last < STAFF_RESEND_COOLDOWN_MS) {
+    return { allowed: false, remainingMs: STAFF_RESEND_COOLDOWN_MS - (now - last) };
+  }
   // Stamp now to block concurrent duplicate requests; clear on failure so retries are allowed.
   _staffResendCooldown.set(contactId, now);
-  return true;
+  return { allowed: true };
 }
 function clearStaffResendCooldown(contactId) {
   _staffResendCooldown.delete(contactId);
@@ -1270,8 +1276,14 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
       return res.status(400).json({ error: 'Invalid contactId.' });
     }
 
-    if (!checkStaffResendCooldown(cid)) {
-      return res.status(429).json({ error: 'Re-send cooldown active — please wait a moment before trying again.' });
+    const resendCooldownCheck = checkStaffResendCooldown(cid);
+    if (!resendCooldownCheck.allowed) {
+      const retryAfterSeconds = Math.ceil(resendCooldownCheck.remainingMs / 1000);
+      res.set('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({
+        error: 'Re-send cooldown active — please wait a moment before trying again.',
+        retryAfterSeconds,
+      });
     }
 
     const preToken = req.body && typeof req.body.token === 'string' ? req.body.token : null;

@@ -227,6 +227,13 @@ function ResendButton({
   const [state, setState] = useState<ResendState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const showToast = useToast();
+  const cooldownTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current !== null) clearTimeout(cooldownTimerRef.current);
+    };
+  }, []);
 
   async function handleResend() {
     setState('loading');
@@ -242,6 +249,18 @@ function ResendButton({
         if (r.status === 429) {
           setState('cooldown');
           showToast('Email sent recently — please wait before re-sending', true);
+          const retryAfterSeconds =
+            (body as { retryAfterSeconds?: number }).retryAfterSeconds
+            ?? (() => {
+              const header = r.headers.get('Retry-After');
+              return header ? parseInt(header, 10) : null;
+            })();
+          if (retryAfterSeconds !== null && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+            if (cooldownTimerRef.current !== null) clearTimeout(cooldownTimerRef.current);
+            cooldownTimerRef.current = setTimeout(() => {
+              setState(prev => prev === 'cooldown' ? 'idle' : prev);
+            }, retryAfterSeconds * 1000);
+          }
         } else {
           setErrorMsg(msg);
           setState('error');
