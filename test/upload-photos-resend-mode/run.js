@@ -378,8 +378,7 @@ async function readModal(page, primaryTestId = 'cah-primary') {
  */
 async function closeModal(page) {
   await page.evaluate(() => {
-    const cancelBtn = Array.from(document.querySelectorAll('[data-testid="upload-photos-dialog"] button'))
-      .find(b => b.textContent.trim() === 'Cancel');
+    const cancelBtn = document.querySelector('[data-testid="upload-photos-dialog"] [data-testid="cah-cancel"]');
     if (cancelBtn) cancelBtn.click();
   });
   // Wait for dialog to unmount.

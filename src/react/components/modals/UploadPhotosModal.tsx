@@ -503,13 +503,13 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
 
   function renderActions() {
     if (phase === 'checking') {
-      return <Button onClick={handleClose}>Cancel</Button>;
+      return <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>;
     }
 
     if (phase === 'check-error') {
       return (
         <>
-          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
           <Button onClick={() => {
             const controller = new AbortController();
             checkStatus(ctx.contactId, controller.signal);
@@ -582,7 +582,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     }
 
     if (phase === 'generating') {
-      return <Button onClick={handleClose}>Cancel</Button>;
+      return <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>;
     }
 
     if (phase === 'sent') {
@@ -593,7 +593,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     const sendLabel = generatedLink?.isResend ? 'Resend email' : 'Send email';
     return (
       <>
-        <Button onClick={handleClose} disabled={submitting || copyAndClosing}>Cancel</Button>
+        <Button onClick={handleClose} disabled={submitting || copyAndClosing} data-testid="cah-cancel">Cancel</Button>
         {generatedLink?.formLink && !linkError && (
           <>
             <Button
