@@ -12,11 +12,10 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { POST } from '../../utils/api';
+import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
-import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useAuth } from '../../contexts/AuthContext';
@@ -232,7 +231,12 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       closeNotePanel();
       broadcastContactAttemptLogged(contactId);
     } catch (e) {
-      setSubmitError((e as Error).message || 'Could not save attempt.');
+      const err = e as ApiError;
+      if (err.status === 400) {
+        setSubmitError(err.message || 'Please check your input and try again.');
+      } else {
+        setSubmitError('Something went wrong on our end. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
