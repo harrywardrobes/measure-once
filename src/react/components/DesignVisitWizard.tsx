@@ -166,10 +166,17 @@ function clearDraft(key: string) {
 }
 
 /**
- * Reads the current sessionStorage draft and extracts every image storageKey
- * found in the rooms list.  Used on wizard open to find uploads from a
- * previous session that ended abruptly (crash, hard-close, forced reload) so
+ * Reads the current sessionStorage draft and extracts every *opaque* image
+ * storageKey found in the rooms list.  Used on wizard open to find uploads from
+ * a previous session that ended abruptly (crash, hard-close, forced reload) so
  * they can be deleted before the wizard starts fresh.
+ *
+ * Inline `data:` URIs (photos captured offline / on a failed upload) are skipped
+ * deliberately: they live only in the draft, were never registered for upload
+ * cleanup (`onNewUpload` fires for opaque keys only), and are not valid object
+ * keys — sending one to the DELETE endpoint would push a multi-MB string into
+ * the URL path.  Excluding them also lets an interrupted offline draft restore
+ * cleanly instead of being wiped.
  */
 function extractOrphanedDraftKeys(key: string): string[] {
   try {
@@ -178,7 +185,7 @@ function extractOrphanedDraftKeys(key: string): string[] {
     const draft = JSON.parse(raw) as { rooms?: RoomData[] };
     return (draft.rooms || [])
       .flatMap(r => (r.images || []).map(img => img.storageKey))
-      .filter((k): k is string => typeof k === 'string' && k.length > 0);
+      .filter((k): k is string => typeof k === 'string' && k.length > 0 && !k.startsWith('data:'));
   } catch {
     return [];
   }

@@ -47,12 +47,6 @@ export interface DesignVisitRoomsStepProps {
   /** Called with a storage key when a photo is removed (the DELETE is already fired by the step). */
   onImageRemoved?: (storageKey: string) => void;
   /**
-   * localStorage key for draft persistence. When provided (new-visit mode only),
-   * room data (excluding images) is saved on every change and restored on mount
-   * if a draft exists. Cleared by the caller on successful submit.
-   */
-  draftKey?: string;
-  /**
    * When true the step runs in read-only demo mode: photo upload and delete
    * API calls are suppressed.  The upload control is hidden so the admin can
    * see the rooms form layout without accidentally triggering writes.
@@ -99,28 +93,6 @@ function toPublic(rooms: InternalRoom[]): RoomData[] {
   return rooms.map(r => r.data);
 }
 
-function readRoomsDraft(draftKey: string): InternalRoom[] | null {
-  try {
-    const raw = localStorage.getItem(draftKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<RoomData>[];
-    if (!Array.isArray(parsed) || !parsed.length) return null;
-    return parsed.map(r => makeInternalRoom({ ...r, images: [] }));
-  } catch {
-    return null;
-  }
-}
-
-function saveRoomsDraft(draftKey: string, rooms: InternalRoom[]): void {
-  try {
-    const data = rooms.map(r => {
-      const { images: _images, ...rest } = r.data;
-      return rest;
-    });
-    localStorage.setItem(draftKey, JSON.stringify(data));
-  } catch {}
-}
-
 export function DesignVisitRoomsStep({
   initialRooms,
   doorStyles,
@@ -128,14 +100,9 @@ export function DesignVisitRoomsStep({
   onUploadingChange,
   onNewUpload,
   onImageRemoved,
-  draftKey,
   demo,
 }: DesignVisitRoomsStepProps) {
   const [rooms, setRooms] = useState<InternalRoom[]>(() => {
-    if (draftKey) {
-      const draft = readRoomsDraft(draftKey);
-      if (draft) return draft;
-    }
     const src = initialRooms.length ? initialRooms : [{}];
     return src.map(r => makeInternalRoom({ ...r, images: (r as RoomData).images ?? [] }));
   });
@@ -160,14 +127,6 @@ export function DesignVisitRoomsStep({
     const anyUploading = Object.values(uploadStatusById).some(s => s === 'uploading');
     onUploadingChangeRef.current?.(anyUploading);
   }, [uploadStatusById]);
-
-  const draftKeyRef = useRef(draftKey);
-  useEffect(() => { draftKeyRef.current = draftKey; }, [draftKey]);
-
-  useEffect(() => {
-    if (!draftKeyRef.current) return;
-    saveRoomsDraft(draftKeyRef.current, rooms);
-  }, [rooms]);
 
   function updateRoomData(clientId: string, patch: Partial<RoomData>) {
     setRooms(prev =>
