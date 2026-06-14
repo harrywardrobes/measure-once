@@ -50,6 +50,7 @@ import {
 import type { ActionOutcome } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
+import { useWorkflow } from '../../hooks/useWorkflow';
 import { STAGE_COLORS } from '../../theme';
 import { resolveActionLabel } from '../../utils/resolveActionLabel.mjs';
 import { DEMO_CONTACT } from '../../components/modals/demoData';
@@ -1124,8 +1125,25 @@ export function WorkflowPage() {
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
-  const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
   const [loading,        setLoading]        = useState(true);
+
+  const { workflow } = useWorkflow();
+  const workflowStages = React.useMemo(() => {
+    const wfDef: WorkflowDef = (workflow && typeof workflow === 'object' && workflow.stages) ? workflow : DEFAULT_WORKFLOW;
+    const stageEntries = Object.entries(wfDef.stages ?? {}).map(([key, val]: [string, WorkflowStage]) => ({
+      key,
+      label: val.label ?? key,
+    }));
+    // Enforce canonical sales→aftercare order; unknown stages fall to the end.
+    stageEntries.sort((a, b) => {
+      const ai = CANONICAL_STAGE_ORDER.indexOf(a.key);
+      const bi = CANONICAL_STAGE_ORDER.indexOf(b.key);
+      const an = ai === -1 ? 9999 : ai;
+      const bn = bi === -1 ? 9999 : bi;
+      return an - bn;
+    });
+    return stageEntries;
+  }, [workflow]);
   const [refreshing,     setRefreshing]     = useState(false);
   const [lastRefreshed,  setLastRefreshed]  = useState<Date | null>(null);
   const [error,          setError]          = useState<string | null>(null);
@@ -1154,12 +1172,11 @@ export function WorkflowPage() {
     }
     setError(null);
     try {
-      const [lbl, sta, hdl, tpl, wf] = await Promise.all([
+      const [lbl, sta, hdl, tpl] = await Promise.all([
         GET<CALabel[]>('/api/admin/stage-action-labels'),
         GET<LeadStatus[]>('/api/admin/lead-statuses'),
         GET<Handler[]>('/api/admin/card-action-handlers'),
         GET<EmailTemplate[]>('/api/admin/email-templates'),
-        GET<WorkflowDef | null>('/api/workflow'),
       ]);
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const newHandlers = safeArr<Handler>(hdl);
@@ -1191,21 +1208,6 @@ export function WorkflowPage() {
       setStatuses(safeArr(sta));
       setHandlers(newHandlers);
       setEmailTemplates(safeArr(tpl));
-
-      const wfDef: WorkflowDef = (wf && typeof wf === 'object' && wf.stages) ? wf : DEFAULT_WORKFLOW;
-      const stageEntries = Object.entries(wfDef.stages ?? {}).map(([key, val]: [string, WorkflowStage]) => ({
-        key,
-        label: val.label ?? key,
-      }));
-      // Enforce canonical sales→aftercare order; unknown stages fall to the end.
-      stageEntries.sort((a, b) => {
-        const ai = CANONICAL_STAGE_ORDER.indexOf(a.key);
-        const bi = CANONICAL_STAGE_ORDER.indexOf(b.key);
-        const an = ai === -1 ? 9999 : ai;
-        const bn = bi === -1 ? 9999 : bi;
-        return an - bn;
-      });
-      setWorkflowStages(stageEntries);
       setLastRefreshed(new Date());
     } catch (e) {
       setError((e as Error).message || 'Failed to load workflow data.');

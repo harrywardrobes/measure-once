@@ -17,7 +17,8 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, DELETE } from '../../utils/api';
 import { STATUS_COLORS } from '../../theme';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { DEFAULT_WORKFLOW, WorkflowDef } from '../../lib/workflowConfig';
+import { DEFAULT_WORKFLOW } from '../../lib/workflowConfig';
+import { useWorkflow } from '../../hooks/useWorkflow';
 
 interface HubStatus {
   connected: boolean;
@@ -77,7 +78,7 @@ const TD: React.CSSProperties = {
 };
 
 function PipelineStagesCard() {
-  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
+  const { workflow } = useWorkflow();
   const [statusCountByStage, setStatusCountByStage] = React.useState<Map<string, number>>(new Map());
   const [loading, setLoading] = React.useState(true);
 
@@ -85,19 +86,15 @@ function PipelineStagesCard() {
     let cancelled = false;
     async function load() {
       try {
-        const [wfRes, statuses] = await Promise.all([
-          fetch('/api/workflow').then(r => r.ok ? r.json().catch(() => null) : null) as Promise<WorkflowDef | null>,
-          GET<Array<{ stage: string | null; is_null_row: boolean }>>('/api/admin/lead-statuses'),
-        ]);
+        const statuses = await GET<Array<{ stage: string | null; is_null_row: boolean }>>('/api/admin/lead-statuses');
         if (cancelled) return;
-        setWorkflow(wfRes || DEFAULT_WORKFLOW);
         const counts = new Map<string, number>();
         for (const s of (Array.isArray(statuses) ? statuses : [])) {
           if (!s.is_null_row && s.stage) counts.set(s.stage, (counts.get(s.stage) ?? 0) + 1);
         }
         setStatusCountByStage(counts);
       } catch {
-        if (!cancelled) setWorkflow(DEFAULT_WORKFLOW);
+        /* ignore */
       } finally {
         if (!cancelled) setLoading(false);
       }

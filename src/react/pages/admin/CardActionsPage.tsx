@@ -13,7 +13,8 @@ import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
-import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
+import { DEFAULT_WORKFLOW, WorkflowStage } from '../../lib/workflowConfig';
+import { useWorkflow } from '../../hooks/useWorkflow';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -165,11 +166,19 @@ function HandlerBadges({
 export function CardActionsPage() {
   usePageTitle('Card Actions · Measure Once');
   const showToast = useToast();
+  const { workflow } = useWorkflow();
   const [labels,         setLabels]         = useState<CALabel[]>([]);
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);
   const [handlers,       setHandlers]       = useState<Handler[]>([]);
-  const [workflowStages, setWorkflowStages] = useState<Array<{ key: string; label: string }>>([]);
   const [loading,       setLoading]       = useState(true);
+
+  const workflowStages = React.useMemo(() => {
+    const rawStages = (workflow ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
+    return Object.entries(rawStages).map(([key, data]) => ({
+      key,
+      label: (data as WorkflowStage).label ?? key,
+    }));
+  }, [workflow]);
   const [reloadKey,     setReloadKey]     = useState(0);
   const [resolvedSlots, setResolvedSlots] = useState<Set<string>>(new Set());
 
@@ -188,19 +197,12 @@ export function CardActionsPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [wfl, lbl, sta, hdl] = await Promise.all([
-        GET('/api/workflow'),
+      const [lbl, sta, hdl] = await Promise.all([
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers'),
-      ]) as [WorkflowDef | null, CALabel[], LeadStatus[], Handler[]];
+      ]) as [CALabel[], LeadStatus[], Handler[]];
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
-      const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
-      const stages = Object.entries(rawStages).map(([key, data]) => ({
-        key,
-        label: (data as WorkflowStage).label ?? key,
-      }));
-      setWorkflowStages(stages);
       setLabels(safeArr(lbl));
       setStatuses(safeArr(sta));
       setHandlers(safeArr(hdl));

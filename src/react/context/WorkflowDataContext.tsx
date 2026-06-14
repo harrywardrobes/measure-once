@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { DEFAULT_WORKFLOW, WorkflowDef } from '../lib/workflowConfig';
+import { WorkflowDef, fetchWorkflowCached } from '../lib/workflowConfig';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -148,23 +148,9 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const fetchWorkflow = useCallback(async (): Promise<void> => {
-    try {
-      const r = await fetch('/api/workflow');
-      if (!r.ok) return;
-      const saved = await r.json().catch(() => null) as WorkflowDef | null;
-      const wf: WorkflowDef = saved || DEFAULT_WORKFLOW;
-      // Normalise legacy tasks → statuses
-      if (wf.stages) {
-        for (const stage of Object.values(wf.stages)) {
-          if (stage.tasks && !stage.statuses) {
-            stage.statuses = stage.tasks.map((t, i) => ({ id: `task_${i}`, label: t, hint: '' }));
-          }
-        }
-      }
-      setWorkflow(wf);
-    } catch (e) {
-      console.warn('[WorkflowDataContext] workflow fetch error:', (e as Error).message);
-    }
+    // Shared module-level cache dedupes this with any admin tabs on the page.
+    const wf = await fetchWorkflowCached();
+    if (wf) setWorkflow(wf);
   }, []);
 
   // ── Initial load ─────────────────────────────────────────────────────────

@@ -49,7 +49,8 @@ import type {
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
-import { DEFAULT_WORKFLOW, WorkflowDef, WorkflowStage } from '../../lib/workflowConfig';
+import { DEFAULT_WORKFLOW, WorkflowStage } from '../../lib/workflowConfig';
+import { useWorkflow } from '../../hooks/useWorkflow';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1029,6 +1030,16 @@ interface ConflictResolverOpenState { stageKey: string | null; statusKey: string
 export function ActionHandlersPage() {
   usePageTitle('Action Handlers · Measure Once');
   const toast = useToast();
+  const { workflow } = useWorkflow();
+  // Keep the module-level cache in sync so _buildActionSlotGroups() (called
+  // during render below) sees the current workflow stages.
+  _workflowStagesRef.current = React.useMemo(() => {
+    const rawStages = (workflow ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
+    return Object.entries(rawStages).map(([key, data]) => ({
+      key,
+      label: (data as WorkflowStage).label ?? key,
+    }));
+  }, [workflow]);
   const [handlers,              setHandlers]              = useState<Handler[]>([]);
   const [labels,                setLabels]                = useState<CALabel[]>([]);
   const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
@@ -1067,15 +1078,14 @@ export function ActionHandlersPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [wfl, hdl, lbl, sta, cfl, orp, tpl] = await Promise.all([
-        GET('/api/workflow'),
+      const [hdl, lbl, sta, cfl, orp, tpl] = await Promise.all([
         GET('/api/admin/card-action-handlers'),
         GET('/api/admin/stage-action-labels'),
         GET('/api/admin/lead-statuses'),
         GET('/api/admin/card-action-handlers/conflicts'),
         GET('/api/admin/card-action-handlers/orphaned'),
         GET('/api/admin/email-templates'),
-      ]) as [WorkflowDef | null, Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }, EmailTemplate[]];
+      ]) as [Handler[], CALabel[], LeadStatus[], ConflictData, { count: number }, EmailTemplate[]];
 
       const safeArr = <T,>(x: unknown): T[] => Array.isArray(x) ? x as T[] : [];
       const h  = safeArr<Handler>(hdl);
@@ -1087,12 +1097,6 @@ export function ActionHandlersPage() {
         : { total: 0, conflicts: [] };
       const orphCount = (orp && typeof orp === 'object') ? (Number((orp as { count: number }).count) || 0) : 0;
 
-      const rawStages = (wfl ?? DEFAULT_WORKFLOW).stages ?? DEFAULT_WORKFLOW.stages!;
-      const wfStages = Object.entries(rawStages).map(([key, data]) => ({
-        key,
-        label: (data as WorkflowStage).label ?? key,
-      }));
-
       setHandlers(h);
       setLabels(lb);
       setStatuses(st);
@@ -1103,7 +1107,6 @@ export function ActionHandlersPage() {
       _labelsRef.current          = lb;
       _statusesRef.current        = st;
       _emailTemplatesRef.current  = et;
-      _workflowStagesRef.current  = wfStages;
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
