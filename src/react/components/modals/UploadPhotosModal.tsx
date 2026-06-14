@@ -18,6 +18,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
+import { broadcastCustomerInfoLinkChanged } from '../../utils/broadcastCustomerInfoLink';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoDialogTitle, DemoActionTooltip } from './demoMode';
@@ -155,9 +156,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         if (controller.signal.aborted) return;
         setGeneratedLink(data);
         setPhase('ready');
-        window.dispatchEvent(
-          new CustomEvent('customer-info-link-generated', { detail: { contactId } })
-        );
+        broadcastCustomerInfoLinkChanged(contactId);
       })
       .catch(e => {
         if ((e as Error).name === 'AbortError') return;

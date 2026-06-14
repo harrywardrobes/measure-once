@@ -24,6 +24,7 @@ import WifiOffIcon from '@mui/icons-material/WifiOff';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useToast } from '../../contexts/ToastContext';
+import { subscribeCustomerInfoLinkChanged } from '../../utils/broadcastCustomerInfoLink';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
@@ -1047,14 +1048,9 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   }, [loadSubmissions]);
 
   useEffect(() => {
-    function handleLinkGenerated(e: Event) {
-      const detail = (e as CustomEvent<{ contactId: string }>).detail;
-      if (detail?.contactId === contactId) {
-        loadSubmissions();
-      }
-    }
-    window.addEventListener('customer-info-link-generated', handleLinkGenerated);
-    return () => window.removeEventListener('customer-info-link-generated', handleLinkGenerated);
+    return subscribeCustomerInfoLinkChanged((id) => {
+      if (id === contactId) loadSubmissions();
+    });
   }, [contactId, loadSubmissions]);
 
   // Deep-link support: a photo conflict's "Open record" link can carry a

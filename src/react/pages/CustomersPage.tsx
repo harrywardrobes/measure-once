@@ -4,6 +4,7 @@ import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } fr
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { subscribeCustomerInfoLinkChanged } from '../utils/broadcastCustomerInfoLink';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -760,17 +761,15 @@ function CustomerCard({
     [handler, hasDraft, draftVisitId, dispatchingAction, contact, name],
   );
 
-  // Reset link cache whenever a new upload link is generated or revoked for this contact.
+  // Reset link cache whenever a new upload link is generated or revoked for this contact,
+  // including changes originating in other browser tabs (via BroadcastChannel).
   useEffect(() => {
     if (handler?.type !== 'upload_photos_and_info' || !isManagerOrAdmin) return;
-    const handleLinkGenerated = (e: Event) => {
-      const detail = (e as CustomEvent<{ contactId: string }>).detail;
-      if (detail?.contactId !== contact.id) return;
+    return subscribeCustomerInfoLinkChanged((contactId) => {
+      if (contactId !== contact.id) return;
       setLinkFetchState('idle');
       setActiveLinkUrl(null);
-    };
-    window.addEventListener('customer-info-link-generated', handleLinkGenerated);
-    return () => window.removeEventListener('customer-info-link-generated', handleLinkGenerated);
+    });
   }, [handler?.type, isManagerOrAdmin, contact.id]);
 
   // Fetch link-status lazily on first hover (upload_photos_and_info + manager/admin only).
