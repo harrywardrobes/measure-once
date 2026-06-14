@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_PRIORITY_FIRST } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
@@ -31,6 +31,7 @@ import {
   DialogTitle,
   FormControl,
   Grid,
+  IconButton,
   InputAdornment,
   Select,
   Skeleton,
@@ -48,6 +49,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { useCardActionHandlers, type CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import { useOfflineContactEntries } from '../hooks/useOfflineContactEntries';
 import { SyncStatePill } from '../components/SyncStatePill';
@@ -663,6 +666,19 @@ function CustomerCard({
   // ── Action strip ─────────────────────────────────────────────────────────────
   const [dispatchingAction, setDispatchingAction] = useState(false);
 
+  // ── Inline copy-link for upload_photos_and_info (manager/admin only) ─────────
+  const { isManager, isAdmin } = usePrivilege();
+  const isManagerOrAdmin = isManager || isAdmin;
+  const [stripHovered, setStripHovered] = useState(false);
+  const [activeLinkUrl, setActiveLinkUrl] = useState<string | null>(null);
+  const [linkFetchState, setLinkFetchState] = useState<'idle' | 'fetching' | 'done'>('idle');
+  const [copyDone, setCopyDone] = useState(false);
+  const copyDoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyDoneTimerRef.current) clearTimeout(copyDoneTimerRef.current);
+  }, []);
+
   // Queue entry ids for this contact's failed status/archive writes; drives the
   // inline Retry / Discard recovery strip below the card.
   const failedIds: number[] = syncFailedIds ?? [];
@@ -744,6 +760,40 @@ function CustomerCard({
     [handler, hasDraft, draftVisitId, dispatchingAction, contact, name],
   );
 
+  // Fetch link-status lazily on first hover (upload_photos_and_info + manager/admin only).
+  useEffect(() => {
+    if (!stripHovered || handler?.type !== 'upload_photos_and_info' || !isManagerOrAdmin || linkFetchState !== 'idle') return;
+    setLinkFetchState('fetching');
+    const controller = new AbortController();
+    fetch(`/api/customer-info/by-contact/${encodeURIComponent(contact.id)}/link-status`, {
+      signal: controller.signal,
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((status: { hasActiveLink: boolean; formLink?: string }) => {
+        if (controller.signal.aborted) return;
+        setActiveLinkUrl(status.hasActiveLink && status.formLink ? status.formLink : null);
+        setLinkFetchState('done');
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setLinkFetchState('done');
+      });
+    return () => { controller.abort(); };
+  }, [stripHovered, handler?.type, isManagerOrAdmin, linkFetchState, contact.id]);
+
+  const handleCopyLink = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!activeLinkUrl) return;
+    navigator.clipboard.writeText(activeLinkUrl).then(() => {
+      setCopyDone(true);
+      if (copyDoneTimerRef.current) clearTimeout(copyDoneTimerRef.current);
+      copyDoneTimerRef.current = setTimeout(() => setCopyDone(false), 1500);
+    }).catch(() => {});
+  }, [activeLinkUrl]);
+
+  const showCopyButton = (stripHovered || copyDone) && activeLinkUrl !== null;
+
   return (
     <Card data-testid="customer-card" variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden' }}>
       <CardActionArea
@@ -821,6 +871,8 @@ function CustomerCard({
         tabIndex={handler ? -1 : undefined}
         title={handler ? (actionLabel || 'Run action') : undefined}
         onClick={handler ? handleActionClick : undefined}
+        onMouseEnter={handler ? () => setStripHovered(true) : undefined}
+        onMouseLeave={handler ? () => setStripHovered(false) : undefined}
         sx={{
           display: 'flex',
           alignItems: 'center',
@@ -861,7 +913,27 @@ function CustomerCard({
         {handler && (dispatchingAction ? (
           <CircularProgress size={12} sx={{ color: actionTextColor }} />
         ) : (
-          <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+            {showCopyButton && (
+              <Tooltip
+                title={copyDone ? 'Copied!' : 'Copy link'}
+                placement="top"
+                open={copyDone || undefined}
+              >
+                <IconButton
+                  size="small"
+                  onClick={handleCopyLink}
+                  aria-label="Copy upload link"
+                  sx={{ p: '2px', color: actionTextColor, opacity: 0.75, '&:hover': { opacity: 1 } }}
+                >
+                  {copyDone
+                    ? <CheckIcon sx={{ fontSize: 14 }} />
+                    : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+                </IconButton>
+              </Tooltip>
+            )}
+            <ChevronRightIcon sx={{ fontSize: 15, color: actionTextColor, flexShrink: 0 }} />
+          </Box>
         ))}
       </Box>
 
