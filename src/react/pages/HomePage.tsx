@@ -20,6 +20,8 @@ import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { readRecords } from '../lib/offlineDb';
+import { WorkflowDef } from '../lib/workflowConfig';
+import { useWorkflowData } from '../context/WorkflowDataContext';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
@@ -41,7 +43,6 @@ type Contact = {
   };
 };
 type Room = { room?: string; stageKey?: string; roomStatus?: string };
-type WorkflowDef = { stages?: Record<string, { label?: string }> };
 
 /**
  * Parse a contact's own cached `measure_once_rooms` property into Room pills.
@@ -525,11 +526,12 @@ export function HomePage(): React.ReactElement {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const { workflow } = useWorkflowData();
+
   const [projectsLoading, setProjectsLoading] = React.useState(true);
   const [projectsError, setProjectsError] = React.useState(false);
   const [contacts, setContacts] = React.useState<Contact[]>([]);
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
-  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
 
   const loadTasks = React.useCallback(() => {
     setTasksLoading(true);
@@ -544,7 +546,6 @@ export function HomePage(): React.ReactElement {
     setProjectsError(false);
     let contactsFailed = false;
     Promise.all([
-      jget<WorkflowDef>('/api/workflow').catch(() => ({} as WorkflowDef)),
       jget<{ results?: Contact[] }>('/api/contacts-all?page=1&limit=100').catch(
         () => {
           contactsFailed = true;
@@ -555,7 +556,7 @@ export function HomePage(): React.ReactElement {
         () => ({} as Record<string, Room[]>),
       ),
     ])
-      .then(async ([wf, contactsResp, localdata]) => {
+      .then(async ([contactsResp, localdata]) => {
         let list = contactsResp?.results || [];
         // Offline fallback: if the live contacts fetch failed, fall back to the
         // customers list cached by the Customers page (IndexedDB). When we can
@@ -582,7 +583,6 @@ export function HomePage(): React.ReactElement {
             if (parsed.length > 0) merged[c.id] = parsed;
           }
         }
-        setWorkflow(wf || null);
         setContacts(list);
         setRoomsByContact(merged);
         setProjectsError(contactsFailed);

@@ -177,11 +177,11 @@ const MOUNTS: Array<{
   { id: 'app-bottom-bar-mount',  render: () => <BottomActionBar /> },                    // chrome-global
   { id: 'command-palette-mount', render: () => <CommandPalette />, fallback: <></> },    // chrome-global
   { id: 'trades-view',          render: () => <TradesPage /> },
-  { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton /> },
+  { id: 'home-view',            render: () => <HomePage />,     fallback: <HomePageSkeleton />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'profile-view',         render: () => <ProfilePage />,  fallback: <ProfilePageSkeleton /> },
   { id: 'admin-grouped-tabs-mount', render: () => <AdminGroupedTabsBar /> },
   { id: 'tab-search',           render: () => <SearchSettingsPage /> },
-  { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton /> },
+  { id: 'tab-customers',        render: () => <CustomersPage />, fallback: <CustomersPageSkeleton />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'tab-team',             render: () => <AdminTeamPage />, fallback: <AdminTeamPageSkeleton /> },
   { id: 'tab-permissions',      render: () => <AdminPermissionsPage />, fallback: <AdminPermissionsPageSkeleton /> },
   { id: 'tab-requests',         render: () => <AdminRequestsPage />,   fallback: <AdminRequestsPageSkeleton /> },

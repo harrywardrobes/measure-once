@@ -64,6 +64,8 @@ import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useNowTick } from '../hooks/useNowTick';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
+import { WorkflowDef } from '../lib/workflowConfig';
+import { useWorkflowData } from '../context/WorkflowDataContext';
 
 type LeadStatus = {
   key: string;
@@ -129,10 +131,6 @@ type Room = {
   room?: string;
   stageKey?: string;
   roomStatus?: string;
-};
-
-type WorkflowDef = {
-  stages?: Record<string, { label?: string }>;
 };
 
 // Fallback stage labels (matches STAGE_COLOURS in workflow-core.js — kept
@@ -1018,7 +1016,7 @@ export function CustomersPage(): React.ReactElement {
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
-  const [workflow, setWorkflow] = React.useState<WorkflowDef | null>(null);
+  const { workflow } = useWorkflowData();
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
   const { loading: qbLoading, statusKnown: qbStatusKnown, invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
@@ -1373,18 +1371,12 @@ export function CustomersPage(): React.ReactElement {
   }, [stageFilter]);
 
 
-  // Load workflow definition (for the stage tab bar + per-card stage labels)
-  // and the per-contact rooms cache (for the client-side stage + archived
+  // Load the per-contact rooms cache (for the client-side stage + archived
   // filters). Also load QuickBooks invoices (for the per-card QB badge) when
   // connected. All are best-effort; failures just leave the corresponding UI
-  // inert.
+  // inert. Workflow definition is read from WorkflowDataContext (no local fetch).
   React.useEffect(() => {
     let cancelled = false;
-    apiGet<WorkflowDef>('/api/workflow')
-      .then((wf) => {
-        if (!cancelled) setWorkflow(wf || null);
-      })
-      .catch(() => {});
     apiGet<Record<string, Room[]>>('/api/localdata/all')
       .then((data) => {
         if (cancelled) return;
