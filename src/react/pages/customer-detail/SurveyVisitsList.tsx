@@ -713,6 +713,10 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
         const r = await fetch(`/api/survey-visits/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(`${r.status}`);
         await evictCachedRecord('visits', `sv:${id}`);
+        // Purge any queued offline edits for this visit so they don't replay
+        // against a now-deleted resource after the next reconnect.
+        const { removeQueuedByRecordKey } = await import('../../lib/offlineQueue');
+        await removeQueuedByRecordKey(`sv:${id}`);
         onRefresh?.();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'error';
