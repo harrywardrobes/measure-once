@@ -106,13 +106,14 @@ export function CustomerDetailPage() {
 
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
-  // True when any section on the page is rendered from the offline IndexedDB
-  // cache because its network fetch failed (e.g. the device is offline).
-  const [fromCache,    setFromCache]    = useState(false);
+  // True when the contact section is rendered from the offline IndexedDB cache.
+  const [contactFromCache, setContactFromCache] = useState(false);
 
   const [designVisits, setDesignVisits] = useState<DesignVisit[]>([]);
   const [dvLoading,    setDvLoading]    = useState(false);
   const [dvError,      setDvError]      = useState<string | null>(null);
+  // True when design visits are rendered from the offline IndexedDB cache.
+  const [dvFromCache,  setDvFromCache]  = useState(false);
 
   const [surveyVisits, setSurveyVisits] = useState<SurveyVisitServer[]>([]);
   const [svLoading,    setSvLoading]    = useState(false);
@@ -150,7 +151,7 @@ export function CustomerDetailPage() {
       const cached = await readRecord<Contact>('customers', contactId);
       if (!cached) throw e;
       c = cached;
-      setFromCache(true);
+      setContactFromCache(true);
     }
     if (!c?.id) return null;
     // The contacts endpoint returns the structured address alongside the raw
@@ -206,6 +207,7 @@ export function CustomerDetailPage() {
   const fetchDesignVisits = useCallback(async () => {
     setDvLoading(true);
     setDvError(null);
+    setDvFromCache(false);
     try {
       const v = await apiFetch<DesignVisit[]>(`/api/design-visits?contactId=${encodeURIComponent(contactId)}`);
       setDesignVisits(Array.isArray(v) ? v : []);
@@ -220,7 +222,7 @@ export function CustomerDetailPage() {
       );
       if (mine.length > 0) {
         setDesignVisits(mine);
-        setFromCache(true);
+        setDvFromCache(true);
       } else {
         setDvError('load-error');
       }
@@ -282,7 +284,8 @@ export function CustomerDetailPage() {
     }
     setLoading(true);
     setError(null);
-    setFromCache(false);
+    setContactFromCache(false);
+    setDvFromCache(false);
     setSvFromCache(false);
     try {
       const [, c] = await Promise.all([
@@ -668,7 +671,7 @@ export function CustomerDetailPage() {
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="workflow-inner">
 
-        {(fromCache || svFromCache) && (
+        {(contactFromCache || dvFromCache || svFromCache) && (
           <Alert severity="info" sx={{ mb: 2 }} data-testid="customer-detail-offline-banner">
             You&apos;re offline — showing saved data from your last visit. Some details may be out of date.
           </Alert>
@@ -683,6 +686,7 @@ export function CustomerDetailPage() {
           visits={designVisits}
           loading={dvLoading}
           error={dvError}
+          fromCache={dvFromCache}
           onRefresh={fetchDesignVisits}
         />
 

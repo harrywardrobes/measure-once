@@ -272,6 +272,7 @@ interface Props {
   visits: DesignVisit[];
   loading: boolean;
   error: string | null;
+  fromCache?: boolean;
   onRefresh: () => void;
 }
 
@@ -407,7 +408,7 @@ function visitIdFromHash(hash: string): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
-export function DesignVisitsList({ contactId, visits, loading, error, onRefresh }: Props) {
+export function DesignVisitsList({ contactId, visits, loading, error, fromCache, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [details, setDetails] = useState<Record<number, DetailState>>({});
@@ -562,7 +563,26 @@ export function DesignVisitsList({ contactId, visits, loading, error, onRefresh 
     )}
     <div id="design-visits-section" style={{ marginBottom: 20 }}>
       <div style={sxHeader}>
-        <span style={sxHeaderLabel}>Design visits</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={sxHeaderLabel}>Design visits</span>
+          {fromCache && (
+            <span
+              data-testid="dv-cached-badge"
+              style={{
+                fontSize: '0.6rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--ink-3)',
+                border: '1px solid var(--stone)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '1px 5px',
+              }}
+            >
+              Cached
+            </span>
+          )}
+        </span>
         <BulkVisitActions entries={pendingEntries} />
       </div>
       {actionError && (
