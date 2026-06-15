@@ -25,6 +25,7 @@ const ALL_TABS: LegacyTab[] = [
   { id: 'cardactions',    label: 'Card Actions',        hidden: false },
   { id: 'actionhandlers', label: 'Action Handlers',     hidden: false },
   { id: 'designvisit',    label: 'Design Visit',        hidden: false },
+  { id: 'surveyvisit',    label: 'Survey Visit',        hidden: false },
   { id: 'settings',       label: 'Settings',            hidden: false },
   { id: 'devenv',         label: 'Dev Environment',     hidden: false },
   { id: 'search',         label: 'Search',              hidden: false },
