@@ -1,0 +1,55 @@
+Fix the stage filter tabs on the Customers page
+
+The stage filter tabs (All / Sales / Design Visit / Survey) on the Customers page
+don't show the right customers. Selecting a stage tab returns no or wrong results
+because the filter matches on workflow ROOM stageKey, but it should match on the
+customer's LEAD STATUS's stage instead.
+
+CURRENT (BUGGY) BEHAVIOUR
+- Tabs are built from `workflow.stages` in src/react/pages/CustomersPage.tsx, and
+  selecting one sends `?stage=<key>` to /api/contacts-all.
+- In server.js, the /api/contacts-all handler (around line 1530, the
+  `if (stageParam)` block) filters by parsing each contact's `measure_once_rooms`
+  JSON and keeping contacts where `room.stageKey === stageParam`. This ignores the
+  contact's lead status, which is the bug.
+
+DESIRED BEHAVIOUR
+When a stage tab is selected, show contacts whose current `hs_lead_status` maps to
+that stage. Each row in the `lead_status_config` table has a `stage` field stored
+UPPERCASE_WITH_UNDERSCORES (e.g. DESIGN_VISIT, SALES, SURVEY), while the tab/stage
+keys are lowercase with no separators (e.g. designvisit). Normalize the config
+value before comparing, the same way the client already does in CustomersPage.tsx:
+    stage.toLowerCase().replace(/_/g, '')
+
+WHAT TO CHANGE
+1. In server.js, /api/contacts-all (the `if (stageParam)` block ~line 1530):
+   replace the `measure_once_rooms` / `stageKey` matching with lead-status-based
+   matching:
+   - Load a map of `lead_status_config.key -> stage` (the handler already queries
+     `lead_status_config` nearby for `excluded_from_sales`, so reuse that pattern
+     and DB connection).
+   - For each contact, take `c.properties?.hs_lead_status`, look up its configured
+     `stage`, normalize it with `.toLowerCase().replace(/_/g, '')`, and keep the
+     contact only if it equals `stageParam`.
+   - Drop the `measure_once_rooms` parsing and the showArchived / room-status logic
+     from this stage filter.
+
+2. Mirror the same lead-status-based logic in the client's offline/cache fallback
+   so online and offline results match: src/react/hooks/usePaginatedContacts.ts,
+   the `matchesOfflineStage` function (~line 109) and its use in
+   `applyContactFilters` (~line 159). Use the lead-status -> stage mapping
+   available on the client (lead statuses carry a `stage` field), applying the same
+   normalization. If that mapping isn't readily available in the hook, pass it in
+   from CustomersPage.tsx (which has `store.statuses`, each with its `stage`).
+
+OUT OF SCOPE — DO NOT CHANGE
+- Do NOT change the count badges or the /api/contacts-lead-status-counts endpoint
+  (or its `_filterContactsByStage` helper / stageKey logic). Leave those exactly
+  as they are.
+
+VERIFY
+- With the dev server running, selecting Sales, Design Visit, and Survey tabs each
+  shows the customers whose lead status belongs to that stage.
+- The "All" tab still shows everyone.
+- Run the existing test suite (test/ has relevant cases like customers-pagination,
+  lead-status-sync, workflow-tab) and confirm nothing regresses.
