@@ -1,0 +1,61 @@
+Fix: simplify contact phone numbers to Phone + Mobile only (remove WhatsApp number field)
+
+The WhatsApp phone-number field is no longer needed anywhere in the app. Every contact
+should show only two numbers from HubSpot: Phone (`phone`) and Mobile (`mobilephone`).
+Remove the dedicated WhatsApp number field (`hs_whatsapp_phone_number`) from the data
+fetching and the UI throughout the application.
+
+IMPORTANT distinction — do NOT remove these (they are unrelated to the number field):
+- The "WhatsApp" contact-attempt logging method (call / email / whatsapp) in the Contact
+  Customer modal and its server endpoints / DB columns (whatsapp_sent, etc.). That tracks
+  *that a WhatsApp message was sent*, not a phone number. Leave it untouched.
+- The WhatsApp send feature / Meta API routes (`/api/whatsapp/*`). Leave untouched.
+
+Make these changes (each is idempotent — skip if already done):
+
+1. Server — `server.js`:
+   - In every HubSpot contact fetch, remove `hs_whatsapp_phone_number` from the
+     `properties` list. Affected handlers include:
+       • POST /api/card-actions/contact-customer
+       • POST /api/card-actions/arrange-visit
+       • GET  /api/contacts/:id  (and any other contact reads)
+     New properties lists should request `phone,mobilephone` (plus the other fields they
+     already use) but NOT `hs_whatsapp_phone_number`.
+   - Remove any line that reads `props.hs_whatsapp_phone_number` (e.g.
+     `const whatsapp = String(props.hs_whatsapp_phone_number || '')`,
+     `contactWhatsAppPhone`, etc.) and remove those fields from the `res.json({...})`
+     payloads. Keep `phone` and `mobile`.
+   - Also remove `hs_whatsapp_phone_number` from any `allowed` property update whitelist.
+
+2. Component — `src/react/components/modals/ModalContactHeader.tsx`:
+   - Remove the `whatsapp` prop from the `Props` interface.
+   - Remove the `whatsapp && <PhoneLine label="WhatsApp" .../>` line.
+   - Update `hasAny` to `!!(phone || mobile || email)`.
+
+3. Modal — `src/react/components/modals/ContactCustomerModal.tsx`:
+   - Remove `whatsapp` from the `ContactData` interface and from `DEMO_CONTACT_DATA`.
+   - Remove the `const whatsapp = contactData?.whatsapp || ''` line.
+   - Remove `whatsapp={whatsapp}` from both `<ModalContactHeader>` usages (the `contact`
+     phase and the `no_response_confirm` phase).
+
+4. Any other modal that passes a WhatsApp number to `ModalContactHeader` (e.g.
+   ArrangeVisitModal) — remove its `whatsapp`/`contactWhatsAppPhone` state, fetch field,
+   and the `whatsapp={...}` prop. Keep phone and mobile.
+
+5. Types — `src/react/pages/customer-detail/types.ts`:
+   - Remove `hs_whatsapp_phone_number?: string;` from the `ContactProperties` interface.
+   - Update any place that falls back through `hs_whatsapp_phone_number` (e.g. a
+     `phone || mobilephone || hs_whatsapp_phone_number` chain) to just
+     `phone || mobilephone`.
+
+6. Demo data — `src/react/components/modals/demoData.ts`: remove the `whatsapp` field if
+   present.
+
+7. Search the whole codebase for `hs_whatsapp_phone_number`, `whatsapp` used as a *number*
+   prop, `contactWhatsAppPhone`, and `WhatsApp` *number* labels, and remove the leftovers
+   (but keep the whatsapp attempt-logging method and /api/whatsapp send routes from the
+   IMPORTANT note above).
+
+Verify: open the Contact Customer modal for a contact that has a `mobilephone` in HubSpot —
+it should show Phone and/or Mobile only, with no WhatsApp number line. TypeScript should
+compile with no references to `hs_whatsapp_phone_number` remaining.
