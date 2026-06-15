@@ -320,7 +320,10 @@ function PendingSurveyVisitCard({ entry }: { entry: PendingSurveyVisitEntry }) {
 
 /** Returns the sign-off link label for a submitted visit, or null if not applicable. */
 function signoffStatusLabel(visit: SurveyVisitServer): { label: string; color: string } | null {
-  if (visit.status !== 'submitted' || !visit.signoff_token_hash) return null;
+  if (visit.status !== 'submitted') return null;
+  if (!visit.signoff_token_hash) {
+    return { label: 'No link sent', color: 'var(--warning, #d97706)' };
+  }
   const isExpired = !!visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at);
   return isExpired
     ? { label: 'Link expired', color: 'var(--warning, #d97706)' }
