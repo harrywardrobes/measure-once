@@ -1,0 +1,44 @@
+Make the customer-info form usable by ANYONE without a personal token, so I can share one standard link. Keep the existing personalized (token) flow exactly as-is. Work through the phases below and ask me before doing anything destructive.
+
+CONTEXT (read these first):
+- Frontend page: src/react/pages/CustomerInfoPage.tsx (island id "customer-info-mount", already a public island in src/react/lib/publicIslands.ts).
+- Page route + EJS: server.js `app.get('/customer-info/:token', ...)` (~line 270) renders views/customer-info.ejs.
+- Backend: customer-info.js — public routes GET/POST `/api/customer-info/:token`, `/:token/photos`, `/:token/resend-expired`. Token rows live in the `customer_info_submissions` table (contact_id is currently TEXT NOT NULL). The public-route allowlist regex is in server.js (~line 502).
+- HubSpot: `fetchContactFromHubSpot()` and `_patchContactProperties()` in customer-info.js; lead status is gated by lead-status-guard.js. On submit the code sets `hs_lead_status: 'AWAITING_PHOTOS'`.
+- Pipeline order (customer-pipeline.txt): FORM_SUBMISSION → ATTEMPTED_CONTACT → IN_PROGRESS → AWAITING_PHOTOS → ROUGH_ESTIMATE → (later stages). "Past photos received" = ROUGH_ESTIMATE or later.
+
+GOALS:
+1. A generic, token-less link anyone can open and fill in.
+2. Old links (invalid/not-found AND expired) silently redirect to the generic form instead of showing an error or "expired" page. IMPORTANT: an ALREADY-SUBMITTED token must STILL show the existing "Already submitted — thank you" message (do not redirect those).
+3. The generic form collects Name, Email, and Phone (all REQUIRED), in addition to the existing address, room count, room notes, and photo upload.
+4. Add one new field to the GENERIC form only: label "Have we spoken?", optional, placeholder "I messaged you on Instagram a few weeks ago...". Persist it and include it in the admin notification email. Do NOT add this field to the personalized token form.
+
+PHASE 1 — Routing & redirects
+- Add a token-less route so `/customer-info` (no token) renders the same EJS page/island as the token route. Keep `/customer-info/:token` working.
+- In CustomerInfoPage.tsx, treat "no token in the URL" as GENERIC mode.
+- Change the load logic so that when the token lookup returns not-found (HTTP 410 status:"not_found") OR expired (status:"expired"), the page switches into GENERIC mode (render the generic form) instead of the error/expired states. Submitted (status:"submitted") must keep showing "Already submitted". Do this client-side (no full error page flash) — e.g. redirect to `/customer-info` or just render the generic form in place.
+
+PHASE 2 — Anonymous draft token (so photo upload + submit reuse existing endpoints)
+- Add a public endpoint, e.g. POST `/api/customer-info/draft`, that creates an anonymous draft row in customer_info_submissions (no contact_id yet) with a fresh token + 28-day expiry, and returns the raw token. Add this path to the public-route allowlist regex in server.js.
+- DB migration (add to migrations/, follow existing migration style): make `contact_id` nullable; add a boolean column like `is_generic` (default false); add a `have_we_spoken` TEXT column. Update any INSERTs accordingly.
+- In GENERIC mode the page should: on mount, call POST /api/customer-info/draft to get a token, then reuse the EXISTING `/api/customer-info/:token/photos` upload flow and the existing draft-save/localStorage logic keyed by that token. Rate limits and quotas on the photo endpoint already work per-token — leave them intact.
+
+PHASE 3 — Generic form UI (CustomerInfoPage.tsx)
+- In GENERIC mode, replace the "We have these details on file" / "correct my…" block with REQUIRED inputs: Full name, Email, Phone. Validate all three (plus the existing required address/city/postcode and room count) before submit, with clear inline errors.
+- Add the optional "Have we spoken?" field (multiline TextField is fine) with the exact placeholder above, shown only in GENERIC mode.
+- Keep the personalized (token) form UI unchanged.
+
+PHASE 4 — Generic submission handling (customer-info.js POST /api/customer-info/:token)
+- When the row is a generic draft (is_generic / no contact_id), require name, email, phone in the body.
+- Resolve the HubSpot contact by email FIRST: search HubSpot for an existing contact with that email.
+    • If none exists, create a new HubSpot contact (lead) from name/email/phone + the submitted address, and set hs_lead_status = AWAITING_PHOTOS.
+    • If one DOES exist, attach to it. Only set hs_lead_status = AWAITING_PHOTOS if the contact is NEW or currently at/earlier than the photos stage. If the existing contact is already PAST photos (ROUGH_ESTIMATE or any later pipeline status), DO NOT change their lead status — leave it as-is so they aren't pulled backwards. Still save their submission/photos and still update their address.
+- ALWAYS email the team (admin notification) regardless of contact status — reuse sendAdminNotificationEmail. Include the "Have we spoken?" answer in that email. Keep the customer thank-you email working too.
+- Store the resolved contact_id back on the row, set submitted_at, and keep the existing structured-address / photo_keys handling.
+- Respect the existing AWAITING_PHOTOS lead-status-guard behaviour (assertLeadStatusKey) — fail gracefully if that status was removed.
+
+PHASE 5 — Tests & checks
+- Add/adjust tests under test/ following the existing customer-info test style for: generic page loads without a token, expired/invalid token redirects to generic form, already-submitted still shows thank-you, generic submit creates a new HubSpot lead, generic submit for an existing past-photos contact does NOT downgrade lead status, and "Have we spoken?" is persisted + appears in the admin email.
+- Run the existing customer-info test suites and the public-island bootstrap check (scripts/check-public-island-bootstrap.mjs) and make sure they pass.
+
+Don't break the existing personalized token flow, the resend-expired flow, or photo rate limits. Show me a summary of the files changed and the new endpoints before finishing.

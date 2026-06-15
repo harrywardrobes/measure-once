@@ -1,0 +1,90 @@
+Persist the Google (Calendar/Gmail) OAuth connection across logout/login and
+server restarts, mirroring how QuickBooks already works.
+
+CONTEXT — how things work today:
+- QuickBooks tokens are stored in the DATABASE in the `qb_tokens` table
+  (see quickbooks.js, persistTokens) and survive logout/login already. Good.
+- Google tokens are stored only in the SESSION:
+    server.js ~line 994:  req.session.googleTokens = tokens
+    server.js ~line 995:  req.session.googleTokensBoundTo = req.user.sub
+  On logout, auth.js (~line 817) calls req.session.destroy(), which wipes the
+  Google tokens. So users must reconnect Google every login. This is the bug.
+- We already request access_type:'offline' + prompt:'consent'
+  (server.js ~line 978), so Google returns a long-lived refresh_token — we are
+  just discarding it with the session.
+
+GOAL:
+Store the Google refresh_token in the database keyed by user, and load Google
+credentials from the DB instead of the session, so the connection is permanent
+until the user explicitly disconnects or Google revokes it.
+
+TASKS:
+1. Add a DB migration creating a `google_oauth_tokens` table:
+     - user_sub TEXT PRIMARY KEY          (matches req.user.sub)
+     - access_token TEXT
+     - refresh_token TEXT NOT NULL
+     - scope TEXT
+     - expires_at TIMESTAMPTZ
+     - created_at / updated_at TIMESTAMPTZ DEFAULT now()
+   Follow the existing migration style in /migrations (same as the QuickBooks
+   migration). Encrypt access_token and refresh_token at rest if an encryption
+   helper exists in the codebase; otherwise leave a clear TODO comment to add
+   column encryption and do NOT log token values.
+
+2. In server.js, add helper functions (mirroring quickbooks.js persistTokens /
+   token-loading helpers):
+     - saveGoogleTokens(userSub, tokens): upsert into google_oauth_tokens.
+       IMPORTANT: Google only returns refresh_token on first consent — if
+       tokens.refresh_token is missing on a refresh, preserve the existing
+       stored refresh_token (do not overwrite with null).
+     - loadGoogleTokens(userSub): read the row and return credentials.
+     - deleteGoogleTokens(userSub): remove the row.
+
+3. Update the OAuth callback (server.js /auth/google/callback ~line 986):
+   after getToken(), call saveGoogleTokens(req.user.sub, tokens) IN ADDITION to
+   the session (session can stay as a fast cache).
+
+4. Update getVerifiedGoogleTokens(req) (server.js ~line 2409):
+   - If session tokens exist and are bound to req.user.sub, use them.
+   - Otherwise, fall back to loadGoogleTokens(req.user.sub) from the DB,
+     repopulate req.session.googleTokens + googleTokensBoundTo, and return them.
+   - Keep the existing cross-user safety check (never return another user's
+     tokens).
+
+5. Silent refresh: when the google client refreshes the access token (the
+   getAccessToken() path in /api/google/status ~line 1016 and anywhere the
+   googleapis client emits a 'tokens' event), persist the refreshed
+   access_token + expiry back to the DB via saveGoogleTokens so the stored copy
+   stays current. Register an oauth2Client 'tokens' listener if appropriate.
+
+6. Disconnect: update POST /auth/logout-google (server.js ~line 1002) to also
+   call deleteGoogleTokens(req.user.sub) in addition to clearing the session.
+   This is the ONLY path (besides Google revoking access) that should drop the
+   connection.
+
+7. Real-revocation handling: keep the existing invalid_grant /
+   token-has-been-revoked detection in /api/google/status (~line 1022). On that
+   error, call deleteGoogleTokens(req.user.sub) and return
+   { connected:false, code:'TOKEN_EXPIRED' } so the Connect-your-services modal
+   prompts a reconnect. This should now be the ONLY situation that triggers the
+   modal for Google.
+
+8. Do NOT change QuickBooks — it already persists correctly. Do not change the
+   logout flow in auth.js (session destroy is correct); persistence must come
+   from the DB layer, not from keeping sessions alive.
+
+ACCEPTANCE CRITERIA:
+- Connect Google, log out, log back in → Google still shows connected, no
+  reconnect needed. Calendar booking and Gmail features work immediately.
+- Restart the server → Google still connected.
+- Click "Disconnect Google" in the modal → connection is removed from DB and
+  session; status shows disconnected.
+- Revoke access from the Google account security page → next status check
+  detects invalid_grant, clears the stored token, and the modal prompts a
+  reconnect.
+- No token values are written to logs.
+
+Add or update tests under /test to cover: persistence across a simulated
+logout/login, refresh-token preservation when Google omits it on refresh, and
+deletion on explicit disconnect. Match the existing test harness style
+(see test/connect-services-modal and test/profile-google-calendar).
