@@ -12,12 +12,16 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import FormGroup from '@mui/material/FormGroup';
+import FormLabel from '@mui/material/FormLabel';
 import IconButton from '@mui/material/IconButton';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
@@ -29,6 +33,8 @@ import type {
   VisitQuestionType,
 } from '../../components/QuestionnaireRenderer';
 
+type VisitTypeFilter = 'all' | 'design' | 'survey';
+
 /** Admin shape — includes inactive questions + active flag. */
 interface AdminQuestion {
   id: number;
@@ -38,6 +44,7 @@ interface AdminQuestion {
   type: VisitQuestionType;
   options: string[];
   required: boolean;
+  required_on: string[];
   active: boolean;
   sort_order: number;
 }
@@ -66,6 +73,7 @@ const BLANK: Omit<AdminQuestion, 'id'> = {
   type: 'text',
   options: [],
   required: false,
+  required_on: [],
   active: true,
   sort_order: 0,
 };
@@ -85,7 +93,8 @@ function QuestionEditorDialog({
   const [label, setLabel] = useState('');
   const [type, setType] = useState<VisitQuestionType>('text');
   const [optionsText, setOptionsText] = useState('');
-  const [required, setRequired] = useState(false);
+  const [requiredOnDesign, setRequiredOnDesign] = useState(false);
+  const [requiredOnSurvey, setRequiredOnSurvey] = useState(false);
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -98,7 +107,9 @@ function QuestionEditorDialog({
     setLabel(q?.label ?? '');
     setType(q?.type ?? BLANK.type);
     setOptionsText((q?.options ?? []).join('\n'));
-    setRequired(q?.required ?? false);
+    const ro = q?.required_on ?? BLANK.required_on;
+    setRequiredOnDesign(ro.includes('design'));
+    setRequiredOnSurvey(ro.includes('survey'));
     setActive(q?.active ?? true);
     setErr('');
   }, [state.open, editing]);
@@ -113,13 +124,17 @@ function QuestionEditorDialog({
       setErr('Choice questions need at least one option.');
       return;
     }
+    const required_on: string[] = [];
+    if (requiredOnDesign) required_on.push('design');
+    if (requiredOnSurvey) required_on.push('survey');
     const body = {
       scope,
       applies_to: appliesTo.split(',').map((s) => s.trim()).filter(Boolean),
       label: trimmed,
       type,
       options: opts,
-      required,
+      required: required_on.length > 0,
+      required_on,
       active,
     };
     setSaving(true);
@@ -137,7 +152,7 @@ function QuestionEditorDialog({
     } finally {
       setSaving(false);
     }
-  }, [label, type, optionsText, scope, appliesTo, required, active, editing, onSaved, onClose]);
+  }, [label, type, optionsText, scope, appliesTo, requiredOnDesign, requiredOnSurvey, active, editing, onSaved, onClose]);
 
   return (
     <Dialog open={state.open} onClose={onClose} fullWidth maxWidth="sm">
@@ -184,10 +199,19 @@ function QuestionEditorDialog({
             size="small"
             helperText="e.g. design, survey"
           />
-          <FormControlLabel
-            control={<Checkbox checked={required} onChange={(e) => setRequired(e.target.checked)} />}
-            label="Required"
-          />
+          <FormControl component="fieldset" variant="standard">
+            <FormLabel component="legend" sx={{ fontSize: '0.75rem', mb: 0.5 }}>Required on</FormLabel>
+            <FormGroup row>
+              <FormControlLabel
+                control={<Checkbox size="small" checked={requiredOnDesign} onChange={(e) => setRequiredOnDesign(e.target.checked)} />}
+                label="Design visits"
+              />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={requiredOnSurvey} onChange={(e) => setRequiredOnSurvey(e.target.checked)} />}
+                label="Survey visits"
+              />
+            </FormGroup>
+          </FormControl>
           <FormControlLabel
             control={<Checkbox checked={active} onChange={(e) => setActive(e.target.checked)} />}
             label="Active (shown in wizard)"
@@ -243,7 +267,9 @@ function QuestionRow({
         <Typography variant="body1" sx={{ fontWeight: 500 }}>{q.label}</Typography>
         <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
           <Chip size="small" label={TYPES.find((t) => t.value === q.type)?.label ?? q.type} />
-          {q.required && <Chip size="small" color="warning" label="Required" />}
+          {(q.required_on ?? []).map((rt) => (
+            <Chip key={rt} size="small" color="warning" label={`Required: ${rt}`} />
+          ))}
           {!q.active && <Chip size="small" variant="outlined" label="Inactive" />}
           {q.applies_to.map((a) => <Chip key={a} size="small" variant="outlined" label={a} />)}
         </Stack>
@@ -258,6 +284,7 @@ export function QuestionnaireBuilder() {
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [loadErr, setLoadErr] = useState('');
   const [edit, setEdit] = useState<EditState>({ open: false, question: null });
+  const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>('all');
 
   const fetchAll = useCallback(async () => {
     try {
@@ -288,7 +315,6 @@ export function QuestionnaireBuilder() {
     const reordered = [...scopeList];
     [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
     const order = reordered.map((item, i) => ({ id: item.id, sort_order: (i + 1) * 10 }));
-    // Optimistic update.
     const byId = new Map(order.map((o) => [o.id, o.sort_order]));
     setQuestions((prev) =>
       prev.map((p) => (byId.has(p.id) ? { ...p, sort_order: byId.get(p.id)! } : p)),
@@ -302,9 +328,19 @@ export function QuestionnaireBuilder() {
     }
   }, [fetchAll]);
 
+  function defaultAppliesTo(): string[] {
+    if (visitTypeFilter === 'design') return ['design'];
+    if (visitTypeFilter === 'survey') return ['survey'];
+    return ['design'];
+  }
+
   const renderScope = (scope: VisitQuestionScope, title: string, description: string) => {
     const list = questions
       .filter((q) => q.scope === scope)
+      .filter((q) => {
+        if (visitTypeFilter === 'all') return true;
+        return q.applies_to.includes(visitTypeFilter);
+      })
       .sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
     return (
       <Card variant="outlined">
@@ -317,14 +353,17 @@ export function QuestionnaireBuilder() {
             <Button
               variant="contained"
               sx={{ flexShrink: 0 }}
-              onClick={() => setEdit({ open: true, question: { ...BLANK, id: 0, scope } as AdminQuestion })}
+              onClick={() => setEdit({
+                open: true,
+                question: { ...BLANK, id: 0, scope, applies_to: defaultAppliesTo() } as AdminQuestion,
+              })}
             >
               + Add question
             </Button>
           </Box>
           {list.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              No questions yet.
+              {visitTypeFilter === 'all' ? 'No questions yet.' : `No ${visitTypeFilter} questions yet.`}
             </Typography>
           ) : (
             list.map((q, i) => (
@@ -348,6 +387,22 @@ export function QuestionnaireBuilder() {
     <>
       <Stack spacing={2}>
         {loadErr && <Alert severity="error">{loadErr}</Alert>}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0 }}>
+            Show:
+          </Typography>
+          <ToggleButtonGroup
+            value={visitTypeFilter}
+            exclusive
+            onChange={(_e, val) => { if (val !== null) setVisitTypeFilter(val as VisitTypeFilter); }}
+            size="small"
+            aria-label="Visit type filter"
+          >
+            <ToggleButton value="all" aria-label="All visit types">All</ToggleButton>
+            <ToggleButton value="design" aria-label="Design visits">Design</ToggleButton>
+            <ToggleButton value="survey" aria-label="Survey visits">Survey</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
         {renderScope('visit', 'Whole-visit questions', 'Asked once per visit, in the wizard summary step.')}
         {renderScope('room', 'Per-room questions', 'Asked for each room added in the wizard.')}
       </Stack>
