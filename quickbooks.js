@@ -5,7 +5,7 @@ const crypto  = require('crypto');
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
-const { encrypt: qbEncrypt, decrypt: qbDecrypt } = require('./qb-token-crypto.cjs');
+const { encrypt: qbEncrypt, tryDecrypt: qbTryDecrypt } = require('./qb-token-crypto.cjs');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
@@ -14,6 +14,15 @@ const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = re
 // what the Workflow page displays as outcome chips.
 const _QB_ACCEPT_STATUS  = HANDLER_OUTCOMES.open_deal.find(o => o.key === 'accept')?.setsLeadStatus  ?? 'DEPOSIT_INVOICE';
 const _QB_DECLINE_STATUS = HANDLER_OUTCOMES.open_deal.find(o => o.key === 'decline')?.setsLeadStatus ?? 'DECLINED_DEAL';
+
+// Boot-time check: warn early if the encryption key is absent so admins see a
+// clear log message rather than a cryptic 500 when the first QB request fires.
+if (!process.env.QB_TOKEN_ENCRYPTION_KEY) {
+  logger.warn(
+    '[quickbooks] QB_TOKEN_ENCRYPTION_KEY is not set — QuickBooks tokens cannot be ' +
+    'encrypted or decrypted. QuickBooks will appear disconnected until the secret is configured.',
+  );
+}
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.
@@ -93,19 +102,61 @@ async function getStoredTokens() {
   const r = await pool.query('SELECT * FROM qb_tokens ORDER BY id DESC LIMIT 1');
   const row = r.rows[0];
   if (!row) return null;
-  return {
-    ...row,
-    access_token:  qbDecrypt(row.access_token),
-    refresh_token: qbDecrypt(row.refresh_token),
-  };
+
+  const { ok: accessOk, plaintext: accessToken } = qbTryDecrypt(row.access_token);
+  const { ok: refreshOk, plaintext: refreshToken } = qbTryDecrypt(row.refresh_token);
+
+  if (!accessOk || !refreshOk) {
+    logger.warn(
+      '[quickbooks] getStoredTokens: token(s) could not be decrypted — ' +
+      'QB_TOKEN_ENCRYPTION_KEY may be missing or rotated. Treating QB as disconnected.',
+    );
+    return null;
+  }
+
+  return { ...row, access_token: accessToken, refresh_token: refreshToken };
+}
+
+/**
+ * Check whether stored QB tokens exist and whether they can be decrypted with
+ * the current QB_TOKEN_ENCRYPTION_KEY.
+ *
+ * Returns one of:
+ *   'missing'    — no row in qb_tokens
+ *   'unreadable' — row exists but token(s) cannot be decrypted (key missing / rotated)
+ *   'ok'         — row exists and tokens decrypt successfully
+ */
+async function checkQbTokenReadability() {
+  const r = await pool.query('SELECT access_token, refresh_token FROM qb_tokens ORDER BY id DESC LIMIT 1');
+  const row = r.rows[0];
+  if (!row) return 'missing';
+  const { ok: accessOk } = qbTryDecrypt(row.access_token);
+  const { ok: refreshOk } = qbTryDecrypt(row.refresh_token);
+  if (!accessOk || !refreshOk) return 'unreadable';
+  return 'ok';
 }
 
 async function persistTokens({ access_token, refresh_token, realm_id, expires_in }) {
+  // Encrypt before touching the DB so a missing/wrong key fails early with a
+  // clear message rather than storing garbage or crashing mid-transaction.
+  let encAccess, encRefresh;
+  try {
+    encAccess  = qbEncrypt(access_token);
+    encRefresh = qbEncrypt(refresh_token);
+  } catch (encErr) {
+    const msg =
+      'QB_TOKEN_ENCRYPTION_KEY is missing or invalid — QuickBooks tokens cannot be stored. ' +
+      'Configure the secret in Replit Secrets and reconnect.';
+    logger.error({ err: encErr.message }, `[quickbooks] persistTokens: ${msg}`);
+    const err = new Error(msg);
+    err.code = 'QB_KEY_MISSING';
+    throw err;
+  }
   const expires_at = Date.now() + ((Number(expires_in) || 3600) * 1000) - 60000;
   await pool.query('DELETE FROM qb_tokens');
   await pool.query(
     'INSERT INTO qb_tokens (access_token, refresh_token, realm_id, expires_at) VALUES ($1, $2, $3, $4)',
-    [qbEncrypt(access_token), qbEncrypt(refresh_token), realm_id, expires_at]
+    [encAccess, encRefresh, realm_id, expires_at]
   );
   return { access_token, refresh_token, realm_id, expires_at };
 }
@@ -356,9 +407,24 @@ router.post('/auth/quickbooks/disconnect', isAuthenticated, requireAdmin, async 
 
 // ── API: connection status ─────────────────────────────────────────────────────
 router.get('/api/quickbooks/status', isAuthenticated, async (req, res) => {
+  // If the encryption key is absent, no QB operations can succeed.  Surface
+  // this as a specific code so the admin UI can show a targeted banner rather
+  // than a plain "not connected" message.
+  if (!process.env.QB_TOKEN_ENCRYPTION_KEY) {
+    return res.json({ connected: false, code: 'KEY_MISSING' });
+  }
   try {
     const t = await getValidTokens();
-    if (!t) return res.json({ connected: false });
+    if (!t) {
+      // Distinguish "never connected / token deleted" from "token exists but
+      // can't be decrypted" (e.g. after QB_TOKEN_ENCRYPTION_KEY rotation).
+      // The latter gets a specific code so the client can prompt to reconnect.
+      const readability = await checkQbTokenReadability();
+      if (readability === 'unreadable') {
+        return res.json({ connected: false, code: 'TOKEN_UNREADABLE' });
+      }
+      return res.json({ connected: false });
+    }
     const data = await fetchFromQuickBooks(`/companyinfo/${t.realm_id}`);
     res.json({
       connected:   true,

@@ -32,6 +32,7 @@ interface QbStatus {
   connected: boolean;
   company?: string;
   environment?: 'sandbox' | 'production';
+  code?: string;
 }
 
 interface QbSettings {
@@ -192,6 +193,22 @@ export function QuickBooksSettingsPage() {
                 To reconnect or disconnect, use the <strong>Connect to QuickBooks</strong>{' '}
                 button on the <em>Invoices</em> page.
               </Typography>
+            </Stack>
+          ) : status?.code === 'KEY_MISSING' ? (
+            <Stack spacing={1.5}>
+              <Alert severity="error">
+                QuickBooks cannot connect — the <strong>QB_TOKEN_ENCRYPTION_KEY</strong>{' '}
+                secret is not configured. Add it in Replit Secrets, then reconnect via
+                the <em>Invoices</em> page.
+              </Alert>
+            </Stack>
+          ) : status?.code === 'TOKEN_UNREADABLE' ? (
+            <Stack spacing={1.5}>
+              <Alert severity="warning">
+                QuickBooks is disconnected — the encryption key used to store your tokens
+                may be missing or has been rotated. Reconnect via the <em>Invoices</em> page
+                to restore invoice access.
+              </Alert>
             </Stack>
           ) : (
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
