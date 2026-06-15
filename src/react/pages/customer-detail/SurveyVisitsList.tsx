@@ -433,6 +433,7 @@ interface Props {
   serverVisits?: SurveyVisitServer[];
   serverLoading?: boolean;
   serverError?: string | null;
+  fromCache?: boolean;
   onRefresh?: () => void;
 }
 
@@ -450,7 +451,7 @@ interface Props {
  *
  * Offline-only creates (not yet on the server) still render as PendingSurveyVisitCards.
  */
-export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, serverError, onRefresh }: Props) {
+export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, serverError, fromCache, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
 
   const pendingEntries = useOfflineSurveyVisitEntries(contactId);
@@ -592,7 +593,26 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
 
       <div id="survey-visits-section" style={{ marginBottom: 20 }}>
         <div style={sxHeader}>
-          <span style={sxHeaderLabel}>Survey visits</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={sxHeaderLabel}>Survey visits</span>
+            {fromCache && (
+              <span
+                data-testid="sv-cached-badge"
+                style={{
+                  fontSize: '0.6rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: 'var(--ink-3)',
+                  border: '1px solid var(--stone)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '1px 5px',
+                }}
+              >
+                Cached
+              </span>
+            )}
+          </span>
           <BulkSurveyVisitActions entries={pendingEntries} />
         </div>
         {actionError && (

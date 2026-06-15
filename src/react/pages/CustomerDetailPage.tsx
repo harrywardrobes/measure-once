@@ -117,6 +117,7 @@ export function CustomerDetailPage() {
   const [surveyVisits, setSurveyVisits] = useState<SurveyVisitServer[]>([]);
   const [svLoading,    setSvLoading]    = useState(false);
   const [svError,      setSvError]      = useState<string | null>(null);
+  const [svFromCache,  setSvFromCache]  = useState(false);
 
   const [emails,          setEmails]          = useState<GoogleEmail[]>([]);
   const [emailsLoading,   setEmailsLoading]   = useState(false);
@@ -177,6 +178,7 @@ export function CustomerDetailPage() {
   const fetchSurveyVisits = useCallback(async () => {
     setSvLoading(true);
     setSvError(null);
+    setSvFromCache(false);
     try {
       const v = await apiFetch<SurveyVisitServer[]>(`/api/survey-visits?contactId=${encodeURIComponent(contactId)}`);
       setSurveyVisits(Array.isArray(v) ? v : []);
@@ -192,7 +194,7 @@ export function CustomerDetailPage() {
       );
       if (mine.length > 0) {
         setSurveyVisits(mine);
-        setFromCache(true);
+        setSvFromCache(true);
       } else {
         setSvError('load-error');
       }
@@ -281,6 +283,7 @@ export function CustomerDetailPage() {
     setLoading(true);
     setError(null);
     setFromCache(false);
+    setSvFromCache(false);
     try {
       const [, c] = await Promise.all([
         refreshLeadStatuses(),
@@ -665,7 +668,7 @@ export function CustomerDetailPage() {
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="workflow-inner">
 
-        {fromCache && (
+        {(fromCache || svFromCache) && (
           <Alert severity="info" sx={{ mb: 2 }} data-testid="customer-detail-offline-banner">
             You&apos;re offline — showing saved data from your last visit. Some details may be out of date.
           </Alert>
@@ -689,6 +692,7 @@ export function CustomerDetailPage() {
           serverVisits={surveyVisits}
           serverLoading={svLoading}
           serverError={svError}
+          fromCache={svFromCache}
           onRefresh={fetchSurveyVisits}
         />
 
