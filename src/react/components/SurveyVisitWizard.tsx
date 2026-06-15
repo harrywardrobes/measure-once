@@ -204,12 +204,12 @@ function draftKey(contactId: string, editId?: string | number | null): string {
 }
 
 function saveDraft(key: string, step1: Step1Data, rooms: RoomData[], answers: AnswerMap) {
-  try { sessionStorage.setItem(key, JSON.stringify({ step1, rooms, answers })); } catch {}
+  try { localStorage.setItem(key, JSON.stringify({ step1, rooms, answers })); } catch {}
 }
 
 function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[]; answers?: AnswerMap } | null {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -218,13 +218,13 @@ function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[]; answers?
 }
 
 function clearDraft(key: string) {
-  try { sessionStorage.removeItem(key); } catch {}
+  try { localStorage.removeItem(key); } catch {}
 }
 
 /** See DesignVisitWizard.extractOrphanedDraftKeys for the rationale. */
 function extractOrphanedDraftKeys(key: string): string[] {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const draft = JSON.parse(raw) as { rooms?: RoomData[] };
     return (draft.rooms || [])

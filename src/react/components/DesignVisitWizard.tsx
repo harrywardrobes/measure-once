@@ -150,12 +150,12 @@ function draftKey(contactId: string, editId?: string | number | null): string {
 }
 
 function saveDraft(key: string, step1: Step1Data, rooms: RoomData[], answers: AnswerMap) {
-  try { sessionStorage.setItem(key, JSON.stringify({ step1, rooms, answers })); } catch {}
+  try { localStorage.setItem(key, JSON.stringify({ step1, rooms, answers })); } catch {}
 }
 
 function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[]; answers?: AnswerMap } | null {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch {
@@ -164,11 +164,11 @@ function loadDraft(key: string): { step1: Step1Data; rooms: RoomData[]; answers?
 }
 
 function clearDraft(key: string) {
-  try { sessionStorage.removeItem(key); } catch {}
+  try { localStorage.removeItem(key); } catch {}
 }
 
 /**
- * Reads the current sessionStorage draft and extracts every *opaque* image
+ * Reads the current localStorage draft and extracts every *opaque* image
  * storageKey found in the rooms list.  Used on wizard open to find uploads from
  * a previous session that ended abruptly (crash, hard-close, forced reload) so
  * they can be deleted before the wizard starts fresh.
@@ -182,7 +182,7 @@ function clearDraft(key: string) {
  */
 function extractOrphanedDraftKeys(key: string): string[] {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const draft = JSON.parse(raw) as { rooms?: RoomData[] };
     return (draft.rooms || [])
@@ -208,7 +208,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   /**
-   * Image storageKeys found in the sessionStorage draft when this wizard
+   * Image storageKeys found in the localStorage draft when this wizard
    * instance first mounted.  They belong to a previous session that was
    * interrupted (crash / hard-close / forced reload) before the cleanup
    * useEffect could fire, so they are orphaned.  Captured once at mount time
@@ -221,7 +221,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   );
 
   /**
-   * True when a sessionStorage draft was restored at mount (no orphaned images).
+   * True when a localStorage draft was restored at mount (no orphaned images).
    * Used to show a one-time "Restoring your draft from last time" notice.
    * Declared after orphanedDraftKeys so the initializer can safely read it.
    */
@@ -445,7 +445,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
    * reload, tab hard-close before the SPA navigation unmount could fire) the
    * abandon-cleanup useEffect below never ran for that session and the images
    * it had uploaded are stranded in object storage.  `orphanedDraftKeys` was
-   * computed from the sessionStorage draft before this session's state was
+   * computed from the localStorage draft before this session's state was
    * saved, so it contains exactly those unreachable keys.  We delete them now
    * and clear the draft so the wizard opens cleanly.
    */
@@ -861,9 +861,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               const savedRooms = rooms;
               const savedAnswers = answers;
 
-              // In new-visit mode the draft lives in sessionStorage; clear it
+              // In new-visit mode the draft lives in localStorage; clear it
               // now so a page reload doesn't resurrect it.  In edit mode there
-              // is no sessionStorage draft — state lives only in React.
+              // is no localStorage draft — state lives only in React.
               if (!editMode) clearDraft(storageKey);
 
               setShowDiscardDialog(false);
@@ -895,7 +895,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                       undoTimerRef.current = null;
                     }
                     if (!editMode) {
-                      // Restore the draft to sessionStorage so it survives
+                      // Restore the draft to localStorage so it survives
                       // any future page reload, then re-open the drawer.
                       saveDraft(storageKey, savedStep1, savedRooms, savedAnswers);
                     } else {
