@@ -39,7 +39,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
@@ -124,6 +124,8 @@ export function ScheduleVisitModal({
   demo,
 }: ScheduleVisitModalProps) {
   const showToast = useToast();
+  const serviceStatuses = useServiceStatuses();
+  const googleDisconnected = serviceStatuses.get('google') === 'error';
   const cfg = handler?.config || {};
   const defaultDuration = (cfg.defaultDurationMin as number) || 60;
   const lockedVisitType = visitTypeProp;
@@ -354,6 +356,22 @@ export function ScheduleVisitModal({
       >
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+            {googleDisconnected && !demo && (
+              <Alert
+                severity="warning"
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => openConnectModal('google', 'Reconnect Google Calendar to schedule visits.')}
+                  >
+                    Reconnect
+                  </Button>
+                }
+              >
+                Google Calendar is disconnected — visits can&apos;t be scheduled until you reconnect.
+              </Alert>
+            )}
 
             {!lockedVisitType && (
               <FormControl size="small" fullWidth>

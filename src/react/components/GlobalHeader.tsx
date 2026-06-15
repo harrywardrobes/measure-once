@@ -114,6 +114,8 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
     status === 'ok'      ? 'rgba(134,239,172,0.35)' :
     'rgba(255,255,255,0.12)';
 
+  const showReconnectLabel = status === 'error' && !!onClick;
+
   return (
     <Tooltip title={onClick ? `${tip} — click to manage connections` : tip}>
       <Box
@@ -122,6 +124,8 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
         aria-label={onClick ? `${ariaLabel} — manage service connections` : ariaLabel}
         sx={{
           display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
           position: 'relative',
           background: 'none',
           border: 'none',
@@ -169,6 +173,22 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
             <Icon fontSize="small" />
           </Box>
         </Badge>
+        {showReconnectLabel && (
+          <Box
+            component="span"
+            aria-hidden="true"
+            sx={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              lineHeight: 1,
+              color: '#fca5a5', // hex-color-ok: error label tint, matches status icon tint
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Reconnect
+          </Box>
+        )}
       </Box>
     </Tooltip>
   );

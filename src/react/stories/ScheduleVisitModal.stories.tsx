@@ -1,5 +1,7 @@
+import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ScheduleVisitModal } from '../components/modals/ScheduleVisitModal';
+import { useConnectionToast } from '../context/ConnectionToastContext';
 
 const ctx = {
   contactId: '12345',
@@ -80,5 +82,30 @@ export const WithEmailToggleExpanded: Story = {
       }
       return <Story />;
     },
+  ],
+};
+
+function GoogleDisconnectedDecorator({ children }: { children: React.ReactNode }) {
+  const { notifyDisconnected } = useConnectionToast();
+  useEffect(() => {
+    notifyDisconnected('google');
+  }, [notifyDisconnected]);
+  return <>{children}</>;
+}
+
+export const GoogleDisconnected: Story = {
+  name: 'Google Calendar disconnected — inline warning',
+  args: {
+    demo: false,
+    visitType:      'design',
+    contactAddress: '14 Oak Street, London, SW1A 1AA',
+    handler:        { id: 1, type: 'schedule_visit', config: { visitType: 'design', defaultDurationMin: 90 }, bindings: [] },
+  },
+  decorators: [
+    (Story) => (
+      <GoogleDisconnectedDecorator>
+        <Story />
+      </GoogleDisconnectedDecorator>
+    ),
   ],
 };
