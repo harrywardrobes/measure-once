@@ -1780,6 +1780,70 @@ router.get('/api/customer-info/unmatched',
   }
 );
 
+// PATCH /api/customer-info/:id/link-contact
+// Admin-only: manually link an unmatched generic submission to a HubSpot contact.
+// Body: { contact_id: string, contact_name?: string }
+// The row must still be unmatched (contact_id IS NULL) — linking an already-linked
+// submission is rejected with 409 to prevent accidental overwrites.
+router.patch('/api/customer-info/:id/link-contact',
+  isAuthenticated,
+  requireAdmin,
+  async (req, res) => {
+    const submissionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(submissionId) || submissionId <= 0) {
+      return res.status(400).json({ error: 'Invalid submission ID.' });
+    }
+    const { contact_id, contact_name } = req.body || {};
+    if (!contact_id || typeof contact_id !== 'string' || !contact_id.trim()) {
+      return res.status(400).json({ error: 'contact_id is required.' });
+    }
+    const contactIdStr = contact_id.trim();
+
+    try {
+      const result = await pool.query(
+        `UPDATE customer_info_submissions
+            SET contact_id   = $2,
+                contact_name = CASE
+                                 WHEN $3::text IS NOT NULL AND $3::text <> ''
+                                 THEN $3::text
+                                 ELSE contact_name
+                               END,
+                updated_at   = NOW()
+          WHERE id         = $1
+            AND contact_id IS NULL
+            AND is_generic = true
+            AND submitted_at IS NOT NULL
+          RETURNING id`,
+        [submissionId, contactIdStr, contact_name || null],
+      );
+
+      if (result.rowCount === 0) {
+        // Check whether the row exists at all vs. was already linked.
+        const check = await pool.query(
+          `SELECT contact_id FROM customer_info_submissions WHERE id = $1`,
+          [submissionId],
+        );
+        if (check.rowCount === 0) {
+          return res.status(404).json({ error: 'Submission not found.' });
+        }
+        if (check.rows[0].contact_id !== null) {
+          return res.status(409).json({ error: 'Submission is already linked to a contact.' });
+        }
+        return res.status(404).json({ error: 'Submission cannot be linked (not a generic submitted form).' });
+      }
+
+      logger.info(
+        { submissionId, contactId: contactIdStr, adminUser: req.user?.id },
+        '[customer-info] Admin manually linked unmatched submission to contact',
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      logger.error({ err: e.message }, '[customer-info] PATCH /link-contact error');
+      res.status(500).json({ error: 'Failed to link submission.' });
+    }
+  },
+);
+
 module.exports = {
   router,
   ensureResendLogTable,

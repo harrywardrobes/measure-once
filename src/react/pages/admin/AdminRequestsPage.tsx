@@ -1,15 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Collapse, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, Grid, IconButton, InputLabel, LinearProgress, Link,
-  MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Tooltip, Typography,
+  Alert, AlertTitle, Autocomplete, Box, Button, Card, CardContent, Chip, CircularProgress,
+  Collapse, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, Grid, IconButton,
+  InputLabel, LinearProgress, Link, MenuItem, Select, Skeleton, Stack, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
 import HomeIcon from '@mui/icons-material/Home';
 import LanguageIcon from '@mui/icons-material/Language';
+import LinkIcon from '@mui/icons-material/Link';
 import PhoneIcon from '@mui/icons-material/Phone';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
 import {
@@ -61,6 +62,11 @@ type UnmatchedSub = {
   submitted_at: string;
   created_at: string;
 };
+type ContactOption = {
+  id: string;
+  label: string;
+  email: string;
+};
 
 function safeUrl(url?: string): string {
   const s = (url || '').trim();
@@ -83,128 +89,284 @@ function addressSummary(sub: UnmatchedSub): string {
   return [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ') || '—';
 }
 
-function UnmatchedSubCard({ sub }: { sub: UnmatchedSub }) {
+function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
   const displayEmail = sub.corrected_email || sub.contact_email || '—';
   const displayPhone = sub.corrected_mobile || '—';
   const photoCount = Array.isArray(sub.photoUrls) ? sub.photoUrls.length : 0;
 
+  // Link-to-customer dialog state
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkQuery, setLinkQuery] = useState('');
+  const [linkOptions, setLinkOptions] = useState<ContactOption[]>([]);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkSelected, setLinkSelected] = useState<ContactOption | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!linkOpen) return;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!linkQuery.trim()) {
+      setLinkOptions([]);
+      setLinkLoading(false);
+      return;
+    }
+    setLinkLoading(true);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const data = await api<{ results: Array<{ id: string; properties: { firstname?: string; lastname?: string; email?: string } }> }>(
+          'GET',
+          `/api/contacts-all?q=${encodeURIComponent(linkQuery.trim())}&limit=10&includeExcluded=1`,
+        );
+        const options: ContactOption[] = (data.results || []).map(c => {
+          const first = c.properties?.firstname || '';
+          const last  = c.properties?.lastname  || '';
+          const name  = [first, last].filter(Boolean).join(' ') || '(no name)';
+          const email = c.properties?.email || '';
+          return { id: c.id, label: name, email };
+        });
+        setLinkOptions(options);
+      } catch {
+        setLinkOptions([]);
+      } finally {
+        setLinkLoading(false);
+      }
+    }, 300);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [linkQuery, linkOpen]);
+
+  function openLinkDialog(e: React.MouseEvent) {
+    e.stopPropagation();
+    setLinkQuery('');
+    setLinkOptions([]);
+    setLinkSelected(null);
+    setLinkBusy(false);
+    setLinkOpen(true);
+  }
+
+  async function confirmLink() {
+    if (!linkSelected) return;
+    setLinkBusy(true);
+    try {
+      await api('PATCH', `/api/customer-info/${sub.id}/link-contact`, {
+        contact_id: linkSelected.id,
+        contact_name: linkSelected.label !== '(no name)' ? linkSelected.label : undefined,
+      });
+      toast('Submission linked to customer');
+      setLinkOpen(false);
+      onLinked(sub.id);
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
   return (
-    <Box
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Summary row */}
+    <>
       <Box
-        onClick={() => setOpen(v => !v)}
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-          px: 2,
-          py: 1.5,
-          cursor: 'pointer',
-          userSelect: 'none',
-          '&:hover': { bgcolor: 'action.hover' },
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          overflow: 'hidden',
         }}
       >
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>{displayName}</Typography>
-            <Typography variant="caption" color="text.secondary">{displayEmail}</Typography>
-            {displayPhone !== '—' && (
-              <Typography variant="caption" color="text.secondary">· {displayPhone}</Typography>
-            )}
-          </Stack>
-          <Stack direction="row" spacing={1} sx={{ mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
-            <HomeIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
-            <Typography variant="caption" color="text.secondary">{addressSummary(sub)}</Typography>
-            <Typography variant="caption" color="text.disabled">·</Typography>
-            <Typography variant="caption" color="text.secondary">{roomLabel(sub.room_count)}</Typography>
-            {photoCount > 0 && (
-              <>
-                <Typography variant="caption" color="text.disabled">·</Typography>
-                <Typography variant="caption" color="text.secondary">{photoCount} photo{photoCount !== 1 ? 's' : ''}</Typography>
-              </>
-            )}
-          </Stack>
+        {/* Summary row */}
+        <Box
+          onClick={() => setOpen(v => !v)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            px: 2,
+            py: 1.5,
+            cursor: 'pointer',
+            userSelect: 'none',
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>{displayName}</Typography>
+              <Typography variant="caption" color="text.secondary">{displayEmail}</Typography>
+              {displayPhone !== '—' && (
+                <Typography variant="caption" color="text.secondary">· {displayPhone}</Typography>
+              )}
+            </Stack>
+            <Stack direction="row" spacing={1} sx={{ mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
+              <HomeIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+              <Typography variant="caption" color="text.secondary">{addressSummary(sub)}</Typography>
+              <Typography variant="caption" color="text.disabled">·</Typography>
+              <Typography variant="caption" color="text.secondary">{roomLabel(sub.room_count)}</Typography>
+              {photoCount > 0 && (
+                <>
+                  <Typography variant="caption" color="text.disabled">·</Typography>
+                  <Typography variant="caption" color="text.secondary">{photoCount} photo{photoCount !== 1 ? 's' : ''}</Typography>
+                </>
+              )}
+            </Stack>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+            {fmtDate(sub.submitted_at)}
+          </Typography>
+          <IconButton size="small" aria-label={open ? 'Collapse' : 'Expand'} sx={{ flexShrink: 0 }}>
+            {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          </IconButton>
         </Box>
-        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-          {fmtDate(sub.submitted_at)}
-        </Typography>
-        <IconButton size="small" aria-label={open ? 'Collapse' : 'Expand'} sx={{ flexShrink: 0 }}>
-          {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-        </IconButton>
+
+        {/* Expandable detail */}
+        <Collapse in={open}>
+          <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Stack spacing={1}>
+              {sub.room_notes && (
+                <Box>
+                  <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
+                  <Typography variant="body2" color="text.secondary">{sub.room_notes}</Typography>
+                </Box>
+              )}
+              {photoCount === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  No photos uploaded.
+                </Typography>
+              ) : (
+                <Box>
+                  <Typography variant="overline" sx={{ fontSize: '0.65rem', display: 'block', mb: 0.5 }}>
+                    Photos ({photoCount})
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                      gap: 1,
+                    }}
+                  >
+                    {sub.photoUrls.map((url, i) => (
+                      <Box
+                        key={i}
+                        component="a"
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{
+                          display: 'block',
+                          aspectRatio: '1',
+                          borderRadius: 1,
+                          overflow: 'hidden',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src={url}
+                          alt={`Photo ${i + 1}`}
+                          loading="lazy"
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <Alert severity="warning" sx={{ py: 0.5, flex: 1 }}>
+                  This submission hasn't been matched to a HubSpot contact.
+                </Alert>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<LinkIcon />}
+                  onClick={openLinkDialog}
+                  sx={{ flexShrink: 0 }}
+                >
+                  Link to customer
+                </Button>
+              </Stack>
+            </Stack>
+          </Box>
+        </Collapse>
       </Box>
 
-      {/* Expandable detail */}
-      <Collapse in={open}>
-        <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Stack spacing={1}>
-            {sub.room_notes && (
-              <Box>
-                <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
-                <Typography variant="body2" color="text.secondary">{sub.room_notes}</Typography>
-              </Box>
-            )}
-            {photoCount === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                No photos uploaded.
-              </Typography>
-            ) : (
-              <Box>
-                <Typography variant="overline" sx={{ fontSize: '0.65rem', display: 'block', mb: 0.5 }}>
-                  Photos ({photoCount})
-                </Typography>
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-                    gap: 1,
-                  }}
-                >
-                  {sub.photoUrls.map((url, i) => (
-                    <Box
-                      key={i}
-                      component="a"
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      sx={{
-                        display: 'block',
-                        aspectRatio: '1',
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <Box
-                        component="img"
-                        src={url}
-                        alt={`Photo ${i + 1}`}
-                        loading="lazy"
-                        sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                    </Box>
-                  ))}
+      {/* Link-to-customer dialog */}
+      <Dialog open={linkOpen} onClose={() => !linkBusy && setLinkOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Link to customer
+          <Typography variant="caption" component="div" color="text.secondary">
+            Search for the HubSpot contact this submission belongs to.
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Autocomplete
+            options={linkOptions}
+            getOptionLabel={(o) => o.label}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            loading={linkLoading}
+            value={linkSelected}
+            onChange={(_, v) => setLinkSelected(v)}
+            inputValue={linkQuery}
+            onInputChange={(_, v) => setLinkQuery(v)}
+            filterOptions={(x) => x}
+            noOptionsText={linkQuery.trim() ? 'No contacts found' : 'Start typing to search'}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.id}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{option.label}</Typography>
+                  {option.email && (
+                    <Typography variant="caption" color="text.secondary">{option.email}</Typography>
+                  )}
                 </Box>
               </Box>
             )}
-            <Alert severity="warning" sx={{ py: 0.5 }}>
-              This submission hasn't been matched to a HubSpot contact. To link it, find or create
-              the contact in HubSpot, then it will appear automatically in their customer record once
-              the ID is resolved.
+            renderInput={(params) => {
+              const inputProps =
+                (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
+              return (
+                <TextField
+                  {...params}
+                  label="Search contacts"
+                  placeholder="Name or email…"
+                  autoFocus
+                  slotProps={{
+                    input: {
+                      ...inputProps,
+                      endAdornment: (
+                        <>
+                          {linkLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
+                          {inputProps.endAdornment as React.ReactNode}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              );
+            }}
+            sx={{ mt: 1 }}
+          />
+          {linkSelected && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              This submission will be linked to <strong>{linkSelected.label}</strong>
+              {linkSelected.email ? ` (${linkSelected.email})` : ''} and will appear on their customer record.
             </Alert>
-          </Stack>
-        </Box>
-      </Collapse>
-    </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLinkOpen(false)} disabled={linkBusy}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={confirmLink}
+            disabled={!linkSelected || linkBusy}
+            startIcon={linkBusy ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
+          >
+            {linkBusy ? 'Linking…' : 'Link'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
@@ -715,7 +877,13 @@ export function AdminRequestsPage() {
             <Typography variant="body2" color="text.secondary">No unmatched submissions.</Typography>
           ) : (
             <Stack spacing={1}>
-              {unmatched.map(s => <UnmatchedSubCard key={s.id} sub={s} />)}
+              {unmatched.map(s => (
+                <UnmatchedSubCard
+                  key={s.id}
+                  sub={s}
+                  onLinked={(id) => setUnmatched(prev => prev.filter(x => x.id !== id))}
+                />
+              ))}
             </Stack>
           )}
         </CardContent>
