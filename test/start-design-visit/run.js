@@ -243,19 +243,19 @@ async function main() {
   const adminClient  = await login(users.admin.email,  PASSWORD);
   const memberClient = await login(users.member.email, PASSWORD);
 
-  const seedHandle = await adminClient.post('/api/admin/design-visit-handles', {
+  const seedHandle = await adminClient.post('/api/admin/catalog/handles', {
     name: HANDLE_NAME, description: 'Seed handle for SDV test', sort_order: 9990,
   });
   const handleId = seedHandle.json?.id ?? null;
   console.log(`  Seeded handle id=${handleId}`);
 
-  const seedFurniture = await adminClient.post('/api/admin/design-visit-furniture-ranges', {
+  const seedFurniture = await adminClient.post('/api/admin/catalog/ranges', {
     name: FURNITURE_NAME, description: 'Seed range for SDV test', sort_order: 9990,
   });
   const furnitureId = seedFurniture.json?.id ?? null;
   console.log(`  Seeded furniture-range id=${furnitureId}`);
 
-  const seedDoorStyle = await adminClient.post('/api/admin/design-visit-door-styles', {
+  const seedDoorStyle = await adminClient.post('/api/admin/catalog/doors', {
     name: DOOR_STYLE_NAME, sort_order: 9990,
   });
   const doorStyleId = seedDoorStyle.json?.id ?? null;
@@ -266,9 +266,9 @@ async function main() {
 
   // Admin catalogue reads → 200
   for (const [label, path] of [
-    ['GET /api/admin/design-visit-handles', '/api/admin/design-visit-handles'],
-    ['GET /api/admin/design-visit-furniture-ranges', '/api/admin/design-visit-furniture-ranges'],
-    ['GET /api/admin/design-visit-door-styles', '/api/admin/design-visit-door-styles'],
+    ['GET /api/admin/catalog/handles', '/api/admin/catalog/handles'],
+    ['GET /api/admin/catalog/ranges',  '/api/admin/catalog/ranges'],
+    ['GET /api/admin/catalog/doors',   '/api/admin/catalog/doors'],
   ]) {
     const r = await adminClient.get(path);
     record(
@@ -310,7 +310,7 @@ async function main() {
     const { makeClient } = require('../privileges/harness');
     const anonClient = makeClient(null);
     for (const [label, path] of [
-      ['GET /api/admin/design-visit-handles (unauth)', '/api/admin/design-visit-handles'],
+      ['GET /api/admin/catalog/handles (unauth)', '/api/admin/catalog/handles'],
       ['GET /api/design-visit-handles (unauth)', '/api/design-visit-handles'],
     ]) {
       const r = await anonClient.get(path);
@@ -373,10 +373,10 @@ async function main() {
 
   // Non-admin POST to admin catalogue routes → 403
   {
-    const r = await memberClient.post('/api/admin/design-visit-handles', { name: 'blocked' });
+    const r = await memberClient.post('/api/admin/catalog/handles', { name: 'blocked' });
     const blocked = r.status === 401 || r.status === 403 || r.status === 302;
     record(
-      '(G) Non-admin POST /api/admin/design-visit-handles blocked',
+      '(G) Non-admin POST /api/admin/catalog/handles blocked',
       'status=403 (or 401/302)',
       `status=${r.status}`,
       blocked,
@@ -1281,12 +1281,12 @@ async function main() {
 
   // — Handles —
   // POST (create)
-  const createHandleRes = await adminClient.post('/api/admin/design-visit-handles', {
+  const createHandleRes = await adminClient.post('/api/admin/catalog/handles', {
     name: HANDLE_CRUD_NAME, description: 'CRUD test', sort_order: 9991,
   });
   const crudHandleId = createHandleRes.json?.id ?? null;
   record(
-    '(E) POST /api/admin/design-visit-handles creates a handle (201)',
+    '(E) POST /api/admin/catalog/handles creates a handle (201)',
     'status=201, id is integer',
     `status=${createHandleRes.status} id=${crudHandleId}`,
     createHandleRes.status === 201 && Number.isInteger(crudHandleId),
@@ -1303,11 +1303,11 @@ async function main() {
 
   // PATCH (update)
   if (crudHandleId) {
-    const patchRes = await adminClient.patch(`/api/admin/design-visit-handles/${crudHandleId}`, {
+    const patchRes = await adminClient.patch(`/api/admin/catalog/handles/${crudHandleId}`, {
       description: 'Updated description',
     });
     record(
-      '(E) PATCH /api/admin/design-visit-handles/:id updates the handle',
+      '(E) PATCH /api/admin/catalog/handles/:id updates the handle',
       'status=200',
       `status=${patchRes.status}`,
       patchRes.status === 200,
@@ -1323,12 +1323,12 @@ async function main() {
 
   // Non-admin PATCH → 403
   {
-    const r = await memberClient.patch(`/api/admin/design-visit-handles/${crudHandleId ?? 1}`, {
+    const r = await memberClient.patch(`/api/admin/catalog/handles/${crudHandleId ?? 1}`, {
       name: 'hacked',
     });
     const blocked = r.status === 401 || r.status === 403 || r.status === 302;
     record(
-      '(E) Non-admin PATCH /api/admin/design-visit-handles/:id blocked',
+      '(E) Non-admin PATCH /api/admin/catalog/handles/:id blocked',
       'status=403/401/302',
       `status=${r.status}`,
       blocked,
@@ -1337,9 +1337,9 @@ async function main() {
 
   // DELETE
   if (crudHandleId) {
-    const delRes = await adminClient.delete(`/api/admin/design-visit-handles/${crudHandleId}`);
+    const delRes = await adminClient.delete(`/api/admin/catalog/handles/${crudHandleId}`);
     record(
-      '(E) DELETE /api/admin/design-visit-handles/:id removes the handle',
+      '(E) DELETE /api/admin/catalog/handles/:id removes the handle',
       'status=200, success=true',
       `status=${delRes.status} success=${delRes.json?.success}`,
       delRes.status === 200 && delRes.json?.success === true,
@@ -1355,10 +1355,10 @@ async function main() {
 
   // Non-admin DELETE → 403
   {
-    const r = await memberClient.delete(`/api/admin/design-visit-handles/${handleId ?? 1}`);
+    const r = await memberClient.delete(`/api/admin/catalog/handles/${handleId ?? 1}`);
     const blocked = r.status === 401 || r.status === 403 || r.status === 302;
     record(
-      '(E) Non-admin DELETE /api/admin/design-visit-handles/:id blocked',
+      '(E) Non-admin DELETE /api/admin/catalog/handles/:id blocked',
       'status=403/401/302',
       `status=${r.status}`,
       blocked,
@@ -1366,30 +1366,30 @@ async function main() {
   }
 
   // — Furniture Ranges —
-  const createFurnitureRes = await adminClient.post('/api/admin/design-visit-furniture-ranges', {
+  const createFurnitureRes = await adminClient.post('/api/admin/catalog/ranges', {
     name: FURNITURE_CRUD_NAME, sort_order: 9991,
   });
   const crudFurnitureId = createFurnitureRes.json?.id ?? null;
   record(
-    '(E) POST /api/admin/design-visit-furniture-ranges creates a range (201)',
+    '(E) POST /api/admin/catalog/ranges creates a range (201)',
     'status=201, id is integer',
     `status=${createFurnitureRes.status} id=${crudFurnitureId}`,
     createFurnitureRes.status === 201 && Number.isInteger(crudFurnitureId),
   );
 
   if (crudFurnitureId) {
-    const patchRes = await adminClient.patch(`/api/admin/design-visit-furniture-ranges/${crudFurnitureId}`, {
+    const patchRes = await adminClient.patch(`/api/admin/catalog/ranges/${crudFurnitureId}`, {
       description: 'Updated range description',
     });
     record(
-      '(E) PATCH /api/admin/design-visit-furniture-ranges/:id updates the range',
+      '(E) PATCH /api/admin/catalog/ranges/:id updates the range',
       'status=200',
       `status=${patchRes.status}`,
       patchRes.status === 200,
     );
-    const delRes = await adminClient.delete(`/api/admin/design-visit-furniture-ranges/${crudFurnitureId}`);
+    const delRes = await adminClient.delete(`/api/admin/catalog/ranges/${crudFurnitureId}`);
     record(
-      '(E) DELETE /api/admin/design-visit-furniture-ranges/:id removes the range',
+      '(E) DELETE /api/admin/catalog/ranges/:id removes the range',
       'status=200',
       `status=${delRes.status}`,
       delRes.status === 200 && delRes.json?.success === true,
@@ -1397,30 +1397,30 @@ async function main() {
   }
 
   // — Door Styles —
-  const createDoorStyleRes = await adminClient.post('/api/admin/design-visit-door-styles', {
+  const createDoorStyleRes = await adminClient.post('/api/admin/catalog/doors', {
     name: DOOR_STYLE_CRUD_NAME, sort_order: 9991,
   });
   const crudDoorStyleId = createDoorStyleRes.json?.id ?? null;
   record(
-    '(E) POST /api/admin/design-visit-door-styles creates a door style (201)',
+    '(E) POST /api/admin/catalog/doors creates a door style (201)',
     'status=201, id is integer',
     `status=${createDoorStyleRes.status} id=${crudDoorStyleId}`,
     createDoorStyleRes.status === 201 && Number.isInteger(crudDoorStyleId),
   );
 
   if (crudDoorStyleId) {
-    const patchRes = await adminClient.patch(`/api/admin/design-visit-door-styles/${crudDoorStyleId}`, {
+    const patchRes = await adminClient.patch(`/api/admin/catalog/doors/${crudDoorStyleId}`, {
       image_url: 'https://example.com/style.png',
     });
     record(
-      '(E) PATCH /api/admin/design-visit-door-styles/:id updates the door style',
+      '(E) PATCH /api/admin/catalog/doors/:id updates the door style',
       'status=200',
       `status=${patchRes.status}`,
       patchRes.status === 200,
     );
-    const delRes = await adminClient.delete(`/api/admin/design-visit-door-styles/${crudDoorStyleId}`);
+    const delRes = await adminClient.delete(`/api/admin/catalog/doors/${crudDoorStyleId}`);
     record(
-      '(E) DELETE /api/admin/design-visit-door-styles/:id removes the door style',
+      '(E) DELETE /api/admin/catalog/doors/:id removes the door style',
       'status=200',
       `status=${delRes.status}`,
       delRes.status === 200 && delRes.json?.success === true,
@@ -1742,7 +1742,7 @@ async function main() {
 
         // ── Create a NEW handle via admin REST API (not through the UI) ──────
         const newHandleName = `${RUN_PREFIX} bc-refresh-handle-${runId}`;
-        const newHandleRes  = await adminClient.post('/api/admin/design-visit-handles', {
+        const newHandleRes  = await adminClient.post('/api/admin/catalog/handles', {
           name: newHandleName, sort_order: 9995,
         });
         const newHandleId = newHandleRes.json?.id ?? null;
@@ -1789,13 +1789,13 @@ async function main() {
 
         // Cleanup: delete the ephemeral handle
         if (newHandleId) {
-          await adminClient.delete(`/api/admin/design-visit-handles/${newHandleId}`);
+          await adminClient.delete(`/api/admin/catalog/handles/${newHandleId}`);
         }
 
         // ── Probe (F3): furniture BC → #dv-furniture dropdown refreshes ─────
         {
           const newFrName = `${RUN_PREFIX} bc-fr-${runId}`;
-          const frRes = await adminClient.post('/api/admin/design-visit-furniture-ranges', {
+          const frRes = await adminClient.post('/api/admin/catalog/ranges', {
             name: newFrName, sort_order: 9996,
           });
           const newFrId = frRes.json?.id ?? null;
@@ -1826,13 +1826,13 @@ async function main() {
             frDropUpdated === 'found',
           );
 
-          if (newFrId) await adminClient.delete(`/api/admin/design-visit-furniture-ranges/${newFrId}`);
+          if (newFrId) await adminClient.delete(`/api/admin/catalog/ranges/${newFrId}`);
         }
 
         // ── Probe (F4): door-style BC → .dv-ds on step 2 shows new style ────
         {
           const newDsName = `${RUN_PREFIX} bc-ds-${runId}`;
-          const dsRes = await adminClient.post('/api/admin/design-visit-door-styles', {
+          const dsRes = await adminClient.post('/api/admin/catalog/doors', {
             name: newDsName, sort_order: 9997,
           });
           const newDsId = dsRes.json?.id ?? null;
@@ -1891,7 +1891,7 @@ async function main() {
             );
           }
 
-          if (newDsId) await adminClient.delete(`/api/admin/design-visit-door-styles/${newDsId}`);
+          if (newDsId) await adminClient.delete(`/api/admin/catalog/doors/${newDsId}`);
         }
 
         await senderTab.close();

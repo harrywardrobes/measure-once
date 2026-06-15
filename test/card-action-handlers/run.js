@@ -2568,7 +2568,7 @@ async function main() {
     const REORDER_TYPES = [
       {
         type: 'handle',
-        endpoint: '/api/admin/design-visit-handles',
+        endpoint: '/api/admin/catalog/handles',
         wrapId: 'dv-handles-wrap',
         broadcastChannel: 'design_visit_handles_changed',
         // POST requires `style` for handles; the other fields are optional.
@@ -2576,14 +2576,14 @@ async function main() {
       },
       {
         type: 'furniture',
-        endpoint: '/api/admin/design-visit-furniture-ranges',
+        endpoint: '/api/admin/catalog/ranges',
         wrapId: 'dv-furniture-wrap',
         broadcastChannel: 'design_visit_furniture_ranges_changed',
         extraPostFields: {},
       },
       {
         type: 'door-style',
-        endpoint: '/api/admin/design-visit-door-styles',
+        endpoint: '/api/admin/catalog/doors',
         wrapId: 'dv-door-styles-wrap',
         broadcastChannel: 'design_visit_door_styles_changed',
         extraPostFields: {},

@@ -7,7 +7,7 @@ const { makeSkip } = require('../helpers/report');
 // Covers:
 //   (S) Success path — open the Add Handle modal, fill Name + Style, attach a
 //       small PNG to #dvie-img-file, click Save:
-//        • POST /api/admin/design-visit-handles creates the handle row.
+//        • POST /api/admin/catalog/handles creates the handle row.
 //        • A follow-up POST /api/admin/dv-handles/:id/image uploads the file.
 //        • The modal closes; #dv-handles-wrap re-renders an <img> whose src
 //          is the /uploads/handles/... URL returned by the server.
@@ -190,9 +190,9 @@ async function main() {
 
   // ── API pre-check ──────────────────────────────────────────────────────────
   const adminClient = await login(users.admin.email, PASSWORD);
-  const handlesPre = await adminClient.get('/api/admin/design-visit-handles');
+  const handlesPre = await adminClient.get('/api/admin/catalog/handles');
   record(
-    'GET /api/admin/design-visit-handles responds for admin',
+    'GET /api/admin/catalog/handles responds for admin',
     'status=200, JSON array',
     `status=${handlesPre.status} type=${Array.isArray(handlesPre.json) ? 'array' : typeof handlesPre.json}`,
     handlesPre.status === 200 && Array.isArray(handlesPre.json),

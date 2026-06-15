@@ -993,18 +993,7 @@ router.delete('/api/admin/catalog/pairings/:id', isAuthenticated, requireAdmin, 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Legacy admin catalogue route aliases (308 redirects) ──────────────────────
-// TODO remove after migration
-function catalogAdminAlias(legacyPrefix, newPrefix) {
-  router.all([legacyPrefix, `${legacyPrefix}/*`], isAuthenticated, requireAdmin, (req, res) => {
-    const rest = req.params[0] ? `/${req.params[0]}` : '';
-    res.redirect(308, `${newPrefix}${rest}`);
-  });
-}
-catalogAdminAlias('/api/admin/design-visit-handles',          '/api/admin/catalog/handles');  // TODO remove after migration
-catalogAdminAlias('/api/admin/design-visit-door-styles',      '/api/admin/catalog/doors');    // TODO remove after migration
-catalogAdminAlias('/api/admin/design-visit-furniture-ranges', '/api/admin/catalog/ranges');   // TODO remove after migration
-// Legacy existing-row handle image upload used a separate prefix. // TODO remove after migration
+// ── Legacy existing-row handle image upload (dv-handles → catalog/handles) ───
 router.all('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin, (req, res) => {
   res.redirect(308, `/api/admin/catalog/handles/${req.params.id}/image`);  // TODO remove after migration
 });

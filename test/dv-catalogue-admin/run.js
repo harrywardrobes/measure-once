@@ -23,9 +23,9 @@ const PROBE_LABELS = [
 // report to test-results/dv-catalogue-admin.md.
 //
 // Covers:
-//   (API)    Pre-checks — GET /api/admin/design-visit-handles,
-//            /api/admin/design-visit-furniture-ranges and
-//            /api/admin/design-visit-door-styles respond for admin.
+//   (API)    Pre-checks — GET /api/admin/catalog/handles,
+//            /api/admin/catalog/ranges and
+//            /api/admin/catalog/doors respond for admin.
 //   (H)      Handle modal — open via "+ Add handle", fill Name + Style, click
 //            Save: the Save button is disabled and shows "Saving…" while the
 //            POST is in flight, the modal closes, the new row appears in
@@ -49,7 +49,7 @@ const PROBE_LABELS = [
 //   (D/edit) Door-style edit — same shape against the seeded door-style row
 //            (rename + new image URL, PATCH .../door-styles/:id).
 //   (H/del)  Handle delete — stub window.confirm=true, click the row's Delete
-//            button, assert the DELETE hits /api/admin/design-visit-handles/:id,
+//            button, assert the DELETE hits /api/admin/catalog/handles/:id,
 //            the row disappears from #dv-handles-wrap without a page reload,
 //            the DB row is gone, AND the seeded local image file under
 //            public/uploads/handles/ is unlinked by the server
@@ -239,9 +239,9 @@ async function main() {
   const adminClient = await login(users.admin.email, PASSWORD);
 
   for (const [label, url] of [
-    ['handles',        '/api/admin/design-visit-handles'],
-    ['furniture',      '/api/admin/design-visit-furniture-ranges'],
-    ['door-styles',    '/api/admin/design-visit-door-styles'],
+    ['handles',        '/api/admin/catalog/handles'],
+    ['furniture',      '/api/admin/catalog/ranges'],
+    ['door-styles',    '/api/admin/catalog/doors'],
   ]) {
     const r = await adminClient.get(url);
     record(
@@ -740,7 +740,7 @@ async function main() {
     await runAddFlow('H', {
       addBtnLabel:     '+ Add handle',
       addBtnSelector:  'button[onclick="openDvHandleEditor()"]',
-      endpoint:        '/api/admin/design-visit-handles',
+      endpoint:        '/api/admin/catalog/handles',
       wrapId:          'dv-handles-wrap',
       assertExpected:  `wrap contains "${HANDLE_NAME}" and "${HANDLE_STYLE}"`,
       assertObserved:  t => `name=${t.includes(HANDLE_NAME)} style=${t.includes(HANDLE_STYLE)}`,
@@ -758,7 +758,7 @@ async function main() {
     });
 
     // Verify style persisted via the API (server returned style="Bar").
-    const handlesAfter = await adminClient.get('/api/admin/design-visit-handles');
+    const handlesAfter = await adminClient.get('/api/admin/catalog/handles');
     const createdHandle = Array.isArray(handlesAfter.json)
       ? handlesAfter.json.find(h => h.name === HANDLE_NAME)
       : null;
@@ -773,7 +773,7 @@ async function main() {
     if (createdHandle) {
       await runEditFlow('H', {
         type:           'handle',
-        endpoint:       '/api/admin/design-visit-handles',
+        endpoint:       '/api/admin/catalog/handles',
         wrapId:         'dv-handles-wrap',
         targetId:       createdHandle.id,
         expectedPrefill: { name: HANDLE_NAME, style: HANDLE_STYLE },
@@ -843,7 +843,7 @@ async function main() {
 
       await runDeleteFlow('H', {
         type:          'handle',
-        endpoint:      '/api/admin/design-visit-handles',
+        endpoint:      '/api/admin/catalog/handles',
         wrapId:        'dv-handles-wrap',
         targetId:      createdHandle.id,
         rowMarkerText: HANDLE_NAME_EDITED,
@@ -869,7 +869,7 @@ async function main() {
     await runAddFlow('F', {
       addBtnLabel:     '+ Add range',
       addBtnSelector:  'button[onclick="openDvFurnitureEditor()"]',
-      endpoint:        '/api/admin/design-visit-furniture-ranges',
+      endpoint:        '/api/admin/catalog/ranges',
       wrapId:          'dv-furniture-wrap',
       assertExpected:  `wrap contains "${FURNITURE_NAME}" and "${FURNITURE_DESC}"`,
       assertObserved:  t => `name=${t.includes(FURNITURE_NAME)} desc=${t.includes(FURNITURE_DESC)}`,
@@ -894,7 +894,7 @@ async function main() {
     if (furnitureRow) {
       await runEditFlow('F', {
         type:           'furniture',
-        endpoint:       '/api/admin/design-visit-furniture-ranges',
+        endpoint:       '/api/admin/catalog/ranges',
         wrapId:         'dv-furniture-wrap',
         targetId:       furnitureRow.id,
         expectedPrefill: { name: FURNITURE_NAME, desc: FURNITURE_DESC },
@@ -938,7 +938,7 @@ async function main() {
 
       await runDeleteFlow('F', {
         type:          'furniture',
-        endpoint:      '/api/admin/design-visit-furniture-ranges',
+        endpoint:      '/api/admin/catalog/ranges',
         wrapId:        'dv-furniture-wrap',
         targetId:      furnitureRow.id,
         rowMarkerText: FURNITURE_NAME_EDITED,
@@ -963,7 +963,7 @@ async function main() {
     await runAddFlow('D', {
       addBtnLabel:     '+ Add style',
       addBtnSelector:  'button[onclick="openDvDoorStyleEditor()"]',
-      endpoint:        '/api/admin/design-visit-door-styles',
+      endpoint:        '/api/admin/catalog/doors',
       wrapId:          'dv-door-styles-wrap',
       assertExpected:  `wrap contains "${DOOR_NAME}" and the image URL`,
       assertObserved:  t => `name=${t.includes(DOOR_NAME)} url=${t.includes(DOOR_IMG_URL)}`,
@@ -988,7 +988,7 @@ async function main() {
     if (doorRow) {
       await runEditFlow('D', {
         type:           'door-style',
-        endpoint:       '/api/admin/design-visit-door-styles',
+        endpoint:       '/api/admin/catalog/doors',
         wrapId:         'dv-door-styles-wrap',
         targetId:       doorRow.id,
         expectedPrefill: { name: DOOR_NAME, img: DOOR_IMG_URL },
@@ -1032,7 +1032,7 @@ async function main() {
 
       await runDeleteFlow('D', {
         type:          'door-style',
-        endpoint:      '/api/admin/design-visit-door-styles',
+        endpoint:      '/api/admin/catalog/doors',
         wrapId:        'dv-door-styles-wrap',
         targetId:      doorRow.id,
         rowMarkerText: DOOR_NAME_EDITED,
@@ -1094,9 +1094,9 @@ async function writeReport(runId, findings) {
     '',
     '## Coverage',
     '',
-    '- **(API pre-checks)**: `GET /api/admin/design-visit-handles`,',
-    '  `/api/admin/design-visit-furniture-ranges`, and',
-    '  `/api/admin/design-visit-door-styles` respond 200 + array for admin.',
+    '- **(API pre-checks)**: `GET /api/admin/catalog/handles`,',
+    '  `/api/admin/catalog/ranges`, and',
+    '  `/api/admin/catalog/doors` respond 200 + array for admin.',
     '- **(H/F/D) Add via modal**: for handle, furniture range, and door style:',
     '  - The "+ Add …" button opens the editor modal (`#dvie-name`,',
     '    `#dvie-save` present).',
@@ -1109,7 +1109,7 @@ async function writeReport(runId, findings) {
     '    the values entered in the modal — *without a full page reload*',
     '    (`window.__pageLoadToken` is preserved across the save).',
     '- **(H) Style dropdown persistence**: after saving the handle, the',
-    '  follow-up `GET /api/admin/design-visit-handles` returns the row with',
+    '  follow-up `GET /api/admin/catalog/handles` returns the row with',
     '  `style === "Bar"`, proving the dropdown value reached the database.',
     '- **(H/F/D) Edit via modal**: for the row each add-flow just created:',
     '  - `openDvItemEditor(type, id)` is called directly so the modal opens',
@@ -1133,8 +1133,8 @@ async function writeReport(runId, findings) {
     '  - The row\'s Delete button (rendered with',
     '    `onclick="deleteDvItem(\'<type>\', <id>)"`) is clicked in-page.',
     '  - A `DELETE` request lands on the matching endpoint',
-    '    (`/api/admin/design-visit-handles/:id`, `/...furniture-ranges/:id`,',
-    '    `/...door-styles/:id`) and returns a 2xx (response listener).',
+    '    (`/api/admin/catalog/handles/:id`, `/api/admin/catalog/ranges/:id`,',
+    '    `/api/admin/catalog/doors/:id`) and returns a 2xx (response listener).',
     '  - The matching catalogue wrap loses the row in place (row count',
     '    drops, the row\'s name no longer appears in `wrap.textContent`)',
     '    without a full page reload (`window.__pageLoadToken` preserved).',
