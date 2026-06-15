@@ -56,5 +56,6 @@
   "1783100000000_catalog-tables",
   "1783200000000_questionnaire-tables",
   "1783300000000_survey-visits",
-  "1783400000000_visit-questions-collection-and-checks"
+  "1783400000000_visit-questions-collection-and-checks",
+  "1783500000000_cleanup-stale-search-settings-action-ids"
 ]
