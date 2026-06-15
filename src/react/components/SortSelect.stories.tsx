@@ -2,12 +2,11 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { SortSelect } from './SortSelect';
 
-const SORT_OPTIONS = [
-  { value: 'name_asc', label: 'Name A–Z' },
-  { value: 'name_desc', label: 'Name Z–A' },
-  { value: 'date_asc', label: 'Oldest first' },
-  { value: 'date_desc', label: 'Newest first' },
-  { value: 'stage', label: 'By stage' },
+const CUSTOMERS_SORT_OPTIONS = [
+  { value: 'priority', label: 'Priority first' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'name-asc', label: 'Name A–Z' },
+  { value: 'name-desc', label: 'Name Z–A' },
 ];
 
 const meta: Meta<typeof SortSelect> = {
@@ -34,22 +33,40 @@ type Story = StoryObj<typeof SortSelect>;
 
 export const Default: Story = {
   args: {
-    value: 'name_asc',
-    options: SORT_OPTIONS,
+    value: 'priority',
+    options: CUSTOMERS_SORT_OPTIONS,
+    label: 'Sort by',
     onChange: () => {},
   },
   parameters: {
     docs: {
-      description: { story: 'Default label ("Sort") and default minWidth (160 px).' },
+      description: {
+        story:
+          'Customers page sort options — "Priority first" is the default selected value (pins no-status contacts to the top, then newest-first within each group).',
+      },
+    },
+  },
+};
+
+export const NonDefaultSelected: Story = {
+  args: {
+    value: 'name-asc',
+    options: CUSTOMERS_SORT_OPTIONS,
+    label: 'Sort by',
+    onChange: () => {},
+  },
+  parameters: {
+    docs: {
+      description: { story: 'A non-default option selected — "Name A–Z".' },
     },
   },
 };
 
 export const CustomLabel: Story = {
   args: {
-    value: 'date_desc',
+    value: 'newest',
     label: 'Order by',
-    options: SORT_OPTIONS,
+    options: CUSTOMERS_SORT_OPTIONS,
     onChange: () => {},
   },
   parameters: {
@@ -61,10 +78,10 @@ export const CustomLabel: Story = {
 
 export const NarrowWidth: Story = {
   args: {
-    value: 'stage',
-    label: 'Sort',
+    value: 'priority',
+    label: 'Sort by',
     minWidth: 100,
-    options: SORT_OPTIONS,
+    options: CUSTOMERS_SORT_OPTIONS,
     onChange: () => {},
   },
   parameters: {
@@ -76,10 +93,10 @@ export const NarrowWidth: Story = {
 
 export const WideWidth: Story = {
   args: {
-    value: 'name_asc',
+    value: 'priority',
     label: 'Sort by',
     minWidth: 240,
-    options: SORT_OPTIONS,
+    options: CUSTOMERS_SORT_OPTIONS,
     onChange: () => {},
   },
   parameters: {
@@ -91,13 +108,13 @@ export const WideWidth: Story = {
 
 export const Interactive: Story = {
   render: () => {
-    const [val, setVal] = useState('name_asc');
+    const [val, setVal] = useState('priority');
     return (
       <SortSelect
         value={val}
         onChange={setVal}
-        options={SORT_OPTIONS}
-        label="Sort"
+        options={CUSTOMERS_SORT_OPTIONS}
+        label="Sort by"
       />
     );
   },
@@ -110,11 +127,11 @@ export const Interactive: Story = {
 
 export const TwoInstances: Story = {
   render: () => {
-    const [sort, setSort] = useState('name_asc');
+    const [sort, setSort] = useState('priority');
     const [group, setGroup] = useState('stage');
     return (
       <div style={{ display: 'flex', gap: 12 }}>
-        <SortSelect value={sort} onChange={setSort} options={SORT_OPTIONS} label="Sort" />
+        <SortSelect value={sort} onChange={setSort} options={CUSTOMERS_SORT_OPTIONS} label="Sort by" />
         <SortSelect
           value={group}
           onChange={setGroup}

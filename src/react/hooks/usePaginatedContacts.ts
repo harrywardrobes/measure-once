@@ -104,6 +104,16 @@ function offlineComparator(sort: string): (a: PaginatedContact, b: PaginatedCont
       return (a, b) => (a.properties?.lastname || '').localeCompare(b.properties?.lastname || '');
     case 'name-desc':
       return (a, b) => (b.properties?.lastname || '').localeCompare(a.properties?.lastname || '');
+    case 'priority': {
+      const byNewest = (a: PaginatedContact, b: PaginatedContact) =>
+        (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+      return (a, b) => {
+        const aNoStatus = !a.properties?.hs_lead_status;
+        const bNoStatus = !b.properties?.hs_lead_status;
+        if (aNoStatus !== bNoStatus) return aNoStatus ? -1 : 1;
+        return byNewest(a, b);
+      };
+    }
     case 'newest':
     default:
       return (a, b) => (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
@@ -297,12 +307,13 @@ export function usePaginatedContacts(
     const qs = new URLSearchParams({ page: String(effectivePage), limit: String(limit) });
     if (leadStatus) qs.set('leadStatus', leadStatus);
     if (stage) qs.set('stage', stage);
-    if (sortBy && sortBy !== 'newest') qs.set('sort', sortBy);
+    const serverSort = sortBy === 'priority' ? 'newest' : sortBy;
+    if (serverSort && serverSort !== 'newest') qs.set('sort', serverSort);
     if (search) qs.set('q', search);
     if (showArchived) qs.set('archived', '1');
     if (showExcluded) qs.set('includeExcluded', '1');
     if (staleAfterDays !== undefined) qs.set('staleAfterDays', String(staleAfterDays));
-    if (priorityFirst) qs.set('priorityFirst', '1');
+    if (priorityFirst || sortBy === 'priority') qs.set('priorityFirst', '1');
 
     (async () => {
       try {
