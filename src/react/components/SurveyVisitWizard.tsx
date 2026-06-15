@@ -704,29 +704,49 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   }
 
   async function handleRefundSubmit() {
+    const reasonTrimmed = refundReason.trim();
+    if (!reasonTrimmed) {
+      setRefundError('Please enter a reason for the refund request.');
+      return;
+    }
+    const amountRaw = refundAmount.trim();
+    if (!amountRaw) {
+      setRefundError('Please enter a refund amount.');
+      return;
+    }
+    const parsedAmount = parseFloat(amountRaw);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setRefundError('Please enter a valid refund amount greater than zero.');
+      return;
+    }
+    if (!contactId) {
+      setRefundError('Contact ID is missing — cannot submit refund request.');
+      return;
+    }
     setRefundSubmitting(true);
     setRefundError('');
     try {
-      const amountPence = refundAmount.trim()
-        ? Math.max(0, Math.round(parseFloat(refundAmount) * 100)) || 0
-        : undefined;
-      const res = await fetch('/api/survey-visits/refund', {
+      const amountPence = Math.round(parsedAmount * 100);
+      const body = {
+        contactId,
+        contactName,
+        contactEmail,
+        designVisitId: designVisitId || undefined,
+        reason: reasonTrimmed,
+        amountPence,
+        depositInvoiceRef: refundInvoiceRef.trim() || undefined,
+        handlerConfig: cfg,
+      };
+      const { sendOrQueue } = await import('../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'visit',
+        label: `Refund request — ${contactName || contactId}`,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contactId,
-          contactName,
-          contactEmail,
-          designVisitId: designVisitId || undefined,
-          reason: refundReason.trim() || undefined,
-          amountPence,
-          depositInvoiceRef: refundInvoiceRef.trim() || undefined,
-          handlerConfig: cfg,
-        }),
+        url: '/api/survey-visits/refund',
+        body,
       });
-      if (!res.ok) {
-        let d: { error?: string } | undefined;
-        try { d = await res.json(); } catch {}
+      if (!res.queued && !res.ok) {
+        const d = res.data as { error?: string } | undefined;
         throw new Error(d?.error || 'Could not record refund request.');
       }
       committedRef.current = true;
@@ -734,7 +754,9 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       setOpen(false);
       setTimeout(() => {
         onClose();
-        const msg = 'Refund request recorded. An admin has been notified.';
+        const msg = res.queued
+          ? "Refund request saved offline — it'll be sent when you're back online."
+          : 'Refund request recorded. An admin has been notified.';
         const w = window as unknown as Record<string, unknown>;
         if (typeof w['toast'] === 'function') (w['toast'] as (m: string) => void)(msg);
         else if (typeof w['showToast'] === 'function') (w['showToast'] as (m: string) => void)(msg);
