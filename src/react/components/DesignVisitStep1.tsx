@@ -1,11 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
-import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -14,6 +10,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { AddressInput } from './AddressInput';
+import { CatalogueDropdowns } from './CatalogueDropdowns';
 import type { StructuredAddress } from '../../../shared/address';
 
 export interface Step1Data {
@@ -128,37 +125,24 @@ export function DesignVisitStep1({
           sx={{ mb: 1.5 }}
         />
 
-        {handles.length > 0 && (
-          <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-            <InputLabel>Handle selection</InputLabel>
-            <Select
-              label="Handle selection"
-              value={data.handleId ? String(data.handleId) : ''}
-              onChange={e => update({ handleId: e.target.value })}
-            >
-              <MenuItem value="">— select handle —</MenuItem>
-              {handles.map(h => (
-                <MenuItem key={h.id} value={String(h.id)}>{h.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-
-        {furnitureRanges.length > 0 && (
-          <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-            <InputLabel>Furniture range</InputLabel>
-            <Select
-              label="Furniture range"
-              value={data.furnitureRangeId ? String(data.furnitureRangeId) : ''}
-              onChange={e => update({ furnitureRangeId: e.target.value })}
-            >
-              <MenuItem value="">— select range —</MenuItem>
-              {furnitureRanges.map(fr => (
-                <MenuItem key={fr.id} value={String(fr.id)}>{fr.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
+        <CatalogueDropdowns
+          dropdowns={[
+            {
+              label: 'Handle selection',
+              value: data.handleId,
+              options: handles,
+              onChange: (v) => update({ handleId: v }),
+              noneLabel: '— select handle —',
+            },
+            {
+              label: 'Furniture range',
+              value: data.furnitureRangeId,
+              options: furnitureRanges,
+              onChange: (v) => update({ furnitureRangeId: v }),
+              noneLabel: '— select range —',
+            },
+          ]}
+        />
 
         {termsText && (
           <>

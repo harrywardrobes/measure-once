@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DV_WIZARD_DRAFT_PREFIX, DV_WIZARD_DRAFT_EDIT_PREFIX } from '../constants/localStorageKeys';
-import { BRAND_COLORS, STATUS_COLORS } from '../theme';
-import Alert from '@mui/material/Alert';
+import { BRAND_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -9,6 +8,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FullScreenModal } from './modals/FullScreenModal';
+import { VisitWizardShell } from './VisitWizardShell';
 import { useToastContext } from '../contexts/ToastContext';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
@@ -21,7 +21,6 @@ import {
   DEMO_STEP1,
   DEMO_ROOMS,
 } from './modals/demoData';
-import { ModalContactHeader } from './modals/ModalContactHeader';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { QuestionnaireRenderer, missingRequired, type VisitQuestion, type AnswerMap } from './QuestionnaireRenderer';
 import { emptyAddress, isAddressEmpty, type StructuredAddress } from '../../../shared/address';
@@ -190,25 +189,6 @@ function extractOrphanedDraftKeys(key: string): string[] {
   } catch {
     return [];
   }
-}
-
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  return (
-    <Box sx={{ display: 'flex', gap: '6px', mb: '20px' }}>
-      {Array.from({ length: total }, (_, i) => (
-        <Box
-          key={i}
-          sx={{
-            flex: 1,
-            height: '4px',
-            borderRadius: '2px',
-            background: i + 1 <= current ? BRAND_COLORS.orchid : 'var(--neutral-200)',
-            transition: 'background .2s',
-          }}
-        />
-      ))}
-    </Box>
-  );
 }
 
 export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady, demo }: DesignVisitWizardProps) {
@@ -633,64 +613,77 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                   : step === 2 ? 'Step 2 of 3 — Rooms'
                   : 'Step 3 of 3 — Review & submit';
 
-  return (
-    <>
-    <FullScreenModal
-      open={open}
-      onClose={handleClose}
-      title={title}
-      headerActions={demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" sx={{ flexShrink: 0 }} /> : undefined}
-      footer={!catalogueLoading ? (
-        <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
-          {(s1Error && step === 1) && (
-            <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s1Error}</Typography>
-          )}
-          {(submitError && step === 3) && (
-            <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{submitError}</Typography>
-          )}
+  const footer = (
+    <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
+      {(s1Error && step === 1) && (
+        <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s1Error}</Typography>
+      )}
+      {(submitError && step === 3) && (
+        <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{submitError}</Typography>
+      )}
 
-          <Box sx={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            {step > 1 && (
-              <Button
-                variant="outlined"
-                onClick={() => { setSubmitError(''); setStep(s => s - 1); }}
-                disabled={submitting}
-                sx={{
-                  borderColor: 'var(--neutral-300)',
-                  color: 'var(--neutral-700)',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { borderColor: 'var(--neutral-400)', background: 'var(--neutral-50)' },
-                }}
-              >
-                ← Back
-              </Button>
-            )}
+      <Box sx={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        {step > 1 && (
+          <Button
+            variant="outlined"
+            onClick={() => { setSubmitError(''); setStep(s => s - 1); }}
+            disabled={submitting}
+            sx={{
+              borderColor: 'var(--neutral-300)',
+              color: 'var(--neutral-700)',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { borderColor: 'var(--neutral-400)', background: 'var(--neutral-50)' },
+            }}
+          >
+            ← Back
+          </Button>
+        )}
 
-            {step === 1 && (
+        {step === 1 && (
+          <Button
+            variant="contained"
+            onClick={advanceToStep2}
+            sx={{
+              background: BRAND_COLORS.orchid,
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { background: BRAND_COLORS.orchidPress },
+            }}
+          >
+            Next: Rooms →
+          </Button>
+        )}
+
+        {step === 2 && (
+          <Button
+            variant="contained"
+            onClick={() => {
+              const emptyRooms = rooms.filter(r => !r.roomName.trim());
+              if (emptyRooms.length || !rooms.length) return;
+              setStep(3);
+            }}
+            disabled={uploading || rooms.some(r => !r.roomName.trim()) || rooms.length === 0}
+            sx={{
+              background: BRAND_COLORS.orchid,
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { background: BRAND_COLORS.orchidPress },
+              '&:disabled': { opacity: 0.55 },
+            }}
+          >
+            Review →
+          </Button>
+        )}
+
+        {step === 3 && (
+          <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
+            <span>
               <Button
                 variant="contained"
-                onClick={advanceToStep2}
-                sx={{
-                  background: BRAND_COLORS.orchid,
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': { background: BRAND_COLORS.orchidPress },
-                }}
-              >
-                Next: Rooms →
-              </Button>
-            )}
-
-            {step === 2 && (
-              <Button
-                variant="contained"
-                onClick={() => {
-                  const emptyRooms = rooms.filter(r => !r.roomName.trim());
-                  if (emptyRooms.length || !rooms.length) return;
-                  setStep(3);
-                }}
-                disabled={uploading || rooms.some(r => !r.roomName.trim()) || rooms.length === 0}
+                onClick={handleSubmit}
+                disabled={demo || submitting}
+                startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                 sx={{
                   background: BRAND_COLORS.orchid,
                   fontWeight: 600,
@@ -699,111 +692,81 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
                   '&:disabled': { opacity: 0.55 },
                 }}
               >
-                Review →
+                {submitting
+                  ? (editMode ? 'Saving…' : 'Submitting…')
+                  : (editMode ? 'Save changes' : 'Submit visit')}
               </Button>
-            )}
+            </span>
+          </Tooltip>
+        )}
+      </Box>
+    </Box>
+  );
 
-            {step === 3 && (
-              <Tooltip title={demo ? DEMO_TOOLTIP : ''} disableHoverListener={!demo} arrow>
-                <span>
-                  <Button
-                    variant="contained"
-                    onClick={handleSubmit}
-                    disabled={demo || submitting}
-                    startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
-                    sx={{
-                      background: BRAND_COLORS.orchid,
-                      fontWeight: 600,
-                      textTransform: 'none',
-                      '&:hover': { background: BRAND_COLORS.orchidPress },
-                      '&:disabled': { opacity: 0.55 },
-                    }}
-                  >
-                    {submitting
-                      ? (editMode ? 'Saving…' : 'Submitting…')
-                      : (editMode ? 'Save changes' : 'Submit visit')}
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
-          </Box>
-        </Box>
-      ) : undefined}
+  return (
+    <>
+    <VisitWizardShell
+      open={open}
+      onClose={handleClose}
+      title={title}
+      headerActions={demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" sx={{ flexShrink: 0 }} /> : undefined}
+      footer={footer}
+      contactName={contactName}
+      contactEmail={contactEmail}
+      loading={catalogueLoading}
+      draftNotice={showDraftNotice}
+      onDismissDraftNotice={() => setShowDraftNotice(false)}
+      step={step}
+      totalSteps={3}
+      stepLabel={stepLabel}
     >
-      <ModalContactHeader
-        name={contactName}
-        email={contactEmail}
-        loading={catalogueLoading}
-      />
-      {showDraftNotice && (
-        <Alert
-          severity="info"
-          onClose={() => setShowDraftNotice(false)}
-          sx={{ mb: '16px', fontSize: '.82rem' }}
-        >
-          Restoring your draft from last time.
-        </Alert>
-      )}
-      {catalogueLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
-          <CircularProgress size={28} />
-        </Box>
-      ) : (
+      {step === 1 && (
         <>
-          <StepIndicator current={step} total={3} />
-          <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-500)', mb: '16px' }}>
-            {stepLabel}
-          </Typography>
-
-          {step === 1 && (
-            <>
-              <DesignVisitStep1
-                initialData={step1}
-                handles={handles}
-                furnitureRanges={furnitureRanges}
-                termsText={termsText}
-                termsVersionNumber={termsVersionNumber}
-                onDataChange={setStep1}
+          <DesignVisitStep1
+            initialData={step1}
+            handles={handles}
+            furnitureRanges={furnitureRanges}
+            termsText={termsText}
+            termsVersionNumber={termsVersionNumber}
+            onDataChange={setStep1}
+          />
+          {visitQuestions.length > 0 && (
+            <Box sx={{ mt: '24px' }}>
+              <QuestionnaireRenderer
+                questions={visitQuestions}
+                answers={answers}
+                onChange={(id, value) => setAnswers(prev => ({ ...prev, [id]: value }))}
+                showValidation={showAnswerValidation}
               />
-              {visitQuestions.length > 0 && (
-                <Box sx={{ mt: '24px' }}>
-                  <QuestionnaireRenderer
-                    questions={visitQuestions}
-                    answers={answers}
-                    onChange={(id, value) => setAnswers(prev => ({ ...prev, [id]: value }))}
-                    showValidation={showAnswerValidation}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-
-          {step === 2 && (
-            <DesignVisitRoomsStep
-              initialRooms={rooms}
-              doorStyles={doorStyles}
-              onRoomsChange={setRooms}
-              onUploadingChange={setUploading}
-              onNewUpload={key => pendingUploadKeysRef.current.add(key)}
-              onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
-              demo={demo}
-            />
-          )}
-
-          {step === 3 && (
-            <DesignVisitStep3
-              step1Data={step1}
-              rooms={rooms}
-              handles={handles}
-              furnitureRanges={furnitureRanges}
-              doorStyles={doorStyles}
-              termsText={termsText}
-              termsVersionNumber={termsVersionNumber}
-            />
+            </Box>
           )}
         </>
       )}
-    </FullScreenModal>
+
+      {step === 2 && (
+        <DesignVisitRoomsStep
+          initialRooms={rooms}
+          doorStyles={doorStyles}
+          onRoomsChange={setRooms}
+          onUploadingChange={setUploading}
+          onNewUpload={key => pendingUploadKeysRef.current.add(key)}
+          onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
+          demo={demo}
+        />
+      )}
+
+      {step === 3 && (
+        <DesignVisitStep3
+          step1Data={step1}
+          rooms={rooms}
+          handles={handles}
+          furnitureRanges={furnitureRanges}
+          doorStyles={doorStyles}
+          termsText={termsText}
+          termsVersionNumber={termsVersionNumber}
+        />
+      )}
+    </VisitWizardShell>
 
     {/* Discard draft confirmation */}
     <FullScreenModal

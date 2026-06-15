@@ -1,41 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import CloseIcon from '@mui/icons-material/Close';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import { FileUploadField, UploadStatus } from './FileUploadField';
-import { BRAND_COLORS, STATUS_COLORS } from '../theme';
+import { UploadStatus } from './FileUploadField';
+import { BRAND_COLORS } from '../theme';
+import { RoomEditorCard, type RoomData, type DoorStyleOption } from './RoomEditorCard';
+import type { RoomImage } from './RoomImageUploader';
 
-export interface RoomImage {
-  storageKey: string;
-  mimeType: string | null;
-  viewUrl: string;
-}
-
-export interface RoomData {
-  roomName: string;
-  doorStyleId: string;
-  widthMm: number | null;
-  heightMm: number | null;
-  depthMm: number | null;
-  unitCount: number;
-  unitPricePence: number;
-  notes: string;
-  images: RoomImage[];
-}
-
-export interface DoorStyleOption {
-  id: string | number;
-  name: string;
-}
+// Re-exported for backwards compatibility — these types were originally
+// declared here and are imported from this module across the codebase.
+export type { RoomData, DoorStyleOption } from './RoomEditorCard';
+export type { RoomImage } from './RoomImageUploader';
 
 export interface DesignVisitRoomsStepProps {
   initialRooms: RoomData[];
@@ -391,284 +365,25 @@ export function DesignVisitRoomsStep({
     <Box>
       {rooms.map((room, idx) => {
         const { clientId, data } = room;
-        const uploadStatus = uploadStatusById[clientId] ?? 'idle';
-        const uploadProgress = uploadProgressById[clientId];
-
         return (
-          <Box
+          <RoomEditorCard
             key={clientId}
-            sx={{
-              border: '1.5px solid var(--neutral-200)',
-              borderRadius: '10px',
-              p: '14px',
-              mb: '12px',
-            }}
-          >
-            {/* Header row: reorder buttons, room title, remove */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: '10px' }}>
-              <IconButton
-                size="small"
-                title="Move up"
-                disabled={idx === 0}
-                onClick={() => moveRoom(clientId, -1)}
-                sx={{
-                  border: '1.5px solid var(--neutral-300)',
-                  borderRadius: '7px',
-                  p: '3px',
-                  color: 'var(--neutral-500)',
-                  '&:disabled': { opacity: 0.35 },
-                }}
-              >
-                <KeyboardArrowUpIcon sx={{ fontSize: '0.9rem' }} />
-              </IconButton>
-              <IconButton
-                size="small"
-                title="Move down"
-                disabled={idx === rooms.length - 1}
-                onClick={() => moveRoom(clientId, 1)}
-                sx={{
-                  border: '1.5px solid var(--neutral-300)',
-                  borderRadius: '7px',
-                  p: '3px',
-                  color: 'var(--neutral-500)',
-                  '&:disabled': { opacity: 0.35 },
-                }}
-              >
-                <KeyboardArrowDownIcon sx={{ fontSize: '0.9rem' }} />
-              </IconButton>
-              <Typography
-                sx={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--neutral-700)', flex: 1 }}
-              >
-                Room {idx + 1}
-              </Typography>
-              {rooms.length > 1 && (
-                <Button
-                  size="small"
-                  onClick={() => removeRoom(clientId)}
-                  sx={{
-                    border: '1.5px solid var(--neutral-300)',
-                    borderRadius: '7px',
-                    px: '10px',
-                    py: '4px',
-                    bgcolor: 'background.paper',
-                    fontSize: '.8rem',
-                    color: 'var(--neutral-700)',
-                    textTransform: 'none',
-                    minWidth: 0,
-                    '&:hover': {
-                      background: STATUS_COLORS.errorLight.bg,
-                      borderColor: STATUS_COLORS.error.border,
-                      color: 'error.main',
-                    },
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </Box>
-
-            {/* Room name */}
-            <TextField
-              label={
-                <>
-                  Room name{' '}
-                  <Box component="span" sx={{ color: STATUS_COLORS.error.text }}>
-                    *
-                  </Box>
-                </>
-              }
-              size="small"
-              fullWidth
-              slotProps={{ htmlInput: { maxLength: 200 } }}
-              placeholder="e.g. Kitchen"
-              value={data.roomName}
-              onChange={e => updateRoomData(clientId, { roomName: e.target.value })}
-              sx={{ mb: 1.5 }}
-            />
-
-            {/* Door style */}
-            {doorStyles.length > 0 && (
-              <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
-                <InputLabel>Door style</InputLabel>
-                <Select
-                  label="Door style"
-                  value={data.doorStyleId ? String(data.doorStyleId) : ''}
-                  onChange={e => updateRoomData(clientId, { doorStyleId: e.target.value })}
-                >
-                  <MenuItem value="">— none —</MenuItem>
-                  {doorStyles.map(ds => (
-                    <MenuItem key={ds.id} value={String(ds.id)}>
-                      {ds.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-
-            {/* Dimensions */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr',
-                gap: '10px',
-                mb: 1.5,
-              }}
-            >
-              <TextField
-                label="Width (mm)"
-                size="small"
-                type="number"
-                slotProps={{ htmlInput: { min: 0 } }}
-                placeholder="e.g. 3500"
-                value={data.widthMm ?? ''}
-                onChange={e =>
-                  updateRoomData(clientId, { widthMm: parseInt(e.target.value, 10) || null })
-                }
-              />
-              <TextField
-                label="Height (mm)"
-                size="small"
-                type="number"
-                slotProps={{ htmlInput: { min: 0 } }}
-                placeholder="e.g. 2400"
-                value={data.heightMm ?? ''}
-                onChange={e =>
-                  updateRoomData(clientId, { heightMm: parseInt(e.target.value, 10) || null })
-                }
-              />
-              <TextField
-                label="Depth (mm)"
-                size="small"
-                type="number"
-                slotProps={{ htmlInput: { min: 0 } }}
-                placeholder="e.g. 600"
-                value={data.depthMm ?? ''}
-                onChange={e =>
-                  updateRoomData(clientId, { depthMm: parseInt(e.target.value, 10) || null })
-                }
-              />
-            </Box>
-
-            {/* Unit count + unit price */}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '12px',
-                mb: 1.5,
-              }}
-            >
-              <TextField
-                label={
-                  <>
-                    Unit count{' '}
-                    <Box component="span" sx={{ color: STATUS_COLORS.error.text }}>
-                      *
-                    </Box>
-                  </>
-                }
-                size="small"
-                type="number"
-                slotProps={{ htmlInput: { min: 1 } }}
-                value={data.unitCount}
-                onChange={e =>
-                  updateRoomData(clientId, {
-                    unitCount: Math.max(1, parseInt(e.target.value, 10) || 1),
-                  })
-                }
-              />
-              <TextField
-                label="Unit price (£)"
-                size="small"
-                type="number"
-                slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
-                placeholder="0.00"
-                value={data.unitPricePence ? (data.unitPricePence / 100).toFixed(2) : ''}
-                onChange={e =>
-                  updateRoomData(clientId, {
-                    unitPricePence: Math.round(parseFloat(e.target.value) * 100) || 0,
-                  })
-                }
-              />
-            </Box>
-
-            {/* Notes */}
-            <TextField
-              label="Room notes"
-              size="small"
-              fullWidth
-              multiline
-              rows={2}
-              slotProps={{ htmlInput: { maxLength: 2000 } }}
-              placeholder="Any additional notes for this room…"
-              value={data.notes || ''}
-              onChange={e => updateRoomData(clientId, { notes: e.target.value })}
-              sx={{ mb: 1.5 }}
-            />
-
-            {/* Photo upload — hidden in demo mode (no writes allowed) */}
-            {!demo && (
-              <FileUploadField
-                key={fileKeyById[clientId] ?? 0}
-                label="Photos (optional)"
-                accept="image/*"
-                multiple
-                uploadStatus={uploadStatus}
-                progress={uploadProgress}
-                resetDelay={1500}
-                onStatusReset={() => setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }))}
-                onChange={files => handleFilesSelected(clientId, files)}
-              />
-            )}
-
-            {/* Already-uploaded / existing photo thumbnails */}
-            {data.images && data.images.length > 0 && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                {data.images.map((img, imgIdx) => (
-                  <Box
-                    key={imgIdx}
-                    sx={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}
-                  >
-                    <Box
-                      component="img"
-                      src={img.viewUrl || img.storageKey || ''}
-                      alt="Room photo"
-                      onError={() => handleImageError(clientId, imgIdx)}
-                      sx={{
-                        width: 64,
-                        height: 64,
-                        objectFit: 'cover',
-                        borderRadius: '6px',
-                        border: '1px solid var(--neutral-200)',
-                        display: 'block',
-                      }}
-                    />
-                    <IconButton
-                      size="small"
-                      title="Remove photo"
-                      onClick={() => removeImage(clientId, imgIdx)}
-                      sx={{
-                        position: 'absolute',
-                        top: -6,
-                        right: -6,
-                        width: 18,
-                        height: 18,
-                        p: 0,
-                        background: 'var(--neutral-700)',
-                        color: 'common.white',
-                        borderRadius: '50%',
-                        '&:hover': {
-                          background: 'error.main',
-                        },
-                      }}
-                    >
-                      <CloseIcon sx={{ fontSize: '0.65rem' }} />
-                    </IconButton>
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </Box>
+            data={data}
+            index={idx}
+            total={rooms.length}
+            doorStyles={doorStyles}
+            demo={demo}
+            uploadStatus={uploadStatusById[clientId] ?? 'idle'}
+            uploadProgress={uploadProgressById[clientId]}
+            fileKey={fileKeyById[clientId] ?? 0}
+            onUpdate={patch => updateRoomData(clientId, patch)}
+            onMove={dir => moveRoom(clientId, dir)}
+            onRemove={() => removeRoom(clientId)}
+            onFilesSelected={files => handleFilesSelected(clientId, files)}
+            onStatusReset={() => setUploadStatusById(prev => ({ ...prev, [clientId]: 'idle' }))}
+            onImageError={imgIdx => handleImageError(clientId, imgIdx)}
+            onRemoveImage={imgIdx => removeImage(clientId, imgIdx)}
+          />
         );
       })}
 
