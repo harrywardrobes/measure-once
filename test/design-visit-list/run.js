@@ -13,24 +13,36 @@ const { makeSkip } = require('../helpers/report');
 //   (API) GET /api/design-visits?contactId=... returns only that contact's
 //         rows (filter is honoured); rows include estimate_total_pence.
 //   (UI)  Navigating to /customers/:id as admin renders the
-//         #design-visits-section with one .comment-item per seeded visit,
-//         each showing the correct status pill label, "Estimate: £N.NN"
-//         total, and visit_date formatted as e.g. "24 May 2024".
+//         #design-visits-list (inside #design-visits-section) with one
+//         .comment-item per seeded visit, each showing the correct status
+//         pill label, "Estimate: £N.NN" total, and visit_date formatted as
+//         e.g. "24 May 2024".
 //   (ADM) The Request-revision button is shown for admin on visits with
 //         status submitted/signed_off; the Delete button is shown for admin
 //         on every visit; both buttons are hidden for non-admin (member);
-//         Delete invokes DELETE /api/design-visits/:id and the row goes
-//         away; Request-revision invokes POST /api/design-visits/:id/revision
-//         and flips status to revision_requested.
+//         Delete invokes DELETE /api/design-visits/:id (confirmed via the
+//         in-app bottom-confirm bar, not a native confirm()) and the row
+//         goes away; Request-revision invokes
+//         POST /api/design-visits/:id/revision and flips status to
+//         revision_requested.
+//
+// Architecture note: the customer-detail page is now the React island
+// mounted at #customer-detail-root (views/customer-detail.ejs), not the
+// retired vanilla `state` global. The Design-visits rail is driven through
+// the island's bridge: the page exposes window.renderDesignVisits(), which
+// triggers the live GET /api/design-visits fetch and renders [data-dv-id]
+// rows into #design-visits-list. openCustomerDetail() below waits for the
+// React auth bootstrap (window.__moHeaderUser), waits for that bridge, calls
+// it, then asserts the rendered rows.
 //
 // Note on HUBSPOT_TOKEN: the privileges harness strips HUBSPOT_TOKEN, so
-// GET /api/contacts/:id 503s and the customer-detail bootstrap replaces
-// #workflow-view with an error. The Design-visits section is rendered from
-// a separate code path (renderDesignVisits) keyed off state.selectedContactId
-// and not bound to #workflow-view, so we compensate the same way the
-// lead-status-sync-customer-detail test does — seed state.selectedContactId,
-// re-inject the section mount, and call renderDesignVisits() directly. The
+// GET /api/contacts/:id 503s and the customer-detail bootstrap keeps retrying
+// in the background. The Design-visits rail is a separate code path bound to
+// window.renderDesignVisits (independent of the contact bootstrap), so the
 // renderer paths under test are exercised faithfully against the live API.
+// Because those background retries can perturb an idle admin page, the
+// destructive ADM probes re-call renderDesignVisits() and re-await rows
+// immediately before acting.
 //
 // Usage:
 //   DATABASE_URL_TEST=<disposable> npm run test:design-visit-list
@@ -93,15 +105,16 @@ function fmtGbpDate(iso) {
 }
 
 async function purgeFixtures(pool) {
-  // Rooms cascade via FK on design_visit_id.
-  // Scope to created_by LIKE 'privtest-%' so that a broad DELETE on a shared
-  // DB never removes rows seeded by a concurrently-running suite or real data
-  // that happens to share the same contact_id.
+  // Rooms cascade via FK on design_visit_id. Scope to the two synthetic
+  // contact ids this suite owns. They are fixed test-only ids that no other
+  // suite or real record uses, so deleting by contact_id alone is safe even
+  // on a shared DB. (We can't scope by `created_by LIKE 'privtest-%'` here:
+  // visits are seeded with the member's numeric user id as created_by so the
+  // members-see-only-their-own API filter returns them in the member-view test.)
   try {
     await pool.query(
       `DELETE FROM design_visits
-        WHERE contact_id IN ($1, $2)
-          AND created_by LIKE 'privtest-%'`,
+        WHERE contact_id IN ($1, $2)`,
       [FAKE_CONTACT_ID, OTHER_FAKE_CONTACT_ID],
     );
   } catch {}
@@ -129,9 +142,12 @@ async function seedVisit(pool, { contactId, status, createdBy, visitDateIso,
   return { id, visitDateIso };
 }
 
-// Open the customer-detail page as the given user, seed state.selectedContactId
-// directly (HUBSPOT_TOKEN is stripped so GET /api/contacts/:id 503s), then
-// re-render the design-visits section against the live API.
+// Open the customer-detail page (now an EJS shell hosting the React island at
+// #customer-detail-root) as the given user and drive the live design-visits
+// rail. HUBSPOT_TOKEN is stripped so GET /api/contacts/:id 503s and the page
+// shows its "Failed to load customer" header — but the design-visits rail is
+// always mounted in the body regardless of contact-load state, so we trigger
+// its fetch directly. No retired vanilla `state` global is referenced.
 async function openCustomerDetail(browser, jar, contactId) {
   // Each user gets its own incognito context so injected `connect.sid`
   // cookies for one user don't clobber another's in the shared default jar.
@@ -153,39 +169,28 @@ async function openCustomerDetail(browser, jar, contactId) {
   await page.goto(`${BASE}/customers/${contactId}`, {
     waitUntil: 'domcontentloaded', timeout: 25000,
   });
-  // Wait for state.user to be populated (bootstrap calls /api/auth/user).
-  await pollPage(page,
-    () => typeof state !== 'undefined' && state && state.user ? 'ok' : null,
-    null, 10000);
-  // Wait for the DOMContentLoaded handler in customer-detail.html to settle.
-  // HUBSPOT_TOKEN is stripped, so GET /api/contacts/:id 503s and the handler
-  // replaces #workflow-view innerHTML with "Failed to load customer:" — which
-  // would wipe any #design-visits-section we inject. Poll for that error so
-  // we know the handler is done mutating #workflow-view before we mount.
+  // Wait for the React island to finish its auth bootstrap. AuthContext fetches
+  // /api/auth/user on mount and mirrors the result onto window.__moHeaderUser;
+  // usePrivilege derives isAdmin from it, which gates the admin-only action
+  // buttons. Waiting here ensures the privilege-dependent buttons have settled
+  // before we snapshot the list.
   await pollPage(page, () => {
-    const wv = document.getElementById('workflow-view');
-    if (!wv) return null;
-    const t = wv.textContent || '';
-    return /Failed to load customer/.test(t) ? 'ok' : null;
+    const u = window.__moHeaderUser;
+    return u && u.privilege_level ? 'ok' : null;
   }, null, 10000);
-  // Seed selection + ensure the section mount exists, then render.
-  await page.evaluate((cid) => {
-    state.selectedContactId = cid;
-    state.selectedContact = state.selectedContact || {
-      id: cid,
-      properties: { firstname: 'DV', lastname: 'List', email: 'dv@privtest.local' },
-    };
-    if (!document.getElementById('design-visits-section')) {
-      const wv = document.getElementById('workflow-view') || document.body;
-      const div = document.createElement('div');
-      div.id = 'design-visits-section';
-      wv.appendChild(div);
-    }
-  }, contactId);
-  await page.evaluate(() => renderDesignVisits());
-  // Wait for actual .comment-item rows (not just non-loading) so we don't
-  // return early on the initial "No design visits yet." empty-state that the
-  // React component shows before the fetch completes.
+  // Wait for the design-visits rail to mount and the renderDesignVisits() bridge
+  // (installed by CustomerDetailPage's effect) to become available.
+  await pollPage(page, () => (
+    document.getElementById('design-visits-list')
+      && typeof window.renderDesignVisits === 'function' ? 'ok' : null
+  ), null, 10000);
+  // Auto-fetch only runs after a successful contact bootstrap (which 503s here),
+  // so drive the rail's live /api/design-visits fetch explicitly. The bridge
+  // derives the contactId from the page URL — no `state` global required.
+  await page.evaluate(() => window.renderDesignVisits());
+  // Wait for actual [data-dv-id] rows (not just non-loading) so we don't return
+  // early on the initial "No design visits yet." empty-state that the React
+  // component shows before the fetch completes.
   await pollPage(page, () => {
     const list = document.getElementById('design-visits-list');
     if (!list) return null;
@@ -320,15 +325,22 @@ async function main() {
   const visitDateB = new Date('2024-08-12T14:30:00Z').toISOString();
   const visitDateOther = new Date('2024-07-01T09:00:00Z').toISOString();
 
+  // Visits are seeded with created_by = the member's numeric user id (the value
+  // GET /api/design-visits compares against req.user.claims.sub). Members may
+  // only see their own visits, so this lets the member-view test verify that a
+  // member who *can* see a visit still gets no admin-only action buttons.
+  // Admins see all visits regardless of created_by, so the admin assertions
+  // are unaffected.
+  const memberCreatedBy = String(users.member.id);
   // Visit A: submitted, 8 × £150.00 = £1200.00
   const visitA = await seedVisit(pool, {
-    contactId: FAKE_CONTACT_ID, status: 'submitted', createdBy: users.admin.email,
+    contactId: FAKE_CONTACT_ID, status: 'submitted', createdBy: memberCreatedBy,
     visitDateIso: visitDateA, roomName: 'Kitchen',
     unitCount: 8, unitPricePence: 15000,
   });
   // Visit B: signed_off, 2 × £75.50 = £151.00
   const visitB = await seedVisit(pool, {
-    contactId: FAKE_CONTACT_ID, status: 'signed_off', createdBy: users.admin.email,
+    contactId: FAKE_CONTACT_ID, status: 'signed_off', createdBy: memberCreatedBy,
     visitDateIso: visitDateB, roomName: 'Bathroom',
     unitCount: 2, unitPricePence: 7550,
   });
@@ -509,13 +521,26 @@ async function main() {
         try { await memberPage.__ctx?.close(); } catch {}
 
         // ── Admin DELETE round-trip ─────────────────────────────────────────
-        // Click the actual Delete button; the confirm() prompt is accepted by
-        // the dialog handler below. React buttons don't have onclick attrs so
-        // we locate each button via its closest [data-dv-id] ancestor.
+        // The Request-revision flow further down uses a native prompt(); register
+        // its dialog handler now. (Delete no longer uses a native dialog — see
+        // below — but other accidental dialogs are auto-accepted to be safe.)
         adminPage.on('dialog', d => {
           if (d.type() === 'prompt') d.accept('e2e revision note').catch(() => {});
           else d.accept().catch(() => {});
         });
+        // Re-trigger the live fetch and wait for both rows immediately before
+        // acting. The admin page was opened earlier and then sat idle while the
+        // member view was driven; re-priming here makes the delete deterministic
+        // regardless of how long that took (the failing contact bootstrap keeps
+        // retrying in the background).
+        await adminPage.evaluate(() => window.renderDesignVisits());
+        await pollPage(adminPage, () => {
+          const list = document.getElementById('design-visits-list');
+          if (!list) return null;
+          return list.querySelectorAll('[data-dv-id]').length === 2 ? 'ok' : null;
+        }, null, 8000);
+        // Click the actual Delete button. React buttons don't have onclick attrs
+        // so we locate each button via its closest [data-dv-id] ancestor.
         await adminPage.evaluate((id) => {
           const item = document.querySelector(`[data-dv-id="${id}"]`);
           const btn = item
@@ -523,6 +548,16 @@ async function main() {
             : null;
           if (btn) btn.click();
         }, visitB.id);
+        // Delete now routes through the in-app bottom-confirm bar
+        // (window.showBottomConfirm), NOT a native confirm() dialog. Wait for the
+        // bar's "Confirm" button to slide in and click it to run the deletion.
+        await pollPage(adminPage, () => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => (b.textContent || '').trim() === 'Confirm');
+          if (!btn) return null;
+          btn.click();
+          return 'ok';
+        }, null, 5000);
         const deletedOk = await pollPage(adminPage, (id) => {
           const list = document.getElementById('design-visits-list');
           if (!list) return null;
@@ -629,35 +664,39 @@ async function writeReport(runId, findings) {
     '- **[API] anonymous gate** — unauthenticated `GET /api/design-visits`',
     '  is rejected (401/302) by `isAuthenticated`.',
     '- **[UI] customer-detail renders the section** — navigates to',
-    '  `/customers/:id` as admin, seeds `state.selectedContactId`, calls',
-    '  `renderDesignVisits()`, and asserts the rendered `#design-visits-list`',
-    '  contains one `.comment-item` per visit with the correct status-pill',
-    '  label (`Signed off` / `Submitted`), `Estimate: £N.NN` total, and the',
-    '  visit date formatted as en-GB `d MMM yyyy`.',
+    '  `/customers/:id` as admin (the EJS shell hosting the React island at',
+    '  `#customer-detail-root`), waits for the React rail to mount, triggers the',
+    '  live design-visits fetch via the `renderDesignVisits()` bridge (contactId',
+    '  derived from the page URL — no vanilla `state` global), and asserts the',
+    '  rendered `#design-visits-list` contains one `[data-dv-id]` row per visit',
+    '  with the correct status-pill label (`Signed off` / `Submitted`),',
+    '  `Estimate: £N.NN` total, and the visit date formatted as en-GB',
+    '  `d MMM yyyy`.',
     '- **[ADM] admin-only action buttons** — asserts each item shows',
     '  `Request revision` and `Delete` buttons (matched by text; React attaches',
     '  handlers via `addEventListener`, not the `onclick` attribute) when viewed',
     '  as admin, and that **neither** button appears when viewed as a member.',
-    '- **[ADM] Delete round-trip** — invokes `deleteDesignVisit(id)` (accepts',
-    '  the `confirm()` dialog), then asserts the row disappears from the UI',
-    '  *and* from the `design_visits` table.',
-    '- **[ADM] Request-revision round-trip** — invokes',
-    '  `markDesignVisitRevision(id)` (accepts the `prompt()` dialog with a',
-    '  test note), then asserts the pill flips to `Revision requested` in the',
-    '  UI, the `Request revision` button is no longer shown for that row, and',
-    '  the database row has `status=revision_requested` with the persisted',
-    '  note.',
+    '- **[ADM] Delete round-trip** — clicks the `Delete` button and confirms via',
+    '  the in-app bottom-confirm bar (`window.showBottomConfirm` → `Confirm`),',
+    '  then asserts the row disappears from the UI *and* from the',
+    '  `design_visits` table.',
+    '- **[ADM] Request-revision round-trip** — clicks the `Request revision`',
+    '  button and accepts the native `prompt()` with a test note, then asserts',
+    '  the pill flips to `Revision requested` in the UI, the `Request revision`',
+    '  button is no longer shown for that row, and the database row has',
+    '  `status=revision_requested` with the persisted note.',
     '',
     '## Notes',
     '',
     '- The privileges harness strips `HUBSPOT_TOKEN`, so',
-    '  `GET /api/contacts/:id` 503s and the customer-detail bootstrap replaces',
-    '  `#workflow-view` with an error message. The Design-visits section is',
-    '  rendered from a separate code path (`renderDesignVisits` in',
-    '  `src/react/pages/CustomerDetailPage.tsx`) keyed off `state.selectedContactId`, so',
-    '  the test seeds `state.selectedContactId`, re-injects the section mount',
-    '  if needed, and calls `renderDesignVisits()` directly. The renderer',
-    '  paths under test run against the live `/api/design-visits` endpoint.',
+    '  `GET /api/contacts/:id` 503s and the customer-detail bootstrap renders its',
+    '  "Failed to load customer" header. The Design-visits rail is always mounted',
+    '  in the page body regardless of contact-load state, and auto-fetch only',
+    '  runs on a successful bootstrap, so the test triggers the live fetch',
+    '  directly via the `renderDesignVisits()` bridge (in',
+    '  `src/react/pages/CustomerDetailPage.tsx`), which derives the contactId from',
+    '  the page URL. The renderer paths under test run against the live',
+    '  `/api/design-visits` endpoint.',
     '- Fixtures seeded with the synthetic contact ids',
     '  (`989800000683`, `989800000684`) are purged on exit alongside the',
     '  standard `privtest-` user fixtures.',
