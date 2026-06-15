@@ -513,7 +513,10 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
         await evictCachedRecord('visits', `dv:${id}`);
         // Purge any queued offline edits for this visit so they don't replay
         // against a now-deleted resource after the next reconnect.
+        // DesignVisitWizard queues edits as 'design-visit:<id>'; the 'dv:<id>'
+        // form is also purged for safety (used in cache keys and older entries).
         const { removeQueuedByRecordKey } = await import('../../lib/offlineQueue');
+        await removeQueuedByRecordKey(`design-visit:${id}`);
         await removeQueuedByRecordKey(`dv:${id}`);
         onRefresh();
       } catch (e: unknown) {
