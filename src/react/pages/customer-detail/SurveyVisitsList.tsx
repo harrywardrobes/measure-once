@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import Tooltip from '@mui/material/Tooltip';
 import { fmtDesignVisitWhen } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineSurveyVisitEntries, type PendingSurveyVisitEntry } from '../../hooks/useOfflineSurveyVisitEntries';
@@ -419,12 +420,23 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, res
             {signoffStatus && (
               <>
                 <span style={sxMetaSep}>·</span>
-                <span data-testid="sv-signoff-status" style={{
-                  fontSize: '0.65rem', fontWeight: 700, color: signoffStatus.color,
-                  textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>
-                  {signoffStatus.label}
-                </span>
+                <Tooltip
+                  title={signoffStatus.label === 'No link sent'
+                    ? "The sign-off email failed to send at submission time — use 'Resend sign-off email' to send it now"
+                    : ''}
+                  disableHoverListener={signoffStatus.label !== 'No link sent'}
+                  disableFocusListener={signoffStatus.label !== 'No link sent'}
+                  disableTouchListener={signoffStatus.label !== 'No link sent'}
+                  arrow
+                >
+                  <span data-testid="sv-signoff-status" style={{
+                    fontSize: '0.65rem', fontWeight: 700, color: signoffStatus.color,
+                    textTransform: 'uppercase', letterSpacing: '0.05em',
+                    cursor: signoffStatus.label === 'No link sent' ? 'help' : undefined,
+                  }}>
+                    {signoffStatus.label}
+                  </span>
+                </Tooltip>
               </>
             )}
             <span style={sxMetaSep}>·</span>
