@@ -11,6 +11,7 @@ import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
+import { nowDate } from '../../utils/dateDefaults';
 
 import { WorkflowDef } from '../../lib/workflowConfig';
 
@@ -42,7 +43,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
 
   const [showAddTask, setShowAddTask] = useState(false);
   const [subject, setSubject]   = useState('');
-  const [dueDate, setDueDate]   = useState('');
+  const [dueDate, setDueDate]   = useState(nowDate);
   const [stageKey, setStageKey] = useState('');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       onTasksChange([...tasks, task]);
       broadcastUrgencyChanged(contactId);
       setSubject('');
-      setDueDate('');
+      setDueDate(nowDate());
       setStageKey('');
       setShowAddTask(false);
     } catch (e: unknown) {
@@ -210,7 +211,7 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
 
   const startEditDue = useCallback((task: HubSpotTask) => {
     const dueTsMs = task.properties?.hs_timestamp ? parseInt(task.properties.hs_timestamp, 10) : null;
-    const dateStr = dueTsMs ? new Date(dueTsMs).toISOString().slice(0, 10) : '';
+    const dateStr = dueTsMs ? new Date(dueTsMs).toISOString().slice(0, 10) : nowDate();
     setEditDueDate(dateStr);
     setEditingTaskId(task.id);
   }, []);

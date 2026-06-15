@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { INVOICE_DRAFT_KEY as DRAFT_KEY } from '../constants/localStorageKeys';
 import { useConnectionToast } from '../context/ConnectionToastContext';
 import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
+import { nowDate } from '../utils/dateDefaults';
 import {
   Box,
   Button,
@@ -178,7 +179,7 @@ export function InvoiceDetailDrawer({
         setInv(data);
         const draft = loadDraft(invId);
         setEdit({
-          due:   draft?.due   ?? data.dueDate ?? '',
+          due:   draft !== null ? draft.due : (data.dueDate || nowDate()),
           email: draft?.email ?? data.email   ?? '',
           memo:  draft?.memo  ?? data.memo    ?? '',
           dirty: !!draft,

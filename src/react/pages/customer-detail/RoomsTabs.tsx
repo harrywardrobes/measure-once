@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import { Room, RoomComment, stageColour, STAGE_KEYS } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { WorkflowDef } from '../../lib/workflowConfig';
+import { nowDate } from '../../utils/dateDefaults';
 
 interface Props {
   contactId: string;
@@ -330,7 +331,7 @@ export function RoomsTabs({
                     type="date"
                     title="Install start date"
                     aria-label="Install start date"
-                    value={installStart || ''}
+                    value={installStart || nowDate()}
                     onChange={e => changeInstallDate('installStart', e.target.value)}
                     className="border rounded px-2 py-1 text-xs"
                   />
@@ -339,7 +340,7 @@ export function RoomsTabs({
                     type="date"
                     title="Install finish date"
                     aria-label="Install finish date"
-                    value={installFinish || ''}
+                    value={installFinish || nowDate()}
                     onChange={e => changeInstallDate('installFinish', e.target.value)}
                     className="border rounded px-2 py-1 text-xs"
                   />
