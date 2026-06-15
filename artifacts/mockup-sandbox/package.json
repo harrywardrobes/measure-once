@@ -75,8 +75,5 @@
   },
   "dependencies": {
     "caniuse-lite": "^1.0.30001793"
-  },
-  "overrides": {
-    "esbuild": "^0.28.1"
   }
 }
