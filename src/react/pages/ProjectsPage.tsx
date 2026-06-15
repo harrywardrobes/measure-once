@@ -40,6 +40,7 @@ import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
+import { getActionStripColors } from '../utils/actionStripColors';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
 import { useNowTick } from '../hooks/useNowTick';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -544,9 +545,13 @@ function ProjectCard({
     || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const hasNoLeadStatus = !leadStatusKey;
-  const stageColors = STAGE_COLORS[actionStageKey] || STAGE_COLORS[primaryStageKey];
-  const actionTint = hasDraft || (hasNoLeadStatus && !!handler) ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
-  const actionTextColor = hasDraft || (hasNoLeadStatus && !!handler) ? '#15803d' : (stageColors?.text || '#374151');
+  const { actionTint, actionTextColor } = getActionStripColors({
+    hasDraft,
+    hasNoLeadStatus,
+    handler,
+    actionStageKey,
+    primaryStageKey,
+  });
 
   const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
   const activityCounter = (!dispatchingAction && actionLabel && activityTs)
