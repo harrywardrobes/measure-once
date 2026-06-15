@@ -44,6 +44,8 @@ export interface SurveyVisitServer {
   terms_accepted: boolean;
   duration_min: number | null;
   revision_note?: string | null;
+  signoff_token_hash: string | null;
+  signoff_expires_at: string | null;
 }
 
 function fmtGbpFromPence(pence: number): string {
@@ -316,6 +318,15 @@ function PendingSurveyVisitCard({ entry }: { entry: PendingSurveyVisitEntry }) {
   );
 }
 
+/** Returns the sign-off link label for a submitted visit, or null if not applicable. */
+function signoffStatusLabel(visit: SurveyVisitServer): { label: string; color: string } | null {
+  if (visit.status !== 'submitted' || !visit.signoff_token_hash) return null;
+  const isExpired = !!visit.signoff_expires_at && new Date() > new Date(visit.signoff_expires_at);
+  return isExpired
+    ? { label: 'Link expired', color: 'var(--warning, #d97706)' }
+    : { label: 'Link sent',    color: 'var(--success, #059669)' };
+}
+
 interface ServerVisitCardProps {
   visit: SurveyVisitServer;
   pendingEdit: PendingSurveyVisitEntry | undefined;
@@ -324,15 +335,18 @@ interface ServerVisitCardProps {
   onEdit: (id: number) => void;
   onRevision: (id: number) => void;
   onDelete: (id: number) => void;
+  onResendSignoff: (id: number) => void;
 }
 
 /** Card for a server-synced survey visit row, with optional queued-edit badge and admin actions. */
-function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onEdit, onRevision, onDelete }: ServerVisitCardProps) {
+function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onEdit, onRevision, onDelete, onResendSignoff }: ServerVisitCardProps) {
   const when = fmtDesignVisitWhen(visit.visit_date || visit.created_at);
   const totalGbp = fmtGbpFromPence(Number(visit.estimate_total_pence) || 0);
-  const canEdit    = visit.status === 'submitted' || visit.status === 'revision_requested' || visit.status === 'draft';
-  const canRevise  = isAdmin && (visit.status === 'submitted' || visit.status === 'signed_off');
-  const isFailed   = pendingEdit?.status === 'failed';
+  const canEdit       = visit.status === 'submitted' || visit.status === 'revision_requested' || visit.status === 'draft';
+  const canRevise     = isAdmin && (visit.status === 'submitted' || visit.status === 'signed_off');
+  const canResend     = isAdmin && visit.status === 'submitted';
+  const isFailed      = pendingEdit?.status === 'failed';
+  const signoffStatus = signoffStatusLabel(visit);
 
   return (
     <div
@@ -353,6 +367,17 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onE
                 <SyncStatePill status={pendingEdit.status} />
               </>
             )}
+            {signoffStatus && (
+              <>
+                <span style={sxMetaSep}>·</span>
+                <span data-testid="sv-signoff-status" style={{
+                  fontSize: '0.65rem', fontWeight: 700, color: signoffStatus.color,
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  {signoffStatus.label}
+                </span>
+              </>
+            )}
             <span style={sxMetaSep}>·</span>
             <span style={sxDate}>Estimate: £{totalGbp}</span>
           </div>
@@ -371,6 +396,11 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onE
           {canRevise && (
             <button style={sxSecondaryBtn} onClick={() => onRevision(visit.id)}>
               Request revision
+            </button>
+          )}
+          {canResend && (
+            <button style={sxSecondaryBtn} onClick={() => onResendSignoff(visit.id)}>
+              Resend sign-off email
             </button>
           )}
           {isAdmin && (
@@ -583,6 +613,26 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
     window.showBottomConfirm('Delete this survey visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
+  const handleResendSignoff = useCallback(async (id: number) => {
+    if (!isAdmin) return;
+    try {
+      const r = await fetch(`/api/survey-visits/${id}/resend-signoff`, { method: 'POST' });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || `${r.status}`);
+      }
+      const data = await r.json() as { emailSent?: boolean };
+      if (data.emailSent === false) {
+        setActionError('Token refreshed but the email could not be sent — check your email settings.');
+      } else {
+        onRefresh?.();
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'error';
+      setActionError(`Could not resend sign-off email: ${msg}`);
+    }
+  }, [isAdmin, onRefresh]);
+
   const openWizardForEdit = useCallback(async (visitId: number) => {
     if (editBusy) return;
     const serverVisit = serverVisits.find(v => v.id === visitId);
@@ -716,6 +766,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
               onEdit={openWizardForEdit}
               onRevision={handleRevision}
               onDelete={handleDelete}
+              onResendSignoff={handleResendSignoff}
             />
           ))}
         </div>

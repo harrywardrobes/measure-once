@@ -66,6 +66,7 @@ export default defineConfig({
     outDir: resolve(__dirname, 'public/react'),
     emptyOutDir: true,
     sourcemap: true,
+    target: 'esnext',
     /*
      * zxcvbn (~819 kB minified) is dynamically imported only on the profile
      * page when the user types a password — it never blocks initial page

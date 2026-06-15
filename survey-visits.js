@@ -1464,6 +1464,152 @@ router.post('/api/survey-visits/refund', isAuthenticated, requirePrivilege('memb
   }
 });
 
+// ── Admin: resend sign-off email ─────────────────────────────────────────────
+// POST /api/survey-visits/:id/resend-signoff
+// Generates a fresh sign-off token, invalidates the previous one, and resends
+// the customer sign-off email. Admin-only.
+router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdmin, async (req, res) => {
+  const visitId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(visitId)) return res.status(400).json({ error: 'Invalid visit id' });
+  try {
+    const vr = await pool.query(
+      `SELECT sv.*, svh.name AS handle_name, svfr.name AS furniture_range_name
+       FROM survey_visits sv
+       LEFT JOIN catalog_handles   svh  ON svh.id  = sv.handle_id
+       LEFT JOIN catalog_ranges    svfr ON svfr.id = sv.furniture_range_id
+       WHERE sv.id = $1`, [visitId]
+    );
+    if (!vr.rows.length) return res.status(404).json({ error: 'Visit not found' });
+    const visit = vr.rows[0];
+    if (visit.status !== 'submitted') {
+      return res.status(409).json({ error: 'Sign-off email can only be resent for submitted visits' });
+    }
+    if (!visit.contact_email) {
+      return res.status(422).json({ error: 'Visit has no contact email address' });
+    }
+
+    // Generate fresh token and rotate the old one.
+    const rawToken  = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await pool.query(`
+      UPDATE survey_visits
+      SET superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
+            THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
+            ELSE superseded_signoff_token_hashes END,
+          signoff_token_hash = $1,
+          signoff_expires_at = $2,
+          updated_at = NOW()
+      WHERE id = $3`, [tokenHash, expiresAt.toISOString(), visitId]);
+
+    // Load rooms for the email body.
+    const rr = await pool.query(`
+      SELECT svr.*, ds.name AS door_style_name
+      FROM survey_visit_rooms svr
+      LEFT JOIN catalog_door_styles ds ON ds.id = svr.door_style_id
+      WHERE svr.survey_visit_id = $1
+      ORDER BY svr.id`, [visitId]);
+    const rooms = rr.rows;
+
+    // Send customer sign-off email (non-fatal — token rotation already committed).
+    const signOffUrl = `${appBaseUrl()}/survey-visit/sign-off?token=${rawToken}`;
+    let emailSent = false;
+    try {
+      const transport = createMailTransport();
+      if (transport) {
+        const from      = buildFromHeader();
+        const replyTo   = buildReplyTo();
+        const firstName = (visit.contact_name || '').split(' ')[0] || 'there';
+        const grandTotal = rooms.reduce((s, r) => s + r.unit_price_pence * r.unit_count, 0);
+        const roomRows = rooms.map(r => {
+          const total = r.unit_price_pence * r.unit_count;
+          return `
+          <tr>
+            <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">${_esc(r.room_name)}</td>
+            <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">${_esc(r.door_style_name || '—')}</td>
+            <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:right;">£${penceToGbp(total)}</td>
+          </tr>`;
+        }).join('');
+        const roomRowsText = rooms.map(r => {
+          const total = r.unit_price_pence * r.unit_count;
+          return `  ${r.room_name} (${r.door_style_name || '—'}): £${penceToGbp(total)}`;
+        }).join('\n');
+        await transport.sendMail({
+          from, replyTo,
+          to: visit.contact_email,
+          subject: `Your survey visit — ${visit.contact_name || ''}`,
+          text: [
+            `Hi ${firstName},`,
+            '',
+            'Here\'s an updated link to view your survey summary and sign off.',
+            '',
+            '--- Room Breakdown ---',
+            roomRowsText,
+            '',
+            `Estimate total: £${penceToGbp(grandTotal)}`,
+            '',
+            'See Your Survey & Sign Off:',
+            signOffUrl,
+            '',
+            'This link is personal to you and expires in 7 days.',
+            'If you have questions, reply to this email.',
+          ].join('\n'),
+          html: `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
+  <h1 style="font-size:1.4rem;margin-bottom:4px;">Your survey visit summary</h1>
+  <p style="color:#6b7280;margin-top:0;">Hi ${_esc(firstName)},</p>
+  <p>Here's an updated link to view your survey summary and sign off.</p>
+  <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+    <thead>
+      <tr style="background:#f3f4f6;">
+        <th style="text-align:left;padding:8px 12px;font-size:.85rem;">Room</th>
+        <th style="text-align:left;padding:8px 12px;font-size:.85rem;">Style</th>
+        <th style="text-align:right;padding:8px 12px;font-size:.85rem;">Total</th>
+      </tr>
+    </thead>
+    <tbody>${roomRows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="padding:8px 12px;font-weight:600;">Estimate total</td>
+        <td style="padding:8px 12px;font-weight:600;text-align:right;">£${penceToGbp(grandTotal)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div style="text-align:center;margin:28px 0;">
+    <a href="${signOffUrl}"
+       style="display:inline-block;background:#8B2BFF;color:#fff;padding:14px 32px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:1rem;">
+      See Your Survey &amp; Sign Off
+    </a>
+  </div>
+  <p style="font-size:.82rem;color:#6b7280;">
+    This link is personal to you and expires in 7 days.
+    If you have questions, reply to this email.
+  </p>
+</body>
+</html>`,
+        });
+        emailSent = true;
+      }
+    } catch (e) {
+      logger.warn({ err: e.message }, '[survey-visits] resend sign-off email failed:');
+    }
+
+    res.json({
+      ok: true,
+      emailSent,
+      expiresAt: expiresAt.toISOString(),
+      signoff_expires_at: expiresAt.toISOString(),
+      signoff_token_hash: tokenHash,
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, '[survey-visits] POST resend-signoff error:');
+    res.status(500).json({ error: 'Could not resend sign-off email.' });
+  }
+});
+
 // ── Public sign-off routes ────────────────────────────────────────────────────
 // These are public — no isAuthenticated. Added to AUTH_WHITELIST in server.js.
 router.get('/api/survey-visits/sign-off/:token', async (req, res) => {
