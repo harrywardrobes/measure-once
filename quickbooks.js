@@ -262,6 +262,9 @@ router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   }
   const state = crypto.randomBytes(16).toString('hex');
   req.session.qbOAuthState = state;
+  // When the connect button opens a new tab (popup=1), record that so the
+  // callback can post a message to the opener instead of doing a full redirect.
+  req.session.qbOAuthPopup = req.query.popup === '1';
   const params = new URLSearchParams({
     client_id:     process.env.QB_CLIENT_ID,
     redirect_uri:  getQuickBooksRedirectUri(),
@@ -275,11 +278,19 @@ router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
 // ── OAuth: callback ────────────────────────────────────────────────────────────
 router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (req, res) => {
   const { code, realmId, error, state } = req.query;
-  if (error) return res.redirect(`/?qb=error&reason=${encodeURIComponent(error)}`);
+
+  const isPopup = !!req.session.qbOAuthPopup;
+  delete req.session.qbOAuthPopup;
+
+  if (error) {
+    if (isPopup) return res.send(qbPopupPage('error', String(error)));
+    return res.redirect(`/?qb=error&reason=${encodeURIComponent(error)}`);
+  }
 
   const savedState = req.session.qbOAuthState;
   delete req.session.qbOAuthState;
   if (!savedState || savedState !== state) {
+    if (isPopup) return res.send(qbPopupPage('error', 'invalid_state'));
     return res.redirect('/?qb=error&reason=invalid_state');
   }
 
@@ -291,12 +302,44 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
       { headers: { Authorization: `Basic ${creds}`, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' } }
     );
     await persistTokens({ ...r.data, realm_id: realmId });
+    if (isPopup) return res.send(qbPopupPage('connected'));
     res.redirect('/?qb=connected');
   } catch (e) {
     logger.error({ err: e.response?.data || e.message }, 'QB OAuth callback error:');
+    if (isPopup) return res.send(qbPopupPage('error', e.message));
     res.redirect('/?qb=error');
   }
 });
+
+/**
+ * Returns a minimal HTML page for the popup/new-tab OAuth flow.
+ * On success it posts { type: 'qb-connected' } to the opener then closes.
+ * On error it posts { type: 'qb-error', reason } to the opener then closes.
+ */
+function qbPopupPage(outcome, reason) {
+  const message = outcome === 'connected'
+    ? JSON.stringify({ type: 'qb-connected' })
+    : JSON.stringify({ type: 'qb-error', reason: reason || 'unknown' });
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>QuickBooks${outcome === 'connected' ? ' Connected' : ' Error'}</title></head>
+<body>
+<script>
+  (function () {
+    try {
+      if (window.opener) {
+        window.opener.postMessage(${message}, window.location.origin);
+      }
+    } catch (e) {}
+    window.close();
+  })();
+</script>
+<p style="font-family:sans-serif;text-align:center;margin-top:2rem;color:#555">
+  ${outcome === 'connected' ? 'QuickBooks connected — you can close this tab.' : 'Something went wrong — you can close this tab.'}
+</p>
+</body>
+</html>`;
+}
 
 // ── OAuth: disconnect ──────────────────────────────────────────────────────────
 router.post('/auth/quickbooks/disconnect', isAuthenticated, requireAdmin, async (req, res) => {

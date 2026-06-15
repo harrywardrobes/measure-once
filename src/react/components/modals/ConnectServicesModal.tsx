@@ -1,4 +1,4 @@
-import React, { useCallback, useReducer } from 'react';
+import React, { useCallback, useEffect, useReducer } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -15,6 +15,7 @@ import {
 } from '../../context/ConnectionToastContext';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { SERVICE_DESCRIPTORS } from '../../lib/connectionServices';
+import { CONNECT_MODAL_SHOWN_KEY } from '../../constants/localStorageKeys';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,8 @@ interface ActionCellProps {
   status: string | undefined;
   isDisconnecting: boolean;
   onDisconnect: (service: ConnectionService, url: string) => void;
+  /** Called when the user clicks Connect on an admin-only service (opens in new tab). */
+  onConnectNewTab?: (url: string) => void;
 }
 
 function ActionCell({
@@ -60,6 +63,7 @@ function ActionCell({
   status,
   isDisconnecting,
   onDisconnect,
+  onConnectNewTab,
 }: ActionCellProps) {
   if (connect === 'oauth') {
     if (status === 'ok') {
@@ -128,7 +132,7 @@ function ActionCell({
       <Button
         variant="contained"
         size="small"
-        href={connectUrl}
+        onClick={() => connectUrl && onConnectNewTab && onConnectNewTab(connectUrl)}
         data-testid={`connect-action-${serviceKey}`}
       >
         Connect
@@ -174,7 +178,7 @@ function disconnectingReducer(
 export function ConnectServicesModal({ open, onClose, highlightService }: Props) {
   const serviceStatuses = useServiceStatuses();
   const { isAdmin } = usePrivilege();
-  const { notifyDisconnected } = useConnectionToast();
+  const { notifyDisconnected, notifyReconnected } = useConnectionToast();
 
   const [disconnecting, dispatchDisconnecting] = useReducer(disconnectingReducer, {});
 
@@ -198,6 +202,30 @@ export function ConnectServicesModal({ open, onClose, highlightService }: Props)
     },
     [notifyDisconnected],
   );
+
+  // Open an admin-only service's connect URL in a new tab with ?popup=1 so
+  // the OAuth callback can post a message back instead of doing a full redirect.
+  const handleConnectNewTab = useCallback((connectUrl: string) => {
+    window.open(`${connectUrl}?popup=1`, '_blank');
+  }, []);
+
+  // Listen for the postMessage sent by the QuickBooks OAuth callback page when
+  // it runs in popup/new-tab mode.  On success, mark QB as connected and clear
+  // the per-session auto-open flag so the modal can re-open if needed.
+  useEffect(() => {
+    function onMessage(evt: MessageEvent) {
+      if (evt.origin !== window.location.origin) return;
+      const data = evt.data as { type?: string };
+      if (data?.type === 'qb-connected') {
+        notifyReconnected('quickbooks');
+        // Clear the per-session flag so the modal can auto-open again next time
+        // the connection drops (e.g. if a future reconnect fails).
+        try { sessionStorage.removeItem(CONNECT_MODAL_SHOWN_KEY); } catch { /* quota */ }
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => { window.removeEventListener('message', onMessage); };
+  }, [notifyReconnected]);
 
   const visibleDescriptors = SERVICE_DESCRIPTORS.filter((d) => d.connect !== 'status-only');
 
@@ -293,6 +321,7 @@ export function ConnectServicesModal({ open, onClose, highlightService }: Props)
                     status={status}
                     isDisconnecting={isDisconnecting}
                     onDisconnect={handleDisconnect}
+                    onConnectNewTab={handleConnectNewTab}
                   />
                 </Box>
               </Box>
