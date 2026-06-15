@@ -141,31 +141,9 @@ export interface WhatsAppMessage {
   status?: string;
 }
 
-export interface StageColour {
-  key: string;
-  bg: string;
-  light: string;
-  text: string;
-}
-
-export const STAGE_COLOURS: StageColour[] = [
-  { key: 'sales',        bg: 'var(--stage-sales-bg)',          light: 'var(--stage-sales-light)',          text: 'var(--stage-sales-text)'          },
-  { key: 'designvisit',  bg: 'var(--stage-designvisit-bg)',    light: 'var(--stage-designvisit-light)',    text: 'var(--stage-designvisit-text)'    },
-  { key: 'survey',       bg: 'var(--stage-survey-bg)',         light: 'var(--stage-survey-light)',         text: 'var(--stage-survey-text)'         },
-  { key: 'order',        bg: 'var(--stage-order-bg)',          light: 'var(--stage-order-light)',          text: 'var(--stage-order-text)'          },
-  { key: 'workshop',     bg: 'var(--stage-workshop-bg)',       light: 'var(--stage-workshop-light)',       text: 'var(--stage-workshop-text)'       },
-  { key: 'packing',      bg: 'var(--stage-packing-bg)',        light: 'var(--stage-packing-light)',        text: 'var(--stage-packing-text)'        },
-  { key: 'delivery',     bg: 'var(--stage-delivery-bg)',       light: 'var(--stage-delivery-light)',       text: 'var(--stage-delivery-text)'       },
-  { key: 'installation', bg: 'var(--stage-installation-bg)',   light: 'var(--stage-installation-light)',   text: 'var(--stage-installation-text)'   },
-  { key: 'aftercare',    bg: 'var(--stage-aftercare-bg)',      light: 'var(--stage-aftercare-light)',      text: 'var(--stage-aftercare-text)'      },
-];
-
 export const STAGE_KEYS = ['sales','designvisit','survey','order','workshop','packing','delivery','installation','aftercare'];
 
-export function stageColour(stageKey: string): StageColour {
-  const idx = STAGE_KEYS.indexOf(stageKey);
-  return STAGE_COLOURS[Math.max(0, idx)] || STAGE_COLOURS[0];
-}
+export { stageColour } from '../../utils/stageColour';
 
 export const DESIGN_VISIT_STATUS_LABELS: Record<string, { label: string; bg: string; fg: string }> = {
   draft:              { label: 'Draft',               bg: 'var(--status-neutral-bg)',   fg: 'var(--status-neutral-text)' },

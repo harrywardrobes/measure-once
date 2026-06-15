@@ -39,6 +39,7 @@ import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
+import { stageColour } from '../utils/stageColour';
 import { compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { getActionStripColors } from '../utils/actionStripColors';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
@@ -145,9 +146,6 @@ function getStageLabel(stageKey: string, workflow: ProjectWorkflowDef | undefine
   return workflow?.stages?.[stageKey]?.label || STAGE_LABEL_FALLBACK[stageKey] || stageKey;
 }
 
-function getStageColor(stageKey: string) {
-  return STAGE_COLORS[stageKey] || { bg: BRAND_COLORS.ink3, light: BRAND_COLORS.paper, text: BRAND_COLORS.ink2 };
-}
 
 function getFitterInitials(user: ProjectPlatformUser | null | undefined): string {
   if (!user) return '+';
@@ -684,7 +682,7 @@ function ProjectCard({
       {/* Room rows */}
       <Box sx={{ display: 'flex', flexDirection: 'column' }}>
         {rooms.map((room, i) => {
-          const colour = getStageColor(room.stageKey || '');
+          const colour = stageColour(room.stageKey || '');
           const stageLabel = getStageLabel(room.stageKey || '', workflow);
           const roomLabel = room.room || 'Main';
           const isLast = i === rooms.length - 1;
@@ -1470,7 +1468,7 @@ export function ProjectsPage() {
       return (
         <>
           {orderedKeys.map((key) => {
-            const colour = getStageColor(key);
+            const colour = stageColour(key);
             const label = getStageLabel(key, workflow);
             const groupRows = groups.get(key)!;
             return (
