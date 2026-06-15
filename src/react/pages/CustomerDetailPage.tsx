@@ -17,7 +17,7 @@ import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSectio
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
   Contact, Room, HubSpotTask,
-  DesignVisit, SurveyVisit, GoogleEmail, WhatsAppMessage,
+  DesignVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
 import { updateRecentCustomer, compactRelativeTime, latestTimestamp } from '../utils/formatters';
@@ -186,12 +186,12 @@ export function CustomerDetailPage() {
     } catch {
       // Offline fallback: read saved survey visits for this contact from the
       // cache (identified by the `_sv` sentinel written on the success path).
-      const cached = await readRecords<SurveyVisit & { _sv?: boolean }>('visits');
+      const cached = await readRecords<SurveyVisitServer & { _sv?: boolean }>('visits');
       const mine = cached.filter(
         (d) => d && typeof d === 'object' && '_sv' in d && d._sv === true && String(d.contact_id) === contactId,
       );
       if (mine.length > 0) {
-        setSurveyVisits(mine as SurveyVisit[]);
+        setSurveyVisits(mine);
         setFromCache(true);
       } else {
         setSvError('load-error');
