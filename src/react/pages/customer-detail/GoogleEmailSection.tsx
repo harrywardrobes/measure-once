@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { GoogleEmail } from './types';
-import { usePrivilege } from '../../hooks/usePrivilege';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 
 interface Props {
   contactEmail: string;
@@ -17,7 +17,24 @@ export function GoogleEmailSection({ contactEmail, emails, loading, error, conne
   const recent = emails.slice(0, 3);
   const rest   = emails.slice(3);
 
-  if (!connected) return null;
+  if (!connected) {
+    return (
+      <div id="google-emails-section" className="mb-5">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>Emails</Typography>
+        </Box>
+        <p className="text-sm px-1" style={{ color: 'var(--stone-deep)' }}>
+          Google not connected.{' '}
+          <button
+            onClick={() => openConnectModal('google', 'Google is disconnected — reconnect it to view emails from this customer.')}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--orchid)', fontSize: 'inherit', textDecoration: 'underline' }}
+          >
+            Reconnect
+          </button>
+        </p>
+      </div>
+    );
+  }
 
   const EmailCard = ({ em }: { em: GoogleEmail }) => (
     <Box sx={{

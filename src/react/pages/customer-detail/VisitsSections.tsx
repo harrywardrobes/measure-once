@@ -15,6 +15,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { formatAddress, emptyAddress, type StructuredAddress } from '../../../../shared/address';
 import { usePrivilege } from '../../hooks/usePrivilege';
@@ -272,7 +273,13 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
         <>
           <p style={sxMuted}>Google Calendar not connected.</p>
           <p style={sxHelper}>
-            Connect your Google account to view and book visits directly in Google Calendar.
+            <button
+              onClick={() => openConnectModal('google', 'Google Calendar is disconnected — reconnect it to view and book visits.')}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--orchid)', fontSize: 'inherit', textDecoration: 'underline' }}
+            >
+              Connect Google
+            </button>
+            {' '}to view and book visits directly in Google Calendar.
           </p>
         </>
       )}
@@ -363,7 +370,18 @@ export function PastVisitsSection({ contactId }: Pick<VisitsSectionProps, 'conta
       {loading && <p style={sxMuted}>Loading…</p>}
 
       {!loading && !googleConnected && (
-        <p style={sxMuted}>Google Calendar not connected.</p>
+        <>
+          <p style={sxMuted}>Google Calendar not connected.</p>
+          <p style={sxHelper}>
+            <button
+              onClick={() => openConnectModal('google', 'Google Calendar is disconnected — reconnect it to view past visits.')}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--orchid)', fontSize: 'inherit', textDecoration: 'underline' }}
+            >
+              Connect Google
+            </button>
+            {' '}to view past visits.
+          </p>
+        </>
       )}
 
       {!loading && googleConnected && visits.length === 0 && (

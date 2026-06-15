@@ -14,6 +14,7 @@ import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { POST, isGoogleAuthError } from '../../utils/api';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { PlacesLocationField } from '../PlacesLocationField';
@@ -132,10 +133,11 @@ export function GenericVisitEditModal(props: Props) {
             end: { dateTime: end.toDate().toISOString() },
           });
         } catch (gcalErr) {
-          const gcalMsg = isGoogleAuthError(gcalErr)
-            ? "Google account isn't connected — reconnect in your profile to sync Calendar."
-            : gcalErr instanceof Error ? gcalErr.message : 'error';
-          setError(gcalMsg);
+          if (isGoogleAuthError(gcalErr)) {
+            openConnectModal('google', 'Google Calendar is disconnected — reconnect it to schedule visits.');
+          } else {
+            setError(gcalErr instanceof Error ? gcalErr.message : 'Could not schedule visit.');
+          }
           return;
         }
 
@@ -180,7 +182,8 @@ export function GenericVisitEditModal(props: Props) {
         if (!res.ok) {
           const data = res.data as { error?: string; code?: string } | undefined;
           if (data?.code === 'GOOGLE_AUTH' || data?.code === 'GOOGLE_ERROR') {
-            throw new Error("Google account isn't connected — reconnect in your profile to sync Calendar.");
+            openConnectModal('google', 'Google Calendar is disconnected — reconnect it to update visits.');
+            return;
           }
           throw new Error(data?.error || 'Could not save.');
         }

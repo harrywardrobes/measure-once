@@ -24,7 +24,7 @@ import SendIcon from '@mui/icons-material/Send';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import { POST, isGoogleAuthError } from '../../utils/api';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
-import { GoogleAuthAlert } from '../GoogleAuthAlert';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 import { PaymentHistory } from '../PaymentHistory';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
@@ -304,7 +304,12 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
       setDoneMessage('Deposit invoice re-sent successfully.');
       navigateTo('done');
     } catch (err) {
-      setResendError((err as Error).message || 'Could not re-send invoice.');
+      const code = (err as { code?: string })?.code;
+      if (code === 'QB_AUTH' || code === 'QB_ERROR') {
+        openConnectModal('quickbooks', 'QuickBooks is disconnected — reconnect it to re-send the deposit invoice.');
+      } else {
+        setResendError((err as Error).message || 'Could not re-send invoice.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -330,7 +335,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
       setStep('done');
     } catch (err) {
       if (isGoogleAuthError(err)) {
-        setReminderError('GOOGLE_AUTH');
+        openConnectModal('google', 'Google is disconnected — reconnect it to send payment reminders via Gmail.');
       } else {
         setReminderError((err as Error).message || 'Could not send reminder.');
       }
@@ -362,8 +367,14 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
       showToast(leadStatusConfirmationMessage(result.setsLeadStatus) || 'Marked as not proceeding', false);
       handleClose();
     } catch (err) {
-      setNotProceedingError((err as Error).message || 'Something went wrong.');
-      navigateTo('not_proceeding_confirm');
+      const code = (err as { code?: string })?.code;
+      if (code === 'QB_AUTH' || code === 'QB_ERROR') {
+        openConnectModal('quickbooks', 'QuickBooks is disconnected — reconnect it to void the invoice.');
+        navigateTo('not_proceeding_confirm');
+      } else {
+        setNotProceedingError((err as Error).message || 'Something went wrong.');
+        navigateTo('not_proceeding_confirm');
+      }
     }
   }
 
@@ -634,11 +645,8 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
               : 'This invoice appears to have been paid — double-check before sending.'}
           </Alert>
         )}
-        {reminderError && reminderError !== 'GOOGLE_AUTH' && (
+        {reminderError && (
           <Alert severity="error" onClose={() => setReminderError('')}>{reminderError}</Alert>
-        )}
-        {reminderError === 'GOOGLE_AUTH' && (
-          <GoogleAuthAlert />
         )}
         {reminderLoading ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
