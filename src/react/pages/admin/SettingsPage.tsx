@@ -9,10 +9,13 @@ import {
   Divider,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
 import { GET, POST, PATCH } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
@@ -51,6 +54,18 @@ export function SettingsPage() {
   const [pageFilterConfig, setPageFilterConfig] = useState<PageFilterConfig | null>(null);
   const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
   const [pageFilterSaving, setPageFilterSaving] = useState(false);
+
+  const [formLinkCopied, setFormLinkCopied] = useState(false);
+  const genericFormUrl = `${window.location.origin}/customer-info`;
+
+  const copyFormLink = useCallback(() => {
+    navigator.clipboard.writeText(genericFormUrl).then(() => {
+      setFormLinkCopied(true);
+      setTimeout(() => setFormLinkCopied(false), 2000);
+    }).catch(() => {
+      showToast('Could not copy to clipboard.', true);
+    });
+  }, [genericFormUrl]);
 
   const fetchDigestSettings = useCallback(async () => {
     try {
@@ -338,6 +353,43 @@ export function SettingsPage() {
               </Box>
             </Stack>
           )}
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>Generic enquiry form</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Share this link in emails, social posts, or as a QR code. Anyone who opens it can
+            submit their contact details without needing a personalised link.
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              value={genericFormUrl}
+              slotProps={{ input: { readOnly: true } }}
+              sx={{ flex: '1 1 320px', minWidth: 0 }}
+            />
+            <Tooltip title={formLinkCopied ? 'Copied!' : 'Copy link'}>
+              <Button
+                variant="outlined"
+                onClick={copyFormLink}
+                startIcon={formLinkCopied ? <CheckIcon /> : <ContentCopyIcon />}
+                color={formLinkCopied ? 'success' : 'primary'}
+              >
+                {formLinkCopied ? 'Copied' : 'Copy'}
+              </Button>
+            </Tooltip>
+            <Button
+              variant="outlined"
+              href={genericFormUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              endIcon={<OpenInNewIcon />}
+            >
+              Open
+            </Button>
+          </Stack>
         </CardContent>
       </Card>
 
