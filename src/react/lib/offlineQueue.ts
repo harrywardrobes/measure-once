@@ -259,6 +259,20 @@ export async function removeEntry(id: number): Promise<void> {
 }
 
 /**
+ * Remove every non-syncing queued entry whose `recordKey` matches the given
+ * key. Used after a server-side DELETE so that any pending offline edits for
+ * that record do not replay against a now-deleted resource. Entries mid-flight
+ * (`syncing`) are left alone — the sync engine owns their lifecycle.
+ */
+export async function removeQueuedByRecordKey(recordKey: string): Promise<void> {
+  const all = await outboxGetAll<QueueEntry>();
+  const stale = all.filter((e) => e.recordKey === recordKey && e.status !== 'syncing');
+  if (!stale.length) return;
+  for (const e of stale) await outboxDelete(e.id);
+  _notify();
+}
+
+/**
  * Remove every non-syncing queued entry tagged with `dedupeKey`. Used when a
  * write for that record just succeeded directly, so any earlier queued write for
  * the same record is now superseded and must not replay. Entries mid-flight

@@ -511,6 +511,10 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
         const r = await fetch(`/api/design-visits/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(`${r.status}`);
         await evictCachedRecord('visits', `dv:${id}`);
+        // Purge any queued offline edits for this visit so they don't replay
+        // against a now-deleted resource after the next reconnect.
+        const { removeQueuedByRecordKey } = await import('../../lib/offlineQueue');
+        await removeQueuedByRecordKey(`dv:${id}`);
         onRefresh();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'error';
