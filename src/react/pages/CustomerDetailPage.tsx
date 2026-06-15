@@ -10,7 +10,7 @@ import { InvoicesSection } from './customer-detail/InvoicesSection';
 import { PaymentHistory } from '../components/PaymentHistory';
 import { UpcomingVisitsSection, PastVisitsSection } from './customer-detail/VisitsSections';
 import { DesignVisitsList } from './customer-detail/DesignVisitsList';
-import { SurveyVisitsList } from './customer-detail/SurveyVisitsList';
+import { SurveyVisitsList, type SurveyVisitServer } from './customer-detail/SurveyVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
@@ -114,7 +114,7 @@ export function CustomerDetailPage() {
   const [dvLoading,    setDvLoading]    = useState(false);
   const [dvError,      setDvError]      = useState<string | null>(null);
 
-  const [surveyVisits, setSurveyVisits] = useState<SurveyVisit[]>([]);
+  const [surveyVisits, setSurveyVisits] = useState<SurveyVisitServer[]>([]);
   const [svLoading,    setSvLoading]    = useState(false);
   const [svError,      setSvError]      = useState<string | null>(null);
 
@@ -178,7 +178,7 @@ export function CustomerDetailPage() {
     setSvLoading(true);
     setSvError(null);
     try {
-      const v = await apiFetch<SurveyVisit[]>(`/api/survey-visits?contactId=${encodeURIComponent(contactId)}`);
+      const v = await apiFetch<SurveyVisitServer[]>(`/api/survey-visits?contactId=${encodeURIComponent(contactId)}`);
       setSurveyVisits(Array.isArray(v) ? v : []);
     } catch {
       setSvError('load-error');
@@ -320,8 +320,8 @@ export function CustomerDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [contactId, fetchContact, fetchDesignVisits, fetchSurveyVisits, fetchGoogleEmails, fetchLastAttempt,
-      refreshLeadStatuses, fetchWhatsApp, notifyApiError]);
+  }, [contactId, fetchContact, fetchDesignVisits, fetchSurveyVisits, fetchGoogleEmails,
+      fetchLastAttempt, refreshLeadStatuses, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat) ──────────────────────────────────────
 
@@ -669,12 +669,12 @@ export function CustomerDetailPage() {
           onRefresh={fetchDesignVisits}
         />
 
-        {/* Survey visits: server list + offline-queued writes merged */}
+        {/* Survey visits: server-sourced list with queued-edit state overlaid */}
         <SurveyVisitsList
           contactId={contactId}
-          visits={surveyVisits}
-          loading={svLoading}
-          error={svError}
+          serverVisits={surveyVisits}
+          serverLoading={svLoading}
+          serverError={svError}
           onRefresh={fetchSurveyVisits}
         />
 
