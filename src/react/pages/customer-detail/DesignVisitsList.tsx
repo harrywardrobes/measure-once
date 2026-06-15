@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 import { useQBInvoices } from '../../hooks/useQBInvoices';
+import { evictCachedRecord } from '../../lib/offlineDb';
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
 const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
@@ -509,6 +510,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
       try {
         const r = await fetch(`/api/design-visits/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(`${r.status}`);
+        await evictCachedRecord('visits', `dv:${id}`);
         onRefresh();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'error';
