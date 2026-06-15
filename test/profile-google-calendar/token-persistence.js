@@ -7,13 +7,15 @@
 // HTTP — no Puppeteer, no real Google credentials.
 //
 // Probes:
-//   [TP-A] After OAuth callback, tokens are saved to google_oauth_tokens.
+//   [TP-A] After OAuth callback, tokens are saved to google_oauth_tokens with
+//          ciphertext (not plaintext) stored in the DB.
 //   [TP-B] After logout/login, getVerifiedGoogleTokens falls back to DB
 //          (simulated by clearing the session and calling /api/google/status
 //          with a stubbed status check).
 //   [TP-C] refresh_token is preserved when Google omits it on a later save.
 //   [TP-D] DELETE /auth/logout-google removes the row from google_oauth_tokens.
 //   [TP-E] Invalid-grant error on /api/google/status clears the DB row.
+//   [TP-F] Tokens stored in the DB are encrypted (not plaintext).
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> node test/profile-google-calendar/token-persistence.js
@@ -22,6 +24,8 @@
 const path = require('path');
 const http = require('http');
 const { Pool } = require('pg');
+
+const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('../../google-token-crypto.cjs');
 
 require('dotenv').config();
 
@@ -64,6 +68,7 @@ async function getStoredToken(pool, userSub) {
 }
 
 // Inject a google_oauth_tokens row directly (simulates a prior-session save).
+// Tokens are encrypted before being written, mirroring what saveGoogleTokens does.
 async function insertToken(pool, userSub, overrides = {}) {
   const defaults = {
     access_token:  'at_test',
@@ -72,6 +77,8 @@ async function insertToken(pool, userSub, overrides = {}) {
     expires_at:    new Date(Date.now() + 3600 * 1000),
   };
   const t = { ...defaults, ...overrides };
+  const encAt = t.access_token  ? encryptToken(t.access_token)  : t.access_token;
+  const encRt = t.refresh_token ? encryptToken(t.refresh_token) : t.refresh_token;
   await pool.query(
     `INSERT INTO google_oauth_tokens (user_sub, access_token, refresh_token, scope, expires_at)
      VALUES ($1, $2, $3, $4, $5)
@@ -81,7 +88,7 @@ async function insertToken(pool, userSub, overrides = {}) {
        scope         = EXCLUDED.scope,
        expires_at    = EXCLUDED.expires_at,
        updated_at    = now()`,
-    [userSub, t.access_token, t.refresh_token, t.scope, t.expires_at],
+    [userSub, encAt, encRt, t.scope, t.expires_at],
   );
 }
 
@@ -201,11 +208,13 @@ async function main() {
   console.log('\n  [TP-A] DB row created on saveGoogleTokens (direct insert)');
   await insertToken(pool, userSub, { refresh_token: 'rt_initial', access_token: 'at_initial' });
   const rowA = await getStoredToken(pool, userSub);
+  // The raw DB value is encrypted ciphertext; decrypt to verify the original plaintext.
+  const rowADecryptedRt = rowA?.refresh_token ? decryptToken(rowA.refresh_token) : null;
   record(
     '[TP-A] google_oauth_tokens row exists after save',
-    'row found with refresh_token=rt_initial',
-    rowA ? `found, refresh_token=${rowA.refresh_token}` : 'not found',
-    !!rowA && rowA.refresh_token === 'rt_initial',
+    'row found with decrypted refresh_token=rt_initial',
+    rowA ? `found, decrypted refresh_token=${rowADecryptedRt}` : 'not found',
+    !!rowA && rowADecryptedRt === 'rt_initial',
   );
 
   // ── [TP-B] Session repopulation from DB ──────────────────────────────────────
@@ -232,7 +241,7 @@ async function main() {
   // ── [TP-C] refresh_token preserved when missing on upsert ───────────────────
   console.log('\n  [TP-C] refresh_token preserved when subsequent save omits it');
   await insertToken(pool, userSub, { refresh_token: 'rt_precious', access_token: 'at_v1' });
-  // Simulate a token refresh response that omits refresh_token.
+  // Simulate a token refresh response that omits refresh_token (encrypted empty string).
   await pool.query(
     `INSERT INTO google_oauth_tokens
        (user_sub, access_token, refresh_token, scope, expires_at, updated_at)
@@ -246,14 +255,15 @@ async function main() {
        scope         = EXCLUDED.scope,
        expires_at    = EXCLUDED.expires_at,
        updated_at    = now()`,
-    [userSub, 'at_v2', /* no refresh_token */ '', null, null],
+    [userSub, encryptToken('at_v2'), /* no refresh_token */ '', null, null],
   );
   const rowC = await getStoredToken(pool, userSub);
+  const rowCDecryptedRt = rowC?.refresh_token ? decryptToken(rowC.refresh_token) : null;
   record(
     '[TP-C] Original refresh_token preserved after save with empty refresh_token',
-    'refresh_token=rt_precious',
-    rowC ? `refresh_token=${rowC.refresh_token}` : 'not found',
-    !!rowC && rowC.refresh_token === 'rt_precious',
+    'decrypted refresh_token=rt_precious',
+    rowC ? `decrypted refresh_token=${rowCDecryptedRt}` : 'not found',
+    !!rowC && rowCDecryptedRt === 'rt_precious',
   );
 
   // ── [TP-D] Disconnect removes DB row ─────────────────────────────────────────
@@ -308,6 +318,44 @@ async function main() {
     'null',
     rowE ? 'found' : 'null',
     rowE === null,
+  );
+
+  // ── [TP-F] Tokens are stored as ciphertext, not plaintext ───────────────────
+  // After inserting via insertToken (which encrypts), verify the raw DB value is
+  // NOT the original plaintext and successfully decrypts to the original value.
+  // tryDecrypt is the authoritative check: AES-256-GCM auth will reject any
+  // non-ciphertext value, so a successful tryDecrypt proves the value was encrypted.
+  console.log('\n  [TP-F] Tokens are stored encrypted (ciphertext) in the DB');
+  await insertToken(pool, userSub, { refresh_token: 'rt_encrypt_check', access_token: 'at_encrypt_check' });
+  const rowF = await getStoredToken(pool, userSub);
+  const rawAt = rowF?.access_token  ?? '';
+  const rawRt = rowF?.refresh_token ?? '';
+  const decAt = tryDecryptToken(rawAt);
+  const decRt = tryDecryptToken(rawRt);
+  record(
+    '[TP-F] access_token in DB is not plaintext',
+    'DB value != "at_encrypt_check"',
+    rawAt === 'at_encrypt_check' ? 'plaintext (FAIL)' : 'ciphertext',
+    rawAt !== 'at_encrypt_check',
+  );
+  record(
+    '[TP-F] refresh_token in DB is not plaintext',
+    'DB value != "rt_encrypt_check"',
+    rawRt === 'rt_encrypt_check' ? 'plaintext (FAIL)' : 'ciphertext',
+    rawRt !== 'rt_encrypt_check',
+  );
+  // Verify round-trip: tryDecrypt succeeds and recovers original values.
+  record(
+    '[TP-F] access_token decrypts back to original plaintext',
+    'at_encrypt_check',
+    decAt.ok ? decAt.plaintext : 'decrypt failed',
+    decAt.ok && decAt.plaintext === 'at_encrypt_check',
+  );
+  record(
+    '[TP-F] refresh_token decrypts back to original plaintext',
+    'rt_encrypt_check',
+    decRt.ok ? decRt.plaintext : 'decrypt failed',
+    decRt.ok && decRt.plaintext === 'rt_encrypt_check',
   );
 
   await cleanupAndExit(findings.filter(f => !f.ok).length > 0 ? 1 : 0);

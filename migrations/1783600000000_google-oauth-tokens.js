@@ -3,10 +3,9 @@
 // per user across logout/login cycles and server restarts. Mirrors the pattern
 // used by qb_tokens for QuickBooks.
 //
-// TODO: Add column-level encryption for access_token and refresh_token before
-// storing any real credentials in a production environment. Currently tokens are
-// stored as plaintext — protect this table with strict DB-level access controls
-// until encryption is in place.
+// Encryption: access_token and refresh_token are stored AES-256-GCM encrypted
+// by server.js (saveGoogleTokens / loadGoogleTokens via google-token-crypto.cjs).
+// Any existing plaintext rows are encrypted by migration 1783700000000_encrypt-google-tokens.
 //
 // Safe to re-run: the CREATE TABLE is guarded by IF NOT EXISTS.
 

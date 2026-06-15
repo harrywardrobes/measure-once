@@ -7,6 +7,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const logger = require('./logger');
 const { runMigrations } = require('./db-migrate');
+const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('./google-token-crypto.cjs');
 const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
@@ -966,11 +967,13 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
 // ── Google OAuth — DB helpers ─────────────────────────────────────────────────
 // Mirror of the persistTokens / getStoredTokens pattern in quickbooks.js.
-// TODO: add column-level encryption for access_token and refresh_token before
-// any production deployment stores real credentials.
+// access_token and refresh_token are stored AES-256-GCM encrypted (via
+// google-token-crypto.cjs) using the GOOGLE_TOKEN_ENCRYPTION_KEY secret.
 
 async function saveGoogleTokens(userSub, tokens) {
   const expiresAt = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
+  const encAccessToken  = tokens.access_token  ? encryptToken(tokens.access_token)  : null;
+  const encRefreshToken = tokens.refresh_token ? encryptToken(tokens.refresh_token) : '';
   await pool.query(
     `INSERT INTO google_oauth_tokens
        (user_sub, access_token, refresh_token, scope, expires_at, updated_at)
@@ -986,8 +989,8 @@ async function saveGoogleTokens(userSub, tokens) {
        updated_at    = now()`,
     [
       userSub,
-      tokens.access_token || null,
-      tokens.refresh_token || '',
+      encAccessToken,
+      encRefreshToken,
       tokens.scope || null,
       expiresAt,
     ],
@@ -1001,9 +1004,35 @@ async function loadGoogleTokens(userSub) {
   );
   if (!r.rows[0]) return null;
   const row = r.rows[0];
+
+  // Decrypt each token field.  tryDecrypt returns { ok, plaintext } — if
+  // decryption fails the value is stale plaintext (e.g. migration hasn't run
+  // yet or key was rotated).  Treat stale rows as disconnected: return null
+  // so the caller triggers a re-auth rather than crashing.
+  let accessToken  = null;
+  let refreshToken = null;
+
+  if (row.access_token) {
+    const { ok, plaintext } = tryDecryptToken(row.access_token);
+    if (!ok) {
+      logger.warn({ component: 'google-tokens', userSub }, 'loadGoogleTokens: access_token could not be decrypted — row treated as missing (reconnect required)');
+      return null;
+    }
+    accessToken = plaintext;
+  }
+
+  if (row.refresh_token) {
+    const { ok, plaintext } = tryDecryptToken(row.refresh_token);
+    if (!ok) {
+      logger.warn({ component: 'google-tokens', userSub }, 'loadGoogleTokens: refresh_token could not be decrypted — row treated as missing (reconnect required)');
+      return null;
+    }
+    refreshToken = plaintext;
+  }
+
   return {
-    access_token:  row.access_token,
-    refresh_token: row.refresh_token,
+    access_token:  accessToken,
+    refresh_token: refreshToken,
     scope:         row.scope,
     expiry_date:   row.expires_at ? new Date(row.expires_at).getTime() : null,
   };

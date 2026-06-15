@@ -59,5 +59,6 @@
   "1783400000000_visit-questions-collection-and-checks",
   "1783500000000_cleanup-stale-search-settings-action-ids",
   "1783600000000_google-oauth-tokens",
-  "1783600000000_customer-info-generic"
+  "1783600000000_customer-info-generic",
+  "1783700000000_encrypt-google-tokens"
 ]
