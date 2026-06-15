@@ -54,7 +54,6 @@ interface ContactInfo {
   contactName: string;
   contactPhone: string;
   contactMobilePhone: string;
-  contactWhatsAppPhone: string;
   contactEmail: string;
   contactAddress: string;
   contactStructuredAddress: StructuredAddress;
@@ -118,7 +117,6 @@ const DEMO_CONTACT_INFO: ContactInfo = {
   contactName: DEMO_CONTACT.name,
   contactPhone: DEMO_CONTACT.phone,
   contactMobilePhone: DEMO_CONTACT.mobile,
-  contactWhatsAppPhone: DEMO_CONTACT.whatsapp,
   contactEmail: DEMO_CONTACT.email,
   contactAddress: DEMO_CONTACT.address,
   contactStructuredAddress: {
@@ -499,7 +497,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const displayName = contactInfo?.contactName || ctx.contactName || 'the customer';
   const landline = contactInfo?.contactPhone || '';
   const mobile = contactInfo?.contactMobilePhone || '';
-  const whatsapp = contactInfo?.contactWhatsAppPhone || '';
 
   const titleStr =
     step === 'loading' ? `Arrange ${label}`
@@ -628,7 +625,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   name={displayName}
                   phone={landline}
                   mobile={mobile}
-                  whatsapp={whatsapp}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
@@ -647,7 +643,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   name={displayName}
                   phone={landline}
                   mobile={mobile}
-                  whatsapp={whatsapp}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
@@ -682,7 +677,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   name={displayName}
                   phone={landline}
                   mobile={mobile}
-                  whatsapp={whatsapp}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />

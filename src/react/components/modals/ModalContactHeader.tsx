@@ -14,7 +14,6 @@ interface Props {
   name?: string;
   phone?: string;
   mobile?: string;
-  whatsapp?: string;
   email?: string;
   address?: string;
   loading?: boolean;
@@ -45,7 +44,7 @@ function PhoneLine({ label, number }: { label: string; number: string }) {
  *
  * Use this in all modals that show a contact header block.
  */
-export function ModalContactHeader({ name, phone, mobile, whatsapp, email, address, loading }: Props) {
+export function ModalContactHeader({ name, phone, mobile, email, address, loading }: Props) {
   if (loading) {
     return (
       <Box>
@@ -59,7 +58,7 @@ export function ModalContactHeader({ name, phone, mobile, whatsapp, email, addre
     );
   }
 
-  const hasAny = !!(phone || mobile || whatsapp || email);
+  const hasAny = !!(phone || mobile || email);
 
   return (
     <Box>
@@ -71,7 +70,6 @@ export function ModalContactHeader({ name, phone, mobile, whatsapp, email, addre
           <Stack spacing={0.75}>
             {phone    && <PhoneLine label="Phone"     number={phone} />}
             {mobile   && <PhoneLine label="Mobile"    number={mobile} />}
-            {whatsapp && <PhoneLine label="WhatsApp"  number={whatsapp} />}
             {email && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                 <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />

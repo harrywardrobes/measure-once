@@ -13,7 +13,6 @@ const BASE_CONTACT: Contact = {
     email:     'jane@example.com',
     phone:     '',
     mobilephone: '',
-    hs_whatsapp_phone_number: '',
     address: '14 Oak Street',
     city: 'London',
     zip: 'SW1A 1AA',
@@ -54,7 +53,6 @@ export const DirectPhoneActive: Story = {
         ...BASE_CONTACT.properties,
         phone: '020 7946 0123',
         mobilephone: '07700 900456',
-        hs_whatsapp_phone_number: '',
       },
     }} />
   ),
@@ -69,22 +67,6 @@ export const MobilePhoneActive: Story = {
         ...BASE_CONTACT.properties,
         phone: '',
         mobilephone: '07700 900456',
-        hs_whatsapp_phone_number: '',
-      },
-    }} />
-  ),
-};
-
-export const WhatsAppActive: Story = {
-  name: 'WhatsApp — shown in header (no direct or mobile)',
-  render: () => (
-    <Wrapper contact={{
-      ...BASE_CONTACT,
-      properties: {
-        ...BASE_CONTACT.properties,
-        phone: '',
-        mobilephone: '',
-        hs_whatsapp_phone_number: '+447700900789',
       },
     }} />
   ),
@@ -99,7 +81,6 @@ export const NoPhone: Story = {
         ...BASE_CONTACT.properties,
         phone: '',
         mobilephone: '',
-        hs_whatsapp_phone_number: '',
       },
     }} />
   ),

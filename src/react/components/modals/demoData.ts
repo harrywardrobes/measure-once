@@ -12,7 +12,6 @@ export interface DemoContact {
   name: string;
   phone: string;
   mobile: string;
-  whatsapp: string;
   email: string;
   address: string;
   visitType: 'design' | 'survey';
@@ -22,7 +21,6 @@ export const DEMO_CONTACT: DemoContact = {
   name: 'Jane Smith',
   phone: '020 7946 0123',
   mobile: '07700 900456',
-  whatsapp: '07700 900456',
   email: 'jane.smith@example.com',
   address: '12 Willow Lane, London, SW1A 1AA',
   visitType: 'design',

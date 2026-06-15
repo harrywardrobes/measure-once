@@ -66,7 +66,6 @@ interface ContactData {
   contactEmail: string;
   phone: string;
   mobile: string;
-  whatsapp: string;
   leadStatus: string | null;
   callAttempted: boolean;
   emailSent: boolean;
@@ -95,7 +94,6 @@ const DEMO_CONTACT_DATA: ContactData = {
   contactEmail: DEMO_CONTACT.email,
   phone: DEMO_CONTACT.phone,
   mobile: DEMO_CONTACT.mobile,
-  whatsapp: DEMO_CONTACT.whatsapp,
   leadStatus: null,
   callAttempted: false,
   emailSent: false,
@@ -318,9 +316,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   const displayName = contactData?.contactName || contactName || 'the customer';
-  const phone    = contactData?.phone    || '';
-  const mobile   = contactData?.mobile   || '';
-  const whatsapp = contactData?.whatsapp || '';
+  const phone  = contactData?.phone  || '';
+  const mobile = contactData?.mobile || '';
 
   const methodLogged: Record<Method, boolean> = {
     call:     callAttempted,
@@ -422,7 +419,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                   name={displayName}
                   phone={phone}
                   mobile={mobile}
-                  whatsapp={whatsapp}
                   email={contactData?.contactEmail || contactEmail}
                 />
               )}
@@ -871,7 +867,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 name={displayName}
                 phone={phone}
                 mobile={mobile}
-                whatsapp={whatsapp}
                 email={contactData?.contactEmail || contactEmail}
               />
             )}

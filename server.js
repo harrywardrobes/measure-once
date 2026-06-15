@@ -2269,7 +2269,7 @@ app.get('/api/contacts/:id', requireHubspotToken, async (req, res) => {
     const safeContactId = encodeURIComponent(contactId);
     const r = await axios.get(`${HS}/crm/v3/objects/contacts/${safeContactId}`, {
       headers: getHubSpotHeaders(),
-      params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,customer_number,hs_lead_status,createdate' }
+      params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,state,zip,country,customer_number,hs_lead_status,createdate' }
     });
     const payload = r.data || {};
     const p = payload.properties || {};
@@ -2295,7 +2295,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (!/^\d+$/.test(contactId)) {
       return res.status(400).json({ error: 'Invalid contact id.' });
     }
-    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_whatsapp_phone_number'];
+    const allowed = ['hs_lead_status', 'firstname', 'lastname', 'email', 'phone', 'mobilephone'];
     const properties = {};
     for (const key of allowed) {
       if (Object.prototype.hasOwnProperty.call(req.body, key)) {
@@ -6147,23 +6147,22 @@ app.post('/api/card-actions/arrange-visit',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const leadStatus = String(props.hs_lead_status || '').toLowerCase();
       const visitType = (leadStatus === 'awaiting_deposit' || leadStatus === 'deposit_invoice') ? 'survey' : 'design';
       const firstName = String(props.firstname || '');
       const lastName  = String(props.lastname  || '');
-      const contactName          = [firstName, lastName].filter(Boolean).join(' ') || '';
-      const contactPhone         = String(props.phone || '');
-      const contactMobilePhone   = String(props.mobilephone || '');
-      const contactWhatsAppPhone = String(props.hs_whatsapp_phone_number || '');
-      const contactEmail         = String(props.email || '');
+      const contactName        = [firstName, lastName].filter(Boolean).join(' ') || '';
+      const contactPhone       = String(props.phone || '');
+      const contactMobilePhone = String(props.mobilephone || '');
+      const contactEmail       = String(props.email || '');
       const contactStructuredAddress = hubspotToAddress({
         address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
       });
-      const contactAddress       = formatAddress(contactStructuredAddress);
-      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactWhatsAppPhone, contactEmail, contactAddress, contactStructuredAddress });
+      const contactAddress = formatAddress(contactStructuredAddress);
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
@@ -6224,7 +6223,7 @@ app.post('/api/card-actions/contact-customer',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,hs_lead_status' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const firstName = String(props.firstname || '');
@@ -6233,7 +6232,6 @@ app.post('/api/card-actions/contact-customer',
       const contactEmail = String(props.email || '');
       const phone        = String(props.phone || '');
       const mobile       = String(props.mobilephone || '');
-      const whatsapp     = String(props.hs_whatsapp_phone_number || '');
       const leadStatus   = props.hs_lead_status || null;
 
       const [trackingResult, historyResult] = await Promise.all([
@@ -6291,7 +6289,6 @@ app.post('/api/card-actions/contact-customer',
         contactEmail,
         phone,
         mobile,
-        whatsapp,
         leadStatus,
         callAttempted:        attempts.call_attempted,
         emailSent:            attempts.email_sent,
@@ -6607,7 +6604,7 @@ app.post('/api/card-actions/open-deal',
       const r = await hubspotRequestWithRetry('get',
         `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
         null,
-        { params: { properties: 'firstname,lastname,email,phone,mobilephone,hs_whatsapp_phone_number,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
+        { params: { properties: 'firstname,lastname,email,phone,mobilephone,address,city,state,zip,country,hs_lead_status' }, timeout: 15000 }
       );
       const props = r.data?.properties || {};
       const firstName  = String(props.firstname || '');

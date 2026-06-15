@@ -6,7 +6,6 @@ export interface ContactProperties {
   email?: string;
   phone?: string;
   mobilephone?: string;
-  hs_whatsapp_phone_number?: string;
   company?: string;
   address?: string;
   city?: string;

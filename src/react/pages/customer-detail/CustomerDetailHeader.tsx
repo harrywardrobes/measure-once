@@ -50,11 +50,10 @@ export function CustomerDetailHeader({
   const props      = contact.properties;
   const name       = contactName(contact);
   const email      = props.email || '';
-  const bestPhone  = props.phone || props.mobilephone || props.hs_whatsapp_phone_number || '';
-  const phoneSource: 'phone' | 'mobile' | 'whatsapp' | null =
-    props.phone            ? 'phone'
-    : props.mobilephone    ? 'mobile'
-    : props.hs_whatsapp_phone_number ? 'whatsapp'
+  const bestPhone  = props.phone || props.mobilephone || '';
+  const phoneSource: 'phone' | 'mobile' | null =
+    props.phone         ? 'phone'
+    : props.mobilephone ? 'mobile'
     : null;
   const addressText = formatAddress(props.structuredAddress || emptyAddress());
   const customerNum = props.customer_number || '';
@@ -164,19 +163,6 @@ export function CustomerDetailHeader({
                         }}
                       >
                         Mobile
-                      </span>
-                    )}
-                    {phoneSource === 'whatsapp' && (
-                      <span
-                        title="WhatsApp number"
-                        style={{
-                          fontSize: '0.65rem', fontWeight: 600, lineHeight: 1,
-                          padding: '2px 5px', borderRadius: 4,
-                          background: PROVIDER_COLORS.whatsAppBadgeBg, color: PROVIDER_COLORS.whatsAppBadgeText,
-                          letterSpacing: '0.02em', flexShrink: 0,
-                        }}
-                      >
-                        WhatsApp
                       </span>
                     )}
                     {whatsappEnabled && !isViewer && onOpenWhatsApp && (

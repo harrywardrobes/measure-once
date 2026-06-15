@@ -21,11 +21,10 @@ type FormValues = {
   email: string;
   phone: string;
   mobilephone: string;
-  hs_whatsapp_phone_number: string;
   structuredAddress: StructuredAddress;
 };
 
-type ActivePhoneField = 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number' | null;
+type ActivePhoneField = 'phone' | 'mobilephone' | null;
 
 export interface ContactEditModalProps {
   contact: Contact;
@@ -39,13 +38,12 @@ export interface ContactEditModalProps {
 function toFormValues(contact: Contact): FormValues {
   const p = contact.properties;
   return {
-    firstname:               p.firstname               || '',
-    lastname:                p.lastname                || '',
-    email:                   p.email                   || '',
-    phone:                   p.phone                   || '',
-    mobilephone:             p.mobilephone             || '',
-    hs_whatsapp_phone_number: p.hs_whatsapp_phone_number || '',
-    structuredAddress:       p.structuredAddress       || emptyAddress(),
+    firstname:         p.firstname         || '',
+    lastname:          p.lastname          || '',
+    email:             p.email             || '',
+    phone:             p.phone             || '',
+    mobilephone:       p.mobilephone       || '',
+    structuredAddress: p.structuredAddress || emptyAddress(),
   };
 }
 
@@ -53,15 +51,14 @@ function draftKey(contactId: string): string {
   return CONTACT_EDIT_DRAFT_PREFIX + contactId;
 }
 
-function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number'> {
-  const { phone: _phone, mobilephone: _mobilephone, hs_whatsapp_phone_number: _wa, ...safeValues } = values;
+function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobilephone'> {
+  const { phone: _phone, mobilephone: _mobilephone, ...safeValues } = values;
   return safeValues;
 }
 
 function activePhoneField(values: FormValues): ActivePhoneField {
-  if (values.phone)                   return 'phone';
-  if (values.mobilephone)             return 'mobilephone';
-  if (values.hs_whatsapp_phone_number) return 'hs_whatsapp_phone_number';
+  if (values.phone)       return 'phone';
+  if (values.mobilephone) return 'mobilephone';
   return null;
 }
 
@@ -136,7 +133,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     saving,
   );
 
-  function handleChange(field: 'firstname' | 'lastname' | 'email' | 'phone' | 'mobilephone' | 'hs_whatsapp_phone_number') {
+  function handleChange(field: 'firstname' | 'lastname' | 'email' | 'phone' | 'mobilephone') {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       setValues(prev => ({ ...prev, [field]: e.target.value }));
     };
@@ -151,13 +148,12 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     setError(null);
     try {
       const body: Record<string, unknown> = {
-        firstname:               values.firstname,
-        lastname:                values.lastname,
-        email:                   values.email,
-        phone:                   values.phone,
-        mobilephone:             values.mobilephone,
-        hs_whatsapp_phone_number: values.hs_whatsapp_phone_number,
-        structuredAddress:       values.structuredAddress,
+        firstname:         values.firstname,
+        lastname:          values.lastname,
+        email:             values.email,
+        phone:             values.phone,
+        mobilephone:       values.mobilephone,
+        structuredAddress: values.structuredAddress,
       };
       const res = await fetch(`/api/contacts/${encodeURIComponent(contact.id)}`, {
         method: 'PATCH',
@@ -260,17 +256,6 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             size="small"
             autoComplete="off"
             helperText={activePh === 'mobilephone' ? <HeaderBadge /> : undefined}
-          />
-
-          <TextField
-            label="WhatsApp number"
-            type="tel"
-            value={values.hs_whatsapp_phone_number}
-            onChange={handleChange('hs_whatsapp_phone_number')}
-            fullWidth
-            size="small"
-            autoComplete="off"
-            helperText={activePh === 'hs_whatsapp_phone_number' ? <HeaderBadge /> : undefined}
           />
 
           <AddressInput
