@@ -242,6 +242,8 @@
     "test:connect-services-modal:ci": "node scripts/with-test-db.js test/connect-services-modal/run.js",
     "test:profile-google-calendar": "node test/profile-google-calendar/run.js",
     "test:profile-google-calendar:ci": "node scripts/with-test-db.js test/profile-google-calendar/run.js",
+    "test:google-token-persistence": "node test/profile-google-calendar/token-persistence.js",
+    "test:google-token-persistence:ci": "node scripts/with-test-db.js test/profile-google-calendar/token-persistence.js",
     "test:scheduling-past-time-guard": "node test/scheduling-past-time-guard/run.js",
     "test:scheduling-past-time-guard:ci": "node scripts/with-test-db.js test/scheduling-past-time-guard/run.js",
     "test:customer-card-action-strip": "node test/customer-card-action-strip/run.js",

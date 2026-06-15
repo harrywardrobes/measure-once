@@ -950,6 +950,55 @@ app.get('/api/localdata/all', isAuthenticated, async (req, res) => {
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
+// ── Google OAuth — DB helpers ─────────────────────────────────────────────────
+// Mirror of the persistTokens / getStoredTokens pattern in quickbooks.js.
+// TODO: add column-level encryption for access_token and refresh_token before
+// any production deployment stores real credentials.
+
+async function saveGoogleTokens(userSub, tokens) {
+  const expiresAt = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
+  await pool.query(
+    `INSERT INTO google_oauth_tokens
+       (user_sub, access_token, refresh_token, scope, expires_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (user_sub) DO UPDATE SET
+       access_token  = EXCLUDED.access_token,
+       refresh_token = COALESCE(
+                         NULLIF(EXCLUDED.refresh_token, ''),
+                         google_oauth_tokens.refresh_token
+                       ),
+       scope         = EXCLUDED.scope,
+       expires_at    = EXCLUDED.expires_at,
+       updated_at    = now()`,
+    [
+      userSub,
+      tokens.access_token || null,
+      tokens.refresh_token || '',
+      tokens.scope || null,
+      expiresAt,
+    ],
+  );
+}
+
+async function loadGoogleTokens(userSub) {
+  const r = await pool.query(
+    'SELECT access_token, refresh_token, scope, expires_at FROM google_oauth_tokens WHERE user_sub = $1',
+    [userSub],
+  );
+  if (!r.rows[0]) return null;
+  const row = r.rows[0];
+  return {
+    access_token:  row.access_token,
+    refresh_token: row.refresh_token,
+    scope:         row.scope,
+    expiry_date:   row.expires_at ? new Date(row.expires_at).getTime() : null,
+  };
+}
+
+async function deleteGoogleTokens(userSub) {
+  await pool.query('DELETE FROM google_oauth_tokens WHERE user_sub = $1', [userSub]);
+}
+
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI ||
   (process.env.REPLIT_DEV_DOMAIN
@@ -992,22 +1041,24 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
   try {
     const { tokens } = await oauth2Client.getToken(req.query.code);
     req.session.googleTokens = tokens;
-    req.session.googleTokensBoundTo = req.user.sub;
+    req.session.googleTokensBoundTo = String(req.user.claims.sub);
+    await saveGoogleTokens(String(req.user.claims.sub), tokens);
     res.redirect('/?connected=true');
   } catch (e) {
     res.redirect('/?error=google_auth_failed');
   }
 });
 
-app.post('/auth/logout-google', isAuthenticated, (req, res) => {
+app.post('/auth/logout-google', isAuthenticated, async (req, res) => {
   delete req.session.googleTokens;
   delete req.session.googleTokensBoundTo;
+  try { await deleteGoogleTokens(String(req.user.claims.sub)); } catch {}
   res.json({ success: true });
 });
 
 // ── Google: Connection status (live token check) ───────────────────────────────
 app.get('/api/google/status', isAuthenticated, async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) {
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
@@ -1016,12 +1067,14 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
     const { token } = await auth.getAccessToken();
     if (!token) return res.json({ connected: false, code: 'NO_TOKEN' });
     req.session.googleTokens = auth.credentials;
+    await saveGoogleTokens(String(req.user.claims.sub), auth.credentials);
     res.json({ connected: true });
   } catch (e) {
     const msg = (e.message || '').toLowerCase();
     if (msg.includes('invalid_grant') || msg.includes('token has been expired') || msg.includes('token has been revoked')) {
       delete req.session.googleTokens;
       delete req.session.googleTokensBoundTo;
+      try { await deleteGoogleTokens(String(req.user.claims.sub)); } catch {}
       return res.json({ connected: false, code: 'TOKEN_EXPIRED' });
     }
     if (e.response?.status === 401 || msg.includes('invalid_client')) {
@@ -2402,25 +2455,40 @@ function classifyGoogleError(e) {
   return 'GOOGLE_ERROR';
 }
 
-// Returns the session's Google tokens only when they are bound to the currently
-// authenticated Measure Once user.  If tokens exist but belong to a different
-// user (cross-account session reuse), they are cleared and null is returned so
-// stale credentials are never silently forwarded.
-function getVerifiedGoogleTokens(req) {
-  const tokens = req.session.googleTokens;
-  if (!tokens) return null;
-  const boundTo = req.session.googleTokensBoundTo;
-  const currentUser = req.user?.sub;
-  if (!boundTo || !currentUser || boundTo !== currentUser) {
-    delete req.session.googleTokens;
-    delete req.session.googleTokensBoundTo;
-    return null;
+// Returns the Google tokens for the currently authenticated user, using the
+// session as a fast cache and falling back to the DB when the session is empty
+// (e.g. after a logout/login cycle or server restart).  If session tokens exist
+// but belong to a different user (cross-account session reuse), they are cleared
+// and null is returned so stale credentials are never silently forwarded.
+async function getVerifiedGoogleTokens(req) {
+  const currentUser = req.user?.claims?.sub != null
+    ? String(req.user.claims.sub)
+    : null;
+  if (!currentUser) return null;
+
+  const sessionTokens = req.session.googleTokens;
+  if (sessionTokens) {
+    const boundTo = req.session.googleTokensBoundTo;
+    if (!boundTo || boundTo !== currentUser) {
+      delete req.session.googleTokens;
+      delete req.session.googleTokensBoundTo;
+      return null;
+    }
+    return sessionTokens;
   }
-  return tokens;
+
+  // Session miss — try the DB.
+  const dbTokens = await loadGoogleTokens(currentUser);
+  if (!dbTokens) return null;
+
+  // Repopulate session so subsequent requests avoid the DB round-trip.
+  req.session.googleTokens = dbTokens;
+  req.session.googleTokensBoundTo = currentUser;
+  return dbTokens;
 }
 
 app.get('/api/emails', isAuthenticated, async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(googleTokens);
@@ -2457,7 +2525,7 @@ app.get('/api/emails', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailSendLimiter, async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(googleTokens);
@@ -2478,7 +2546,7 @@ app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailS
 
 // ── Google Calendar ───────────────────────────────────────────────────────────
 app.get('/api/events', isAuthenticated, async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
@@ -2510,7 +2578,7 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEventLimiter, async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   let calendarId;
   try { calendarId = getSharedCalendarId(); }
@@ -2536,7 +2604,7 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
 });
 
 app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
@@ -2555,7 +2623,7 @@ app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async 
 });
 
 app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
-  const googleTokens = getVerifiedGoogleTokens(req);
+  const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   const eventId = String(req.params.id || '').trim();
   if (!eventId) return res.status(400).json({ error: 'Invalid event id' });
