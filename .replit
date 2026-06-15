@@ -10,29 +10,16 @@ channel = "stable-25_05"
 runButton = "Project"
 
 [[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "test:privileges"
-
-[[workflows.workflow]]
 name = "Start application"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm start"
 waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow]]
 name = "test:privileges"
@@ -44,6 +31,36 @@ args = "PRIVTEST_ALLOW_SHARED_DB=1 npm run test:privileges"
 
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow]]
+name = "artifacts/mockup-sandbox: Component Preview Server"
+author = "agent"
+mode = "sequential"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+artifactId = "artifacts/mockup-sandbox"
+isCanvasWorkflow = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+cwd = "./artifacts/mockup-sandbox"
+waitForPort = 23636
+router = "path"
+
+[workflows.workflow.tasks.env]
+PORT = "23636"
+BASE_PATH = "/__mockup/"
+
+[[workflows.workflow]]
+name = "Reset Git Files"
+mode = "sequential"
+author = 58014399
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "git remote | grep '^subrepl-' | while IFS= read -r r; do git remote remove \"$r\"; done"
 
 [[ports]]
 localPort = 5000
