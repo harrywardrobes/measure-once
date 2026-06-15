@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_PRIORITY_FIRST, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -1007,6 +1007,9 @@ export function CustomersPage(): React.ReactElement {
   const [roomsByContact, setRoomsByContact] = React.useState<Record<string, Room[]>>({});
   const { loading: qbLoading, statusKnown: qbStatusKnown, invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
+  // One-time migration shim: remove stale localStorage key from the old "Priority first" toggle.
+  // The sort preference is now fully URL-driven; this cleans up any value left from previous sessions.
+  React.useEffect(() => { localStorage.removeItem(CUSTOMERS_PRIORITY_FIRST); }, []); // ls-key-ok: migration shim removing stale key
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
   const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null>>({});
 
