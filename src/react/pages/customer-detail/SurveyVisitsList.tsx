@@ -4,6 +4,7 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineSurveyVisitEntries, type PendingSurveyVisitEntry } from '../../hooks/useOfflineSurveyVisitEntries';
 import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
+import { evictCachedRecord } from '../../lib/offlineDb';
 import type {
   SurveyVisitWizardHandler,
   SurveyVisitWizardCtx,
@@ -688,6 +689,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
       try {
         const r = await fetch(`/api/survey-visits/${id}`, { method: 'DELETE' });
         if (!r.ok) throw new Error(`${r.status}`);
+        await evictCachedRecord('visits', `sv:${id}`);
         onRefresh?.();
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'error';
