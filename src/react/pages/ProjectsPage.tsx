@@ -65,15 +65,9 @@ import type {
 import { usePageTitle } from '../hooks/usePageTitle';
 import { UrgencyDot } from '../components/UrgencyDot';
 import type { Urgency } from '../components/UrgencyDot';
+import { STAGE_KEYS, StageKey } from '../utils/stageKeys';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-const STAGE_KEYS = [
-  'sales', 'designvisit', 'survey', 'order', 'workshop',
-  'packing', 'delivery', 'installation', 'aftercare',
-] as const;
-
-type StageKey = (typeof STAGE_KEYS)[number];
 
 const STAGE_LABEL_FALLBACK: Record<string, string> = {
   sales: 'Sales',

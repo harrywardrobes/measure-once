@@ -1,5 +1,6 @@
 import { Box, Popover, Typography } from '@mui/material';
 import { STAGE_COLORS, BRAND_COLORS } from '../../theme';
+import { STAGE_KEYS as DEFAULT_STAGE_KEYS } from '../../utils/stageKeys';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -15,21 +16,8 @@ interface WindowGlobals {
 }
 
 // ── Default stage ordering ─────────────────────────────────────────────────────
-// Mirrors STAGE_KEYS in ProjectsPage.tsx. The workflow may define fewer stages;
-// only stages that appear in the workflow are shown.
-
-const DEFAULT_STAGE_KEYS = [
-  'sales',
-  'designvisit',
-  'survey',
-  'order',
-  'workshop',
-  'packing',
-  'delivery',
-  'installation',
-  'aftercare',
-  'customerservice',
-] as const;
+// The workflow may define fewer stages; only stages that appear in the
+// workflow are shown.
 
 const DEFAULT_STAGE_LABELS: Record<string, string> = {
   sales:           'Sales',

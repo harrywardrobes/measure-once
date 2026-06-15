@@ -140,7 +140,7 @@ export interface WhatsAppMessage {
   status?: string;
 }
 
-export const STAGE_KEYS = ['sales','designvisit','survey','order','workshop','packing','delivery','installation','aftercare'];
+export { STAGE_KEYS } from '../../utils/stageKeys';
 
 export { stageColour } from '../../utils/stageColour';
 

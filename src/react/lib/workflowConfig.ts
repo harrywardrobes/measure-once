@@ -30,7 +30,7 @@ export const DEFAULT_WORKFLOW: WorkflowDef = {
   },
 };
 
-export const STAGE_KEYS: string[] = Object.keys(DEFAULT_WORKFLOW.stages!);
+export { STAGE_KEYS } from '../utils/stageKeys';
 
 // ── Shared workflow fetch ──────────────────────────────────────────────────────
 // The runtime workflow definition (/api/workflow) is identical for every page and
