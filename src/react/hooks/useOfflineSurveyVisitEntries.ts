@@ -18,6 +18,8 @@ export interface PendingSurveyVisitEntry {
   status: QueueStatus;
   isEdit: boolean;
   editVisitId: number | null;
+  /** True when this entry is a refund request (not a new visit or an edit). */
+  isRefund: boolean;
   contactId: string | null;
   contactName: string | null;
   visitDate: string | null;
@@ -41,8 +43,10 @@ function parseEntry(e: QueueEntry): PendingSurveyVisitEntry | null {
     0,
   );
 
+  const isRefund = e.url === '/api/survey-visits/refund';
+
   let editVisitId: number | null = null;
-  if (e.recordKey && e.recordKey.startsWith('sv:')) {
+  if (!isRefund && e.recordKey && e.recordKey.startsWith('sv:')) {
     const n = Number(e.recordKey.slice('sv:'.length));
     editVisitId = Number.isFinite(n) ? n : null;
   }
@@ -52,6 +56,7 @@ function parseEntry(e: QueueEntry): PendingSurveyVisitEntry | null {
     status: e.status,
     isEdit: editVisitId != null,
     editVisitId,
+    isRefund,
     contactId: typeof body.contactId === 'string' ? body.contactId : null,
     contactName: typeof body.contactName === 'string' ? body.contactName : null,
     visitDate: typeof body.visitDate === 'string' ? body.visitDate : null,

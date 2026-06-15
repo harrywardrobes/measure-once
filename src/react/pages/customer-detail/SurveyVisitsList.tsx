@@ -394,6 +394,34 @@ function ServerSurveyVisitCard({ visit, pendingEdit, isAdmin, onEdit, onRevision
   );
 }
 
+/**
+ * Banner shown at the top of the survey visits section when a refund request
+ * is sitting in the offline queue waiting to sync.
+ */
+function PendingRefundBanner({ entries }: { entries: PendingSurveyVisitEntry[] }) {
+  if (!entries.length) return null;
+  const anyFailed = entries.some(e => e.status === 'failed');
+  const anySyncing = entries.some(e => e.status === 'syncing');
+  const status = anyFailed ? 'failed' : anySyncing ? 'syncing' : 'pending';
+  return (
+    <div
+      data-testid="sv-refund-pending-banner"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        background: 'var(--paper)', border: '1px dashed var(--stone)',
+        borderRadius: 'var(--radius-lg)', padding: '8px 12px', marginBottom: 6,
+      }}
+    >
+      <SyncStatePill status={status} testId="sv-refund-sync-pill" />
+      <span style={{ fontSize: '0.8rem', color: 'var(--ink-3)' }}>
+        {anyFailed
+          ? `Refund request couldn't sync${entries[0].lastError ? ` — ${entries[0].lastError}` : ''}. It'll retry automatically.`
+          : "Refund request pending sync — it'll be sent when you're back online."}
+      </span>
+    </div>
+  );
+}
+
 interface WizardState {
   handler: SurveyVisitWizardHandler;
   ctx: SurveyVisitWizardCtx;
@@ -426,7 +454,8 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
   const { isAdmin } = usePrivilege();
 
   const pendingEntries = useOfflineSurveyVisitEntries(contactId);
-  const pendingCreates = pendingEntries.filter(e => !e.isEdit);
+  const pendingRefunds = pendingEntries.filter(e => e.isRefund);
+  const pendingCreates = pendingEntries.filter(e => !e.isEdit && !e.isRefund);
   const pendingEditByVisitId = new Map<number, PendingSurveyVisitEntry>();
   for (const e of pendingEntries) {
     if (e.isEdit && e.editVisitId != null) pendingEditByVisitId.set(e.editVisitId, e);
@@ -579,6 +608,9 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
           {!serverLoading && !serverError && serverVisits.length === 0 && pendingCreates.length === 0 && pendingEntries.length === 0 && (
             <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No survey visits yet.</p>
           )}
+
+          {/* Refund request(s) queued offline — shown as a banner above visit cards */}
+          <PendingRefundBanner entries={pendingRefunds} />
 
           {pendingCreates.map(p => (
             <PendingSurveyVisitCard key={`sv-pending-${p.id}`} entry={p} />
