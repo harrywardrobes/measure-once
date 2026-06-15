@@ -91,9 +91,6 @@ const ROUTES = [
   // Design-visit catalogue reads (any authenticated user can browse the
   // shared catalogue; admin writes live in the admin block below).
   { method: 'GET',    path: '/api/design-visit-terms',         level: 'auth' },
-  { method: 'GET',    path: '/api/design-visit-handles',       level: 'auth' },
-  { method: 'GET',    path: '/api/design-visit-furniture-ranges', level: 'auth' },
-  { method: 'GET',    path: '/api/design-visit-door-styles',   level: 'auth' },
   // Shared "Visits" catalogue reads (design-visits.js mountCatalogRead). The
   // route is registered from a template literal `/api/catalog/${slug}`, so the
   // audit detects that exact pattern; one row covers all slugs (identical

@@ -1104,12 +1104,6 @@ router.get('/api/catalog/pairings', isAuthenticated, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Legacy member catalogue read aliases (308 redirects) ──────────────────────
-// TODO remove after migration
-router.get('/api/design-visit-handles',          isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/handles'));  // TODO remove after migration
-router.get('/api/design-visit-furniture-ranges', isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/ranges'));   // TODO remove after migration
-router.get('/api/design-visit-door-styles',      isAuthenticated, (req, res) => res.redirect(308, '/api/catalog/doors'));    // TODO remove after migration
-
 // ── Design Visits: CRUD ───────────────────────────────────────────────────────
 router.get('/api/design-visits', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {

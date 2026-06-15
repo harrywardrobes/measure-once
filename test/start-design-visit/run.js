@@ -292,9 +292,9 @@ async function main() {
 
   // Member reads public catalogue → 200
   for (const [label, path] of [
-    ['GET /api/design-visit-handles (member)', '/api/design-visit-handles'],
-    ['GET /api/design-visit-furniture-ranges (member)', '/api/design-visit-furniture-ranges'],
-    ['GET /api/design-visit-door-styles (member)', '/api/design-visit-door-styles'],
+    ['GET /api/catalog/handles (member)', '/api/catalog/handles'],
+    ['GET /api/catalog/ranges (member)', '/api/catalog/ranges'],
+    ['GET /api/catalog/doors (member)', '/api/catalog/doors'],
   ]) {
     const r = await memberClient.get(path);
     record(
@@ -311,7 +311,7 @@ async function main() {
     const anonClient = makeClient(null);
     for (const [label, path] of [
       ['GET /api/admin/catalog/handles (unauth)', '/api/admin/catalog/handles'],
-      ['GET /api/design-visit-handles (unauth)', '/api/design-visit-handles'],
+      ['GET /api/catalog/handles (unauth)', '/api/catalog/handles'],
     ]) {
       const r = await anonClient.get(path);
       const blocked = r.status === 401 || r.status === 403 || r.status === 302;
@@ -1758,7 +1758,7 @@ async function main() {
         });
 
         // Poll for the new handle name to appear in the wizard dropdown.
-        // The wizard BC listener re-fetches /api/design-visit-handles and calls
+        // The wizard BC listener re-fetches /api/catalog/handles and calls
         // renderStep1() which rebuilds the <select> with the updated list.
         const dropdownUpdated = await pollPage(
           wizardTab,
