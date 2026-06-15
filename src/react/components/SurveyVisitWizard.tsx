@@ -733,6 +733,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         contactName,
         contactEmail,
         designVisitId: designVisitId || undefined,
+        surveyVisitId: editVisitId != null ? Number(editVisitId) : undefined,
         reason: reasonTrimmed,
         amountPence,
         depositInvoiceRef: refundInvoiceRef.trim() || undefined,

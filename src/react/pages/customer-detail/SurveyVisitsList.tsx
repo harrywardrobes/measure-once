@@ -319,6 +319,7 @@ function PendingSurveyVisitCard({ entry }: { entry: PendingSurveyVisitEntry }) {
 interface ServerVisitCardProps {
   visit: SurveyVisitServer;
   pendingEdit: PendingSurveyVisitEntry | undefined;
+  pendingRefund: PendingSurveyVisitEntry | undefined;
   isAdmin: boolean;
   onEdit: (id: number) => void;
   onRevision: (id: number) => void;
@@ -326,7 +327,7 @@ interface ServerVisitCardProps {
 }
 
 /** Card for a server-synced survey visit row, with optional queued-edit badge and admin actions. */
-function ServerSurveyVisitCard({ visit, pendingEdit, isAdmin, onEdit, onRevision, onDelete }: ServerVisitCardProps) {
+function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onEdit, onRevision, onDelete }: ServerVisitCardProps) {
   const when = fmtDesignVisitWhen(visit.visit_date || visit.created_at);
   const totalGbp = fmtGbpFromPence(Number(visit.estimate_total_pence) || 0);
   const canEdit    = visit.status === 'submitted' || visit.status === 'revision_requested' || visit.status === 'draft';
@@ -389,6 +390,23 @@ function ServerSurveyVisitCard({ visit, pendingEdit, isAdmin, onEdit, onRevision
         <p style={{ fontSize: '0.78rem', color: 'var(--ink-3)', margin: 0 }}>
           Edit saved on this device — it'll upload when you&apos;re back online.
         </p>
+      )}
+      {pendingRefund && (
+        <div
+          data-testid="sv-refund-inline-badge"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'var(--paper)', border: '1px dashed var(--stone)',
+            borderRadius: 'var(--radius-md)', padding: '5px 10px',
+          }}
+        >
+          <SyncStatePill status={pendingRefund.status} testId="sv-refund-sync-pill" />
+          <span style={{ fontSize: '0.78rem', color: 'var(--ink-3)' }}>
+            {pendingRefund.status === 'failed'
+              ? `Refund request couldn't sync${pendingRefund.lastError ? ` — ${pendingRefund.lastError}` : ''}. It'll retry automatically.`
+              : "Refund request pending sync — it'll be sent when you're back online."}
+          </span>
+        </div>
       )}
     </div>
   );
@@ -507,9 +525,12 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
   const pendingRefunds = pendingEntries.filter(e => e.isRefund);
   const pendingCreates = pendingEntries.filter(e => !e.isEdit && !e.isRefund);
   const pendingEditByVisitId = new Map<number, PendingSurveyVisitEntry>();
+  const pendingRefundByVisitId = new Map<number, PendingSurveyVisitEntry>();
   for (const e of pendingEntries) {
     if (e.isEdit && e.editVisitId != null) pendingEditByVisitId.set(e.editVisitId, e);
+    if (e.isRefund && e.refundVisitId != null) pendingRefundByVisitId.set(e.refundVisitId, e);
   }
+  const bannerRefunds = pendingRefunds.filter(e => e.refundVisitId == null);
 
   const [wizardState, setWizardState] = useState<WizardState | null>(null);
   const [editBusy, setEditBusy] = useState(false);
@@ -678,8 +699,8 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
             <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>No survey visits yet.</p>
           )}
 
-          {/* Refund request(s) queued offline — shown as a banner above visit cards */}
-          <PendingRefundBanner entries={pendingRefunds} />
+          {/* Refund request(s) queued offline without a specific visit — shown as a contact-level banner */}
+          <PendingRefundBanner entries={bannerRefunds} />
 
           {pendingCreates.map(p => (
             <PendingSurveyVisitCard key={`sv-pending-${p.id}`} entry={p} />
@@ -690,6 +711,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
               key={`sv-server-${v.id}`}
               visit={v}
               pendingEdit={pendingEditByVisitId.get(v.id)}
+              pendingRefund={pendingRefundByVisitId.get(v.id)}
               isAdmin={isAdmin}
               onEdit={openWizardForEdit}
               onRevision={handleRevision}

@@ -20,6 +20,12 @@ export interface PendingSurveyVisitEntry {
   editVisitId: number | null;
   /** True when this entry is a refund request (not a new visit or an edit). */
   isRefund: boolean;
+  /**
+   * When the refund was triggered from an existing survey visit, the visit's
+   * numeric ID. Allows the badge to be shown inline on that visit card rather
+   * than as a contact-level banner.
+   */
+  refundVisitId: number | null;
   contactId: string | null;
   contactName: string | null;
   visitDate: string | null;
@@ -51,12 +57,18 @@ function parseEntry(e: QueueEntry): PendingSurveyVisitEntry | null {
     editVisitId = Number.isFinite(n) ? n : null;
   }
 
+  let refundVisitId: number | null = null;
+  if (isRefund && typeof body.surveyVisitId === 'number' && Number.isFinite(body.surveyVisitId)) {
+    refundVisitId = body.surveyVisitId;
+  }
+
   return {
     id: e.id,
     status: e.status,
     isEdit: editVisitId != null,
     editVisitId,
     isRefund,
+    refundVisitId,
     contactId: typeof body.contactId === 'string' ? body.contactId : null,
     contactName: typeof body.contactName === 'string' ? body.contactName : null,
     visitDate: typeof body.visitDate === 'string' ? body.visitDate : null,
