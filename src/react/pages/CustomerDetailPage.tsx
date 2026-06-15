@@ -212,11 +212,11 @@ export function CustomerDetailPage() {
       if (Array.isArray(v)) void cacheRecords('visits', v, (dv) => `dv:${dv.id}`);
     } catch {
       // Offline fallback: read saved design visits for this contact from the
-      // cache (the `visits` store mixes design + calendar visits; design visits
-      // are the records carrying a `contact_id`).
+      // cache (the `visits` store mixes design + survey visits; design visits
+      // carry a `contact_id` but no `_sv` sentinel, which survey visits use).
       const cached = await readRecords<DesignVisit>('visits');
       const mine = cached.filter(
-        (d) => d && typeof d === 'object' && 'contact_id' in d && String(d.contact_id) === contactId,
+        (d) => d && typeof d === 'object' && !('_sv' in d && (d as Record<string, unknown>)._sv) && 'contact_id' in d && String(d.contact_id) === contactId,
       );
       if (mine.length > 0) {
         setDesignVisits(mine);
