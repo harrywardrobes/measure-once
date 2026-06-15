@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DV_WIZARD_DRAFT_PREFIX, DV_WIZARD_DRAFT_EDIT_PREFIX } from '../constants/localStorageKeys';
+import { nowDateTime } from '../utils/dateDefaults';
 import { BRAND_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -90,9 +91,9 @@ export interface DesignVisitWizardProps {
   demo?: boolean;
 }
 
-function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit | null): Step1Data {
+function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit | null, defaultDate?: string): Step1Data {
   const s: Step1Data = {
-    visitDate: '',
+    visitDate: defaultDate ?? nowDateTime(),
     duration: String(defaultDuration),
     structuredAddress: emptyAddress(),
     designerName: '',
@@ -211,6 +212,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   /**
+   * Captured once at mount so that the step1 state initializer and the
+   * initialStep1Ref baseline always use the same timestamp string.
+   * Prevents a false-positive "unsaved changes" prompt if a minute-boundary
+   * rolls over between the two `makeDefaultStep1` calls.
+   */
+  const [mountDefaultDate] = useState(nowDateTime);
+
+  /**
    * Image storageKeys found in the localStorage draft when this wizard
    * instance first mounted.  They belong to a previous session that was
    * interrupted (crash / hard-close / forced reload) before the cleanup
@@ -244,7 +253,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       const draft = loadDraft(storageKey);
       if (draft) return draft.step1;
     }
-    return makeDefaultStep1(defaultDuration, existingVisit);
+    return makeDefaultStep1(defaultDuration, existingVisit, mountDefaultDate);
   });
 
   const [rooms, setRooms] = useState<RoomData[]>(() => {
@@ -304,7 +313,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
    * Used to detect whether the user has actually changed anything before
    * showing the "Discard changes?" prompt.  Irrelevant in new-visit mode.
    */
-  const initialStep1Ref = useRef<Step1Data>(makeDefaultStep1(defaultDuration, existingVisit));
+  const initialStep1Ref = useRef<Step1Data>(makeDefaultStep1(defaultDuration, existingVisit, mountDefaultDate));
   const initialRoomsRef = useRef<RoomData[]>(normaliseRooms(existingVisit));
 
   /**
@@ -484,7 +493,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   function hasUnsavedDraftData(): boolean {
     const step1Touched =
       step1.termsAccepted ||
-      step1.visitDate.trim() !== '' ||
+      step1.visitDate !== initialStep1Ref.current.visitDate ||
       step1.designerName.trim() !== '' ||
       !isAddressEmpty(step1.structuredAddress) ||
       step1.handleId !== '' ||

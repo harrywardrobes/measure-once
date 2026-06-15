@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import { nowDate, nowDateTime } from '../../utils/dateDefaults';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -161,17 +162,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     demo ? DEMO_CONTACT_INFO.contactStructuredAddress : (draft.structuredAddress ?? emptyAddress()),
   );
   const [bookedSlot, setBookedSlot] = useState<Dayjs | null>(
-    draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : null,
+    draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : dayjs(nowDateTime()),
   );
 
   const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
   const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
 
   const [proposedEmailDate, setProposedEmailDate] = useState<Dayjs | null>(
-    draft.proposedEmailDateIso ? dayjs(draft.proposedEmailDateIso) : null,
+    draft.proposedEmailDateIso ? dayjs(draft.proposedEmailDateIso) : dayjs(nowDate()),
   );
   const [proposedEmailTime, setProposedEmailTime] = useState<Dayjs | null>(
-    draft.proposedEmailTimeIso ? dayjs(draft.proposedEmailTimeIso) : null,
+    draft.proposedEmailTimeIso ? dayjs(draft.proposedEmailTimeIso) : dayjs(nowDateTime()),
   );
   const [emailLoading, setEmailLoading] = useState(false);
 
@@ -513,8 +514,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           disabled={submitting}
           onClick={() => {
             setActionError('');
-            setProposedEmailDate(null);
-            setProposedEmailTime(null);
+            setProposedEmailDate(dayjs(nowDate()));
+            setProposedEmailTime(dayjs(nowDateTime()));
             if (!emailSubject && !emailBody) {
               if (noAnswerTemplate) {
                 setEmailSubject(noAnswerTemplate.subject);
