@@ -325,7 +325,7 @@ export function AdminRequestsPage() {
   }
 
   if (loading) {
-    return <Box id="requests-content"><Skeleton variant="rectangular" height={200} /></Box>;
+    return <Box id="requests-content"><Skeleton data-testid="loading-skeleton" variant="rectangular" height={200} /></Box>;
   }
 
   const pending = reqs.filter(r => r.status === 'pending');

@@ -208,7 +208,7 @@ export function AdminPermissionsPage() {
 
           <Box id="roles-list">
             {loading ? (
-              <Skeleton variant="rectangular" height={80} />
+              <Skeleton data-testid="loading-skeleton" variant="rectangular" height={80} />
             ) : jobRoles.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No job roles defined yet.</Typography>
             ) : (
@@ -337,7 +337,7 @@ export function AdminPermissionsPage() {
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Permissions matrix</Typography>
           {loading ? (
-            <Skeleton variant="rectangular" height={200} />
+            <Skeleton data-testid="loading-skeleton" variant="rectangular" height={200} />
           ) : (
             <TableContainer>
               <Table size="small">

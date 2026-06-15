@@ -95,7 +95,7 @@ export function AdminAuditLogPage() {
         </Typography>
         <Box id="audit-feed">
           {loading ? (
-            <Skeleton variant="rectangular" height={200} />
+            <Skeleton data-testid="loading-skeleton" variant="rectangular" height={200} />
           ) : entries.length === 0 ? (
             <Typography variant="body2" color="text.secondary">No audit entries recorded yet.</Typography>
           ) : (
