@@ -1078,6 +1078,108 @@ async function main() {
       } // end if (g7SeedOk)
     }
 
+    // ── CI-M1: correctedMobile normalisation ─────────────────────────────────
+    // Exercises the E.164 normalisation path for correctedMobile:
+    //   a) Invalid mobile → POST returns 400
+    //   b) Messy UK mobile → DB stores E.164, staff API returns E.164
+    //
+    // We insert a fresh non-generic row directly so this scenario is isolated
+    // from CI-4 (which deliberately submits an empty correctedMobile).
+    {
+      const contactIdM = String(600000000 + Math.floor(Math.random() * 99999999));
+
+      // ── CI-M1a: invalid mobile → 400 ──────────────────────────────────────
+      // Insert a fresh non-submitted token for contactIdM.
+      const mRawTokenA  = crypto.randomBytes(32).toString('hex');
+      const mHashA      = crypto.createHash('sha256').update(mRawTokenA).digest('hex');
+      const mExpiresA   = new Date(Date.now() + 86_400_000);
+      await pool.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at, is_generic,
+            masked_email, masked_phone)
+         VALUES ($1, 'Mobile Test User', 'mobiletest@privtest.local', $2, $3, false,
+                 'm***@***.local', '07***0000')`,
+        [contactIdM, mHashA, mExpiresA.toISOString()]
+      );
+      const mValidAddress = {
+        addressLines: ['10 Mobile Street'],
+        locality: 'London', postalCode: 'SW1A 1AA',
+        administrativeArea: '', country: 'GB',
+      };
+      const mV1 = await postSubmit(BASE, mRawTokenA, {
+        correctedMobile: '12345',
+        structuredAddress: mValidAddress,
+        roomCount: '1', roomNotes: '', photoKeys: [],
+      });
+      const mV1Ok = mV1.status === 400 && !!mV1.json?.error;
+      record('CI-M1a.invalid-mobile-400',
+        mV1Ok,
+        mV1Ok
+          ? `400 error="${mV1.json.error}"`
+          : `status=${mV1.status} body=${JSON.stringify(mV1.json).slice(0, 200)}`);
+
+      // ── CI-M1b: messy UK mobile → DB stores E.164 ─────────────────────────
+      const mRawTokenB = crypto.randomBytes(32).toString('hex');
+      const mHashB     = crypto.createHash('sha256').update(mRawTokenB).digest('hex');
+      const mExpiresB  = new Date(Date.now() + 86_400_000);
+      await pool.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at, is_generic,
+            masked_email, masked_phone)
+         VALUES ($1, 'Mobile Test User', 'mobiletest@privtest.local', $2, $3, false,
+                 'm***@***.local', '07***0000')`,
+        [contactIdM, mHashB, mExpiresB.toISOString()]
+      );
+      const mSubmitRes = await postSubmit(BASE, mRawTokenB, {
+        correctedMobile: '07902 819 990',
+        structuredAddress: mValidAddress,
+        roomCount: '1', roomNotes: '', photoKeys: [],
+      });
+      const mSubmitOk = mSubmitRes.status === 200 && mSubmitRes.json?.ok === true;
+      record('CI-M1b.messy-mobile-submit-200',
+        mSubmitOk,
+        mSubmitOk
+          ? `POST 200 ok=true`
+          : `status=${mSubmitRes.status} body=${JSON.stringify(mSubmitRes.json).slice(0, 200)}`);
+
+      if (mSubmitOk) {
+        // Assert DB stores E.164
+        const mDbR = await pool.query(
+          `SELECT corrected_mobile FROM customer_info_submissions WHERE token_hash = $1`,
+          [mHashB]
+        );
+        const mDbMobile = mDbR.rows[0]?.corrected_mobile;
+        const mDbOk = mDbMobile === '+447902819990';
+        record('CI-M1b.e164-in-db',
+          mDbOk,
+          mDbOk
+            ? `corrected_mobile="${mDbMobile}" (E.164)`
+            : `expected "+447902819990", got "${mDbMobile}"`);
+
+        // Assert staff API returns E.164 (formatting is done in the React layer, not the API)
+        const mListRes = await adminClient.get(`/api/customer-info/by-contact/${contactIdM}`);
+        const mListBody = mListRes.json;
+        const mSubmittedRow = Array.isArray(mListBody)
+          ? mListBody.find(r => r.corrected_mobile)
+          : null;
+        const mApiMobile = mSubmittedRow?.corrected_mobile;
+        const mApiOk = mApiMobile === '+447902819990';
+        record('CI-M1b.e164-in-api-response',
+          mApiOk,
+          mApiOk
+            ? `by-contact API corrected_mobile="${mApiMobile}"`
+            : `expected "+447902819990", got "${mApiMobile}" (row: ${JSON.stringify(mSubmittedRow)?.slice(0, 200)})`);
+      } else {
+        record('CI-M1b.e164-in-db', false, 'skipped — submit failed');
+        record('CI-M1b.e164-in-api-response', false, 'skipped — submit failed');
+      }
+
+      // Clean up CI-M1 rows
+      await pool.query(
+        `DELETE FROM customer_info_submissions WHERE contact_id = $1`, [contactIdM]
+      ).catch(() => {});
+    }
+
     // ── CI-UI-A/B: Puppeteer — Resend button visible for admin, hidden for viewer
     const CI_UI_PROBE_LABELS = [
       'CI-UI-A.admin-sees-resend-btn',

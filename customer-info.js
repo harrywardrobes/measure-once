@@ -19,6 +19,7 @@ const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./sh
 const {
   structuredAddressSchema, hubspotToAddress, addressToHubspot, formatAddress, isAddressEmpty,
 } = require('./shared/address.cjs');
+const { normalizePhone } = require('./shared/phone.cjs');
 
 // Email template keys resolved from the central registry (single source of
 // truth). The customer invite is the upload_photos_and_info / link_sent
@@ -991,6 +992,16 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     }
   }
 
+  // Normalise correctedMobile to E.164 (non-generic flow only).
+  // If a mobile was provided but cannot be parsed as a valid number, reject early.
+  let normalisedMobile = null;
+  if (!preRow.is_generic && correctedMobile && typeof correctedMobile === 'string' && correctedMobile.trim()) {
+    normalisedMobile = normalizePhone(correctedMobile.trim(), 'GB');
+    if (normalisedMobile === null) {
+      return res.status(400).json({ error: 'Please enter a valid mobile number.' });
+    }
+  }
+
   // Validate inputs before opening the transaction.
   if (!['1', '2', '3+'].includes(roomCount)) {
     return res.status(400).json({ error: 'roomCount must be 1, 2, or 3+.' });
@@ -1114,8 +1125,8 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
            photo_keys         = $9::jsonb
          WHERE id = $10`,
         [
-          correctedEmail  || null,
-          correctedMobile || null,
+          correctedEmail    || null,
+          normalisedMobile  || null,
           addressLine1.trim(),
           city.trim(),
           postcode.trim(),

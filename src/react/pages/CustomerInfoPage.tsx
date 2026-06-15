@@ -26,6 +26,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { BRAND_COLORS, STATUS_COLORS } from '../theme';
+import { normalizePhone, formatPhone } from '../utils/phoneFormatters';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -329,6 +330,8 @@ export function CustomerInfoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr]   = useState('');
 
+  const [mobileError, setMobileError] = useState('');
+
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [resendErr, setResendErr]     = useState('');
   const turnstile = useTurnstileResend('ts-resend-expired', pageState === 'expired' && !!maskedEmail);
@@ -538,6 +541,26 @@ export function CustomerInfoPage() {
     });
   }
 
+  // Blur handler for the correctedMobile field (non-generic flow only).
+  // Reformats the raw input to international display form and validates.
+  function handleMobileBlur() {
+    const raw = formData.correctedMobile.trim();
+    if (!raw) {
+      setMobileError('');
+      return;
+    }
+    const e164 = normalizePhone(raw, 'GB');
+    if (e164 === null) {
+      setMobileError('Please enter a valid mobile number (e.g. 07700 900123).');
+    } else {
+      // Reformat to international display form in-place
+      const displayVal = formatPhone(e164);
+      setFormData(prev => ({ ...prev, correctedMobile: displayVal }));
+      setMobileError('');
+      if (activeToken) saveDraft(activeToken, { ...formData, correctedMobile: displayVal }, photos.map(p => p.key));
+    }
+  }
+
   async function handleSubmit() {
     setSubmitErr('');
 
@@ -551,6 +574,16 @@ export function CustomerInfoPage() {
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors);
         setSubmitErr('Please fill in all required fields above.');
+        return;
+      }
+    }
+
+    // Validate correctedMobile if provided (non-generic flow)
+    if (!isGeneric && formData.correctedMobile.trim()) {
+      const mobileNorm = normalizePhone(formData.correctedMobile.trim(), 'GB');
+      if (mobileNorm === null) {
+        setMobileError('Please enter a valid mobile number (e.g. 07700 900123).');
+        setSubmitErr('Please fix the errors above.');
         return;
       }
     }
@@ -859,9 +892,16 @@ export function CustomerInfoPage() {
                       label="Correct my mobile number (optional)"
                       placeholder="e.g. 07700 900123"
                       value={formData.correctedMobile}
-                      onChange={handleFieldChange('correctedMobile')}
+                      onChange={e => {
+                        handleFieldChange('correctedMobile')(e);
+                        if (mobileError) setMobileError('');
+                      }}
+                      onBlur={handleMobileBlur}
                       fullWidth
                       size="small"
+                      error={!!mobileError}
+                      helperText={mobileError || undefined}
+                      slotProps={{ htmlInput: { inputMode: 'tel' } }}
                     />
                     <TextField
                       label="Correct my email address (optional)"

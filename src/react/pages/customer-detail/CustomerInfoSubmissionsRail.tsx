@@ -29,6 +29,7 @@ import { SyncStatePill } from '../../components/SyncStatePill';
 import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../../hooks/useOfflinePhotoReviewEntries';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { formatAddress, isAddressEmpty, type StructuredAddress } from '../../../../shared/address';
+import { formatPhone } from '../../utils/phoneFormatters';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -923,7 +924,7 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
                     Contact corrections
                   </Typography>
                   {sub.corrected_email  && <Typography variant="body2">Email: {sub.corrected_email}</Typography>}
-                  {sub.corrected_mobile && <Typography variant="body2">Mobile: {sub.corrected_mobile}</Typography>}
+                  {sub.corrected_mobile && <Typography variant="body2">Mobile: {formatPhone(sub.corrected_mobile)}</Typography>}
                 </Box>
               )}
 

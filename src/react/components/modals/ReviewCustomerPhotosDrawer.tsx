@@ -18,6 +18,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { formatPhone } from '../../utils/phoneFormatters';
 import { REVIEW_PHOTOS_OUTCOME_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
@@ -508,7 +509,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                   <DetailRow label="Email (corrected)" value={submission.correctedEmail} />
                 )}
                 {submission.correctedMobile && (
-                  <DetailRow label="Mobile (corrected)" value={submission.correctedMobile} />
+                  <DetailRow label="Mobile (corrected)" value={formatPhone(submission.correctedMobile)} />
                 )}
               </Box>
 

@@ -330,6 +330,7 @@
     "express-session": "^1.19.0",
     "googleapis": "^128.0.0",
     "idb": "^8.0.3",
+    "libphonenumber-js": "^1.13.6",
     "memoizee": "^0.4.17",
     "multer": "^2.1.1",
     "node-pg-migrate": "^8.0.4",
