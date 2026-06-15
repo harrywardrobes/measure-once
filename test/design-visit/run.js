@@ -101,13 +101,16 @@ async function purgeFixtures(pool) {
     await pool.query(`DELETE FROM card_action_handlers WHERE name LIKE 'PrivTest DV %'`);
   } catch {}
   try {
-    await pool.query(`DELETE FROM design_visit_handles          WHERE name LIKE 'privtest-dv-%'`);
+    await pool.query(`DELETE FROM catalog_handles  WHERE name LIKE 'privtest-dv-%'`);
   } catch {}
   try {
-    await pool.query(`DELETE FROM design_visit_furniture_ranges WHERE name LIKE 'privtest-dv-%'`);
+    await pool.query(`DELETE FROM catalog_ranges   WHERE name LIKE 'privtest-dv-%'`);
   } catch {}
   try {
-    await pool.query(`DELETE FROM design_visit_door_styles      WHERE name LIKE 'privtest-dv-%'`);
+    await pool.query(`DELETE FROM catalog_doors    WHERE name LIKE 'privtest-dv-%'`);
+  } catch {}
+  try {
+    await pool.query(`DELETE FROM visit_questions  WHERE label LIKE 'privtest-dv-%'`);
   } catch {}
   try {
     await pool.query(`DELETE FROM terms_conditions_versions     WHERE terms_text LIKE 'privtest-dv-%'`);
@@ -204,15 +207,17 @@ async function main() {
     if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await Promise.all([
-    waitForTable('design_visit_handles'),
-    waitForTable('design_visit_furniture_ranges'),
-    waitForTable('design_visit_door_styles'),
+    waitForTable('catalog_handles'),
+    waitForTable('catalog_ranges'),
+    waitForTable('catalog_doors'),
     waitForTable('design_visits'),
     waitForTable('design_visit_rooms'),
+    waitForTable('visit_questions'),
+    waitForTable('visit_answers'),
     waitForTable('terms_conditions_versions'),
     waitForTable('card_action_handlers'),
   ]);
-  console.log('  All design_visit_* tables ready');
+  console.log('  All catalogue / design_visit tables ready');
 
   await purgeFixtures(pool);
 
@@ -226,10 +231,10 @@ async function main() {
   console.log('\n  [API] Pre-checks');
 
   for (const [label, p] of [
-    ['GET /api/admin/design-visit-handles',          '/api/admin/design-visit-handles'],
-    ['GET /api/admin/design-visit-furniture-ranges', '/api/admin/design-visit-furniture-ranges'],
-    ['GET /api/admin/design-visit-door-styles',      '/api/admin/design-visit-door-styles'],
-    ['GET /api/admin/terms-conditions/versions',     '/api/admin/terms-conditions/versions'],
+    ['GET /api/admin/catalog/handles', '/api/admin/catalog/handles'],
+    ['GET /api/admin/catalog/ranges',  '/api/admin/catalog/ranges'],
+    ['GET /api/admin/catalog/doors',   '/api/admin/catalog/doors'],
+    ['GET /api/admin/terms-conditions/versions', '/api/admin/terms-conditions/versions'],
   ]) {
     const r = await adminClient.get(p);
     record(
@@ -258,48 +263,48 @@ async function main() {
   // -- handles --
   const handleName  = `${RUN_PREFIX}handle-${runId}`;
   const handleNameU = `${handleName}-updated`;
-  const hCreate = await adminClient.post('/api/admin/design-visit-handles',
+  const hCreate = await adminClient.post('/api/admin/catalog/handles',
     { name: handleName, description: 'created', sort_order: 9990, style: 'Bar' });
-  record('[CRUD] POST /api/admin/design-visit-handles creates row',
+  record('[CRUD] POST /api/admin/catalog/handles creates row',
     'status=201, integer id', `status=${hCreate.status} id=${hCreate.json?.id}`,
     hCreate.status === 201 && Number.isInteger(hCreate.json?.id));
   const handleId = hCreate.json?.id ?? null;
 
   if (handleId) {
-    const hPatch = await adminClient.patch(`/api/admin/design-visit-handles/${handleId}`,
+    const hPatch = await adminClient.patch(`/api/admin/catalog/handles/${handleId}`,
       { name: handleNameU });
-    record('[CRUD] PATCH /api/admin/design-visit-handles/:id renames row',
+    record('[CRUD] PATCH /api/admin/catalog/handles/:id renames row',
       `status=200, name="${handleNameU}"`,
       `status=${hPatch.status} name=${hPatch.json?.name}`,
       hPatch.status === 200 && hPatch.json?.name === handleNameU);
 
-    const hList = await adminClient.get('/api/admin/design-visit-handles');
+    const hList = await adminClient.get('/api/admin/catalog/handles');
     const hHit  = Array.isArray(hList.json) && hList.json.find(x => x.id === handleId);
-    record('[CRUD] GET /api/admin/design-visit-handles includes updated row',
+    record('[CRUD] GET /api/admin/catalog/handles includes updated row',
       `row id=${handleId} with name="${handleNameU}" in list`,
       hHit ? `found name=${hHit.name}` : 'not found in list',
       !!hHit && hHit.name === handleNameU);
   } else {
     for (const lbl of [
-      '[CRUD] PATCH /api/admin/design-visit-handles/:id renames row',
-      '[CRUD] GET /api/admin/design-visit-handles includes updated row',
+      '[CRUD] PATCH /api/admin/catalog/handles/:id renames row',
+      '[CRUD] GET /api/admin/catalog/handles includes updated row',
     ]) skip(lbl, 'handle created in previous step', 'create failed');
   }
 
   // -- furniture ranges --
   const furnitureName  = `${RUN_PREFIX}fr-${runId}`;
-  const fCreate = await adminClient.post('/api/admin/design-visit-furniture-ranges',
+  const fCreate = await adminClient.post('/api/admin/catalog/ranges',
     { name: furnitureName, sort_order: 9991 });
-  record('[CRUD] POST /api/admin/design-visit-furniture-ranges creates row',
+  record('[CRUD] POST /api/admin/catalog/ranges creates row',
     'status=201, integer id', `status=${fCreate.status} id=${fCreate.json?.id}`,
     fCreate.status === 201 && Number.isInteger(fCreate.json?.id));
   const furnitureId = fCreate.json?.id ?? null;
 
   // -- door styles --
   const doorStyleName = `${RUN_PREFIX}ds-${runId}`;
-  const dCreate = await adminClient.post('/api/admin/design-visit-door-styles',
+  const dCreate = await adminClient.post('/api/admin/catalog/doors',
     { name: doorStyleName, sort_order: 9992 });
-  record('[CRUD] POST /api/admin/design-visit-door-styles creates row',
+  record('[CRUD] POST /api/admin/catalog/doors creates row',
     'status=201, integer id', `status=${dCreate.status} id=${dCreate.json?.id}`,
     dCreate.status === 201 && Number.isInteger(dCreate.json?.id));
   const doorStyleId = dCreate.json?.id ?? null;
@@ -314,11 +319,21 @@ async function main() {
     tcvRes.status === 201 && Number.isInteger(tcvRes.json?.id) && Number.isInteger(tcvRes.json?.version_number));
   const tcvId = tcvRes.json?.id ?? null;
 
+  // -- room-scoped visit question (drives the per-room answer round-trip) --
+  const roomQuestionLabel = `${RUN_PREFIX}room-q-${runId}`;
+  const vqRes = await adminClient.post('/api/admin/visit-questions',
+    { label: roomQuestionLabel, scope: 'room', type: 'text', applies_to: ['design'], active: true, sort_order: 9993 });
+  record('[CRUD] POST /api/admin/visit-questions creates a room-scoped question',
+    'status=201, integer id, scope="room"',
+    `status=${vqRes.status} id=${vqRes.json?.id} scope=${vqRes.json?.scope}`,
+    vqRes.status === 201 && Number.isInteger(vqRes.json?.id) && vqRes.json?.scope === 'room');
+  const roomQuestionId = vqRes.json?.id ?? null;
+
   // -- privilege gate: member POST to admin catalogue → 403 --
   {
-    const r = await memberClient.post('/api/admin/design-visit-handles', { name: 'blocked' });
+    const r = await memberClient.post('/api/admin/catalog/handles', { name: 'blocked' });
     const blocked = r.status === 401 || r.status === 403 || r.status === 302;
-    record('[CRUD] Non-admin POST /api/admin/design-visit-handles is blocked',
+    record('[CRUD] Non-admin POST /api/admin/catalog/handles is blocked',
       'status=403 (or 401/302)', `status=${r.status}`, blocked);
   }
 
@@ -341,6 +356,9 @@ async function main() {
     rooms: [{
       roomName: 'Kitchen', doorStyleId, widthMm: 3000, heightMm: 2400, depthMm: 600,
       unitCount: 8, unitPricePence: 15000, notes: 'kitchen note',
+      answers: roomQuestionId
+        ? [{ question_id: roomQuestionId, answer: 'shaker-white' }]
+        : [],
     }],
     handlerConfig: {},
   });
@@ -379,6 +397,25 @@ async function main() {
       'no "[design-visits] Side effect chain error" entry',
       chainErr ? 'FAIL: chain error logged' : 'no chain error logged',
       !chainErr);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [ANS] Per-room questionnaire answer round-trip (create → read)
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [ANS] Per-room questionnaire answer round-trip');
+
+  if (designVisitId && roomQuestionId) {
+    const r = await memberClient.get(`/api/design-visits/${designVisitId}/answers`);
+    const rows = Array.isArray(r.json) ? r.json : [];
+    const hit  = rows.find(a => a.question_id === roomQuestionId);
+    record('[ANS] room-scoped answer submitted with the visit round-trips via GET /answers',
+      `status=200, an answer for question ${roomQuestionId} with room_id set and answer="shaker-white"`,
+      `status=${r.status} hit=${hit ? `room_id=${hit.room_id} answer=${JSON.stringify(hit.answer)}` : 'not found'}`,
+      r.status === 200 && !!hit && hit.room_id != null && hit.answer === 'shaker-white');
+  } else {
+    skip('[ANS] room-scoped answer submitted with the visit round-trips via GET /answers',
+      'visit + room question created in previous steps',
+      designVisitId ? 'room question create failed' : 'visit submit failed');
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1022,7 +1059,7 @@ async function writeReport(runId, findings) {
     '  before any browser tab opens; the public sign-off route is reachable',
     '  without a session (404 on a bogus token, not 401).',
     '- **[CRUD] Admin catalogue CRUD** — create + rename + list-includes round',
-    '  trip for `design_visit_handles`; create probes for furniture ranges,',
+    '  trip for `catalog_handles`; create probes for furniture ranges,',
     '  door styles, and `terms_conditions_versions`; a non-admin POST is',
     '  blocked with 403 to verify the admin gate.',
     '- **[SUB] POST /api/design-visits side-effect chain** — submitting a',
@@ -1031,6 +1068,11 @@ async function writeReport(runId, findings) {
     '  stripped → step skipped non-fatally), and the server log contains no',
     '  `[design-visits] Side effect chain error` entry (email transport',
     '  similarly absent → silent skip).',
+    '- **[ANS] Per-room questionnaire answer round-trip** — a room-scoped',
+    '  `visit_questions` row is created, an answer for it is carried inline on',
+    '  the submitted room, and GET `/api/design-visits/:id/answers` returns it',
+    '  with a non-null `room_id` and the original answer value (verifying the',
+    '  create-path persistence into `visit_answers`).',
     '- **[TOK] Sign-off token generation** — `signoff_token_hash` is set on',
     '  the visit row and `signoff_expires_at` is ~7 days in the future.',
     '- **[PUB] Public sign-off — approve** — a known raw token is injected',

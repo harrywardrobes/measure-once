@@ -22,3 +22,4 @@
 - [Admin tabs are separate React roots](admin-tabs-separate-roots.md) — admin `#tab-*` panels are independent non-unmounting createRoot mounts; can't share React context — dedupe cross-tab data with a module-level cache, not a provider.
 - [design-visit E2E stale catalog tables](design-visit-e2e-stale-catalog-tables.md) — test/design-visit/run.js waits on design_visit_handles/door_styles/furniture_ranges which the catalog migration drops; pre-existing infra staleness.
 - [Privilege matrix run timing](privilege-matrix-run-timing.md) — test:privileges(:ci) full run exceeds 120s due to the trailing puppeteer smoke; the `matrix: N/N ok` line confirms new route rows pass before the timeout.
+- [design-visit E2E catalog fallout](design-visit-e2e-stale-catalog-tables.md) — catalog rename broke the E2E (table refs + 308-aliased admin paths); 308 redirects silently skip real handlers and masked a server-crashing catalog PATCH bug.

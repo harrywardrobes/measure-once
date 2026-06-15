@@ -790,10 +790,12 @@ function catalogInsertFields(body, extraCols) {
   return { cols, vals };
 }
 
-// Append UPDATE SET fragments + values from a patch body for the shared columns
-// onto the provided sets/vals arrays (so the caller can prepend name first and
-// keep placeholder numbering sequential).
-function catalogUpdateFields(body, extraCols, sets, vals) {
+// Build UPDATE SET fragments + values from a patch body for the shared columns.
+// Returns a fresh { sets, vals } pair; the caller prepends name first and then
+// renumbers the placeholders sequentially.
+function catalogUpdateFields(body, extraCols) {
+  const sets = [];
+  const vals = [];
   const add = (col, v) => { vals.push(v); sets.push(`${col} = $${vals.length}`); };
   for (const [col, max] of Object.entries(CATALOG_TEXT_COLS)) {
     if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : String(body[col]).slice(0, max));
@@ -804,6 +806,7 @@ function catalogUpdateFields(body, extraCols, sets, vals) {
   for (const col of extraCols) {
     if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : String(body[col]).trim());
   }
+  return { sets, vals };
 }
 
 function mountCatalogCrud(slug, table, opts = {}) {
