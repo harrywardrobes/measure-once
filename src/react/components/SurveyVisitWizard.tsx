@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SV_WIZARD_DRAFT_PREFIX, SV_WIZARD_DRAFT_EDIT_PREFIX } from '../constants/localStorageKeys';
+import { nowDateTime } from '../utils/dateDefaults';
 import { BRAND_COLORS } from '../theme';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -123,7 +124,7 @@ interface PrefillResponse {
 
 function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingSurveyVisit | null): Step1Data {
   const s: Step1Data = {
-    visitDate: '',
+    visitDate: existingVisit ? '' : nowDateTime(),
     duration: String(defaultDuration),
     structuredAddress: emptyAddress(),
     designerName: '',
