@@ -16,6 +16,9 @@ export const ADMIN_ACTIVE_TAB_KEY   = 'adminActiveTab';
 /** Active sub-tab within the admin Visits tab (Catalogues/Questionnaire/etc.). */
 export const ADMIN_VISITS_SUBTAB_KEY = 'adminVisitsSubtab';
 
+/** Active sub-tab within the admin Survey Visit tab (Catalogue/Questionnaire). */
+export const ADMIN_SURVEY_VISIT_SUBTAB_KEY = 'adminSurveyVisitSubtab';
+
 // ── Recent customers cache ─────────────────────────────────────────────────────
 export const CP_RECENT_CUSTOMERS_KEY = 'cp_recent_customers';
 
