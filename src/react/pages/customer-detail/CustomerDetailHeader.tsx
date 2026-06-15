@@ -23,6 +23,7 @@ interface Props {
   depositInvoiceDocNum?: string | null;
   depositPaymentState?: DepositPaymentState;
   depositInvoiceLoading?: boolean;
+  fromCache?: boolean;
 }
 
 export function CustomerDetailHeader({
@@ -38,6 +39,7 @@ export function CustomerDetailHeader({
   depositInvoiceDocNum,
   depositPaymentState,
   depositInvoiceLoading,
+  fromCache,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -91,6 +93,24 @@ export function CustomerDetailHeader({
               <h1 className="text-xl font-bold truncate" style={{ color: 'var(--ink-1)' }}>{name}</h1>
               {customerNum && (
                 <span className="customer-num-badge">{customerNum}</span>
+              )}
+              {fromCache && (
+                <span
+                  data-testid="contact-cached-badge"
+                  style={{
+                    fontSize: '0.6rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'var(--ink-3)',
+                    border: '1px solid var(--stone)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '1px 5px',
+                    flexShrink: 0,
+                  }}
+                >
+                  Cached
+                </span>
               )}
               {!isViewer && onEditContact && (
                 <button

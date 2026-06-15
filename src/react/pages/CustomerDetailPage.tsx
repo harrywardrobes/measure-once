@@ -665,6 +665,7 @@ export function CustomerDetailPage() {
             if (total > 0 && balance < total) return 'partial';
             return 'unpaid';
           })()}
+          fromCache={contactFromCache}
         />
       )}
 
