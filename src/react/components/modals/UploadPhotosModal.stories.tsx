@@ -5,6 +5,7 @@ import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { UploadPhotosModal } from './UploadPhotosModal';
+import { broadcastCustomerInfoLinkChanged } from '../../utils/broadcastCustomerInfoLink';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
@@ -229,9 +230,83 @@ function ActiveLinkMemberDemo({ ctx }: { ctx: CardActionContext }) {
   );
 }
 
+function RevokedElsewhereDemo({ ctx }: { ctx: CardActionContext }) {
+  const [open, setOpen] = useState(false);
+  const revokedRef = React.useRef(false);
+  const expiresAt = new Date(Date.now() + 14 * 86400000).toISOString();
+
+  React.useEffect(() => {
+    if (!open) return;
+    revokedRef.current = false;
+
+    const origFetch = window.fetch;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      // Before the simulated cross-tab revoke, an active link exists
+      // (confirming phase). After it, no active link remains so the
+      // broadcast re-check surfaces the "revoked-elsewhere" phase.
+      if (url.includes('/link-status')) {
+        return new Response(
+          JSON.stringify(
+            revokedRef.current
+              ? { hasActiveLink: false }
+              : { hasActiveLink: true, expiresAt, formLink: MOCK_LINK, token: MOCK_TOKEN },
+          ),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (url.includes('/generate-link') && method === 'POST') {
+        await new Promise(r => setTimeout(r, 600));
+        return new Response(
+          JSON.stringify({ formLink: MOCK_LINK, token: MOCK_TOKEN, expiresAt }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return origFetch(input, init);
+    };
+
+    return () => { window.fetch = origFetch; };
+  }, [open, expiresAt]);
+
+  return (
+    <Box>
+      <Stack direction="row" spacing={1}>
+        <Button variant="contained" onClick={() => setOpen(true)}>
+          Open (active link)
+        </Button>
+        <Button
+          variant="outlined"
+          color="warning"
+          onClick={() => {
+            revokedRef.current = true;
+            broadcastCustomerInfoLinkChanged(ctx.contactId);
+          }}
+        >
+          Simulate revoke from another tab
+        </Button>
+      </Stack>
+      <UploadPhotosModal
+        handler={mockHandler}
+        ctx={ctx}
+        open={open}
+        onClose={() => setOpen(false)}
+      />
+    </Box>
+  );
+}
+
 export const Default: Story = {
   name: 'Normal — link generates, then send email or copy & close',
   render: () => <Demo ctx={mockCtx} generateDelay={800} />,
+};
+
+export const RevokedElsewhere: Story = {
+  name: 'Revoked elsewhere — cross-tab revoke surfaces explicit notice',
+  render: () => <RevokedElsewhereDemo ctx={mockCtx} />,
 };
 
 export const CopyAndClose: Story = {

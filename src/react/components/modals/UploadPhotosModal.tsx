@@ -52,6 +52,7 @@ type Phase =
   | 'checking'
   | 'check-error'
   | 'confirming'
+  | 'revoked-elsewhere'
   | 'revoking-confirm'
   | 'generating'
   | 'ready'
@@ -177,7 +178,11 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   }
 
   // Fetch link-status (read-only) then decide whether to warn or generate immediately.
-  const checkStatus = useCallback((contactId: string, signal: AbortSignal) => {
+  // `fromBroadcast` flags a re-check triggered by a cross-tab generate/revoke
+  // event. In that case, if no active link remains, we do NOT silently
+  // auto-generate a new one — instead we surface the 'revoked-elsewhere' phase
+  // so staff explicitly see the previous link is gone and choose to regenerate.
+  const checkStatus = useCallback((contactId: string, signal: AbortSignal, fromBroadcast = false) => {
     setPhase('checking');
     setCheckError('');
     setLinkError('');
@@ -198,6 +203,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         setLinkStatus(status);
         if (status.hasActiveLink) {
           setPhase('confirming');
+        } else if (fromBroadcast) {
+          setPhase('revoked-elsewhere');
         } else {
           generateLink(contactId);
         }
@@ -261,7 +268,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       recheckAbortRef.current?.abort();
       const controller = new AbortController();
       recheckAbortRef.current = controller;
-      checkStatus(ctx.contactId, controller.signal);
+      checkStatus(ctx.contactId, controller.signal, true);
     });
     return () => {
       unsubscribe();
@@ -407,7 +414,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const title =
     phase === 'confirming'
       ? 'Active link exists'
-      : phase === 'revoking-confirm'
+      : phase === 'revoked-elsewhere'
+        ? 'Link no longer valid'
+        : phase === 'revoking-confirm'
         ? 'Revoke this link?'
         : generatedLink?.isResend
         ? 'Resend photo upload link'
@@ -474,6 +483,22 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             You can still proceed — this is just a heads-up. If the customer
             hasn't submitted yet, they'll need to use the new link instead.
+          </Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'revoked-elsewhere') {
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }} data-testid="cah-revoked-elsewhere">
+          <Alert severity="warning" icon={<WarningAmberIcon fontSize="inherit" />}>
+            The link for <strong>{ctx.contactName || 'this contact'}</strong> was
+            just revoked from another tab or by another team member. The previous
+            link is no longer valid — the customer can no longer use it.
+          </Alert>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            No new link has been created yet. If the customer still needs to
+            upload photos and details, generate a fresh link to send them.
           </Typography>
         </Stack>
       );
@@ -651,6 +676,22 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       }
 
       // Member view (no formLink): warning-only with generate/cancel
+      return (
+        <>
+          <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => generateLink(ctx.contactId)}
+            data-testid="cah-confirm-generate"
+          >
+            Generate new link
+          </Button>
+        </>
+      );
+    }
+
+    if (phase === 'revoked-elsewhere') {
       return (
         <>
           <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
