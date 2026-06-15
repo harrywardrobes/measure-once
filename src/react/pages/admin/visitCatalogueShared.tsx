@@ -1,8 +1,8 @@
 /**
- * Shared catalogue components and helpers used by both DesignVisitPage and
- * SurveyVisitPage.  The underlying catalogue tables (catalog_handles,
- * catalog_ranges, catalog_doors) are shared between visit types — this module
- * provides the UI building-blocks to manage them from either admin tab.
+ * Shared catalogue components and helpers used by DesignVisitPage.
+ * The underlying catalogue tables (catalog_handles, catalog_ranges,
+ * catalog_doors) are shared between design and survey visit types — this module
+ * provides the UI building-blocks to manage them from the admin Visits tab.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {

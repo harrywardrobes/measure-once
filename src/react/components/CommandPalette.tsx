@@ -90,7 +90,7 @@ const ADMIN_GROUP_ACTIONS: Action[] = [
   { id: 'go-admin-tab-stages',          label: 'Admin · Stages',              hint: 'Manage lead and project stages',               category: 'Admin', icon: <AccountTreeIcon fontSize="small" /> },
   { id: 'go-admin-tab-cardactions',     label: 'Admin · Card Actions',        hint: 'Configure customer card action buttons',       category: 'Admin', icon: <ViewKanbanIcon fontSize="small" /> },
   { id: 'go-admin-tab-actionhandlers',  label: 'Admin · Action Handlers',     hint: 'Manage action handler types and settings',     category: 'Admin', icon: <BuildIcon fontSize="small" /> },
-  { id: 'go-admin-tab-designvisit',     label: 'Admin · Design Visit',        hint: 'Configure design visit settings',              category: 'Admin', icon: <DesignServicesIcon fontSize="small" /> },
+  { id: 'go-admin-visits',              label: 'Admin · Visits',              hint: 'Configure visit settings (catalogues, questionnaire, terms)', category: 'Admin', icon: <DesignServicesIcon fontSize="small" /> },
   { id: 'go-admin-tab-emailtemplates',  label: 'Admin · Email Templates',     hint: 'Edit email templates sent to customers',       category: 'Admin', icon: <EmailIcon fontSize="small" /> },
   { id: 'go-admin-tab-workflow',        label: 'Admin · Workflow',             hint: 'View workflow — stages, handlers, and email chains', category: 'Admin', icon: <AccountTreeIcon fontSize="small" /> },
   // Developer tabs (filtered out when devMode is off)
@@ -288,7 +288,7 @@ export function CommandPalette() {
       'go-admin-tab-stages':          () => adminTabNav('stages',         'configuration'),
       'go-admin-tab-cardactions':     () => adminTabNav('cardactions',    'configuration'),
       'go-admin-tab-actionhandlers':  () => adminTabNav('actionhandlers', 'configuration'),
-      'go-admin-tab-designvisit':     () => adminTabNav('designvisit',    'configuration'),
+      'go-admin-visits':              () => adminTabNav('designvisit', 'visits'),
       'go-admin-tab-emailtemplates':  () => adminTabNav('emailtemplates', 'configuration'),
       'go-admin-tab-workflow':        () => adminTabNav('workflow',        'configuration'),
       // Developer tabs

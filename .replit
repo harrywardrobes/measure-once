@@ -64,23 +64,15 @@ args = "git remote | grep '^subrepl-' | while IFS= read -r r; do git remote remo
 
 [[ports]]
 localPort = 5000
-externalPort = 80
+externalPort = 5000
 
 [[ports]]
 localPort = 5050
 externalPort = 3001
 
 [[ports]]
-localPort = 5051
-externalPort = 3002
-
-[[ports]]
-localPort = 5071
-externalPort = 3003
-
-[[ports]]
 localPort = 23636
-externalPort = 3000
+externalPort = 80
 
 [deployment]
 deploymentTarget = "vm"

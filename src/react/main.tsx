@@ -61,7 +61,6 @@ const ActionHandlersPage = React.lazy(() => import('./pages/admin/ActionHandlers
 const HubSpotPage        = React.lazy(() => import('./pages/admin/HubSpotPage').then(m => ({ default: m.HubSpotPage })));
 const QuickBooksSettingsPage = React.lazy(() => import('./pages/admin/QuickBooksSettingsPage').then(m => ({ default: m.QuickBooksSettingsPage })));
 const DesignVisitPage    = React.lazy(() => import('./pages/admin/DesignVisitPage').then(m => ({ default: m.DesignVisitPage })));
-const SurveyVisitPage    = React.lazy(() => import('./pages/admin/SurveyVisitPage').then(m => ({ default: m.SurveyVisitPage })));
 const DevEnvironmentPage = React.lazy(() => import('./pages/admin/DevEnvironmentPage').then(m => ({ default: m.DevEnvironmentPage })));
 const OfflineSupportPage = React.lazy(() => import('./pages/admin/OfflineSupportPage').then(m => ({ default: m.OfflineSupportPage })));
 const EmailTemplatesPage = React.lazy(() => import('./pages/admin/EmailTemplatesPage'));
@@ -195,7 +194,6 @@ const MOUNTS: Array<{
   { id: 'tab-cardactions',      render: () => <CardActionsPage />,     fallback: <CardActionsPageSkeleton /> },
   { id: 'tab-actionhandlers',   render: () => <ActionHandlersPage />,  fallback: <ActionHandlersPageSkeleton /> },
   { id: 'tab-designvisit',      render: () => <DesignVisitPage /> },
-  { id: 'tab-surveyvisit',      render: () => <SurveyVisitPage /> },
   { id: 'tab-devenv',           render: () => <DevEnvironmentPage /> },
   { id: 'tab-maps',             render: () => <GoogleMapsPage /> },
   { id: 'tab-offline',          render: () => <OfflineSupportPage /> },

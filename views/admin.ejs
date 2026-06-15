@@ -159,7 +159,6 @@
         <button class="tab-btn"        data-tab="cardactions"   onclick="switchTab('cardactions')">Card actions</button>
         <button class="tab-btn"        data-tab="actionhandlers" onclick="switchTab('actionhandlers')">Action handlers</button>
         <button class="tab-btn"        data-tab="designvisit"   onclick="switchTab('designvisit')">Visits</button>
-        <button class="tab-btn"        data-tab="surveyvisit"   onclick="switchTab('surveyvisit')">Survey Visit</button>
         <button class="tab-btn"        data-tab="search"        onclick="switchTab('search')">Search</button>
         <button class="tab-btn"        data-tab="maps"          onclick="switchTab('maps')">Google Maps</button>
         <button class="tab-btn"        data-tab="emailtemplates" onclick="switchTab('emailtemplates')">Email templates</button>
@@ -210,7 +209,6 @@
       <div class="tab-panel" id="tab-cardactions"></div>
       <div class="tab-panel" id="tab-actionhandlers"></div>
       <div class="tab-panel" id="tab-designvisit"></div>
-      <div class="tab-panel" id="tab-surveyvisit"></div>
 
       <!-- SEARCH SETTINGS — React island (src/react/pages/SearchSettingsPage.tsx). -->
       <div class="tab-panel" id="tab-search"></div>
@@ -258,7 +256,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'surveyvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
+    const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;
     try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);

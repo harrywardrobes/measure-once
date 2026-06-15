@@ -23,7 +23,7 @@ export const TAB_GROUPS: TabGroup[] = [
   {
     id: 'visits',
     label: 'Visits',
-    tabIds: ['designvisit', 'surveyvisit'],
+    tabIds: ['designvisit'],
   },
   {
     id: 'configuration',
@@ -163,6 +163,11 @@ export function AdminGroupedTabsBarInner({
 
   if (!groupTabs.length) return null;
 
+  // When the active group has only 1 visible sub-tab, the page component
+  // supplies its own inner tab row — suppress the sub-tab bar here to avoid
+  // a redundant single-item strip.
+  const showSubTabs = subTabs.length > 1;
+
   return (
     <div className="admin-grouped-tabs">
       <TabBar
@@ -171,7 +176,7 @@ export function AdminGroupedTabsBarInner({
         onSelect={(key) => onGroupSelect(key as GroupId)}
         className="admin-grouped-tabs__groups"
       />
-      {subTabs.length > 0 && (
+      {showSubTabs && (
         <TabBar
           tabs={subTabs}
           activeKey={resolvedSubTabId ?? undefined}

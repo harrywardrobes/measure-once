@@ -14,12 +14,11 @@ import {
   showToast,
 } from './visitCatalogueShared';
 
-type VisitsSubtab = 'catalogues' | 'questionnaire' | 'designvisit' | 'survey';
+type VisitsSubtab = 'catalogues' | 'questionnaire' | 'terms';
 const VISITS_SUBTABS: { key: VisitsSubtab; label: string }[] = [
   { key: 'catalogues',    label: 'Catalogues' },
   { key: 'questionnaire', label: 'Questionnaire' },
-  { key: 'designvisit',   label: 'Design Visit' },
-  { key: 'survey',        label: 'Survey' },
+  { key: 'terms',         label: 'Terms' },
 ];
 
 // ── Module-level refs ──────────────────────────────────────────────────────────
@@ -165,6 +164,14 @@ export function DesignVisitPage() {
 
       {subtab === 'catalogues' && (
       <Stack spacing={2} sx={{ mt: 2 }}>
+        <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+          <CardContent sx={{ py: '10px !important' }}>
+            <Typography variant="body2" color="text.secondary">
+              Catalogue (door styles, handles, ranges) is shared with survey visits.
+            </Typography>
+          </CardContent>
+        </Card>
+
         <Card variant="outlined">
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
@@ -251,48 +258,27 @@ export function DesignVisitPage() {
 
       {subtab === 'questionnaire' && (
         <Box sx={{ mt: 2 }}>
+          <Card variant="outlined" sx={{ bgcolor: 'action.hover', mb: 2 }}>
+            <CardContent sx={{ py: '10px !important' }}>
+              <Typography variant="body2" color="text.secondary">
+                Survey questions are the ones tagged with &lsquo;survey&rsquo; in <em>Applies to</em>.
+              </Typography>
+            </CardContent>
+          </Card>
           <QuestionnaireBuilder />
         </Box>
       )}
 
-      {subtab === 'survey' && (
-        <Box sx={{ mt: 2 }}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="h6">Survey Visit</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                The Survey Visit is a continuation of the Design Visit. It reuses the
-                same foundations rather than maintaining a separate set of settings:
-              </Typography>
-              <Box component="ul" sx={{ mt: 1.5, mb: 0, pl: 3, color: 'text.secondary' }}>
-                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
-                  <strong>Catalogue</strong> — door styles, handles, furniture ranges,
-                  and pairings are shared. Manage them in the catalogue subtabs above.
-                </Typography>
-                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
-                  <strong>Questionnaire</strong> — survey questions live in the shared
-                  <em> Questionnaire</em> subtab. Tag a question with
-                  {' '}<code>survey</code> in its <em>Applies&nbsp;to</em> field to make
-                  it appear in the Survey Visit wizard.
-                </Typography>
-                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
-                  <strong>Terms &amp; Conditions</strong> — the same versioned terms
-                  published in the <em>Design&nbsp;Visit</em> subtab are reused.
-                </Typography>
-                <Typography component="li" variant="body2">
-                  <strong>Action settings</strong> — default duration, the in-progress
-                  and submitted lead statuses, and the terms shown to customers are
-                  configured per binding via the <em>Start survey visit</em> action in
-                  the <em>Action&nbsp;Handlers</em> admin page.
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
-      {subtab === 'designvisit' && (
+      {subtab === 'terms' && (
       <Stack spacing={2} sx={{ mt: 2 }}>
+        <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+          <CardContent sx={{ py: '10px !important' }}>
+            <Typography variant="body2" color="text.secondary">
+              The same versioned terms are reused for survey visits.
+            </Typography>
+          </CardContent>
+        </Card>
+
         <Card variant="outlined" id="dv-terms-card">
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
