@@ -11,6 +11,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
 import HomeIcon from '@mui/icons-material/Home';
 import LanguageIcon from '@mui/icons-material/Language';
 import LinkIcon from '@mui/icons-material/Link';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhoneIcon from '@mui/icons-material/Phone';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
 import {
@@ -103,6 +104,7 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkSelected, setLinkSelected] = useState<ContactOption | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [linkSuccess, setLinkSuccess] = useState<ContactOption | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -145,6 +147,7 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
     setLinkOptions([]);
     setLinkSelected(null);
     setLinkBusy(false);
+    setLinkSuccess(null);
     setLinkOpen(true);
   }
 
@@ -157,13 +160,20 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
         contact_name: linkSelected.label !== '(no name)' ? linkSelected.label : undefined,
       });
       toast('Submission linked to customer');
-      setLinkOpen(false);
-      onLinked(sub.id);
+      setLinkSuccess(linkSelected);
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     } finally {
       setLinkBusy(false);
     }
+  }
+
+  function closeLinkDialog() {
+    if (linkSuccess) {
+      onLinked(sub.id);
+    }
+    setLinkOpen(false);
+    setLinkSuccess(null);
   }
 
   return (
@@ -293,78 +303,107 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
       </Box>
 
       {/* Link-to-customer dialog */}
-      <Dialog open={linkOpen} onClose={() => !linkBusy && setLinkOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Link to customer
-          <Typography variant="caption" component="div" color="text.secondary">
-            Search for the HubSpot contact this submission belongs to.
-          </Typography>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Autocomplete
-            options={linkOptions}
-            getOptionLabel={(o) => o.label}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            loading={linkLoading}
-            value={linkSelected}
-            onChange={(_, v) => setLinkSelected(v)}
-            inputValue={linkQuery}
-            onInputChange={(_, v) => setLinkQuery(v)}
-            filterOptions={(x) => x}
-            noOptionsText={linkQuery.trim() ? 'No contacts found' : 'Start typing to search'}
-            renderOption={(props, option) => (
-              <Box component="li" {...props} key={option.id}>
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{option.label}</Typography>
-                  {option.email && (
-                    <Typography variant="caption" color="text.secondary">{option.email}</Typography>
-                  )}
-                </Box>
-              </Box>
-            )}
-            renderInput={(params) => {
-              const inputProps =
-                (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-              return (
-                <TextField
-                  {...params}
-                  label="Search contacts"
-                  placeholder="Name or email…"
-                  autoFocus
-                  slotProps={{
-                    input: {
-                      ...inputProps,
-                      endAdornment: (
-                        <>
-                          {linkLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
-                          {inputProps.endAdornment as React.ReactNode}
-                        </>
-                      ),
-                    },
-                  }}
-                />
-              );
-            }}
-            sx={{ mt: 1 }}
-          />
-          {linkSelected && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              This submission will be linked to <strong>{linkSelected.label}</strong>
-              {linkSelected.email ? ` (${linkSelected.email})` : ''} and will appear on their customer record.
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setLinkOpen(false)} disabled={linkBusy}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={confirmLink}
-            disabled={!linkSelected || linkBusy}
-            startIcon={linkBusy ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
-          >
-            {linkBusy ? 'Linking…' : 'Link'}
-          </Button>
-        </DialogActions>
+      <Dialog open={linkOpen} onClose={() => !linkBusy && closeLinkDialog()} maxWidth="sm" fullWidth>
+        {linkSuccess ? (
+          <>
+            <DialogTitle>Submission linked</DialogTitle>
+            <DialogContent dividers>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                This submission has been linked to <strong>{linkSuccess.label}</strong>
+                {linkSuccess.email ? ` (${linkSuccess.email})` : ''} and will appear on their customer record.
+              </Alert>
+              <Typography variant="body2" color="text.secondary">
+                You can view the submission on the customer's profile to verify it was linked correctly.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={closeLinkDialog}>Close</Button>
+              <Button
+                variant="contained"
+                component="a"
+                href={`/customers/${encodeURIComponent(linkSuccess.id)}#customer-info-${sub.id}`}
+                endIcon={<OpenInNewIcon />}
+                onClick={closeLinkDialog}
+              >
+                View customer
+              </Button>
+            </DialogActions>
+          </>
+        ) : (
+          <>
+            <DialogTitle>
+              Link to customer
+              <Typography variant="caption" component="div" color="text.secondary">
+                Search for the HubSpot contact this submission belongs to.
+              </Typography>
+            </DialogTitle>
+            <DialogContent dividers>
+              <Autocomplete
+                options={linkOptions}
+                getOptionLabel={(o) => o.label}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                loading={linkLoading}
+                value={linkSelected}
+                onChange={(_, v) => setLinkSelected(v)}
+                inputValue={linkQuery}
+                onInputChange={(_, v) => setLinkQuery(v)}
+                filterOptions={(x) => x}
+                noOptionsText={linkQuery.trim() ? 'No contacts found' : 'Start typing to search'}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props} key={option.id}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>{option.label}</Typography>
+                      {option.email && (
+                        <Typography variant="caption" color="text.secondary">{option.email}</Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+                renderInput={(params) => {
+                  const inputProps =
+                    (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
+                  return (
+                    <TextField
+                      {...params}
+                      label="Search contacts"
+                      placeholder="Name or email…"
+                      autoFocus
+                      slotProps={{
+                        input: {
+                          ...inputProps,
+                          endAdornment: (
+                            <>
+                              {linkLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
+                              {inputProps.endAdornment as React.ReactNode}
+                            </>
+                          ),
+                        },
+                      }}
+                    />
+                  );
+                }}
+                sx={{ mt: 1 }}
+              />
+              {linkSelected && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  This submission will be linked to <strong>{linkSelected.label}</strong>
+                  {linkSelected.email ? ` (${linkSelected.email})` : ''} and will appear on their customer record.
+                </Alert>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={closeLinkDialog} disabled={linkBusy}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={confirmLink}
+                disabled={!linkSelected || linkBusy}
+                startIcon={linkBusy ? <CircularProgress size={14} color="inherit" /> : <LinkIcon />}
+              >
+                {linkBusy ? 'Linking…' : 'Link'}
+              </Button>
+            </DialogActions>
+          </>
+        )}
       </Dialog>
     </>
   );
