@@ -180,8 +180,22 @@ export function CustomerDetailPage() {
     try {
       const v = await apiFetch<SurveyVisitServer[]>(`/api/survey-visits?contactId=${encodeURIComponent(contactId)}`);
       setSurveyVisits(Array.isArray(v) ? v : []);
+      // Write-through to offline cache. The `visits` store is shared with
+      // design visits; the `_sv` sentinel lets offline reads distinguish them.
+      if (Array.isArray(v)) void cacheRecords('visits', v.map(sv => ({ ...sv, _sv: true })), (sv) => `sv:${sv.id}`);
     } catch {
-      setSvError('load-error');
+      // Offline fallback: read saved survey visits for this contact from the
+      // cache (identified by the `_sv` sentinel written on the success path).
+      const cached = await readRecords<SurveyVisit & { _sv?: boolean }>('visits');
+      const mine = cached.filter(
+        (d) => d && typeof d === 'object' && '_sv' in d && d._sv === true && String(d.contact_id) === contactId,
+      );
+      if (mine.length > 0) {
+        setSurveyVisits(mine as SurveyVisit[]);
+        setFromCache(true);
+      } else {
+        setSvError('load-error');
+      }
     } finally {
       setSvLoading(false);
     }
