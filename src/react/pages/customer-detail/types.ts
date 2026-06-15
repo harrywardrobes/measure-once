@@ -61,6 +61,20 @@ export interface LeadStatus {
   sort_order?: number;
 }
 
+export interface SurveyVisit {
+  id: number;
+  contact_id: string;
+  status: string;
+  visit_date?: string | null;
+  created_at?: string;
+  estimate_total_pence?: number;
+  handle_name?: string | null;
+  furniture_range_name?: string | null;
+  revision_note?: string | null;
+  contact_name?: string;
+  contact_email?: string;
+}
+
 export interface DesignVisit {
   id: number;
   contact_id: string;

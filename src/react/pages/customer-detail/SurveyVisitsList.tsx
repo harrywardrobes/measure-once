@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { fmtDesignVisitWhen } from './types';
+import { SurveyVisit, fmtDesignVisitWhen, fmtGbp } from './types';
+import { DesignVisitStatusPill } from './DesignVisitStatusPill';
+import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineSurveyVisitEntries, type PendingSurveyVisitEntry } from '../../hooks/useOfflineSurveyVisitEntries';
 import { useToast } from '../../contexts/ToastContext';
 import { SyncStatePill } from '../../components/SyncStatePill';
@@ -12,10 +14,6 @@ const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-
 const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
 const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
 const sxSecondaryBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '0.75rem', border: '1px solid var(--stone)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '4px 10px' };
-
-function fmtGbpFromPence(pence: number): string {
-  return (pence / 100).toFixed(2);
-}
 
 /** Retry / Discard actions for a queued *edit* that failed to upload. */
 function PendingEditActions({ entry }: { entry: PendingSurveyVisitEntry }) {
@@ -129,7 +127,7 @@ function BulkSurveyVisitActions({ entries }: { entries: PendingSurveyVisitEntry[
 /** A survey visit captured offline that has not yet reached the server. */
 function PendingSurveyVisitCard({ entry }: { entry: PendingSurveyVisitEntry }) {
   const when = fmtDesignVisitWhen(entry.visitDate || new Date(entry.createdAt).toISOString());
-  const totalGbp = fmtGbpFromPence(entry.estimateTotalPence || 0);
+  const totalGbp = fmtGbp(entry.estimateTotalPence || 0);
   const [busy, setBusy] = useState(false);
   const isFailed = entry.status === 'failed';
 
@@ -198,8 +196,8 @@ function PendingSurveyVisitCard({ entry }: { entry: PendingSurveyVisitEntry }) {
   );
 }
 
-/** Card shown inline on a server-side survey visit row when there is a pending edit queued. */
-function PendingEditCard({ entry }: { entry: PendingSurveyVisitEntry }) {
+/** Sync-state badge shown inline on a server card when there is a queued edit. */
+function PendingEditBadge({ entry }: { entry: PendingSurveyVisitEntry }) {
   const isFailed = entry.status === 'failed';
   return (
     <div style={{ marginTop: 6 }}>
@@ -218,17 +216,21 @@ function PendingEditCard({ entry }: { entry: PendingSurveyVisitEntry }) {
 
 interface Props {
   contactId: string;
-  onRefresh?: () => void;
+  visits: SurveyVisit[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
 }
 
 /**
- * Shows offline-queued survey visit writes (pending / failed) for a contact.
- *
- * Survey visits are launched from the card-action modal host rather than as a
- * persistent page list, so this component only renders when there are queued
- * entries in the outbox — it is invisible in the normal (online) case.
+ * Shows server-sourced survey visits for a contact, merged with any
+ * offline-queued pending / failed writes. Each card shows visit date, status
+ * pill, and estimate total. Admins can request a revision or delete a visit.
  */
-export function SurveyVisitsList({ contactId, onRefresh }: Props) {
+export function SurveyVisitsList({ contactId, visits, loading, error, onRefresh }: Props) {
+  const { isAdmin } = usePrivilege();
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const pendingEntries = useOfflineSurveyVisitEntries(contactId);
   const pendingCreates = pendingEntries.filter(e => !e.isEdit);
   const pendingEditByVisitId = new Map<number, PendingSurveyVisitEntry>();
@@ -236,6 +238,7 @@ export function SurveyVisitsList({ contactId, onRefresh }: Props) {
     if (e.isEdit && e.editVisitId != null) pendingEditByVisitId.set(e.editVisitId, e);
   }
 
+  // Refetch when a queued entry drains so the server card replaces the pending card.
   const prevIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     const current = new Set(pendingEntries.map(e => e.id));
@@ -245,10 +248,45 @@ export function SurveyVisitsList({ contactId, onRefresh }: Props) {
       if (!current.has(id)) { removed = true; break; }
     }
     prevIdsRef.current = current;
-    if (removed) onRefresh?.();
+    if (removed) onRefresh();
   }, [pendingEntries, onRefresh]);
 
-  if (pendingEntries.length === 0) return null;
+  const handleRevision = useCallback(async (id: number) => {
+    if (!isAdmin) return;
+    const note = window.prompt('Revision note (optional):', '');
+    if (note === null) return;
+    try {
+      const r = await fetch(`/api/survey-visits/${id}/revision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revisionNote: note }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      onRefresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'error';
+      setActionError(`Could not mark for revision: ${msg}`);
+    }
+  }, [isAdmin, onRefresh]);
+
+  const handleDelete = useCallback((id: number) => {
+    if (!isAdmin) return;
+    const doDelete = async () => {
+      try {
+        const r = await fetch(`/api/survey-visits/${id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error(`${r.status}`);
+        onRefresh();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'error';
+        setActionError(`Could not delete: ${msg}`);
+      }
+    };
+    window.showBottomConfirm('Delete this survey visit? This cannot be undone.', doDelete);
+  }, [isAdmin, onRefresh]);
+
+  const hasContent = visits.length > 0 || pendingEntries.length > 0 || loading || !!error;
+
+  if (!hasContent) return null;
 
   return (
     <div id="survey-visits-section" style={{ marginBottom: 20 }}>
@@ -256,18 +294,72 @@ export function SurveyVisitsList({ contactId, onRefresh }: Props) {
         <span style={sxHeaderLabel}>Survey visits</span>
         <BulkSurveyVisitActions entries={pendingEntries} />
       </div>
+      {actionError && (
+        <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>{actionError}</p>
+      )}
       <div style={{ fontSize: '0.875rem', color: 'var(--stone-deep)' }}>
-        {pendingCreates.map(p => (
+        {loading && (
+          <p style={{ fontSize: '0.85rem', padding: '4px 0', fontStyle: 'italic' }}>Loading…</p>
+        )}
+        {!loading && error && (
+          <p style={{ fontSize: '0.85rem', color: 'var(--error)', padding: '4px 0' }}>Could not load survey visits.</p>
+        )}
+        {/* Pending offline cards render even when the server fetch failed */}
+        {!loading && pendingCreates.map(p => (
           <PendingSurveyVisitCard key={`sv-pending-${p.id}`} entry={p} />
         ))}
-        {Array.from(pendingEditByVisitId.entries()).map(([visitId, e]) => (
-          <div key={`sv-edit-${visitId}`} style={{ ...sxItem, marginBottom: 6 }}>
-            <div style={{ ...sxText, fontWeight: 500, fontSize: '0.8rem' }}>
-              Survey visit #{visitId} — pending edit
+        {!loading && !error && visits.map(v => {
+          const when      = fmtDesignVisitWhen(v.visit_date || v.created_at);
+          const totalGbp  = fmtGbp(Number(v.estimate_total_pence) || 0);
+          const canRevise = v.status === 'submitted' || v.status === 'signed_off';
+          const pendingEdit = pendingEditByVisitId.get(v.id);
+
+          return (
+            <div
+              key={v.id}
+              data-sv-id={v.id}
+              style={{ ...sxItem, marginBottom: 6, flexDirection: 'column', alignItems: 'stretch', gap: 6 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, justifyContent: 'space-between' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...sxText, fontWeight: 500 }}>{when}</div>
+                  <div style={{ ...sxMeta, marginTop: 2 }}>
+                    <span data-testid="sv-status-pill">
+                      <DesignVisitStatusPill status={v.status} />
+                    </span>
+                    {pendingEdit && <SyncStatePill status={pendingEdit.status} />}
+                    <span style={sxMetaSep}>·</span>
+                    <span style={sxDate}>Estimate: £{totalGbp}</span>
+                  </div>
+                  {v.revision_note && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--error)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+                      <strong>Revision note:</strong> {v.revision_note}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {isAdmin && canRevise && (
+                    <button
+                      style={sxSecondaryBtn}
+                      onClick={() => handleRevision(v.id)}
+                    >
+                      Request revision
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      style={{ ...sxSecondaryBtn, color: 'var(--error)' }}
+                      onClick={() => handleDelete(v.id)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+              {pendingEdit && <PendingEditBadge entry={pendingEdit} />}
             </div>
-            <PendingEditCard entry={e} />
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

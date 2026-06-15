@@ -17,7 +17,7 @@ import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSectio
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
   Contact, Room, HubSpotTask,
-  DesignVisit, GoogleEmail, WhatsAppMessage,
+  DesignVisit, SurveyVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
 import { updateRecentCustomer, compactRelativeTime, latestTimestamp } from '../utils/formatters';
@@ -114,6 +114,10 @@ export function CustomerDetailPage() {
   const [dvLoading,    setDvLoading]    = useState(false);
   const [dvError,      setDvError]      = useState<string | null>(null);
 
+  const [surveyVisits, setSurveyVisits] = useState<SurveyVisit[]>([]);
+  const [svLoading,    setSvLoading]    = useState(false);
+  const [svError,      setSvError]      = useState<string | null>(null);
+
   const [emails,          setEmails]          = useState<GoogleEmail[]>([]);
   const [emailsLoading,   setEmailsLoading]   = useState(false);
   const [emailsError,     setEmailsError]     = useState<string | null>(null);
@@ -168,6 +172,19 @@ export function CustomerDetailPage() {
     // Recent customers
     updateRecentCustomer(c);
     return c;
+  }, [contactId]);
+
+  const fetchSurveyVisits = useCallback(async () => {
+    setSvLoading(true);
+    setSvError(null);
+    try {
+      const v = await apiFetch<SurveyVisit[]>(`/api/survey-visits?contactId=${encodeURIComponent(contactId)}`);
+      setSurveyVisits(Array.isArray(v) ? v : []);
+    } catch {
+      setSvError('load-error');
+    } finally {
+      setSvLoading(false);
+    }
   }, [contactId]);
 
   const fetchDesignVisits = useCallback(async () => {
@@ -292,6 +309,7 @@ export function CustomerDetailPage() {
       } catch { /* noop */ }
 
       fetchDesignVisits();
+      fetchSurveyVisits();
       if (c.properties.email) fetchGoogleEmails(c.properties.email);
       fetchWhatsApp();
       fetchLastAttempt();
@@ -302,7 +320,7 @@ export function CustomerDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [contactId, fetchContact, fetchDesignVisits, fetchGoogleEmails, fetchLastAttempt,
+  }, [contactId, fetchContact, fetchDesignVisits, fetchSurveyVisits, fetchGoogleEmails, fetchLastAttempt,
       refreshLeadStatuses, fetchWhatsApp, notifyApiError]);
 
   // ── Global bridges (for test compat) ──────────────────────────────────────
@@ -651,8 +669,14 @@ export function CustomerDetailPage() {
           onRefresh={fetchDesignVisits}
         />
 
-        {/* Survey visits: renders only when there are queued offline writes */}
-        <SurveyVisitsList contactId={contactId} />
+        {/* Survey visits: server list + offline-queued writes merged */}
+        <SurveyVisitsList
+          contactId={contactId}
+          visits={surveyVisits}
+          loading={svLoading}
+          error={svError}
+          onRefresh={fetchSurveyVisits}
+        />
 
         {/* These sections only render once contact is loaded */}
         {contact && (
