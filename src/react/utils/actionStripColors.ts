@@ -1,4 +1,4 @@
-import { STAGE_COLORS } from '../theme';
+import { ACTION_STRIP_DRAFT_COLORS, NEUTRAL_COLORS, STAGE_COLORS } from '../theme';
 
 export interface ActionStripColors {
   actionTint: string;
@@ -16,7 +16,7 @@ export function getActionStripColors(params: {
   const stageColors = STAGE_COLORS[actionStageKey] || STAGE_COLORS[primaryStageKey];
   const greenCondition = hasDraft || (hasNoLeadStatus && !!handler);
   return {
-    actionTint: greenCondition ? '#F0FDF4' : (stageColors?.light || '#f3f4f6'),
-    actionTextColor: greenCondition ? '#15803d' : (stageColors?.text || '#374151'),
+    actionTint: greenCondition ? ACTION_STRIP_DRAFT_COLORS.tint : (stageColors?.light || NEUTRAL_COLORS[100]),
+    actionTextColor: greenCondition ? ACTION_STRIP_DRAFT_COLORS.text : (stageColors?.text || NEUTRAL_COLORS[700]),
   };
 }

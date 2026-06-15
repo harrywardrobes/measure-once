@@ -147,6 +147,16 @@ export const STAGE_COLORS: Record<string, StageColor> = {
   customerservice: { bg: '#475569', light: '#f1f5f9', text: '#1e293b' },
 };
 
+// ── Action-strip draft / no-lead-status green treatment ────────────────
+// Sourced here so that palette adjustments to the green scale stay in sync
+// with the action strip automatically. The fallback neutrals reference
+// NEUTRAL_COLORS directly in the utility; only the semantic green pair lives
+// here as a named constant.
+export const ACTION_STRIP_DRAFT_COLORS = {
+  tint: '#f0fdf4',
+  text: '#15803d',
+} as const;
+
 // ── Radius scale (drives --radius-* CSS custom properties via AppThemeProvider) ─
 export const RADIUS = {
   xs:   2,
