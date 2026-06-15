@@ -6,6 +6,8 @@
  * path reads from these constants instead of fetching from the server.
  */
 
+import type { VisitQuestion, AnswerMap } from '../QuestionnaireRenderer';
+
 export interface DemoContact {
   name: string;
   phone: string;
@@ -69,6 +71,88 @@ export const DEMO_STEP1 = {
   termsAccepted: true,
 };
 
+/**
+ * Sample whole-visit questionnaire questions (scope='visit') shown in the
+ * wizard demo so the step-3 review can render a representative "Questionnaire"
+ * section. Mirrors the shape returned by GET /api/visit-questions.
+ */
+export const DEMO_VISIT_QUESTIONS: VisitQuestion[] = [
+  {
+    id: 9001,
+    scope: 'visit',
+    applies_to: ['design'],
+    label: 'Is the customer the property owner?',
+    type: 'yesno',
+    options: [],
+    required: false,
+    sort_order: 1,
+  },
+  {
+    id: 9002,
+    scope: 'visit',
+    applies_to: ['design'],
+    label: 'How did the customer hear about us?',
+    type: 'choice',
+    options: ['Referral', 'Online search', 'Social media', 'Returning customer'],
+    required: false,
+    sort_order: 2,
+  },
+  {
+    id: 9003,
+    scope: 'visit',
+    applies_to: ['design'],
+    label: 'Preferred installation timeframe',
+    type: 'text',
+    options: [],
+    required: false,
+    sort_order: 3,
+  },
+];
+
+/** Demo answers to the whole-visit questions, keyed by question id. */
+export const DEMO_VISIT_ANSWERS: AnswerMap = {
+  9001: true,
+  9002: 'Referral',
+  9003: 'Within the next 3 months',
+};
+
+/**
+ * Sample per-room questionnaire questions (scope='room') shown in the wizard
+ * demo. Each demo room carries its own answers in DEMO_ROOMS[i].answers.
+ */
+export const DEMO_ROOM_QUESTIONS: VisitQuestion[] = [
+  {
+    id: 9101,
+    scope: 'room',
+    applies_to: ['design'],
+    label: "What is the room's primary use?",
+    type: 'choice',
+    options: ['Cooking', 'Dining', 'Storage', 'Laundry'],
+    required: false,
+    sort_order: 1,
+  },
+  {
+    id: 9102,
+    scope: 'room',
+    applies_to: ['design'],
+    label: 'Are there existing appliances to integrate?',
+    type: 'yesno',
+    options: [],
+    required: false,
+    sort_order: 2,
+  },
+  {
+    id: 9103,
+    scope: 'room',
+    applies_to: ['design'],
+    label: 'Additional notes from the customer',
+    type: 'text',
+    options: [],
+    required: false,
+    sort_order: 3,
+  },
+];
+
 /** Pre-filled rooms shown in the wizard demo. */
 export const DEMO_ROOMS = [
   {
@@ -81,6 +165,11 @@ export const DEMO_ROOMS = [
     unitPricePence: 45000,
     notes: 'L-shaped layout, island on the right',
     images: [] as Array<{ storageKey: string; mimeType: string | null; viewUrl: string }>,
+    answers: {
+      9101: 'Cooking',
+      9102: true,
+      9103: 'Wants to keep the existing range cooker',
+    } as AnswerMap,
   },
   {
     roomName: 'Utility Room',
@@ -92,6 +181,10 @@ export const DEMO_ROOMS = [
     unitPricePence: 35000,
     notes: '',
     images: [] as Array<{ storageKey: string; mimeType: string | null; viewUrl: string }>,
+    answers: {
+      9101: 'Laundry',
+      9102: false,
+    } as AnswerMap,
   },
 ];
 

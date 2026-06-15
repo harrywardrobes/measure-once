@@ -20,6 +20,9 @@ import {
   DEMO_TERMS_TEXT,
   DEMO_STEP1,
   DEMO_ROOMS,
+  DEMO_VISIT_QUESTIONS,
+  DEMO_VISIT_ANSWERS,
+  DEMO_ROOM_QUESTIONS,
 } from './modals/demoData';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { QuestionnaireRenderer, missingRequired, type VisitQuestion, type AnswerMap } from './QuestionnaireRenderer';
@@ -258,16 +261,20 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   // Whole-visit questionnaire (scope='visit'). Questions are fetched from the
   // shared questionnaire engine; answers travel inline with the submit payload
   // so they survive the offline queue.
-  const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>([]);
+  const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>(
+    demo ? DEMO_VISIT_QUESTIONS : []
+  );
   // Per-room questionnaire (scope='room'). Each room captures its own answers
   // (stored on RoomData.answers); they travel inline within the rooms payload
   // so they survive the offline queue. The backend tags them with the
   // freshly-inserted room id on save (room DB ids are not stable across edits).
-  const [roomQuestions, setRoomQuestions] = useState<VisitQuestion[]>([]);
+  const [roomQuestions, setRoomQuestions] = useState<VisitQuestion[]>(
+    demo ? DEMO_ROOM_QUESTIONS : []
+  );
   const [showRoomAnswerValidation, setShowRoomAnswerValidation] = useState(false);
   const [s2Error, setS2Error] = useState('');
   const [answers, setAnswers] = useState<AnswerMap>(() => {
-    if (demo) return {};
+    if (demo) return { ...DEMO_VISIT_ANSWERS };
     if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
       if (draft?.answers) return draft.answers;
