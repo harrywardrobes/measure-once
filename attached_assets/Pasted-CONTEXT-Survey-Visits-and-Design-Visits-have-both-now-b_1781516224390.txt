@@ -1,0 +1,105 @@
+CONTEXT
+Survey Visits and Design Visits have both now been implemented in Measure Once. Before
+writing ANY new code, I want you to (1) audit what's already there, (2) confirm it was
+done correctly, and (3) ask me clarifying questions. Do NOT start coding until I've
+answered your questions and approved a plan.
+
+This relates to on-hold task #2911 ("Add offline support to the Survey Visit wizard once
+it's built"). The Design Visit wizard already has full offline support and was hardened
+previously. The Survey Visit wizard now exists, so the offline work can finally be wired
+up to mirror the Design Visit behaviour.
+
+The Design Visit offline reference implementation lives in:
+  - src/react/components/DesignVisitWizard.tsx        (draft persistence + sendOrQueue submit)
+  - src/react/components/DesignVisitRoomsStep.tsx     (Base64 inline photo fallback when offline)
+  - src/react/hooks/useOfflineVisitEntries.ts
+  - src/react/pages/customer-detail/DesignVisitsList.tsx  (optimistic pending/failed cards + retry)
+  - src/react/lib/offlineQueue.ts, src/react/lib/syncEngine.ts
+  - src/react/constants/localStorageKeys.ts           (all storage keys must be registered here)
+
+The Survey Visit wizard now lives in:
+  - src/react/components/SurveyVisitWizard.tsx
+  - migrations/1783300000000_survey-visits.js
+  - survey-visits.js (backend API)
+
+==================================================================
+PART 1 — AUDIT & VERIFY (no code changes yet)
+==================================================================
+Review the current Survey Visit and Design Visit implementations end to end and report
+back on whether each of the following is actually done correctly. Quote the specific
+files/lines you checked. Flag anything missing, half-wired, or inconsistent between the
+two wizards.
+
+For BOTH the Survey Visit and Design Visit wizards, verify:
+  1. In-progress draft persistence — the wizard saves a draft (e.g. to sessionStorage /
+     localStorage) on every step/field change, and on reload it RESTORES the draft and
+     shows a "restore draft" banner. Confirm no data is lost on accidental reload,
+     navigation away, browser refresh, or tab close/reopen at ANY step.
+  2. Saving half-way through — a user can stop part-way and come back later to exactly
+     where they were, including photos and per-room answers.
+  3. Offline submit — submission goes through sendOrQueue with conflict-check metadata;
+     when offline it's queued and replayed when back online.
+  4. Offline photos — photos are queued as inline Base64 when offline (see
+     DesignVisitRoomsStep.tsx as the reference).
+  5. Optimistic UI — pending/failed cards show in the visit list with retry, the item
+     counts toward the SyncPill, and conflicts surface in ConflictsReview.
+  6. Storage keys — every new localStorage/sessionStorage key is registered in
+     src/react/constants/localStorageKeys.ts.
+  7. Backend + migration — /api/survey-visits and migrations/1783300000000_survey-visits.js
+     match the wizard's expectations and mirror the design-visit equivalents.
+
+Tell me clearly: which of these are DONE, which are PARTIAL, and which are MISSING for
+each wizard.
+
+==================================================================
+PART 2 — OFFLINE HARDENING (the #2911 goal)
+==================================================================
+Once the audit is done and I've approved, bring the Survey Visit wizard's offline
+behaviour up to full parity with the Design Visit wizard, per task #2911:
+  - Persist an in-progress draft with a restore banner.
+  - Submit via sendOrQueue with conflict-check metadata.
+  - Queue photos as inline Base64 when offline.
+  - Show optimistic pending/failed cards with retry in the survey visit list.
+  - Count toward the SyncPill.
+  - Surface conflicts in ConflictsReview.
+  - Register any new storage keys in localStorageKeys.ts.
+
+The hard requirement across BOTH wizards: NO data can ever be lost on reload, refresh,
+crash, going offline, or coming back online. Saving half-way and resuming must be
+bulletproof.
+
+==================================================================
+PART 3 — MOVE VISITS TO A MAIN TAB
+==================================================================
+The Visits section is currently a sub-tab / inline section on the customer detail page
+(see src/react/pages/CustomerDetailPage.tsx and
+src/react/pages/customer-detail/VisitsSections.tsx). Promote Visits to a top-level / main
+tab instead of a sub-tab. Before doing this, ask me exactly where the main tab navigation
+lives and how I want it ordered/labelled.
+
+==================================================================
+QUESTIONS I WANT YOU TO ASK ME (ask as many as you can — be exhaustive)
+==================================================================
+Please ask me clarifying questions before implementing. At minimum cover:
+  - Draft scope: should an in-progress draft be per-device only, or sync across devices
+    for the same user? One draft per visit, or per user+contact?
+  - Draft lifetime: when is a draft auto-cleared (on successful submit only? after N days?
+    on discard?)? Should there be an explicit "discard draft" action?
+  - Restore UX: exact wording/placement of the restore banner; auto-restore vs. ask first?
+  - Conflict handling: what counts as a conflict for survey visits, and what should the
+    user see/do when one is detected on sync?
+  - Photos offline: any size/count limits for Base64-queued photos? What happens if local
+    storage fills up?
+  - Multiple in-progress visits: can a user have several half-finished survey visits at
+    once, or only one at a time?
+  - Sync ordering: if both a survey and design visit are queued offline, does order matter?
+  - Required fields / partial submit: can a survey visit be submitted partially, or must
+    all steps be complete before queue/submit?
+  - Main tab placement: where exactly should the Visits main tab sit in the nav, what
+    should it be labelled, and what should it contain (upcoming, past, design, survey all
+    together)?
+  - Permissions: who can see/start/submit survey vs. design visits?
+  - Anything else you find ambiguous during the audit — surface it.
+
+Deliverable for THIS round: the Part 1 audit report + your full list of questions. Do not
+change any code until I reply.
