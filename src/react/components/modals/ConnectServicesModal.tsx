@@ -54,7 +54,7 @@ interface ActionCellProps {
   status: string | undefined;
   isDisconnecting: boolean;
   onDisconnect: (service: ConnectionService, url: string) => void;
-  /** Called when the user clicks Connect on an admin-only service (opens in new tab). */
+  /** Called when the user clicks Connect on an oauth or admin-only service (opens in popup). */
   onConnectNewTab?: (url: string) => void;
 }
 
