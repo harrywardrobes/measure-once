@@ -1085,8 +1085,6 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
 
   const expectedState = req.session.googleOAuthState;
   delete req.session.googleOAuthState;
-  const isPopup = !!req.session.googleOAuthPopup;
-  delete req.session.googleOAuthPopup;
   if (!expectedState || req.query.state !== expectedState) {
     if (isPopup) return res.send(googlePopupPage('error', 'invalid_state'));
     return res.redirect('/?error=google_auth_failed');
