@@ -1,0 +1,35 @@
+Update all date and time inputs in the app so that when a field is empty, it
+defaults to the current date/time instead of being blank.
+
+Scope — these are the files with date/time inputs (React + TypeScript, mix of
+MUI <TextField> and plain HTML <input>):
+- src/react/pages/customer-detail/TasksSection.tsx  (task due date — type="date", lines ~288 & ~550)
+- src/react/pages/customer-detail/RoomsTabs.tsx      (install start/finish — type="date", lines ~330 & ~339)
+- src/react/components/InvoiceDetailDrawer.tsx        (type="date", line ~444)
+- src/react/pages/auth/OnboardingPage.tsx             (date of birth — type="date")
+- src/react/pages/admin/AdminTeamPage.tsx             (date of birth — type="date", lines ~693 & ~983)
+
+Requirements:
+1. For every <input type="date">, <input type="time">, and <input
+   type="datetime-local"> (including MUI <TextField type="date"> etc.), if the
+   bound value is empty/undefined, default it to the current date/time.
+   - date  -> today's date in YYYY-MM-DD
+   - time  -> current time in HH:MM
+   - datetime-local -> current local datetime in YYYY-MM-DDTHH:MM
+2. Use the user's LOCAL timezone, not UTC. A naive new Date().toISOString()
+   produces UTC and will show the wrong day for some users — format from local
+   getFullYear/getMonth/getDate/getHours/getMinutes with zero-padding instead.
+3. Add a small shared helper (e.g. src/react/utils/dateDefaults.ts) exporting
+   nowDate(), nowTime(), nowDateTime() and reuse it everywhere rather than
+   duplicating formatting logic.
+4. EXCLUDE date-of-birth fields (OnboardingPage and AdminTeamPage) — defaulting
+   a DOB to today makes no sense. Leave those blank.
+5. The default should only be a display/initial default — do NOT silently
+   overwrite saved data. If the underlying state is genuinely empty, seed it
+   with the current value (e.g. in a useEffect or via the value fallback) so the
+   user sees today's date but can still change it.
+6. Don't change the visual styling, validation, or onChange handlers beyond
+   what's needed for the default.
+
+After editing, run the type-check / lint and the dev build to confirm nothing
+breaks, then show me a summary of which inputs were changed.
