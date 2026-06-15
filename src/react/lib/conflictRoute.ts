@@ -78,7 +78,7 @@ function contactIdFor(conflict: RouteSource): string | null {
  */
 function visitIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
-  if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'visit')) {
+  if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'visit' || parts.type === 'sv')) {
     const id = asId(parts.id);
     if (id) return id;
   }
@@ -91,7 +91,7 @@ function visitIdFor(conflict: RouteSource): string | null {
   const fromServer = asId(server?.id ?? server?.visitId ?? server?.visit_id);
   if (fromServer) return fromServer;
 
-  const m = conflict.url.match(/\/api\/(?:design-visits|visits)\/([^/?#]+)/);
+  const m = conflict.url.match(/\/api\/(?:design-visits|survey-visits|visits)\/([^/?#]+)/);
   if (m) {
     try { return decodeURIComponent(m[1]); } catch { return m[1]; }
   }
@@ -107,9 +107,19 @@ function isArrangeVisit(source: RouteSource): boolean {
   if (source.recordKey) {
     const parts = recordKeyParts(source.recordKey);
     if (parts?.type === 'visit') return true;
-    if (parts && (parts.type === 'dv' || parts.type === 'design-visit')) return false;
+    if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'sv')) return false;
   }
+  if (/\/api\/survey-visits\//.test(source.url)) return false;
   return /\/api\/visits\//.test(source.url);
+}
+
+/** Returns `true` when the source is a survey-visit write (`sv:` record key or `/api/survey-visits/` URL). */
+function isSurveyVisit(source: RouteSource): boolean {
+  if (source.recordKey) {
+    const parts = recordKeyParts(source.recordKey);
+    if (parts?.type === 'sv') return true;
+  }
+  return /\/api\/survey-visits\//.test(source.url);
 }
 
 /**
@@ -176,6 +186,9 @@ function resolveRoute(source: RouteSource): string | null {
     case 'visit': {
       if (isArrangeVisit(source)) {
         return `${base}#upcoming-visits-section`;
+      }
+      if (isSurveyVisit(source)) {
+        return `${base}#survey-visits-section`;
       }
       const visitId = visitIdFor(source);
       return visitId ? `${base}#design-visit-${encodeURIComponent(visitId)}` : base;

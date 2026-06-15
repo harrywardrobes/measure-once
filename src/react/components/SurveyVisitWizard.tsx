@@ -639,14 +639,29 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       };
       const url    = editMode ? `/api/survey-visits/${encodeURIComponent(String(editVisitId))}` : '/api/survey-visits';
       const method = editMode ? 'PUT' : 'POST';
-      const res = await fetch(url, {
+      // Offline-aware submit. When offline / on a network error the survey visit
+      // is queued and replayed (with its side effects — sign-off email, QB
+      // estimate) once connectivity returns. Edit-mode updates carry a
+      // conflict-check URL so a stale overwrite is logged for Phase 3 review.
+      const { sendOrQueue } = await import('../lib/offlineQueue');
+      const res = await sendOrQueue({
+        area: 'visit',
+        label: editMode ? `Edit survey visit — ${contactName || contactId}` : `Survey visit — ${contactName || contactId}`,
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        url,
+        body: payload,
+        ...(editMode
+          ? {
+              conflictCheckUrl: `/api/survey-visits/${encodeURIComponent(String(editVisitId))}`,
+              recordKey: `sv:${editVisitId}`,
+              dedupeKey: `sv:${editVisitId}`,
+              baseVersion: existingVisit?.version ?? null,
+              baseUpdatedAt: existingVisit?.updated_at ?? null,
+            }
+          : {}),
       });
-      if (!res.ok) {
-        let d: { error?: string; code?: string } | undefined;
-        try { d = await res.json(); } catch {}
+      if (!res.queued && !res.ok) {
+        const d = res.data as { error?: string; code?: string } | undefined;
         if (d?.code === 'LEAD_STATUS_REMOVED') {
           throw new Error(LEAD_STATUS_REMOVED_MESSAGE);
         }
@@ -655,15 +670,19 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       committedRef.current = true;
       pendingUploadKeysRef.current.clear();
       clearDraft(storageKey);
-      if (!editMode && cfg.submittedLeadStatus && contactId) {
+      if (!res.queued && !editMode && cfg.submittedLeadStatus && contactId) {
         broadcastLeadStatusChange(contactId, { hs_lead_status: cfg.submittedLeadStatus });
       }
       setOpen(false);
       setTimeout(() => {
         onClose();
-        const msg = editMode
-          ? 'Survey visit updated. A fresh sign-off email has been sent.'
-          : 'Survey visit submitted. Customer sign-off email sent.';
+        const msg = res.queued
+          ? (editMode
+              ? "Survey visit saved offline — it'll sync and send the sign-off email when you're back online."
+              : "Survey visit saved offline — it'll submit and send the sign-off email when you're back online.")
+          : (editMode
+              ? 'Survey visit updated. A fresh sign-off email has been sent.'
+              : 'Survey visit submitted. Customer sign-off email sent.');
         const w = window as unknown as Record<string, unknown>;
         if (typeof w['toast'] === 'function') {
           (w['toast'] as (m: string) => void)(msg);

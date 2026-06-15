@@ -10,6 +10,7 @@ import { InvoicesSection } from './customer-detail/InvoicesSection';
 import { PaymentHistory } from '../components/PaymentHistory';
 import { UpcomingVisitsSection, PastVisitsSection } from './customer-detail/VisitsSections';
 import { DesignVisitsList } from './customer-detail/DesignVisitsList';
+import { SurveyVisitsList } from './customer-detail/SurveyVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
@@ -649,6 +650,9 @@ export function CustomerDetailPage() {
           error={dvError}
           onRefresh={fetchDesignVisits}
         />
+
+        {/* Survey visits: renders only when there are queued offline writes */}
+        <SurveyVisitsList contactId={contactId} />
 
         {/* These sections only render once contact is loaded */}
         {contact && (

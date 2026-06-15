@@ -449,6 +449,7 @@ function cacheTargetForConflict(conflict: { recordKey?: string; url: string }): 
         if (type === 'contact' || type === 'customer') return { store: 'customers', id };
         if (type === 'visit') return { store: 'visits', id: `v:${id}` };
         if (type === 'dv' || type === 'design-visit') return { store: 'visits', id: `dv:${id}` };
+        if (type === 'sv') return { store: 'visits', id: `sv:${id}` };
       }
     }
   }
@@ -457,6 +458,8 @@ function cacheTargetForConflict(conflict: { recordKey?: string; url: string }): 
   if (cm) return { store: 'customers', id: decode(cm[1]) };
   const dm = conflict.url.match(/\/api\/design-visits\/([^/?#]+)/);
   if (dm) return { store: 'visits', id: `dv:${decode(dm[1])}` };
+  const svm = conflict.url.match(/\/api\/survey-visits\/([^/?#]+)/);
+  if (svm) return { store: 'visits', id: `sv:${decode(svm[1])}` };
   const vm = conflict.url.match(/\/api\/visits\/([^/?#]+)/);
   if (vm) return { store: 'visits', id: `v:${decode(vm[1])}` };
   return null;
