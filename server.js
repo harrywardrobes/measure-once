@@ -1038,6 +1038,35 @@ async function loadGoogleTokens(userSub) {
   };
 }
 
+/**
+ * Check whether a user's Google token row exists and whether it can be decrypted
+ * with the current GOOGLE_TOKEN_ENCRYPTION_KEY.
+ *
+ * Returns one of:
+ *   'missing'    — no row in google_oauth_tokens for this user
+ *   'unreadable' — row exists but the token(s) cannot be decrypted (key rotation
+ *                  or other corruption); user must reconnect
+ *   'ok'         — row exists and tokens decrypt successfully
+ */
+async function checkGoogleTokenReadability(userSub) {
+  const r = await pool.query(
+    'SELECT access_token, refresh_token FROM google_oauth_tokens WHERE user_sub = $1',
+    [userSub],
+  );
+  if (!r.rows[0]) return 'missing';
+  const row = r.rows[0];
+
+  if (row.access_token) {
+    const { ok } = tryDecryptToken(row.access_token);
+    if (!ok) return 'unreadable';
+  }
+  if (row.refresh_token) {
+    const { ok } = tryDecryptToken(row.refresh_token);
+    if (!ok) return 'unreadable';
+  }
+  return 'ok';
+}
+
 async function deleteGoogleTokens(userSub) {
   await pool.query('DELETE FROM google_oauth_tokens WHERE user_sub = $1', [userSub]);
 }
@@ -1140,8 +1169,16 @@ app.post('/auth/logout-google', isAuthenticated, async (req, res) => {
 
 // ── Google: Connection status (live token check) ───────────────────────────────
 app.get('/api/google/status', isAuthenticated, async (req, res) => {
+  const userSub = String(req.user.claims.sub);
   const googleTokens = await getVerifiedGoogleTokens(req);
   if (!googleTokens) {
+    // Distinguish between "never connected" and "token exists but can't be
+    // decrypted" (e.g. after a key rotation).  The latter gets a specific code
+    // so the client can show a targeted "please reconnect" prompt.
+    const readability = await checkGoogleTokenReadability(userSub);
+    if (readability === 'unreadable') {
+      return res.json({ connected: false, code: 'TOKEN_UNREADABLE' });
+    }
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
   try {
@@ -1149,14 +1186,14 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
     const { token } = await auth.getAccessToken();
     if (!token) return res.json({ connected: false, code: 'NO_TOKEN' });
     req.session.googleTokens = auth.credentials;
-    await saveGoogleTokens(String(req.user.claims.sub), auth.credentials);
+    await saveGoogleTokens(userSub, auth.credentials);
     res.json({ connected: true });
   } catch (e) {
     const msg = (e.message || '').toLowerCase();
     if (msg.includes('invalid_grant') || msg.includes('token has been expired') || msg.includes('token has been revoked')) {
       delete req.session.googleTokens;
       delete req.session.googleTokensBoundTo;
-      try { await deleteGoogleTokens(String(req.user.claims.sub)); } catch {}
+      try { await deleteGoogleTokens(userSub); } catch {}
       return res.json({ connected: false, code: 'TOKEN_EXPIRED' });
     }
     if (e.response?.status === 401 || msg.includes('invalid_client')) {

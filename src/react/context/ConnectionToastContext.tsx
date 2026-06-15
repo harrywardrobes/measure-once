@@ -130,9 +130,18 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
     const connected =
       (data as { connected?: boolean }).connected === true ||
       (data as { status?: string }).status === 'connected';
+    const code = (data as { code?: string }).code;
     const prev = _lastKnown.get(service);
     if (!connected && prev !== 'error') {
       _fire(service, 'disconnected');
+      // If the token exists but can't be decrypted (key rotation), open the
+      // modal immediately with a targeted message so users know to reconnect.
+      if (code === 'TOKEN_UNREADABLE') {
+        openConnectModal(
+          service,
+          'Your Google connection needs to be refreshed — please reconnect to restore Calendar and Gmail access.',
+        );
+      }
     } else if (connected && prev === 'error') {
       _fire(service, 'reconnected');
     }
