@@ -5,6 +5,7 @@ import { UploadStatus } from './FileUploadField';
 import { BRAND_COLORS } from '../theme';
 import { RoomEditorCard, type RoomData, type DoorStyleOption } from './RoomEditorCard';
 import type { RoomImage } from './RoomImageUploader';
+import type { VisitQuestion, AnswerValue } from './QuestionnaireRenderer';
 
 // Re-exported for backwards compatibility — these types were originally
 // declared here and are imported from this module across the codebase.
@@ -20,6 +21,10 @@ export interface DesignVisitRoomsStepProps {
   onNewUpload?: (storageKey: string) => void;
   /** Called with a storage key when a photo is removed (the DELETE is already fired by the step). */
   onImageRemoved?: (storageKey: string) => void;
+  /** Room-scoped questionnaire questions, rendered inside every room editor. */
+  roomQuestions?: VisitQuestion[];
+  /** When true, required room questions with no answer show an error state. */
+  showAnswerValidation?: boolean;
   /**
    * When true the step runs in read-only demo mode: photo upload and delete
    * API calls are suppressed.  The upload control is hidden so the admin can
@@ -74,6 +79,8 @@ export function DesignVisitRoomsStep({
   onUploadingChange,
   onNewUpload,
   onImageRemoved,
+  roomQuestions,
+  showAnswerValidation,
   demo,
 }: DesignVisitRoomsStepProps) {
   const [rooms, setRooms] = useState<InternalRoom[]>(() => {
@@ -105,6 +112,16 @@ export function DesignVisitRoomsStep({
   function updateRoomData(clientId: string, patch: Partial<RoomData>) {
     setRooms(prev =>
       prev.map(r => r.clientId === clientId ? { ...r, data: { ...r.data, ...patch } } : r)
+    );
+  }
+
+  function updateRoomAnswer(clientId: string, questionId: number, value: AnswerValue) {
+    setRooms(prev =>
+      prev.map(r =>
+        r.clientId === clientId
+          ? { ...r, data: { ...r.data, answers: { ...(r.data.answers || {}), [questionId]: value } } }
+          : r
+      )
     );
   }
 
@@ -376,7 +393,10 @@ export function DesignVisitRoomsStep({
             uploadStatus={uploadStatusById[clientId] ?? 'idle'}
             uploadProgress={uploadProgressById[clientId]}
             fileKey={fileKeyById[clientId] ?? 0}
+            roomQuestions={roomQuestions}
+            showAnswerValidation={showAnswerValidation}
             onUpdate={patch => updateRoomData(clientId, patch)}
+            onAnswerChange={(qId, value) => updateRoomAnswer(clientId, qId, value)}
             onMove={dir => moveRoom(clientId, dir)}
             onRemove={() => removeRoom(clientId)}
             onFilesSelected={files => handleFilesSelected(clientId, files)}

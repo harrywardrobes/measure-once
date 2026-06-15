@@ -1398,7 +1398,11 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
       }
     }
 
-    // Insert rooms
+    // Insert rooms. Room-scoped questionnaire answers travel inline with each
+    // room (rm.answers); we tag them with the freshly-inserted room id here
+    // because room DB ids are not stable across edits (rooms are fully replaced
+    // on every save).
+    const collectedRoomAnswers = [];
     for (let i = 0; i < rooms.length; i++) {
       const rm = rooms[i];
       const rr = await client.query(`
@@ -1421,6 +1425,13 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         ]
       );
       const roomId = rr.rows[0].id;
+      if (Array.isArray(rm.answers)) {
+        for (const a of rm.answers) {
+          if (a && a.question_id != null) {
+            collectedRoomAnswers.push({ question_id: a.question_id, room_id: roomId, answer: a.answer });
+          }
+        }
+      }
       // Insert images. Accepts opaque cloud-storage keys (POST
       // /api/design-visits/uploads), inline data:image/* URIs from offline
       // capture (materialised into storage by the helper), http(s) URLs, or
@@ -1438,12 +1449,17 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
 
     await client.query('COMMIT');
 
-    // Persist questionnaire answers (whole-visit scope) carried inline with the
-    // submit so they survive the offline queue. Non-fatal — a failure here must
-    // not lose the saved visit.
-    if (Array.isArray(answers) && answers.length) {
+    // Persist questionnaire answers carried inline with the submit so they
+    // survive the offline queue: whole-visit answers (room_id null) plus the
+    // per-room answers collected above. Non-fatal — a failure here must not lose
+    // the saved visit.
+    const visitAnswers = Array.isArray(answers)
+      ? answers.map(a => ({ question_id: a.question_id, room_id: null, answer: a.answer }))
+      : [];
+    const combinedAnswers = [...visitAnswers, ...collectedRoomAnswers];
+    if (combinedAnswers.length) {
       try {
-        await saveAnswers('design', visitId, answers);
+        await saveAnswers('design', visitId, combinedAnswers);
       } catch (e) {
         logger.error({ err: e.message }, '[design-visits] saveAnswers (create) error:');
       }
@@ -1651,6 +1667,10 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
     // Replace all rooms (cascades to images)
     await client.query(`DELETE FROM design_visit_rooms WHERE design_visit_id=$1`, [id]);
 
+    // Room-scoped questionnaire answers travel inline with each room; collect
+    // them tagged with the new room id (rooms are fully re-inserted here so old
+    // room ids are gone).
+    const collectedRoomAnswers = [];
     for (let i = 0; i < rooms.length; i++) {
       const rm = rooms[i];
       const rr = await client.query(`
@@ -1673,6 +1693,13 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         ]
       );
       const roomId = rr.rows[0].id;
+      if (Array.isArray(rm.answers)) {
+        for (const a of rm.answers) {
+          if (a && a.question_id != null) {
+            collectedRoomAnswers.push({ question_id: a.question_id, room_id: roomId, answer: a.answer });
+          }
+        }
+      }
       const images = Array.isArray(rm.images) ? rm.images : [];
       const MAX_IMG_BYTES = 10 * 1024 * 1024;
       for (const img of images) {
@@ -1693,11 +1720,18 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
 
     await client.query('COMMIT');
 
-    // Replace questionnaire answers (whole-visit scope) carried inline with the
-    // edit. Non-fatal — a failure must not lose the saved edit.
-    if (Array.isArray(answers)) {
+    // Replace questionnaire answers carried inline with the edit: whole-visit
+    // answers (room_id null) plus the per-room answers collected above. saveAnswers
+    // replaces the full set atomically. Non-fatal — a failure must not lose the
+    // saved edit.
+    const hasVisitAnswers = Array.isArray(answers);
+    if (hasVisitAnswers || collectedRoomAnswers.length) {
+      const visitAnswers = hasVisitAnswers
+        ? answers.map(a => ({ question_id: a.question_id, room_id: null, answer: a.answer }))
+        : [];
+      const combinedAnswers = [...visitAnswers, ...collectedRoomAnswers];
       try {
-        await saveAnswers('design', id, answers);
+        await saveAnswers('design', id, combinedAnswers);
       } catch (e) {
         logger.error({ err: e.message }, '[design-visits] saveAnswers (update) error:');
       }

@@ -10,6 +10,12 @@ import { STATUS_COLORS } from '../theme';
 import { CatalogueDropdowns } from './CatalogueDropdowns';
 import { RoomImageUploader, type RoomImage } from './RoomImageUploader';
 import type { UploadStatus } from './FileUploadField';
+import {
+  QuestionnaireRenderer,
+  type VisitQuestion,
+  type AnswerMap,
+  type AnswerValue,
+} from './QuestionnaireRenderer';
 
 export interface RoomData {
   roomName: string;
@@ -21,6 +27,8 @@ export interface RoomData {
   unitPricePence: number;
   notes: string;
   images: RoomImage[];
+  /** Captured answers to room-scoped questionnaire questions (question id → value). */
+  answers?: AnswerMap;
 }
 
 export interface DoorStyleOption {
@@ -39,7 +47,13 @@ export interface RoomEditorCardProps {
   uploadStatus: UploadStatus;
   uploadProgress?: number;
   fileKey: number;
+  /** Room-scoped questionnaire questions rendered inside this room editor. */
+  roomQuestions?: VisitQuestion[];
+  /** When true, required room questions with no answer show an error state. */
+  showAnswerValidation?: boolean;
   onUpdate: (patch: Partial<RoomData>) => void;
+  /** Called when a room-scoped questionnaire answer changes. */
+  onAnswerChange?: (questionId: number, value: AnswerValue) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   onFilesSelected: (files: FileList | null) => void;
@@ -63,7 +77,10 @@ export function RoomEditorCard({
   uploadStatus,
   uploadProgress,
   fileKey,
+  roomQuestions,
+  showAnswerValidation,
   onUpdate,
+  onAnswerChange,
   onMove,
   onRemove,
   onFilesSelected,
@@ -274,6 +291,18 @@ export function RoomEditorCard({
         onChange={e => onUpdate({ notes: e.target.value })}
         sx={{ mb: 1.5 }}
       />
+
+      {/* Room-scoped questionnaire questions */}
+      {roomQuestions && roomQuestions.length > 0 && (
+        <Box sx={{ mb: 1.5 }}>
+          <QuestionnaireRenderer
+            questions={roomQuestions}
+            answers={data.answers || {}}
+            onChange={(qId, value) => onAnswerChange?.(qId, value)}
+            showValidation={showAnswerValidation}
+          />
+        </Box>
+      )}
 
       {/* Photos */}
       <RoomImageUploader

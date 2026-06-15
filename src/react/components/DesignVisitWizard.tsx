@@ -62,6 +62,7 @@ export interface ExistingVisit {
   notes?: string;
   terms_accepted?: boolean;
   rooms?: Array<{
+    id?: number | string;
     room_name?: string; roomName?: string;
     door_style_id?: string | number; doorStyleId?: string | number;
     width_mm?: number | null;  widthMm?: number | null;
@@ -123,7 +124,7 @@ function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit
 
 function normaliseRooms(existingVisit?: ExistingVisit | null): RoomData[] {
   if (!existingVisit?.rooms?.length) {
-    return [{ roomName: '', doorStyleId: '', widthMm: null, heightMm: null, depthMm: null, unitCount: 1, unitPricePence: 0, notes: '', images: [] }];
+    return [{ roomName: '', doorStyleId: '', widthMm: null, heightMm: null, depthMm: null, unitCount: 1, unitPricePence: 0, notes: '', images: [], answers: {} }];
   }
   return existingVisit.rooms.map(r => ({
     roomName:       r.room_name || r.roomName || '',
@@ -139,6 +140,7 @@ function normaliseRooms(existingVisit?: ExistingVisit | null): RoomData[] {
       mimeType:   i.mimeType   || i.mime_type   || null,
       viewUrl:    i.viewUrl    || i.view_url    || '',
     })) : [],
+    answers:        {},
   }));
 }
 
@@ -255,9 +257,15 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   // Whole-visit questionnaire (scope='visit'). Questions are fetched from the
   // shared questionnaire engine; answers travel inline with the submit payload
-  // so they survive the offline queue. Per-room questionnaire wiring is a
-  // deferred follow-up — the renderer/engine already support room scope.
+  // so they survive the offline queue.
   const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>([]);
+  // Per-room questionnaire (scope='room'). Each room captures its own answers
+  // (stored on RoomData.answers); they travel inline within the rooms payload
+  // so they survive the offline queue. The backend tags them with the
+  // freshly-inserted room id on save (room DB ids are not stable across edits).
+  const [roomQuestions, setRoomQuestions] = useState<VisitQuestion[]>([]);
+  const [showRoomAnswerValidation, setShowRoomAnswerValidation] = useState(false);
+  const [s2Error, setS2Error] = useState('');
   const [answers, setAnswers] = useState<AnswerMap>(() => {
     if (demo) return {};
     if (!editMode && orphanedDraftKeys.length === 0) {
@@ -335,7 +343,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         const qr = await fetch('/api/visit-questions?applies_to=design');
         if (!cancelled && qr.ok) {
           const all: VisitQuestion[] = await qr.json();
-          setVisitQuestions((Array.isArray(all) ? all : []).filter(q => q.scope === 'visit'));
+          const list = Array.isArray(all) ? all : [];
+          setVisitQuestions(list.filter(q => q.scope === 'visit'));
+          setRoomQuestions(list.filter(q => q.scope === 'room'));
         }
       } catch {}
       if (editMode && editVisitId != null) {
@@ -343,11 +353,36 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           const ar = await fetch(`/api/design-visits/${encodeURIComponent(String(editVisitId))}/answers`);
           if (!cancelled && ar.ok) {
             const rows: Array<{ question_id: number; room_id: number | null; answer: AnswerMap[number] }> = await ar.json();
-            const map: AnswerMap = {};
+            // Split into whole-visit answers (room_id null) and per-room answers
+            // (keyed by the room's DB id). Room DB ids are returned by
+            // loadVisitWithRooms (dvr.*), so we can map each room answer back to
+            // its room by matching existingVisit.rooms[i].id.
+            const visitMap: AnswerMap = {};
+            const perRoomById: Record<number, AnswerMap> = {};
             for (const row of (Array.isArray(rows) ? rows : [])) {
-              if (row.room_id == null) map[row.question_id] = row.answer;
+              if (row.room_id == null) {
+                visitMap[row.question_id] = row.answer;
+              } else {
+                (perRoomById[row.room_id] ||= {})[row.question_id] = row.answer;
+              }
             }
-            setAnswers(map);
+            if (!cancelled) {
+              setAnswers(visitMap);
+              if (Object.keys(perRoomById).length) {
+                const evRooms = existingVisit?.rooms || [];
+                // Inject room answers by matching position (rooms state is
+                // initialised from existingVisit.rooms in the same order).
+                const injected = initialRoomsRef.current.map((r, i) => {
+                  const rid = (evRooms[i] as { id?: number | string } | undefined)?.id;
+                  const a = rid != null ? perRoomById[Number(rid)] : undefined;
+                  return a ? { ...r, answers: { ...(r.answers || {}), ...a } } : r;
+                });
+                setRooms(injected);
+                // Keep the edit-mode baseline in sync so loading answers does not
+                // count as an unsaved change (which would prompt "Discard?").
+                initialRoomsRef.current = injected;
+              }
+            }
           }
         } catch {}
       }
@@ -502,6 +537,21 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     setStep(2);
   }
 
+  function advanceToStep3() {
+    if (rooms.some(r => !r.roomName.trim()) || rooms.length === 0) return;
+    if (!demo && roomQuestions.length > 0) {
+      const anyMissing = rooms.some(r => missingRequired(roomQuestions, r.answers || {}).length > 0);
+      if (anyMissing) {
+        setShowRoomAnswerValidation(true);
+        setS2Error('Please answer all required questions for each room before continuing.');
+        return;
+      }
+    }
+    setShowRoomAnswerValidation(false);
+    setS2Error('');
+    setStep(3);
+  }
+
   async function handleSubmit() {
     setSubmitting(true);
     setSubmitError('');
@@ -530,6 +580,12 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             storageKey: img.storageKey,
             mimeType:   img.mimeType,
           })),
+          // Per-room questionnaire answers (scope='room'). Carried inline within
+          // the room so the backend can tag them with the freshly-inserted room
+          // id, and so they survive the offline queue alongside the room data.
+          answers: roomQuestions
+            .filter(q => r.answers?.[q.id] !== undefined)
+            .map(q => ({ question_id: q.id, answer: r.answers![q.id] })),
         })),
         handlerConfig: cfg,
         // Whole-visit questionnaire answers (scope='visit', no room_id). Sent
@@ -617,6 +673,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px' }}>
       {(s1Error && step === 1) && (
         <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s1Error}</Typography>
+      )}
+      {(s2Error && step === 2) && (
+        <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{s2Error}</Typography>
       )}
       {(submitError && step === 3) && (
         <Typography sx={{ color: 'error.dark', fontSize: '.82rem' }}>{submitError}</Typography>
@@ -751,6 +810,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           onUploadingChange={setUploading}
           onNewUpload={key => pendingUploadKeysRef.current.add(key)}
           onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
+          roomQuestions={roomQuestions}
+          showAnswerValidation={showRoomAnswerValidation}
           demo={demo}
         />
       )}

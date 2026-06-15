@@ -20,3 +20,4 @@
 - [HANDLER_OUTCOMES in main bundle](handler-outcomes-in-main-bundle.md) — the outcome registry literal ships in main.js; enriching its data / re-exporting page-only helpers can trip the main.js gzip cap.
 - [Places API (New) migration](places-api-new-migration.md) — new API uses importLibrary('places') not libraries=places; shape changed from long_name/short_name to longText/shortText; REST endpoints moved to places.googleapis.com/v1.
 - [Admin tabs are separate React roots](admin-tabs-separate-roots.md) — admin `#tab-*` panels are independent non-unmounting createRoot mounts; can't share React context — dedupe cross-tab data with a module-level cache, not a provider.
+- [design-visit E2E stale catalog tables](design-visit-e2e-stale-catalog-tables.md) — test/design-visit/run.js waits on design_visit_handles/door_styles/furniture_ranges which the catalog migration drops; pre-existing infra staleness.
