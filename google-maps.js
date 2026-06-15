@@ -317,6 +317,29 @@ async function diagnosticsSnapshot(days = 7) {
   };
 }
 
+// Classify a Google Maps failure so the admin UI can point at the right fix.
+// Returns 'disabled' (the API is switched off in Cloud Console), 'restriction'
+// (the key is blocked by an HTTP-referrer / IP / API restriction or a denied
+// permission), or undefined when we can't tell. Reason codes in the new Places
+// API error `details[]` are the most reliable signal, so they win over the
+// free-text message; HTTP 401/403 is the last-resort fallback.
+function classifyMapsFailure({ httpStatus, googleStatus, errorObj, message } = {}) {
+  const reasons = Array.isArray(errorObj?.details)
+    ? errorObj.details.map((d) => d && d.reason).filter(Boolean)
+    : [];
+  if (reasons.includes('SERVICE_DISABLED')) return 'disabled';
+  if (reasons.some((r) => /^API_KEY_/.test(r))) return 'restriction';
+  const text = `${message || ''} ${googleStatus || ''}`.toUpperCase();
+  if (/HAS NOT BEEN USED|IS DISABLED|NOT BEEN USED IN PROJECT|PLEASE (ENABLE|ACTIVATE)|ENABLE IT|ACTIVATE/.test(text)) {
+    return 'disabled';
+  }
+  if (/REFERER|REFERRER|RESTRICT|BLOCKED|NOT AUTHORIZED|FORBIDDEN|PERMISSION_DENIED|REQUEST_DENIED|INVALID.*KEY|KEY.*INVALID/.test(text)) {
+    return 'restriction';
+  }
+  if (httpStatus === 401 || httpStatus === 403) return 'restriction';
+  return undefined;
+}
+
 // ── Server-side Google REST wrapper (used for connection testing) ────────────
 async function callGoogle(api, url, surface = 'admin-test', fetchOpts = {}) {
   recordRequest(api);
@@ -337,7 +360,13 @@ async function callGoogle(api, url, surface = 'admin-test', fetchOpts = {}) {
       if (!ok) {
         const msg = body.error_message || body.error?.message || status || `HTTP ${res.status}`;
         recordError(api, { surface, errorCode: status || `HTTP_${res.status}`, message: msg });
-        return { ok: false, latencyMs, status: status || res.status, error: msg, body };
+        const reason = classifyMapsFailure({
+          httpStatus: res.status,
+          googleStatus: status,
+          errorObj: body.error,
+          message: msg,
+        });
+        return { ok: false, latencyMs, status: status || res.status, error: msg, reason, body };
       }
       return { ok: true, latencyMs, status: status || 'OK', body };
     }
@@ -345,7 +374,8 @@ async function callGoogle(api, url, surface = 'admin-test', fetchOpts = {}) {
     // the only signal available server-side.
     if (!res.ok) {
       recordError(api, { surface, errorCode: `HTTP_${res.status}`, message: `HTTP ${res.status}` });
-      return { ok: false, latencyMs, status: res.status, error: `HTTP ${res.status}` };
+      const reason = classifyMapsFailure({ httpStatus: res.status });
+      return { ok: false, latencyMs, status: res.status, error: `HTTP ${res.status}`, reason };
     }
     return { ok: true, latencyMs, status: res.status };
   } catch (e) {
@@ -408,7 +438,7 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
   }
   const enc = encodeURIComponent;
   // Never leak the raw Google response body back to the client.
-  const slim = (c) => ({ ok: c.ok, latencyMs: c.latencyMs, status: c.status, error: c.error });
+  const slim = (c) => ({ ok: c.ok, latencyMs: c.latencyMs, status: c.status, error: c.error, reason: c.reason });
   const checks = {};
 
   // 1) Places Autocomplete (New) — drives the address search box. Keep a

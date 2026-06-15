@@ -47,7 +47,7 @@ const CLOUD_CONSOLE_CREDENTIALS_URL =
 // place-details checks use the Places API (New); the rest still use legacy APIs.
 const CHECK_META: Record<
   string,
-  { label: string; docUrl: string; docLabel: string }
+  { label: string; docUrl: string; docLabel: string; note?: string }
 > = {
   autocomplete: {
     label: 'Places Autocomplete (New)',
@@ -73,8 +73,32 @@ const CHECK_META: Record<
     label: 'Maps JavaScript API',
     docUrl: 'https://console.cloud.google.com/apis/library/maps-backend.googleapis.com',
     docLabel: 'Enable the Maps JavaScript API →',
+    note:
+      'Key, HTTP-referrer and IP restrictions only surface fully when the library loads in the browser — this server-side check can pass even when a restriction is still blocking real page traffic.',
   },
 };
+
+const RESTRICTIONS_LINK_LABEL = 'Check API key restrictions →';
+
+// Decide whether a failed check looks like an API-key restriction / permission
+// problem (HTTP-referrer, IP, or API restriction, or a denied request) rather
+// than a disabled API. The server's `reason` classification is authoritative
+// when present; otherwise fall back to the HTTP status and error text so the
+// hint still appears for older payloads.
+function isRestrictionFailure(c: CheckResult): boolean {
+  if (c.ok) return false;
+  if (c.reason === 'restriction') return true;
+  if (c.reason === 'disabled') return false;
+  const status = String(c.status ?? '');
+  if (status === '401' || status === '403') return true;
+  if (/REQUEST_DENIED|PERMISSION_DENIED/i.test(status)) return true;
+  return (
+    !!c.error &&
+    /referer|referrer|restrict|blocked|not authorized|forbidden|permission|denied|invalid.*key|key.*invalid/i.test(
+      c.error,
+    )
+  );
+}
 
 // Fallback for an unrecognised check key: humanise the raw name so the panel
 // still renders sensibly if the server adds a new check before the UI knows it.
@@ -124,6 +148,7 @@ interface CheckResult {
   latencyMs?: number;
   status?: string | number;
   error?: string;
+  reason?: 'disabled' | 'restriction' | string;
 }
 
 interface TestResponse {
@@ -345,35 +370,72 @@ export function GoogleMapsPage() {
               <Stack spacing={0.75}>
                 {Object.entries(testResult.checks).map(([api, c]) => {
                   const meta = CHECK_META[api];
+                  const restriction = isRestrictionFailure(c);
+                  // Show the "Enable the … API" link unless the server is
+                  // certain this is a key restriction (then the enable link
+                  // would just mislead). A restriction-style failure with no
+                  // definitive reason shows both links so the admin can check
+                  // either cause.
+                  const showEnableLink = !c.ok && !!meta && c.reason !== 'restriction';
+                  const showRestrictionsLink = restriction;
+                  const note = meta?.note;
                   return (
-                    <Stack
-                      key={api}
-                      direction="row"
-                      spacing={1}
-                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                    >
-                      {c.ok ? (
-                        <CheckCircleOutlinedIcon color="success" fontSize="small" />
-                      ) : (
-                        <ErrorOutlinedIcon color="error" fontSize="small" />
-                      )}
-                      <Typography variant="body2" sx={{ minWidth: 180 }}>
-                        {meta ? meta.label : humaniseCheckKey(api)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {c.ok
-                          ? `${c.latencyMs ?? '?'} ms`
-                          : c.error || `status ${c.status ?? 'error'}`}
-                      </Typography>
-                      {!c.ok && meta && (
-                        <Link
-                          href={meta.docUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          variant="caption"
+                    <Stack key={api} spacing={0.25}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        {c.ok ? (
+                          <CheckCircleOutlinedIcon color="success" fontSize="small" />
+                        ) : (
+                          <ErrorOutlinedIcon color="error" fontSize="small" />
+                        )}
+                        <Typography variant="body2" sx={{ minWidth: 180 }}>
+                          {meta ? meta.label : humaniseCheckKey(api)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {c.ok
+                            ? `${c.latencyMs ?? '?'} ms`
+                            : c.error || `status ${c.status ?? 'error'}`}
+                        </Typography>
+                      </Stack>
+                      {(showEnableLink || showRestrictionsLink) && (
+                        <Stack
+                          direction="row"
+                          spacing={2}
+                          sx={{ pl: 3.5, alignItems: 'center', flexWrap: 'wrap' }}
                         >
-                          {meta.docLabel}
-                        </Link>
+                          {showEnableLink && meta && (
+                            <Link
+                              href={meta.docUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="caption"
+                            >
+                              {meta.docLabel}
+                            </Link>
+                          )}
+                          {showRestrictionsLink && (
+                            <Link
+                              href={CLOUD_CONSOLE_CREDENTIALS_URL}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="caption"
+                            >
+                              {RESTRICTIONS_LINK_LABEL}
+                            </Link>
+                          )}
+                        </Stack>
+                      )}
+                      {note && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ pl: 3.5, display: 'block' }}
+                        >
+                          {note}
+                        </Typography>
                       )}
                     </Stack>
                   );
