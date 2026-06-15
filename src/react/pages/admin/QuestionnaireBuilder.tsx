@@ -28,6 +28,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
+import { QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY } from '../../constants/localStorageKeys';
 import type {
   VisitQuestionScope,
   VisitQuestionType,
@@ -284,7 +285,10 @@ export function QuestionnaireBuilder() {
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [loadErr, setLoadErr] = useState('');
   const [edit, setEdit] = useState<EditState>({ open: false, question: null });
-  const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>('all');
+  const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>(() => {
+    const stored = localStorage.getItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY);
+    return (stored === 'design' || stored === 'survey') ? stored : 'all';
+  });
 
   const fetchAll = useCallback(async () => {
     try {
@@ -394,7 +398,12 @@ export function QuestionnaireBuilder() {
           <ToggleButtonGroup
             value={visitTypeFilter}
             exclusive
-            onChange={(_e, val) => { if (val !== null) setVisitTypeFilter(val as VisitTypeFilter); }}
+            onChange={(_e, val) => {
+              if (val !== null) {
+                setVisitTypeFilter(val as VisitTypeFilter);
+                localStorage.setItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY, val as VisitTypeFilter);
+              }
+            }}
             size="small"
             aria-label="Visit type filter"
           >

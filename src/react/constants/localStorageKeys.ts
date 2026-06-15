@@ -48,6 +48,10 @@ export const CONTACTS_LAST_SYNC_META_KEY = 'customersLastSyncAt';
 // ── Trades page ───────────────────────────────────────────────────────────────
 export const TRADES_TYPE_FILTER_KEY = 'tradesTypeFilter';
 
+// ── Questionnaire builder ─────────────────────────────────────────────────────
+/** Active visit-type filter in the Questionnaire subtab (all | design | survey). */
+export const QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY = 'questionnaireVisitTypeFilter';
+
 // ── Action handlers page ──────────────────────────────────────────────────────
 export const CAH_ORPHANED_DISMISSED_KEY = 'cah_orphaned_dismissed_count';
 export const CAH_CONFLICT_DISMISSED_KEY = 'cah_conflict_dismissed_key';
