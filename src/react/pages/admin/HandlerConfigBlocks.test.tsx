@@ -26,8 +26,8 @@ describe('ScheduleVisitConfig', () => {
     const { container } = render(<ScheduleVisitConfig />);
     const durInput = getDurationInput(container);
     expect(durInput.value).toBe('60');
-    // Default visitType is 'survey' — its label should be displayed in the combobox
-    expect(screen.getByRole('combobox')).toHaveTextContent('Survey');
+    // Default visitType is 'design' — its label should be displayed in the combobox
+    expect(screen.getByRole('combobox')).toHaveTextContent('Design visit');
   });
 
   it('renders with supplied initial props', () => {
@@ -186,7 +186,7 @@ describe('StartDesignVisitConfig', () => {
         defaultDurationMin={120}
         termsAndConditions="My terms"
         intermediateLeadStatus="ls_a"
-        submittedLeadStatus="sub_x"
+        submittedLeadStatus="ls_b"
         leadStatuses={LEAD_STATUSES}
       />,
     );
@@ -195,7 +195,7 @@ describe('StartDesignVisitConfig', () => {
     // Initial status selections should be visible in the comboboxes
     const combos = screen.getAllByRole('combobox');
     expect(combos[0]).toHaveTextContent('Status A');
-    expect(combos[1]).toHaveTextContent('sub_x');
+    expect(combos[1]).toHaveTextContent('Status B');
   });
 
   it('calls onChange with correct shape when duration changes', () => {
