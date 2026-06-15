@@ -825,6 +825,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           doorStyles={doorStyles}
           termsText={termsText}
           termsVersionNumber={termsVersionNumber}
+          visitQuestions={visitQuestions}
+          answers={answers}
+          roomQuestions={roomQuestions}
         />
       )}
     </VisitWizardShell>

@@ -4,6 +4,12 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import { type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import { type RoomData } from './DesignVisitRoomsStep';
+import {
+  isAnswered,
+  type AnswerMap,
+  type AnswerValue,
+  type VisitQuestion,
+} from './QuestionnaireRenderer';
 import { formatAddress, isAddressEmpty } from '../../../shared/address';
 
 export interface DesignVisitStep3Props {
@@ -14,6 +20,33 @@ export interface DesignVisitStep3Props {
   doorStyles: CatalogueItem[];
   termsText: string;
   termsVersionNumber?: number | null;
+  /** Whole-visit questionnaire questions (scope='visit'). */
+  visitQuestions?: VisitQuestion[];
+  /** Whole-visit answers keyed by question id. */
+  answers?: AnswerMap;
+  /** Per-room questionnaire questions (scope='room'). */
+  roomQuestions?: VisitQuestion[];
+}
+
+/** Formats a captured answer value for read-only display. */
+function formatAnswer(value: AnswerValue): string {
+  if (value === true) return 'Yes';
+  if (value === false) return 'No';
+  if (typeof value === 'number') return String(value);
+  return String(value);
+}
+
+/** Renders answered questions from a question set as read-only review rows. */
+function AnswerRows({ questions, answers }: { questions: VisitQuestion[]; answers: AnswerMap }) {
+  const answered = questions.filter(q => isAnswered(answers[q.id] ?? null));
+  if (!answered.length) return null;
+  return (
+    <>
+      {answered.map(q => (
+        <ReviewRow key={q.id} label={q.label} value={formatAnswer(answers[q.id] ?? null)} />
+      ))}
+    </>
+  );
 }
 
 function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -66,6 +99,9 @@ export function DesignVisitStep3({
   doorStyles,
   termsText,
   termsVersionNumber,
+  visitQuestions = [],
+  answers = {},
+  roomQuestions = [],
 }: DesignVisitStep3Props) {
   const handleName =
     handles.find(h => String(h.id) === String(step1Data.handleId))?.name || '—';
@@ -98,40 +134,55 @@ export function DesignVisitStep3({
         {furnitureRanges.length > 0 && <ReviewRow label="Furniture range" value={furnitureName} />}
       </ReviewSection>
 
+      {visitQuestions.some(q => isAnswered(answers[q.id] ?? null)) && (
+        <ReviewSection title="Questionnaire">
+          <AnswerRows questions={visitQuestions} answers={answers} />
+        </ReviewSection>
+      )}
+
       <ReviewSection title="Room breakdown">
-        {roomRowData.map((r, idx) => (
-          <Box
-            key={idx}
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: '.88rem',
-              py: '5px',
-              borderBottom: '1px solid var(--neutral-100)',
-            }}
-          >
-            <Box>
-              <Typography
-                component="span"
-                sx={{ fontWeight: 700, fontSize: 'inherit', color: 'var(--neutral-800)' }}
+        {roomRowData.map((r, idx) => {
+          const roomAnswers = r.answers || {};
+          const hasRoomAnswers = roomQuestions.some(q => isAnswered(roomAnswers[q.id] ?? null));
+          return (
+            <Box key={idx} sx={{ borderBottom: '1px solid var(--neutral-100)' }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '.88rem',
+                  py: '5px',
+                }}
               >
-                {r.roomName}
-              </Typography>{' '}
-              <Typography
-                component="span"
-                sx={{ fontWeight: 400, color: 'var(--neutral-400)', fontSize: 'inherit' }}
-              >
-                ({r.dsName}, {r.unitCount} unit{r.unitCount !== 1 ? 's' : ''})
-              </Typography>
+                <Box>
+                  <Typography
+                    component="span"
+                    sx={{ fontWeight: 700, fontSize: 'inherit', color: 'var(--neutral-800)' }}
+                  >
+                    {r.roomName}
+                  </Typography>{' '}
+                  <Typography
+                    component="span"
+                    sx={{ fontWeight: 400, color: 'var(--neutral-400)', fontSize: 'inherit' }}
+                  >
+                    ({r.dsName}, {r.unitCount} unit{r.unitCount !== 1 ? 's' : ''})
+                  </Typography>
+                </Box>
+                <Typography
+                  component="span"
+                  sx={{ fontSize: 'inherit', color: 'var(--neutral-800)', ml: 2 }}
+                >
+                  £{(r.tot / 100).toFixed(2)}
+                </Typography>
+              </Box>
+              {hasRoomAnswers && (
+                <Box sx={{ pl: 2, pb: '6px' }}>
+                  <AnswerRows questions={roomQuestions} answers={roomAnswers} />
+                </Box>
+              )}
             </Box>
-            <Typography
-              component="span"
-              sx={{ fontSize: 'inherit', color: 'var(--neutral-800)', ml: 2 }}
-            >
-              £{(r.tot / 100).toFixed(2)}
-            </Typography>
-          </Box>
-        ))}
+          );
+        })}
         <Typography
           sx={{
             fontSize: '1rem',
