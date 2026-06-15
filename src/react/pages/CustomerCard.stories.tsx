@@ -11,7 +11,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          "The **CustomerCard** component shown on the Customers page. Cards display contact details, pipeline stage pills, and invoice/customer-number chips. When a card action handler is configured for the contact's primary stage/lead-status, an **action strip** appears at the bottom — tinted with the stage colour. A **\"Continue designing\"** strip appears when the contact has a saved draft design visit. Clicking the strip opens the handler modal; clicking the rest of the card navigates to the customer detail page.",
+          "The **CustomerCard** component shown on the Customers page. Cards display contact details, lead status, and invoice/customer-number chips. When a card action handler is configured for the contact's primary stage/lead-status, an **action strip** appears at the bottom — tinted with the stage colour. A **\"Continue designing\"** strip appears when the contact has a saved draft design visit. Clicking the strip opens the handler modal; clicking the rest of the card navigates to the customer detail page.",
       },
     },
   },
@@ -55,28 +55,6 @@ interface DemoCardProps {
   labelOnly?: boolean;
 }
 
-function StagePill({ stageKey, label }: { stageKey: string; label: string }) {
-  const sc = STAGE_COLORS[stageKey] || STAGE_COLORS.sales;
-  return (
-    <Box
-      component="span"
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        fontSize: '0.72rem',
-        fontWeight: 700,
-        px: '8px',
-        py: '2px',
-        borderRadius: '999px',
-        bgcolor: sc.light,
-        color: sc.text,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
-    </Box>
-  );
-}
 
 function DemoCustomerCard({
   name,
@@ -135,14 +113,6 @@ function DemoCustomerCard({
             ) : null}
           </Box>
         </Box>
-
-        <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap' }}>
-          {rooms.map((r, idx) => {
-            const lbl = DEFAULT_STAGE_LABELS[r.stageKey] || r.stageKey;
-            const pillText = multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
-            return <StagePill key={idx} stageKey={r.stageKey} label={pillText} />;
-          })}
-        </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
           {email ? <Chip label={email} size="small" variant="outlined" /> : null}

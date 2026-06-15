@@ -559,9 +559,8 @@ function CustomerCardSkeleton() {
             </Stack>
           </Box>
 
-          {/* Right column — stage pill + lead status chip */}
+          {/* Right column — lead status chip */}
           <Box sx={{ flex: '0 1 auto', display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
-            <Skeleton variant="rounded" width={80} height={22} />
             <Skeleton variant="rounded" width={64} height={20} />
           </Box>
 
@@ -825,27 +824,10 @@ function CustomerCard({
             </Stack>
           </Box>
 
-          {/* Right column — stage pills, lead status, QB badge */}
+          {/* Right column — lead status, QB badge */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
-            <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', justifyContent: { md: 'flex-end' } }}>
-              {effectiveRooms.map((r, idx) => {
-                const sk = r.stageKey || 'sales';
-                const lbl =
-                  workflow?.stages?.[sk]?.label || DEFAULT_STAGE_LABELS[sk] || sk;
-                const pillText =
-                  multiRoom && r.room && r.room !== 'Main' ? `${lbl} — ${r.room}` : lbl;
-                return (
-                  <StagePill
-                    key={`${sk}-${r.room || 'Main'}-${idx}`}
-                    stageKey={sk}
-                    label={pillText}
-                    archived={(r.roomStatus || 'active') !== 'active'}
-                  />
-                );
-              })}
-            </Stack>
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
             {depositInvoice && (
               <DepositInvoiceBadge
