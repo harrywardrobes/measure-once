@@ -301,6 +301,8 @@
     "test:browser-launch-pattern": "node scripts/check-browser-launch-pattern.mjs",
     "test:story-count-sync": "node scripts/check-story-count-sync.mjs",
     "test:offline-capability-sync": "node scripts/check-offline-capability-sync.mjs",
+    "test:sw-closures": "node scripts/check-sw-urlpattern-closures.mjs",
+    "test:sw-closures-fixtures": "node test/sw-closures/run.js",
     "test:lead-status-keys": "node scripts/check-lead-status-keys.mjs"
   },
   "dependencies": {

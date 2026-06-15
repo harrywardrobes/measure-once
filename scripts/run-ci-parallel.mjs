@@ -91,6 +91,8 @@ const STATIC_SUITES = [
   'test:browser-launch-pattern',
   'test:story-count-sync',
   'test:offline-capability-sync',
+  'test:sw-closures',
+  'test:sw-closures-fixtures',
 ];
 
 /**
@@ -125,9 +127,12 @@ const DB_SUITES = [
   'test:photo-approval-notification:ci',
   'test:photo-reviews:ci',
   'test:start-design-visit:ci',
+  'test:start-survey-visit:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',
   'test:visit-edit-cancel:ci',
+  'test:catalog-migration:ci',
+  'test:questionnaire:ci',
   'test:dv-catalogue-admin:ci',
   'test:dv-catalogue-image-upload:ci',
   'test:dv-catalogue-reorder:ci',

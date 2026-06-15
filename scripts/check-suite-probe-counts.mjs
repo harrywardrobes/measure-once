@@ -155,6 +155,8 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:browser-launch-pattern',       'static-lint — binary browser-launch pattern check'],
   ['test:story-count-sync',             'static-lint — binary story-count drift check'],
   ['test:offline-capability-sync',      'static-lint — binary offline capability sync check'],
+  ['test:sw-closures',                  'static-lint — binary SW urlPattern closure scan'],
+  ['test:sw-closures-fixtures',         'meta-test — fixture-based self-test for check-sw-urlpattern-closures.mjs'],
   ['test:icon-lint',                    'static-lint — binary two-pass icon import check'],
   ['test:mount-ids',                    'static-lint — binary four-pass mount-id check'],
   ['test:inline-styles',                'static-lint — binary inline-style scan'],

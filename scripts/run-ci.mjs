@@ -67,6 +67,8 @@ const STEPS = [
   'test:browser-launch-pattern',
   'test:story-count-sync',
   'test:offline-capability-sync',
+  'test:sw-closures',
+  'test:sw-closures-fixtures',
   'test:migration-renames:ci',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
