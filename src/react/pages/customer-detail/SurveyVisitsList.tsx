@@ -336,6 +336,7 @@ interface ServerVisitCardProps {
   pendingEdit: PendingSurveyVisitEntry | undefined;
   pendingRefund: PendingSurveyVisitEntry | undefined;
   isAdmin: boolean;
+  resendBusy: boolean;
   onEdit: (id: number) => void;
   onRevision: (id: number) => void;
   onDelete: (id: number) => void;
@@ -343,7 +344,7 @@ interface ServerVisitCardProps {
 }
 
 /** Card for a server-synced survey visit row, with optional queued-edit badge and admin actions. */
-function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onEdit, onRevision, onDelete, onResendSignoff }: ServerVisitCardProps) {
+function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, resendBusy, onEdit, onRevision, onDelete, onResendSignoff }: ServerVisitCardProps) {
   const when = fmtDesignVisitWhen(visit.visit_date || visit.created_at);
   const totalGbp = fmtGbpFromPence(Number(visit.estimate_total_pence) || 0);
   const canEdit       = visit.status === 'submitted' || visit.status === 'revision_requested' || visit.status === 'draft';
@@ -403,8 +404,8 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onE
             </button>
           )}
           {canResend && (
-            <button style={sxSecondaryBtn} onClick={() => onResendSignoff(visit.id)}>
-              Resend sign-off email
+            <button style={sxSecondaryBtn} disabled={resendBusy} onClick={() => onResendSignoff(visit.id)}>
+              {resendBusy ? 'Sending…' : 'Resend sign-off email'}
             </button>
           )}
           {isAdmin && (
@@ -635,6 +636,7 @@ interface Props {
  */
 export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, serverError, fromCache, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
+  const showToast = useToast();
 
   const pendingEntries = useOfflineSurveyVisitEntries(contactId);
   const pendingRefunds = pendingEntries.filter(e => e.isRefund);
@@ -651,6 +653,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [resendBusyId, setResendBusyId] = useState<number | null>(null);
 
   // Refetch when a queued entry drains so the server card replaces the pending card.
   const prevIdsRef = useRef<Set<number>>(new Set());
@@ -701,6 +704,8 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
 
   const handleResendSignoff = useCallback(async (id: number) => {
     if (!isAdmin) return;
+    setResendBusyId(id);
+    setActionError(null);
     try {
       const r = await fetch(`/api/survey-visits/${id}/resend-signoff`, { method: 'POST' });
       if (!r.ok) {
@@ -709,15 +714,21 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
       }
       const data = await r.json() as { emailSent?: boolean };
       if (data.emailSent === false) {
-        setActionError('Token refreshed but the email could not be sent — check your email settings.');
+        setActionError('Sign-off link refreshed, but no email was sent — email is not configured in your settings.');
+        onRefresh?.();
       } else {
+        const email = serverVisits.find(v => v.id === id)?.contact_email;
+        const dest = email ? ` to ${email}` : '';
+        showToast(`Sign-off email resent${dest}.`);
         onRefresh?.();
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'error';
       setActionError(`Could not resend sign-off email: ${msg}`);
+    } finally {
+      setResendBusyId(null);
     }
-  }, [isAdmin, onRefresh]);
+  }, [isAdmin, onRefresh, serverVisits, showToast]);
 
   const openWizardForEdit = useCallback(async (visitId: number) => {
     if (editBusy) return;
@@ -849,6 +860,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
               pendingEdit={pendingEditByVisitId.get(v.id)}
               pendingRefund={pendingRefundByVisitId.get(v.id)}
               isAdmin={isAdmin}
+              resendBusy={resendBusyId === v.id}
               onEdit={openWizardForEdit}
               onRevision={handleRevision}
               onDelete={handleDelete}
