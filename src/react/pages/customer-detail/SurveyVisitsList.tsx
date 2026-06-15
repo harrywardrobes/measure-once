@@ -442,13 +442,76 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, onE
   );
 }
 
+/** A single refund-banner row with its own Retry / Discard pair. */
+function RefundBannerRow({ entry, showIndex, total }: { entry: PendingSurveyVisitEntry; showIndex: number; total: number }) {
+  const [busy, setBusy] = useState(false);
+  const isFailed = entry.status === 'failed';
+
+  const handleRetry = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await engine.retryEntry(entry.id);
+    } catch {
+      /* best-effort — the periodic flush will pick it up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, entry.id]);
+
+  const handleDiscard = useCallback(() => {
+    if (busy) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await mod.removeEntry(entry.id);
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      "Discard this queued refund request? The request will be permanently removed — you'll need to submit it again manually if still needed.",
+      doDiscard,
+    );
+  }, [busy, entry.id]);
+
+  return (
+    <div
+      data-testid="sv-refund-banner-row"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        background: 'var(--paper)',
+        borderTop: showIndex > 0 ? '1px solid var(--stone)' : undefined,
+        padding: total > 1 ? '6px 0' : '0',
+      }}
+    >
+      <SyncStatePill status={entry.status} testId="sv-refund-sync-pill" />
+      <span style={{ fontSize: '0.8rem', color: 'var(--ink-3)', flex: 1, minWidth: 0 }}>
+        {isFailed
+          ? `Refund request ${total > 1 ? `#${showIndex + 1} ` : ''}couldn't sync${entry.lastError ? ` — ${entry.lastError}` : ''}.`
+          : `Refund request${total > 1 ? ` #${showIndex + 1}` : ''} pending sync — it'll be sent when you're back online.`}
+      </span>
+      {isFailed && (
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button style={sxSecondaryBtn} disabled={busy} onClick={handleRetry}>Retry</button>
+          <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }} disabled={busy} onClick={handleDiscard}>Discard</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * Banner shown at the top of the survey visits section when a refund request
- * is sitting in the offline queue waiting to sync.
+ * Banner shown at the top of the survey visits section when one or more refund
+ * requests are sitting in the offline queue waiting to sync.
  *
- * When the entry has permanently failed (retry budget exhausted) the banner
- * renders inline Retry and Discard buttons so staff can recover without
- * leaving the page.
+ * - **Single entry:** collapsed single-row banner (existing behaviour).
+ * - **2+ entries:** each refund gets its own inline row with its own
+ *   Retry / Discard pair so staff can act on them individually.
  */
 function PendingRefundBanner({ entries }: { entries: PendingSurveyVisitEntry[] }) {
   const [busy, setBusy] = useState(false);
@@ -494,6 +557,24 @@ function PendingRefundBanner({ entries }: { entries: PendingSurveyVisitEntry[] }
   const status = anyFailed ? 'failed' : anySyncing ? 'syncing' : 'pending';
   const firstError = entries.find(e => e.lastError)?.lastError;
 
+  /* 2+ entries — render one row per refund so each can be retried/discarded individually */
+  if (entries.length > 1) {
+    return (
+      <div
+        data-testid="sv-refund-pending-banner"
+        style={{
+          background: 'var(--paper)', border: '1px dashed var(--stone)',
+          borderRadius: 'var(--radius-lg)', padding: '8px 12px', marginBottom: 6,
+        }}
+      >
+        {entries.map((e, i) => (
+          <RefundBannerRow key={e.id} entry={e} showIndex={i} total={entries.length} />
+        ))}
+      </div>
+    );
+  }
+
+  /* Single entry — original collapsed banner */
   return (
     <div
       data-testid="sv-refund-pending-banner"
