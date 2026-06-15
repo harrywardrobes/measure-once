@@ -33,9 +33,6 @@ export const CUSTOMERS_SCROLL_KEY = 'customers_scroll';
 /** sessionStorage – viewer-privilege banner dismissed for this session. */
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 
-/** localStorage – whether "Priority first" (pin no-status contacts to top) is active. */
-export const CUSTOMERS_PRIORITY_FIRST = 'customers_priorityFirst';
-
 // ── Projects page ─────────────────────────────────────────────────────────────
 export const PROJECTS_STALENESS_KEY = 'projectsStalenessActive';
 export const PROJECTS_SUBSTAGE_KEY  = 'projectsHiddenSubstages';
