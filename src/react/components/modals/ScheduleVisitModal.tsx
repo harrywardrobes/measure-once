@@ -38,7 +38,8 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
-import { POST, calendarErrorMessage } from '../../utils/api';
+import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
@@ -284,6 +285,9 @@ export function ScheduleVisitModal({
       }
     } catch (e) {
       setError(calendarErrorMessage(e));
+      if (isGoogleAuthError(e)) {
+        openConnectModal('google', 'Google Calendar is disconnected — reconnect it to schedule visits.');
+      }
     } finally {
       setSubmitting(false);
     }

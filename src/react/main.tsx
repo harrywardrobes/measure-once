@@ -252,12 +252,13 @@ function initCardActionModalsHost() {
 }
 
 function ConnectServicesModalHost() {
-  const { open, highlightService, closeConnectModal } = useConnectModal();
+  const { open, highlightService, message, closeConnectModal } = useConnectModal();
   return (
     <ConnectServicesModal
       open={open}
       onClose={closeConnectModal}
       highlightService={highlightService}
+      message={message}
     />
   );
 }

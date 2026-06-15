@@ -81,6 +81,32 @@ export const HubSpotDisconnected: Story = {
   render: (args) => <Controlled {...args} highlightService="hubspot" />,
 };
 
+/** Modal with an action-failure context message — opened because a specific
+ *  action failed due to a disconnected service. The Alert above the rows
+ *  explains why the modal appeared. */
+export const WithContextMessage: Story = {
+  name: 'With context message (Google)',
+  render: (args) => (
+    <Controlled
+      {...args}
+      highlightService="google"
+      message="Google Calendar is disconnected — reconnect it to schedule visits."
+    />
+  ),
+};
+
+/** QuickBooks context message — opened when a QB invoice action fails. */
+export const WithQuickBooksMessage: Story = {
+  name: 'With context message (QuickBooks)',
+  render: (args) => (
+    <Controlled
+      {...args}
+      highlightService="quickbooks"
+      message="QuickBooks is disconnected — reconnect it to save or send invoices."
+    />
+  ),
+};
+
 /** Modal initially closed — click "Open modal" to trigger it. */
 export const InitiallyClosed: Story = {
   name: 'Initially closed',

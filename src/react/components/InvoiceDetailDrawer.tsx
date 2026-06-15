@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { INVOICE_DRAFT_KEY as DRAFT_KEY } from '../constants/localStorageKeys';
 import { useConnectionToast } from '../context/ConnectionToastContext';
+import { ApiError } from '../utils/api';
 import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
 import { nowDate } from '../utils/dateDefaults';
 import {
@@ -230,7 +231,7 @@ export function InvoiceDetailDrawer({
     setSaving(true);
     setSaveMsg(null);
     try {
-      const r = await fetch(`/api/quickbooks/invoice/${inv.id}`, {
+      const res = await fetch(`/api/quickbooks/invoice/${inv.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -239,8 +240,15 @@ export function InvoiceDetailDrawer({
           memo:      edit.memo  || null,
           email:     edit.email || null,
         }),
-      }).then(res => res.json());
-      if (r.error) throw new Error(r.error);
+      });
+      const r = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (!res.ok || (r as { error?: string }).error) {
+        throw new ApiError(
+          (r as { error?: string }).error || `HTTP ${res.status}`,
+          (r as { code?: string }).code,
+          res.status,
+        );
+      }
       // Optimistic patch so the UI responds immediately while the re-fetch is in flight.
       setInv(prev => prev ? {
         ...prev,
@@ -269,7 +277,7 @@ export function InvoiceDetailDrawer({
         .then(fresh => { if (!fresh.error) setInv(prev => prev?.id === savedId ? fresh : prev); })
         .catch(() => { /* non-fatal — optimistic patch is already applied */ });
     } catch (e: unknown) {
-      notifyApiError('quickbooks', e);
+      notifyApiError('quickbooks', e, 'QuickBooks is disconnected — reconnect it to save or send invoices.');
       setSaveMsg({ text: (e as Error).message || 'Save failed', ok: false });
     } finally {
       setSaving(false);
@@ -281,15 +289,22 @@ export function InvoiceDetailDrawer({
     setSending(true);
     setSaveMsg(null);
     try {
-      const r = await fetch(`/api/quickbooks/invoice/${inv.id}/send`, {
+      const res = await fetch(`/api/quickbooks/invoice/${inv.id}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: edit.email || null }),
-      }).then(res => res.json());
-      if (r.error) throw new Error(r.error);
+      });
+      const r = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (!res.ok || (r as { error?: string }).error) {
+        throw new ApiError(
+          (r as { error?: string }).error || `HTTP ${res.status}`,
+          (r as { code?: string }).code,
+          res.status,
+        );
+      }
       setSaveMsg({ text: `Sent to ${edit.email || inv.email}`, ok: true });
     } catch (e: unknown) {
-      notifyApiError('quickbooks', e);
+      notifyApiError('quickbooks', e, 'QuickBooks is disconnected — reconnect it to save or send invoices.');
       setSaveMsg({ text: (e as Error).message || 'Send failed', ok: false });
     } finally {
       setSending(false);

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useReducer } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -23,6 +24,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   highlightService?: ConnectionService;
+  /** When provided, renders an explanatory Alert above the service rows. Use
+   *  this to give the user context about why the modal was opened — e.g.
+   *  "Google Calendar is disconnected — reconnect it to schedule visits." */
+  message?: string;
 }
 
 // ── Status chip ────────────────────────────────────────────────────────────────
@@ -175,7 +180,7 @@ function disconnectingReducer(
   return { ...state, [action.service]: action.inFlight };
 }
 
-export function ConnectServicesModal({ open, onClose, highlightService }: Props) {
+export function ConnectServicesModal({ open, onClose, highlightService, message }: Props) {
   const serviceStatuses = useServiceStatuses();
   const { isAdmin } = usePrivilege();
   const { notifyDisconnected, notifyReconnected } = useConnectionToast();
@@ -243,6 +248,11 @@ export function ConnectServicesModal({ open, onClose, highlightService }: Props)
       </DialogTitle>
 
       <DialogContent sx={{ pt: 0.5 }}>
+        {message && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {message}
+          </Alert>
+        )}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           These integrations power the app&apos;s core features. Connect any that show as
           disconnected to restore full functionality.

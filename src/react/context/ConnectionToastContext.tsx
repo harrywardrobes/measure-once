@@ -147,7 +147,7 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
   }
 }
 
-function _notifyApiError(service: ConnectionService, error: unknown): void {
+function _notifyApiError(service: ConnectionService, error: unknown, connectMessage?: string): void {
   const code = (error as { code?: string }).code;
   const status = (error as { status?: number }).status;
   const isRateLimit =
@@ -158,11 +158,16 @@ function _notifyApiError(service: ConnectionService, error: unknown): void {
     code === 'HUBSPOT_AUTH'        ||
     code === 'HUBSPOT_UNAVAILABLE' ||
     code === 'DB_ERROR'            ||
+    code === 'QB_ERROR'            ||
+    code === 'QB_AUTH'             ||
     (typeof status === 'number' && status >= 500);
   if (isRateLimit) {
     _fireWarning(service);
   } else if (isConnectionIssue) {
     _fire(service, 'disconnected');
+    if (connectMessage) {
+      openConnectModal(service, connectMessage);
+    }
   }
 }
 
@@ -192,6 +197,7 @@ const _checkServicesOnMount: () => Promise<void> = _createDedupedCheck(
 
 let _modalOpen = false;
 let _modalHighlight: ConnectionService | undefined;
+let _modalMessage: string | undefined;
 const _modalCallbacks = new Set<() => void>();
 
 function _notifyModalAll(): void {
@@ -199,12 +205,14 @@ function _notifyModalAll(): void {
 }
 
 /**
- * Open the "Connect your services" modal, optionally pre-highlighting a service.
+ * Open the "Connect your services" modal, optionally pre-highlighting a service
+ * and displaying an explanatory message above the service rows.
  * This is the manual (always-allowed) path — no session-flag check.
  */
-export function openConnectModal(service?: ConnectionService): void {
+export function openConnectModal(service?: ConnectionService, message?: string): void {
   _modalOpen = true;
   _modalHighlight = service;
+  _modalMessage = message;
   _notifyModalAll();
 }
 
@@ -214,6 +222,7 @@ export function openConnectModal(service?: ConnectionService): void {
 export function closeConnectModal(): void {
   _modalOpen = false;
   _modalHighlight = undefined;
+  _modalMessage = undefined;
   _notifyModalAll();
 }
 
@@ -225,8 +234,10 @@ interface ConnectionToastContextValue {
   checkServicesOnMount: () => Promise<void>;
   /** Update service status to 'error' (red) when an API call fails with a
    *  5xx / network error. Pass the raw caught error — the function decides
-   *  whether it is connection-related. Rate-limit errors (429) map to 'warning'. */
-  notifyApiError: (service: ConnectionService, error: unknown) => void;
+   *  whether it is connection-related. Rate-limit errors (429) map to 'warning'.
+   *  Pass an optional `connectMessage` to open the "Connect your services" modal
+   *  with an explanatory message when the error is a connection-level failure. */
+  notifyApiError: (service: ConnectionService, error: unknown, connectMessage?: string) => void;
   /** Update service status to 'warning' (amber) — for partial failures such as
    *  rate-limiting where the service is reachable but degraded. */
   notifyApiWarning: (service: ConnectionService) => void;
@@ -453,18 +464,20 @@ export function useOnlineStatus(): boolean {
  * Returns the current state of the "Connect your services" modal, and helpers
  * to open/close it. Re-renders when the modal state changes.
  *
- * `openConnectModal(service?)` — opens the modal, optionally pre-highlighting
- * the named service. This is the manual path and always works regardless of
+ * `openConnectModal(service?, message?)` — opens the modal, optionally
+ * pre-highlighting the named service and showing an explanatory message above
+ * the service rows. This is the manual path and always works regardless of
  * the per-session auto-open flag.
  *
  * `closeConnectModal()` — closes the modal.
  *
  * @example
- * const { open, highlightService, openConnectModal, closeConnectModal } = useConnectModal();
+ * const { open, highlightService, message, openConnectModal, closeConnectModal } = useConnectModal();
  */
 export function useConnectModal(): {
   open: boolean;
   highlightService: ConnectionService | undefined;
+  message: string | undefined;
   openConnectModal: typeof openConnectModal;
   closeConnectModal: typeof closeConnectModal;
 } {
@@ -479,6 +492,7 @@ export function useConnectModal(): {
   return {
     open: _modalOpen,
     highlightService: _modalHighlight,
+    message: _modalMessage,
     openConnectModal,
     closeConnectModal,
   };

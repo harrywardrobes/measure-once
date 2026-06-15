@@ -19,6 +19,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
@@ -480,6 +481,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     } catch (e) {
       if (isGoogleAuthError(e)) {
         setActionError('GOOGLE_AUTH');
+        openConnectModal('google', 'Google is disconnected — reconnect it to send emails from your Gmail account.');
       } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
         setActionError(LEAD_STATUS_REMOVED_MESSAGE);
       } else {
