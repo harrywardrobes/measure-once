@@ -48,6 +48,7 @@ interface GenericFields {
 
 interface DraftPayload extends FormData {
   savedPhotoKeys?: string[];
+  genericFields?: GenericFields;
 }
 
 interface UploadedPhoto {
@@ -96,10 +97,11 @@ function loadDraft(token: string): Partial<DraftPayload> {
   return {};
 }
 
-function saveDraft(token: string, data: FormData, photoKeys: string[]) {
+function saveDraft(token: string, data: FormData, photoKeys: string[], generic?: GenericFields) {
   if (!token) return;
   try {
     const payload: DraftPayload = { ...data, savedPhotoKeys: photoKeys };
+    if (generic) payload.genericFields = generic;
     localStorage.setItem(lsKey(token), JSON.stringify(payload));
   } catch { /* ignore */ }
 }
@@ -352,6 +354,7 @@ export function CustomerInfoPage() {
           setGenericDraftToken(stored);
           const draft = loadDraft(stored);
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
+          if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
             setPhotos(draft.savedPhotoKeys.map(k => ({
               key: k,
@@ -416,6 +419,7 @@ export function CustomerInfoPage() {
           setIsGeneric(true);
           const draft = loadDraft(urlToken);
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
+          if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
             setPhotos(draft.savedPhotoKeys.map(k => ({
               key: k,
@@ -451,18 +455,18 @@ export function CustomerInfoPage() {
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Draft-save whenever formData or photos change (after initial restore)
+  // Draft-save whenever formData, photos, or genericFields change (after initial restore)
   useEffect(() => {
     if (pageState !== 'main' || !activeToken) return;
     if (!draftSavedRef.current) { draftSavedRef.current = true; return; }
-    saveDraft(activeToken, formData, photos.map(p => p.key));
-  }, [formData, photos]); // eslint-disable-line react-hooks/exhaustive-deps
+    saveDraft(activeToken, formData, photos.map(p => p.key), isGeneric ? genericFields : undefined);
+  }, [formData, photos, genericFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFieldChange(field: keyof FormData) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setFormData(prev => {
         const updated = { ...prev, [field]: e.target.value };
-        if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key));
+        if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key), isGeneric ? genericFields : undefined);
         return updated;
       });
     };
@@ -470,7 +474,11 @@ export function CustomerInfoPage() {
 
   function handleGenericFieldChange(field: keyof GenericFields) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setGenericFields(prev => ({ ...prev, [field]: e.target.value }));
+      setGenericFields(prev => {
+        const updated = { ...prev, [field]: e.target.value };
+        if (activeToken) saveDraft(activeToken, formData, photos.map(p => p.key), updated);
+        return updated;
+      });
       if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
     };
   }
@@ -509,7 +517,7 @@ export function CustomerInfoPage() {
       }));
       setPhotos(prev => {
         const updated = [...prev, ...newPhotos];
-        if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key));
+        if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key), isGeneric ? genericFields : undefined);
         return updated;
       });
       if (truncated) {
@@ -525,7 +533,7 @@ export function CustomerInfoPage() {
   function removePhoto(key: string) {
     setPhotos(prev => {
       const updated = prev.filter(p => p.key !== key);
-      if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key));
+      if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key), isGeneric ? genericFields : undefined);
       return updated;
     });
   }
