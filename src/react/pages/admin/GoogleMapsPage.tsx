@@ -40,6 +40,50 @@ import { invalidateGoogleMapsConfig } from '../../lib/googleMapsConfig';
 const CLOUD_CONSOLE_CREDENTIALS_URL =
   'https://console.cloud.google.com/google/maps-apis/credentials';
 
+// Plain-language metadata for each server-side connection check. The keys match
+// the `checks` object returned by /api/admin/google-maps/test-connection in
+// google-maps.js. `docUrl` points an admin at the exact Google Cloud Console
+// API library page to enable/fix when that check fails — the autocomplete and
+// place-details checks use the Places API (New); the rest still use legacy APIs.
+const CHECK_META: Record<
+  string,
+  { label: string; docUrl: string; docLabel: string }
+> = {
+  autocomplete: {
+    label: 'Places Autocomplete (New)',
+    docUrl: 'https://console.cloud.google.com/apis/library/places.googleapis.com',
+    docLabel: 'Enable the Places API (New) →',
+  },
+  placeDetails: {
+    label: 'Place Details (New)',
+    docUrl: 'https://console.cloud.google.com/apis/library/places.googleapis.com',
+    docLabel: 'Enable the Places API (New) →',
+  },
+  geocode: {
+    label: 'Geocoding',
+    docUrl: 'https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com',
+    docLabel: 'Enable the Geocoding API →',
+  },
+  staticmap: {
+    label: 'Static Maps',
+    docUrl: 'https://console.cloud.google.com/apis/library/static-maps-backend.googleapis.com',
+    docLabel: 'Enable the Maps Static API →',
+  },
+  mapsJs: {
+    label: 'Maps JavaScript API',
+    docUrl: 'https://console.cloud.google.com/apis/library/maps-backend.googleapis.com',
+    docLabel: 'Enable the Maps JavaScript API →',
+  },
+};
+
+// Fallback for an unrecognised check key: humanise the raw name so the panel
+// still renders sensibly if the server adds a new check before the UI knows it.
+function humaniseCheckKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
 type SurfaceId = 'customerInfo' | 'designVisit' | 'arrangeVisit' | 'contactEdit' | 'genericVisit';
 
 interface SurfaceFlags {
@@ -298,24 +342,42 @@ export function GoogleMapsPage() {
                   ? 'All Google APIs responded successfully.'
                   : testResult.error || 'One or more Google APIs failed — see details below.'}
               </Alert>
-              <Stack spacing={0.5}>
-                {Object.entries(testResult.checks).map(([api, c]) => (
-                  <Stack key={api} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    {c.ok ? (
-                      <CheckCircleOutlinedIcon color="success" fontSize="small" />
-                    ) : (
-                      <ErrorOutlinedIcon color="error" fontSize="small" />
-                    )}
-                    <Typography variant="body2" sx={{ minWidth: 110, textTransform: 'capitalize' }}>
-                      {api}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {c.ok
-                        ? `${c.latencyMs ?? '?'} ms`
-                        : c.error || `status ${c.status ?? 'error'}`}
-                    </Typography>
-                  </Stack>
-                ))}
+              <Stack spacing={0.75}>
+                {Object.entries(testResult.checks).map(([api, c]) => {
+                  const meta = CHECK_META[api];
+                  return (
+                    <Stack
+                      key={api}
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                    >
+                      {c.ok ? (
+                        <CheckCircleOutlinedIcon color="success" fontSize="small" />
+                      ) : (
+                        <ErrorOutlinedIcon color="error" fontSize="small" />
+                      )}
+                      <Typography variant="body2" sx={{ minWidth: 180 }}>
+                        {meta ? meta.label : humaniseCheckKey(api)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {c.ok
+                          ? `${c.latencyMs ?? '?'} ms`
+                          : c.error || `status ${c.status ?? 'error'}`}
+                      </Typography>
+                      {!c.ok && meta && (
+                        <Link
+                          href={meta.docUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          variant="caption"
+                        >
+                          {meta.docLabel}
+                        </Link>
+                      )}
+                    </Stack>
+                  );
+                })}
               </Stack>
             </Box>
           )}
