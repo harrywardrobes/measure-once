@@ -1527,29 +1527,21 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       }
     }
 
-    const stageParam = (req.query.stage || '').trim();
-    // archived=1 means show all rooms; archived=0 (default) means only active rooms.
-    const showArchived = req.query.archived === '1';
+    const stageParam = (req.query.stage || '').trim().toLowerCase().replace(/_/g, '');
     if (stageParam) {
-      contacts = contacts.filter(c => {
-        const roomsJson = c.properties?.measure_once_rooms;
-        if (!roomsJson) return false;
-        try {
-          const rooms = JSON.parse(roomsJson);
-          if (!Array.isArray(rooms)) return false;
-          // Normalise missing stageKey to 'sales' (the default used throughout
-          // the room-resolution layer in the client and localdata endpoint).
-          const inStage = rooms.filter(r => (r.stageKey || 'sales') === stageParam);
-          if (inStage.length === 0) return false;
-          // When not showing archived, require at least one active room in the stage.
-          if (!showArchived) {
-            return inStage.some(r => (r.roomStatus || 'active') === 'active');
-          }
-          return true;
-        } catch {
-          return false;
-        }
-      });
+      try {
+        const { rows: stageRows } = await pool.query(
+          'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
+        );
+        const statusStageMap = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
+        contacts = contacts.filter(c => {
+          const ls = c.properties?.hs_lead_status || '';
+          const contactStage = statusStageMap.get(ls) || '';
+          return contactStage === stageParam;
+        });
+      } catch (dbErr) {
+        logger.warn({ err: dbErr.message }, '[contacts-all] could not load stage config:');
+      }
     }
 
     if (q) {

@@ -1128,6 +1128,14 @@ export function CustomersPage(): React.ReactElement {
     [store.statuses],
   );
 
+  const statusStageMap = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of store.statuses) {
+      if (s.stage) m.set(s.key, s.stage.toLowerCase().replace(/_/g, ''));
+    }
+    return m;
+  }, [store.statuses]);
+
   const {
     contacts,
     total,
@@ -1141,7 +1149,7 @@ export function CustomersPage(): React.ReactElement {
     setPage,
     patchContact,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, pageSize: customersPageSize, priorityFirst },
+    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst },
     { onFetchSuccess: scheduleCounts },
   );
 

@@ -38,6 +38,8 @@ export type UsePaginatedContactsParams = {
   showExcluded?: boolean;
   /** Keys of statuses that are excluded_from_sales; used by the offline filter. */
   excludedStatusKeys?: Set<string>;
+  /** Maps each hs_lead_status key to its normalised stage string (lowercase, no underscores); used by the offline stage filter. */
+  statusStageMap?: Map<string, string>;
   refreshNonce?: number;
   staleAfterDays?: number;
   pageSize?: number;
@@ -87,6 +89,8 @@ type OfflineFilterParams = {
   showArchived: boolean;
   showExcluded?: boolean;
   excludedStatusKeys?: Set<string>;
+  /** Maps each hs_lead_status key to its normalised stage string (lowercase, no underscores). */
+  statusStageMap?: Map<string, string>;
   page: number;
   limit: number;
   priorityFirst?: boolean;
@@ -106,19 +110,11 @@ function offlineComparator(sort: string): (a: PaginatedContact, b: PaginatedCont
   }
 }
 
-function matchesOfflineStage(c: PaginatedContact, stage: string, showArchived: boolean): boolean {
-  const roomsJson = c.properties?.measure_once_rooms;
-  if (!roomsJson) return false;
-  try {
-    const rooms = JSON.parse(roomsJson) as Array<{ stageKey?: string; roomStatus?: string }>;
-    if (!Array.isArray(rooms)) return false;
-    const inStage = rooms.filter((r) => (r?.stageKey || 'sales') === stage);
-    if (inStage.length === 0) return false;
-    if (!showArchived) return inStage.some((r) => (r?.roomStatus || 'active') === 'active');
-    return true;
-  } catch {
-    return false;
-  }
+function matchesOfflineStage(c: PaginatedContact, stage: string, statusStageMap: Map<string, string>): boolean {
+  const ls = c.properties?.hs_lead_status || '';
+  const contactStage = statusStageMap.get(ls) || '';
+  const normalizedStage = stage.toLowerCase().replace(/_/g, '');
+  return !!contactStage && contactStage === normalizedStage;
 }
 
 /**
@@ -132,7 +128,7 @@ export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
   params: OfflineFilterParams,
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
-  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, limit, priorityFirst } = params;
+  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, limit, priorityFirst } = params;
   let list = cached;
 
   // Mirror the server-side excluded_from_sales filter: hide excluded contacts
@@ -157,7 +153,7 @@ export function filterSortPaginateCachedContacts(
   }
 
   if (stage) {
-    list = list.filter((c) => matchesOfflineStage(c, stage, showArchived));
+    list = list.filter((c) => matchesOfflineStage(c, stage, statusStageMap ?? new Map()));
   }
 
   const q = (search || '').trim().toLowerCase();
@@ -211,7 +207,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
+  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -363,6 +359,7 @@ export function usePaginatedContacts(
               showArchived,
               showExcluded,
               excludedStatusKeys,
+              statusStageMap,
               page: effectivePage,
               limit,
               priorityFirst,
