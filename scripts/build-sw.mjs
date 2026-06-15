@@ -106,10 +106,18 @@ const { count, size, warnings } = await generateSW({
     // Do NOT hand-add same-origin read-route caches below; add them to that
     // manifest so the matrix/docs drift guard stays effective.
     ...OFFLINE_READ_CACHES.map(({ cacheName, maxEntries, routes }) => {
-      const patterns = routes.map((source) => new RegExp(source));
+      // Build the union pattern at build time and embed it as a regex
+      // *literal* inside a self-contained function so that when Workbox
+      // serialises urlPattern via .toString() the generated sw.js has no
+      // reference to any closed-over variable (the old `patterns` closure
+      // caused a ReferenceError at SW runtime).  We must test url.pathname
+      // (not url.href) because the routes use ^/api/… anchors.
+      const patternSrc = routes.map((s) => `(?:${s})`).join('|');
+      const escapedSrc = patternSrc.replace(/\//g, '\\/');
       return {
-        urlPattern: ({ url, sameOrigin }) =>
-          sameOrigin && patterns.some((re) => re.test(url.pathname)),
+        urlPattern: new Function(
+          `return ({ url, sameOrigin }) => sameOrigin && /${escapedSrc}/.test(url.pathname)`,
+        )(),
         handler: 'StaleWhileRevalidate',
         options: {
           cacheName,
