@@ -147,18 +147,6 @@ const DEFAULT_STAGE_LABELS: Record<string, string> = {
   installation: 'Installation',
   aftercare: 'Aftercare',
 };
-function stageColour(stageKey: string): { bg: string; light: string; text: string } {
-  const w = (window as unknown as { stageColour?: (k: string) => { bg: string; light: string; text: string } }).stageColour;
-  if (typeof w === 'function') {
-    try {
-      return w(stageKey);
-    } catch {
-      /* fall through */
-    }
-  }
-  return STAGE_COLORS[stageKey] || STAGE_COLORS.sales;
-}
-
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'priority', label: 'Priority first' },
   { value: 'newest', label: 'Newest first' },
@@ -385,29 +373,6 @@ function useLeadStatusSync(
       if (bc) bc.close();
     };
   }, [onChange]);
-}
-
-function StagePill({ stageKey, label, archived }: { stageKey: string; label: string; archived: boolean }) {
-  const c = stageColour(stageKey);
-  return (
-    <Box
-      component="span"
-      sx={{
-        display: 'inline-block',
-        px: 1,
-        py: 0.25,
-        borderRadius: 1,
-        fontSize: 12,
-        fontWeight: 600,
-        bgcolor: c.light,
-        color: c.text,
-        opacity: archived ? 0.55 : 1,
-        lineHeight: 1.4,
-      }}
-    >
-      {label}
-    </Box>
-  );
 }
 
 function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInvoice[] {
