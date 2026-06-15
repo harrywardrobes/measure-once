@@ -8,7 +8,7 @@ const { makeSkip } = require('../helpers/report');
 //   (S) Success path — open the Add Handle modal, fill Name + Style, attach a
 //       small PNG to #dvie-img-file, click Save:
 //        • POST /api/admin/catalog/handles creates the handle row.
-//        • A follow-up POST /api/admin/dv-handles/:id/image uploads the file.
+//        • A follow-up POST /api/admin/catalog/handles/:id/image uploads the file.
 //        • The modal closes; #dv-handles-wrap re-renders an <img> whose src
 //          is the /uploads/handles/... URL returned by the server.
 //        • design_visit_handles.image_url in the DB is non-null and matches
@@ -400,7 +400,7 @@ async function main() {
       await page.setRequestInterception(true);
       const reqListener = async (req) => {
         const u = req.url();
-        if (req.method() === 'POST' && /\/api\/admin\/dv-handles\/\d+\/image$/.test(u)) {
+        if (req.method() === 'POST' && /\/api\/admin\/catalog\/handles\/\d+\/image$/.test(u)) {
           try {
             await req.respond({
               status: 500,
@@ -514,7 +514,7 @@ async function writeReport(runId, findings) {
     '  `/uploads/handles/`, and `design_visit_handles.image_url` is non-null',
     '  and equal to the rendered URL.',
     '- **(F) Failure path**: re-open the same handle in the Edit modal, attach',
-    '  a different PNG, intercept `POST /api/admin/dv-handles/:id/image` and',
+    '  a different PNG, intercept `POST /api/admin/catalog/handles/:id/image` and',
     '  force a 500. The modal stays open, `#dvie-err` shows an "Image upload',
     '  failed" message, `#dvie-save` is re-enabled for retry, and the DB',
     '  `image_url` is preserved (not overwritten).',

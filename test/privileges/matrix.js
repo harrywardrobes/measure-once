@@ -265,7 +265,7 @@ const ROUTES = [
   // Multipart upload endpoint — no file in the body, so admin should receive
   // 400 ("No image file provided"); non-admins must be 403 from requireAdmin
   // (which runs before multer ever sees the empty body).
-  { method: 'POST',   path: '/api/admin/dv-handles/0/image',                    level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/catalog/handles/0/image',               level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/card-action-handlers',                 level: 'admin' },
   { method: 'GET',    path: '/api/admin/card-action-handlers/conflicts',       level: 'admin' },
   { method: 'GET',    path: '/api/admin/card-action-handlers/orphaned',        level: 'admin' },

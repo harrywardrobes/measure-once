@@ -993,11 +993,6 @@ router.delete('/api/admin/catalog/pairings/:id', isAuthenticated, requireAdmin, 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Legacy existing-row handle image upload (dv-handles → catalog/handles) ───
-router.all('/api/admin/dv-handles/:id/image', isAuthenticated, requireAdmin, (req, res) => {
-  res.redirect(308, `/api/admin/catalog/handles/${req.params.id}/image`);  // TODO remove after migration
-});
-
 // ── Non-admin read of T&C text (any authenticated user — used by wizard) ─────
 router.get('/api/design-visit-terms', isAuthenticated, async (req, res) => {
   try {
