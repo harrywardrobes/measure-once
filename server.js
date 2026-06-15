@@ -1140,9 +1140,10 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
 });
 
 
-app.get('/auth/status', (req, res) => {
+app.get('/auth/status', async (req, res) => {
+  const googleTokens = await getVerifiedGoogleTokens(req);
   res.json({
-    google:  !!req.session.googleTokens,
+    google:  !!googleTokens,
     hubspot: !!getCredential('access_token')
   });
 });
