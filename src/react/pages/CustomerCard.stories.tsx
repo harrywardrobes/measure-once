@@ -70,8 +70,8 @@ function DemoCustomerCard({
   showInvoiceBadge = false,
   labelOnly = false,
 }: DemoCardProps) {
-  const primaryStageKey = actionStageKey || rooms[0]?.stageKey || 'sales';
-  const stageColors = STAGE_COLORS[primaryStageKey];
+  const primaryStageKey = rooms[0]?.stageKey || 'sales';
+  const stageColors = STAGE_COLORS[actionStageKey || primaryStageKey];
   const actionTint = showContinueDesigning ? 'success.light' : (stageColors?.light || STATUS_COLORS.neutral.bg);
   const actionTextColor = showContinueDesigning ? 'success.dark' : (stageColors?.text || STATUS_COLORS.neutral.text);
   const multiRoom = rooms.length > 1;

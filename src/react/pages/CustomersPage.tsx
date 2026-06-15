@@ -706,7 +706,7 @@ function CustomerCard({
     || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const hasNoLeadStatus = !leadStatusKey;
-  const stageColors = STAGE_COLORS[primaryStageKey];
+  const stageColors = STAGE_COLORS[actionStageKey] || STAGE_COLORS[primaryStageKey];
   const actionTint = hasDraft || (hasNoLeadStatus && !!handler) ? '#F0FDF4' : (stageColors?.light || '#f3f4f6');
   const actionTextColor = hasDraft || (hasNoLeadStatus && !!handler) ? '#15803d' : (stageColors?.text || '#374151');
 
