@@ -84,6 +84,7 @@ export const HANDLER_OUTCOMES: Record<HandlerType, ActionOutcome[]> = {
   schedule_visit:           _s['schedule_visit'],
   show_message:             _s['show_message'],
   start_design_visit:       _s['start_design_visit'],
+  start_survey_visit:       _s['start_survey_visit'],
   summarise_phone_call:     _s['summarise_phone_call'],
   upload_photos_and_info:   _s['upload_photos_and_info'],
 };
@@ -196,6 +197,10 @@ export const HANDLER_MODAL_SUMMARY: Record<HandlerType, HandlerModalSummary> = {
     steps: '3 steps — visit details → rooms → review',
     hubspot: 'Sets lead status to in-progress on open; to configured submitted status on submit',
   },
+  start_survey_visit: {
+    steps: 'Hub (start / refund) → 3 steps — visit details → rooms → review',
+    hubspot: 'Sets lead status to in-progress when started; to submitted status on submit; refund sets declined',
+  },
   upload_photos_and_info: {
     steps: '1 step — confirmation → emails customer a unique form link',
     hubspot: 'See outcomes below',
@@ -228,6 +233,7 @@ export const HANDLER_TYPE_LABELS: Record<HandlerType, string> = {
   summarise_phone_call:         'Summarise phone call',
   show_message:                 'Show informational message',
   start_design_visit:           'Start design visit wizard',
+  start_survey_visit:           'Start survey visit wizard',
   upload_photos_and_info:       'Upload photos & info',
   review_customer_photos:       'Review customer photos',
   arrange_visit:                'Arrange visit',
@@ -279,6 +285,7 @@ export const HANDLER_EMAIL_TEMPLATES: Record<HandlerType, string[]> = {
   arrange_visit:                deriveHandlerEmailTemplates('arrange_visit'),
   contact_customer:             deriveHandlerEmailTemplates('contact_customer'),
   start_design_visit:           deriveHandlerEmailTemplates('start_design_visit'),
+  start_survey_visit:           deriveHandlerEmailTemplates('start_survey_visit'),
   schedule_visit:               deriveHandlerEmailTemplates('schedule_visit'),
   summarise_phone_call:         deriveHandlerEmailTemplates('summarise_phone_call'),
   show_message:                 deriveHandlerEmailTemplates('show_message'),
@@ -306,6 +313,10 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
   start_design_visit: {
     component: 'DesignVisitWizard',
     filePath:  'src/react/components/DesignVisitWizard.tsx',
+  },
+  start_survey_visit: {
+    component: 'SurveyVisitWizard',
+    filePath:  'src/react/components/SurveyVisitWizard.tsx',
   },
   upload_photos_and_info: {
     component: 'UploadPhotosModal',

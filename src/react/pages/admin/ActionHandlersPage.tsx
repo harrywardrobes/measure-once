@@ -97,6 +97,15 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• Step 2 — Rooms: add/remove rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
     '• Step 3 — Review: read-only summary before submission.\n' +
     '• On submit: creates a design_visits DB record, updates HubSpot lead status to the configured submitted status, creates a HubSpot note, attempts a QuickBooks Estimate (non-fatal), generates a single-use sign-off token, emails the customer a "See Your Design & Sign Off" link, and notifies the admin team.',
+  start_survey_visit:
+    'Clicking the action on a Sales/Survey card opens a full multi-step survey visit wizard — a continuation of the Design Visit.\n' +
+    '• Pre-fills rooms, door style, handle, and furniture range from the customer\'s signed-off design visit when one exists.\n' +
+    '• Two-phase HubSpot status update: when the wizard opens the contact\'s lead status is set to the "In-progress" status (if configured); when the wizard is submitted it is set to the "Submitted" status (if configured).\n' +
+    '• Step 1 — Visit details: date/time, surveyor name, handle selection, furniture range, T&C acceptance.\n' +
+    '• Step 2 — Rooms: confirm/adjust rooms with name, door style, dimensions (mm), unit count, unit price, notes, and optional photo upload.\n' +
+    '• Step 3 — Review: read-only summary before submission.\n' +
+    '• On submit: creates a survey_visits DB record, updates HubSpot lead status to the configured submitted status, creates a HubSpot note, attempts a QuickBooks Estimate sparse-update (non-fatal), generates a single-use sign-off token, emails the customer a sign-off link, and notifies the admin team.\n' +
+    '• A refund request can be raised from the action hub, which records the request, emails the admin team, and sets the deal to DECLINED_DEAL.',
   upload_photos_and_info:
     'Clicking the action on a card opens a confirmation modal showing the customer\'s name and email.\n' +
     '• On confirmation, an email is sent to the customer with a unique, time-limited link to a public form.\n' +
@@ -375,12 +384,14 @@ function HandlerEditorModal({
   const showSv  = handlerType === 'schedule_visit';
   const showMsg = handlerType === 'show_message';
   const showSdv = handlerType === 'start_design_visit';
+  const showSsv = handlerType === 'start_survey_visit';
+  const showVisitCfg = showSdv || showSsv;
   const showNoConfig = NO_CONFIG_HANDLER_TYPES.has(handlerType);
-  const showJson = !(showSv || showMsg || showSdv || showNoConfig);
+  const showJson = !(showSv || showMsg || showVisitCfg || showNoConfig);
 
-  const sdvInvalidIntermediate = showSdv
+  const sdvInvalidIntermediate = showVisitCfg
     && !isLeadStatusKeyValid(sdvVal.intermediateLeadStatus, sdvLeadStatuses);
-  const sdvInvalidSubmitted = showSdv
+  const sdvInvalidSubmitted = showVisitCfg
     && !isLeadStatusKeyValid(sdvVal.submittedLeadStatus, sdvLeadStatuses);
 
   // Detect stale status-key references inside the JSON fallback editor.
@@ -428,7 +439,7 @@ function HandlerEditorModal({
       cfg = { message: msg };
       if (msgVal.title.trim()) cfg.title = msgVal.title.trim();
 
-    } else if (handlerType === 'start_design_visit') {
+    } else if (handlerType === 'start_design_visit' || handlerType === 'start_survey_visit') {
       const dur = sdvVal.defaultDurationMin;
       const n   = dur === '' ? NaN : Number(dur);
       if (dur !== '' && (isNaN(n) || n < 5 || n > 1440)) {
@@ -574,7 +585,7 @@ function HandlerEditorModal({
                 onChange={setMsgVal}
               />
             )}
-            {showSdv && (
+            {showVisitCfg && (
               <StartDesignVisitConfig
                 defaultDurationMin={sdvVal.defaultDurationMin}
                 intermediateLeadStatus={sdvVal.intermediateLeadStatus}

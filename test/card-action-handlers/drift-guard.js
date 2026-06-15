@@ -92,7 +92,7 @@ console.log('\n── handler-outcomes drift guard ─────────�
 const REQUIRED_TYPES = [
   'arrange_visit', 'contact_customer', 'deposit_invoice_followup',
   'design_visit_followup', 'open_deal', 'review_customer_photos',
-  'schedule_visit', 'show_message', 'start_design_visit',
+  'schedule_visit', 'show_message', 'start_design_visit', 'start_survey_visit',
   'summarise_phone_call', 'upload_photos_and_info',
 ];
 for (const type of REQUIRED_TYPES) {

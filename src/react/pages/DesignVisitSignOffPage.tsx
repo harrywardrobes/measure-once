@@ -51,6 +51,41 @@ interface SignOffData {
 type PageState = 'loading' | 'expired' | 'superseded' | 'error' | 'success' | 'main';
 type SuccessKind = 'approved' | 'revision';
 
+// ── Sign-off page configuration ────────────────────────────────────────────────
+// The design-visit and survey-visit sign-off pages are identical except for the
+// API base path and a handful of copy strings. The config object lets the same
+// component serve both (see SurveyVisitSignOffPage.tsx).
+
+export interface SignOffPageConfig {
+  /** API base used for GET/POST sign-off, e.g. '/api/design-visits'. */
+  apiBasePath: string;
+  loadingText: string;
+  summaryHeading: string;
+  summaryIntro: string;
+  successApprovedTitle: string;
+  expiredSubtitle: string;
+}
+
+export const DESIGN_SIGNOFF_CONFIG: SignOffPageConfig = {
+  apiBasePath: '/api/design-visits',
+  loadingText: 'Loading your design visit…',
+  summaryHeading: 'Your Design Visit Summary',
+  summaryIntro: "here's a summary of the design options we discussed.",
+  successApprovedTitle: 'Design signed off — thank you!',
+  expiredSubtitle:
+    'Sign-off links are only valid for a short time after we send them. Please reply to the original email — or get in touch with your designer — and we\'ll send you a fresh link to review and approve your design visit.',
+};
+
+export const SURVEY_SIGNOFF_CONFIG: SignOffPageConfig = {
+  apiBasePath: '/api/survey-visits',
+  loadingText: 'Loading your survey visit…',
+  summaryHeading: 'Your Survey Visit Summary',
+  summaryIntro: "here's a summary of the measurements and options from your survey.",
+  successApprovedTitle: 'Survey signed off — thank you!',
+  expiredSubtitle:
+    'Sign-off links are only valid for a short time after we send them. Please reply to the original email — or get in touch with your surveyor — and we\'ll send you a fresh link to review and approve your survey visit.',
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmt(pence: number): string {
@@ -182,7 +217,9 @@ export interface EmbeddedPreview extends GalleryEmbedded {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPreview } = {}) {
+export function DesignVisitSignOffPage(
+  { embedded, config = DESIGN_SIGNOFF_CONFIG }: { embedded?: EmbeddedPreview; config?: SignOffPageConfig } = {},
+) {
   const [pageState, setPageState] = useState<PageState>(embedded?.state ?? 'loading');
   const [data, setData] = useState<SignOffData | null>(embedded?.data ?? null);
   const [errorTitle, setErrorTitle] = useState(embedded?.errorTitle ?? 'Link not valid');
@@ -216,7 +253,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
       return;
     }
 
-    fetch('/api/design-visits/sign-off/' + encodeURIComponent(token))
+    fetch(config.apiBasePath + '/sign-off/' + encodeURIComponent(token))
       .then(async r => {
         if (r.status === 410) {
           const d = await r.json();
@@ -263,7 +300,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
     setApproving(true);
     try {
       const r = await fetch(
-        '/api/design-visits/sign-off/' + encodeURIComponent(tokenRef.current ?? ''),
+        config.apiBasePath + '/sign-off/' + encodeURIComponent(tokenRef.current ?? ''),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -291,7 +328,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
     setSubmittingRevision(true);
     try {
       const r = await fetch(
-        '/api/design-visits/sign-off/' + encodeURIComponent(tokenRef.current ?? ''),
+        config.apiBasePath + '/sign-off/' + encodeURIComponent(tokenRef.current ?? ''),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -343,7 +380,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
           <Box sx={{ textAlign: 'center', py: 8, color: 'text.disabled' }}>
             <CircularProgress size={28} sx={{ mb: 2, color: BRAND_COLORS.orchid }} />
             <Typography variant="body2" color="text.disabled">
-              Loading your design visit…
+              {config.loadingText}
             </Typography>
           </Box>
         )}
@@ -362,14 +399,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
           <StateBlock
             icon={<HourglassBottomIcon />}
             title="This sign-off link has expired"
-            subtitle={
-              <>
-                Sign-off links are only valid for a short time after we send them.
-                Please reply to the original email — or get in touch with your
-                designer — and we'll send you a fresh link to review and approve
-                your design visit.
-              </>
-            }
+            subtitle={config.expiredSubtitle}
           />
         )}
 
@@ -384,7 +414,7 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
         {pageState === 'success' && (
           <StateBlock
             icon={<CheckCircleOutlinedIcon sx={{ color: 'success.main !important' }} />}
-            title={successKind === 'approved' ? 'Design signed off — thank you!' : 'Changes requested'}
+            title={successKind === 'approved' ? config.successApprovedTitle : 'Changes requested'}
             subtitle={
               successKind === 'approved'
                 ? "We've received your approval. We'll be in touch soon with next steps."
@@ -397,11 +427,11 @@ export function DesignVisitSignOffPage({ embedded }: { embedded?: EmbeddedPrevie
         {pageState === 'main' && data && (
           <>
             <Typography variant="h2" sx={{ mb: 0.75 }}>
-              Your Design Visit Summary
+              {config.summaryHeading}
             </Typography>
             {data.contactName && (
               <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-                Hi {data.contactName.split(' ')[0]}, here's a summary of the design options we discussed.
+                Hi {data.contactName.split(' ')[0]}, {config.summaryIntro}
               </Typography>
             )}
 

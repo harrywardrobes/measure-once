@@ -6,6 +6,9 @@ import { UploadPhotosModal } from './modals/UploadPhotosModal';
 const DesignVisitWizard = React.lazy(() =>
   import('./DesignVisitWizard').then(m => ({ default: m.DesignVisitWizard }))
 );
+const SurveyVisitWizard = React.lazy(() =>
+  import('./SurveyVisitWizard').then(m => ({ default: m.SurveyVisitWizard }))
+);
 const ArrangeVisitModal = React.lazy(() =>
   import('./modals/ArrangeVisitModal').then(m => ({ default: m.ArrangeVisitModal }))
 );
@@ -30,6 +33,7 @@ import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry'
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../utils/dispatchCardActionHandler';
 import type { ExistingVisit } from './DesignVisitWizard';
+import type { ExistingSurveyVisit } from './SurveyVisitWizard';
 
 type ModalState =
   | { type: 'none' }
@@ -37,6 +41,7 @@ type ModalState =
   | { type: 'schedule_visit';                handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'summarise_phone_call';          handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'start_design_visit';            handler: CardActionHandlerData; ctx: CardActionContext; existingVisit?: ExistingVisit | null }
+  | { type: 'start_survey_visit';            handler: CardActionHandlerData; ctx: CardActionContext; existingSurveyVisit?: ExistingSurveyVisit | null }
   | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
@@ -68,6 +73,9 @@ export function CardActionModalsHost() {
           break;
         case 'start_design_visit':
           setModal({ type: 'start_design_visit', handler, ctx, existingVisit });
+          break;
+        case 'start_survey_visit':
+          setModal({ type: 'start_survey_visit', handler, ctx });
           break;
         case 'upload_photos_and_info':
           setModal({ type: 'upload_photos_and_info', handler, ctx });
@@ -135,6 +143,16 @@ export function CardActionModalsHost() {
             handler={modal.handler}
             ctx={modal.ctx}
             existingVisit={modal.existingVisit}
+            onClose={close}
+          />
+        </React.Suspense>
+      )}
+      {modal.type === 'start_survey_visit' && (
+        <React.Suspense fallback={null}>
+          <SurveyVisitWizard
+            handler={modal.handler}
+            ctx={modal.ctx}
+            existingVisit={modal.existingSurveyVisit}
             onClose={close}
           />
         </React.Suspense>

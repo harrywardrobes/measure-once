@@ -10,7 +10,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { AddressInput } from './AddressInput';
-import { CatalogueDropdowns } from './CatalogueDropdowns';
+import { CatalogueDropdowns, type CatalogueSuggestion } from './CatalogueDropdowns';
 import type { StructuredAddress } from '../../../shared/address';
 
 export interface Step1Data {
@@ -35,6 +35,21 @@ export interface DesignVisitStep1Props {
   termsText: string;
   termsVersionNumber?: number | null;
   onDataChange: (data: Step1Data) => void;
+  /** Label for the name field. Defaults to 'Designer name'. */
+  nameLabel?: string;
+  /** Placeholder for the name field. Defaults to 'e.g. Sarah Jones'. */
+  namePlaceholder?: string;
+  /** idPrefix for the AddressInput. Defaults to 'dv-step1-address'. */
+  addressIdPrefix?: string;
+  /** Google Maps autocomplete surface for the address. Defaults to 'designVisit'. */
+  addressSurface?: React.ComponentProps<typeof AddressInput>['surface'];
+  /**
+   * Optional pairing suggestion for the Handle dropdown (sourced from
+   * catalog_pairings). When supplied and it differs from the current handle a
+   * "Suggested: …" hint with an Apply action is shown. Defaults to none, so
+   * the Design Visit wizard is unaffected.
+   */
+  handleSuggestion?: CatalogueSuggestion | null;
 }
 
 /** Parse a stored visitDate string to a Dayjs value, or null if empty/invalid. */
@@ -57,6 +72,11 @@ export function DesignVisitStep1({
   furnitureRanges,
   termsText,
   onDataChange,
+  nameLabel = 'Designer name',
+  namePlaceholder = 'e.g. Sarah Jones',
+  addressIdPrefix = 'dv-step1-address',
+  addressSurface = 'designVisit',
+  handleSuggestion = null,
 }: DesignVisitStep1Props) {
   const [data, setData] = useState<Step1Data>(() => ({ ...initialData }));
 
@@ -109,16 +129,16 @@ export function DesignVisitStep1({
           <AddressInput
             value={data.structuredAddress}
             onChange={(next) => update({ structuredAddress: next })}
-            idPrefix="dv-step1-address"
-            surface="designVisit"
+            idPrefix={addressIdPrefix}
+            surface={addressSurface}
           />
         </Box>
 
         <TextField
-          label="Designer name"
+          label={nameLabel}
           size="small"
           fullWidth
-          placeholder="e.g. Sarah Jones"
+          placeholder={namePlaceholder}
           slotProps={{ htmlInput: { maxLength: 200 } }}
           value={data.designerName}
           onChange={e => update({ designerName: e.target.value })}
@@ -133,6 +153,7 @@ export function DesignVisitStep1({
               options: handles,
               onChange: (v) => update({ handleId: v }),
               noneLabel: '— select handle —',
+              suggestion: handleSuggestion,
             },
             {
               label: 'Furniture range',

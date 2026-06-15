@@ -29,6 +29,13 @@ export interface RoomData {
   images: RoomImage[];
   /** Captured answers to room-scoped questionnaire questions (question id → value). */
   answers?: AnswerMap;
+  /**
+   * For the Survey Visit continuation only: the id of the design-visit room this
+   * room was pre-filled from. Carried through reorder/edit and sent back on
+   * submit so the backend can link survey rooms to their source design rooms.
+   * Undefined for genuinely new rooms and for the Design Visit wizard.
+   */
+  sourceDesignVisitRoomId?: number | string | null;
 }
 
 export interface DoorStyleOption {

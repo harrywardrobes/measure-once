@@ -31,7 +31,28 @@ export interface DesignVisitRoomsStepProps {
    * see the rooms form layout without accidentally triggering writes.
    */
   demo?: boolean;
+  /**
+   * Override the photo upload / sign / delete endpoints. Defaults to the
+   * Design Visit endpoints so existing behaviour is unchanged; the Survey
+   * Visit wizard passes its own `/api/survey-visits/*` paths.
+   */
+  endpoints?: VisitUploadEndpoints;
 }
+
+export interface VisitUploadEndpoints {
+  /** POST { dataUrl } → { storageKey, mimeType, viewUrl }. */
+  uploadUrl: string;
+  /** POST { storageKeys } → { urls }. */
+  signUrl: string;
+  /** DELETE /:storageKey. */
+  deleteUrl: (storageKey: string) => string;
+}
+
+const DEFAULT_ENDPOINTS: VisitUploadEndpoints = {
+  uploadUrl: '/api/design-visits/uploads',
+  signUrl: '/api/design-visits/sign-image-urls',
+  deleteUrl: (key) => `/api/design-visits/uploads/${encodeURIComponent(key)}`,
+};
 
 /**
  * Internal room representation — wraps the public RoomData with a stable
@@ -82,6 +103,7 @@ export function DesignVisitRoomsStep({
   roomQuestions,
   showAnswerValidation,
   demo,
+  endpoints = DEFAULT_ENDPOINTS,
 }: DesignVisitRoomsStepProps) {
   const [rooms, setRooms] = useState<InternalRoom[]>(() => {
     const src = initialRooms.length ? initialRooms : [{}];
@@ -171,7 +193,7 @@ export function DesignVisitRoomsStep({
 
       void (async () => {
         try {
-          const r = await fetch('/api/design-visits/sign-image-urls', {
+          const r = await fetch(endpoints.signUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ storageKeys: [key] }),
@@ -219,7 +241,7 @@ export function DesignVisitRoomsStep({
       const key = removedKey;
       onImageRemoved?.(key);
       if (!demo) {
-        fetch(`/api/design-visits/uploads/${encodeURIComponent(key)}`, { method: 'DELETE' })
+        fetch(endpoints.deleteUrl(key), { method: 'DELETE' })
           .catch(err => console.warn('[design-visit] photo delete failed:', err));
       }
     }
@@ -302,7 +324,7 @@ export function DesignVisitRoomsStep({
         const body = JSON.stringify({ dataUrl });
         data = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open('POST', '/api/design-visits/uploads');
+          xhr.open('POST', endpoints.uploadUrl);
           xhr.setRequestHeader('Content-Type', 'application/json');
           xhr.upload.onprogress = (evt) => {
             if (evt.lengthComputable) {

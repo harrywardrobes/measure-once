@@ -79,6 +79,12 @@ export const DV_WIZARD_DRAFT_PREFIX = 'dv-wizard-draft-';
 /** Design-visit wizard edit drafts: `${DV_WIZARD_DRAFT_EDIT_PREFIX}${visitId}` */
 export const DV_WIZARD_DRAFT_EDIT_PREFIX = 'dv-wizard-draft-edit-';
 
+/** Survey-visit wizard new-visit drafts: `${SV_WIZARD_DRAFT_PREFIX}${contactId}` */
+export const SV_WIZARD_DRAFT_PREFIX = 'sv-wizard-draft-';
+
+/** Survey-visit wizard edit drafts: `${SV_WIZARD_DRAFT_EDIT_PREFIX}${visitId}` */
+export const SV_WIZARD_DRAFT_EDIT_PREFIX = 'sv-wizard-draft-edit-';
+
 /** Schedule visit modal drafts: `${SCHEDULE_VISIT_DRAFT_PREFIX}${contactId}` */
 export const SCHEDULE_VISIT_DRAFT_PREFIX = 'mo-schedule-visit-draft-';
 

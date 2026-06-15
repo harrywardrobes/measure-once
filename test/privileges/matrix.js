@@ -169,6 +169,26 @@ const ROUTES = [
   // gated by HMAC. It lives in PUBLIC_PATH_ALLOWLIST in routeAudit.js; no
   // matrix row is needed because there's no privilege gate to measure.
 
+  // Survey-visit member-level surface (survey-visits.js). Mirrors the design
+  // surface — the survey visit is a continuation of the design visit and
+  // reuses the same catalogue, questionnaire, and sign-off flow.
+  { method: 'GET',    path: '/api/survey-visits',              level: 'member' },
+  { method: 'GET',    path: '/api/survey-visits/in-progress',  level: 'member' },
+  { method: 'GET',    path: '/api/survey-visits/prefill',      level: 'member' },
+  { method: 'GET',    path: '/api/survey-visits/0',            level: 'member' },
+  { method: 'POST',   path: '/api/survey-visits',             level: 'member',  body: {} },
+  { method: 'PATCH',  path: '/api/survey-visits/0',           level: 'member',  body: {} },
+  { method: 'PUT',    path: '/api/survey-visits/0',           level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/survey-visits/0/submit',    level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/survey-visits/0/revision',  level: 'admin',   body: {} },
+  { method: 'POST',   path: '/api/survey-visits/refund',      level: 'member',  body: {} },
+  { method: 'DELETE', path: '/api/survey-visits/0',           level: 'admin' },
+  { method: 'POST',   path: '/api/survey-visits/uploads',     level: 'member',  body: {} },
+  { method: 'POST',   path: '/api/survey-visits/sign-image-urls', level: 'member', body: { storageKeys: [] } },
+  { method: 'DELETE', path: '/api/survey-visits/uploads/obj%3Afake.jpg', level: 'member' },
+  { method: 'GET',    path: '/api/survey-visits/0/answers',   level: 'member' },
+  { method: 'POST',   path: '/api/survey-visits/0/answers',   level: 'member',  body: {} },
+
   // ── manager-level surface ─────────────────────────────────────────────────
   { method: 'POST',   path: '/api/workflow',                  level: 'manager', body: {} },
   { method: 'PATCH',  path: '/api/contacts/0/rooms/0/fitter', level: 'manager', body: {}, needsHubspot: true },

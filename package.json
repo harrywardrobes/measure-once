@@ -91,6 +91,8 @@
     "test:photo-reviews:ci": "node scripts/with-test-db.js test/photo-reviews/run.js",
     "test:start-design-visit": "node test/start-design-visit/run.js",
     "test:start-design-visit:ci": "node scripts/with-test-db.js test/start-design-visit/run.js",
+    "test:start-survey-visit": "node test/start-survey-visit/run.js",
+    "test:start-survey-visit:ci": "node scripts/with-test-db.js test/start-survey-visit/run.js",
     "test:design-visit": "node test/design-visit/run.js",
     "test:design-visit:ci": "node scripts/with-test-db.js test/design-visit/run.js",
     "test:design-visit-list": "node test/design-visit-list/run.js",

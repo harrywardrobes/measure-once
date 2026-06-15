@@ -305,6 +305,15 @@ export const HANDLER_OUTCOMES: Record<string, ActionOutcome[]> = {
     },
   ],
 
+  start_survey_visit: [
+    {
+      key: 'submitted',
+      label: 'Survey visit submitted',
+      kind: 'terminal',
+      description: 'Sets lead status to the handler-configured submittedLeadStatus on submit',
+    },
+  ],
+
   schedule_visit: [
     {
       key: 'scheduled',
@@ -366,6 +375,12 @@ export const SYSTEM_EMAIL_TEMPLATES: SystemEmailTemplate[] = [
     key: 'set_password_reset',
     sentFrom: 'auth.js',
     description: 'Password-reset link sent when a user requests a forgotten-password reset.',
+    system: true,
+  },
+  {
+    key: 'survey_refund_request',
+    sentFrom: 'survey-visits.js',
+    description: 'Admin notification sent when a survey deposit refund is requested ("customer changed their mind"), so the refund can be processed manually in QuickBooks.',
     system: true,
   },
 ];

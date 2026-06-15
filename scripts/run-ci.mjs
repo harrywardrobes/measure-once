@@ -94,6 +94,7 @@ const STEPS = [
   'test:photo-approval-notification:ci',
   'test:photo-reviews:ci',
   'test:start-design-visit:ci',
+  'test:start-survey-visit:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',
   'test:visit-edit-cancel:ci',

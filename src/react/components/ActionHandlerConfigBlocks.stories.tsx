@@ -23,6 +23,7 @@ function configBlockForType(type: string): React.ReactNode {
     case 'show_message':
       return <ShowMessageConfig />;
     case 'start_design_visit':
+    case 'start_survey_visit':
       return (
         <StartDesignVisitConfig
           intermediateLeadStatus="design_in_prog"

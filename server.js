@@ -38,6 +38,7 @@ const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
 const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties, ensureStartDesignVisitHandlerBindings } = require('./design-visits');
+const { router: surveyVisitsRouter, setPatchContactProperties: setSvPatchContactProperties, ensureStartSurveyVisitHandlerBindings } = require('./survey-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
@@ -95,6 +96,7 @@ setCustomerInfoSseClients(_hsWebhookSseClients);
 // Wire the shared patchContactProperties helper into every module that mutates
 // hs_lead_status so cache invalidation is guaranteed on every PATCH path.
 setDvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+setSvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setCiPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setPrPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 quickbooksRoutes.setPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
@@ -226,6 +228,40 @@ app.get('/design-visit/sign-off', async (req, res) => {
     ogTitle,
     ogDescription,
     ogUrl: `${baseUrl}/design-visit/sign-off`,
+    ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
+  });
+});
+
+// Public survey-visit sign-off page (no auth required — token-gated)
+app.get('/survey-visit/sign-off', async (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  let ogTitle = 'Survey Visit Sign-Off · Harry Wardrobes';
+  let ogDescription = 'Review and sign off on your survey visit details with Harry Wardrobes.';
+  let pageTitle = 'Survey Visit Sign-Off · Measure Once';
+  const rawToken = String(req.query.token || '').trim();
+  if (rawToken && rawToken.length <= 200) {
+    try {
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const { rows } = await pool.query(
+        `SELECT contact_name FROM survey_visits WHERE signoff_token_hash = $1 LIMIT 1`,
+        [tokenHash]
+      );
+      if (rows.length && rows[0].contact_name) {
+        const name = rows[0].contact_name;
+        ogTitle = `Survey Visit Sign-Off for ${name} · Harry Wardrobes`;
+        ogDescription = `${name} has been sent a survey visit sign-off request. Review and sign off on the details with Harry Wardrobes.`;
+        pageTitle = `Survey Visit Sign-Off for ${name} · Measure Once`;
+      }
+    } catch (_) {
+      // Fall back to generic strings if lookup fails
+    }
+  }
+  res.render('survey-visit-signoff', {
+    title: pageTitle,
+    description: 'Review and sign off on your survey visit details with Harry Wardrobes.',
+    ogTitle,
+    ogDescription,
+    ogUrl: `${baseUrl}/survey-visit/sign-off`,
     ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
   });
 });
@@ -430,10 +466,12 @@ app.use(googleMapsRouter);
 // req.user is absent, so public/token-gated routes inside these routers are
 // unaffected.
 app.use('/api/design-visits', requireOnboardingComplete);
+app.use('/api/survey-visits', requireOnboardingComplete);
 app.use('/api/customer-info', requireOnboardingComplete);
 app.use('/api/photo-reviews', requireOnboardingComplete);
 
 app.use(designVisitsRouter);
+app.use(surveyVisitsRouter);
 app.use(customerInfoRouter);
 app.use(photoReviewsRouter);
 
@@ -458,6 +496,8 @@ app.use('/api', (req, res, next) => {
   if (AUTH_WHITELIST.has(req.path)) return next();
   // Public design-visit sign-off routes (/api/design-visits/sign-off/:token)
   if (/^\/design-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
+  // Public survey-visit sign-off routes (/api/survey-visits/sign-off/:token)
+  if (/^\/survey-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
   // Public customer-info routes (/api/customer-info/:token, /photos, /resend-expired)
   if (/^\/customer-info\/[^/]+(\/photos|\/resend-expired)?$/.test(req.path)) return next();
   return isAuthenticated(req, res, next);
@@ -5437,6 +5477,32 @@ const CARD_ACTION_HANDLER_CONFIG_VALIDATORS = {
     }
     return { value: out };
   },
+  start_survey_visit(cfg) {
+    const out = {};
+    if (cfg.defaultDurationMin !== undefined) {
+      const n = parseInt(cfg.defaultDurationMin, 10);
+      if (!Number.isInteger(n) || n < 5 || n > 1440) {
+        return { error: 'defaultDurationMin must be 5–1440.' };
+      }
+      out.defaultDurationMin = n;
+    }
+    if (cfg.intermediateLeadStatus !== undefined) {
+      const v = String(cfg.intermediateLeadStatus || '').trim();
+      if (v.length > 60) return { error: 'intermediateLeadStatus must be 60 characters or fewer.' };
+      out.intermediateLeadStatus = v;
+    }
+    if (cfg.submittedLeadStatus !== undefined) {
+      const v = String(cfg.submittedLeadStatus || '').trim();
+      if (v.length > 60) return { error: 'submittedLeadStatus must be 60 characters or fewer.' };
+      out.submittedLeadStatus = v;
+    }
+    if (cfg.termsAndConditions !== undefined) {
+      const v = String(cfg.termsAndConditions || '');
+      if (v.length > 4000) return { error: 'termsAndConditions must be 4000 characters or fewer.' };
+      out.termsAndConditions = v;
+    }
+    return { value: out };
+  },
   // No required config keys — the form link and email are generated at send time.
   upload_photos_and_info(_cfg) {
     return { value: {} };
@@ -7209,6 +7275,8 @@ async function cleanupStaleHubSpotCredentialRows() {
     catch (e) { logger.error({ err: e }, '  Contact customer handler binding setup failed'); }
     try { await ensureStartDesignVisitHandlerBindings(); }
     catch (e) { logger.error({ err: e }, '  Start design visit handler binding setup failed'); }
+    try { await ensureStartSurveyVisitHandlerBindings(); }
+    catch (e) { logger.error({ err: e }, '  Start survey visit handler binding setup failed'); }
     try { await seedStageActionLabelsDefaults(); }
     catch (e) { logger.error({ err: e }, '  Stage action labels seed failed'); }
     try { await ensureHwTestUserProperty(); }

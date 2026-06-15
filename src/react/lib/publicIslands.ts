@@ -17,6 +17,7 @@ export const PUBLIC_ISLAND_IDS = new Set([
   'set-password-root',
   'onboarding-root',
   'dv-signoff-mount',
+  'sv-signoff-mount',
   'customer-info-mount',
 ]);
 

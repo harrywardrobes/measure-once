@@ -16,6 +16,7 @@ export const HANDLER_TYPES = [
   { value: 'schedule_visit',        label: 'Schedule visit' },
   { value: 'contact_customer',      label: 'Contact customer (call / email / WhatsApp)' },
   { value: 'start_design_visit',    label: 'Start design visit wizard' },
+  { value: 'start_survey_visit',    label: 'Start survey visit wizard' },
   { value: 'upload_photos_and_info', label: 'Upload photos & info' },
   { value: 'review_customer_photos', label: 'Review customer photos' },
   { value: 'summarise_phone_call',  label: 'Summarise phone call (hidden from UI)' },
@@ -54,6 +55,17 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     '• On submit: creates a design_visits DB record, updates HubSpot lead ' +
     'status, creates a HubSpot note, attempts a QuickBooks Estimate, emails ' +
     'the customer a sign-off link.',
+  start_survey_visit:
+    'Clicking the action on a Survey card opens a full multi-step survey ' +
+    'visit wizard. It is a continuation of the design visit and reuses the ' +
+    'same wizard UI, catalogue, questionnaire, and sign-off flow.\n' +
+    '• Two-phase HubSpot status update: wizard open → in-progress status; ' +
+    'wizard submit → submitted status.\n' +
+    '• Step 1 — Visit details. Step 2 — Rooms. Step 3 — Review.\n' +
+    '• On submit: creates a survey_visits DB record (optionally pre-filled ' +
+    'from a signed-off design visit), updates HubSpot lead status, creates a ' +
+    'HubSpot note, attempts a QuickBooks Estimate, emails the customer a ' +
+    'sign-off link.',
 };
 
 interface ModalChromeProps {

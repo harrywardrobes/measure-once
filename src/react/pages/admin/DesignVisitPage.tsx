@@ -799,9 +799,31 @@ export function DesignVisitPage() {
             <CardContent>
               <Typography variant="h6">Survey Visit</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Survey visit configuration is coming soon. The shared catalogue and
-                questionnaire foundation already supports it.
+                The Survey Visit is a continuation of the Design Visit. It reuses the
+                same foundations rather than maintaining a separate set of settings:
               </Typography>
+              <Box component="ul" sx={{ mt: 1.5, mb: 0, pl: 3, color: 'text.secondary' }}>
+                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
+                  <strong>Catalogue</strong> — door styles, handles, furniture ranges,
+                  and pairings are shared. Manage them in the catalogue subtabs above.
+                </Typography>
+                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
+                  <strong>Questionnaire</strong> — survey questions live in the shared
+                  <em> Questionnaire</em> subtab. Tag a question with
+                  {' '}<code>survey</code> in its <em>Applies&nbsp;to</em> field to make
+                  it appear in the Survey Visit wizard.
+                </Typography>
+                <Typography component="li" variant="body2" sx={{ mb: 0.75 }}>
+                  <strong>Terms &amp; Conditions</strong> — the same versioned terms
+                  published in the <em>Design&nbsp;Visit</em> subtab are reused.
+                </Typography>
+                <Typography component="li" variant="body2">
+                  <strong>Action settings</strong> — default duration, the in-progress
+                  and submitted lead statuses, and the terms shown to customers are
+                  configured per binding via the <em>Start survey visit</em> action in
+                  the <em>Action&nbsp;Handlers</em> admin page.
+                </Typography>
+              </Box>
             </CardContent>
           </Card>
         </Box>
