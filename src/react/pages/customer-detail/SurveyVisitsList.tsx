@@ -138,6 +138,50 @@ function queuedBodyToExistingSurveyVisit(
   };
 }
 
+/** Retry / Discard actions for a queued *refund* that failed to sync. */
+function PendingRefundActions({ entries }: { entries: PendingSurveyVisitEntry[] }) {
+  const [busy, setBusy] = useState(false);
+
+  const handleRetry = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const engine = await import('../../lib/syncEngine');
+      await Promise.all(entries.map(e => engine.retryEntry(e.id)));
+    } catch {
+      /* best-effort — the periodic flush will pick it up */
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, entries]);
+
+  const handleDiscard = useCallback(() => {
+    if (busy) return;
+    const doDiscard = async () => {
+      setBusy(true);
+      try {
+        const mod = await import('../../lib/offlineQueue');
+        await Promise.all(entries.map(e => mod.removeEntry(e.id)));
+      } catch {
+        /* best-effort */
+      } finally {
+        setBusy(false);
+      }
+    };
+    window.showBottomConfirm(
+      "Discard this queued refund request? The request will be permanently removed — you'll need to submit it again manually if still needed.",
+      doDiscard,
+    );
+  }, [busy, entries]);
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+      <button style={sxSecondaryBtn} disabled={busy} onClick={handleRetry}>Retry</button>
+      <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }} disabled={busy} onClick={handleDiscard}>Discard</button>
+    </div>
+  );
+}
+
 /** Retry / Discard actions for a queued *edit* that failed to upload. */
 function PendingEditActions({ entry }: { entry: PendingSurveyVisitEntry }) {
   const [busy, setBusy] = useState(false);
@@ -430,17 +474,20 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, res
         <div
           data-testid="sv-refund-inline-badge"
           style={{
-            display: 'flex', alignItems: 'center', gap: 8,
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
             background: 'var(--paper)', border: '1px dashed var(--stone)',
             borderRadius: 'var(--radius-md)', padding: '5px 10px',
           }}
         >
           <SyncStatePill status={pendingRefund.status} testId="sv-refund-sync-pill" />
-          <span style={{ fontSize: '0.78rem', color: 'var(--ink-3)' }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--ink-3)', flex: 1, minWidth: 0 }}>
             {pendingRefund.status === 'failed'
-              ? `Refund request couldn't sync${pendingRefund.lastError ? ` — ${pendingRefund.lastError}` : ''}. It'll retry automatically.`
+              ? `Refund request couldn't sync${pendingRefund.lastError ? ` — ${pendingRefund.lastError}` : ''}.`
               : "Refund request pending sync — it'll be sent when you're back online."}
           </span>
+          {pendingRefund.status === 'failed' && (
+            <PendingRefundActions entries={[pendingRefund]} />
+          )}
         </div>
       )}
     </div>
@@ -512,53 +559,19 @@ function RefundBannerRow({ entry, showIndex, total }: { entry: PendingSurveyVisi
 
 /**
  * Banner shown at the top of the survey visits section when one or more refund
- * requests are sitting in the offline queue waiting to sync.
+ * requests are sitting in the offline queue waiting to sync (legacy: no visit-id
+ * attached). Supports multiple entries.
  *
  * - **Single entry:** collapsed single-row banner (existing behaviour).
  * - **2+ entries:** each refund gets its own inline row with its own
  *   Retry / Discard pair so staff can act on them individually.
  */
 function PendingRefundBanner({ entries }: { entries: PendingSurveyVisitEntry[] }) {
-  const [busy, setBusy] = useState(false);
+  if (!entries.length) return null;
 
   const anyFailed = entries.some(e => e.status === 'failed');
   const anySyncing = entries.some(e => e.status === 'syncing');
   const failedEntries = entries.filter(e => e.status === 'failed');
-
-  const handleRetry = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const engine = await import('../../lib/syncEngine');
-      await Promise.all(failedEntries.map(e => engine.retryEntry(e.id)));
-    } catch {
-      /* best-effort — the periodic flush will pick it up */
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, failedEntries]);
-
-  const handleDiscard = useCallback(() => {
-    if (busy) return;
-    const doDiscard = async () => {
-      setBusy(true);
-      try {
-        const mod = await import('../../lib/offlineQueue');
-        await Promise.all(failedEntries.map(e => mod.removeEntry(e.id)));
-      } catch {
-        /* best-effort */
-      } finally {
-        setBusy(false);
-      }
-    };
-    window.showBottomConfirm(
-      "Discard this queued refund request? The request will be permanently removed — you'll need to submit it again manually if still needed.",
-      doDiscard,
-    );
-  }, [busy, failedEntries]);
-
-  if (!entries.length) return null;
-
   const status = anyFailed ? 'failed' : anySyncing ? 'syncing' : 'pending';
   const firstError = entries.find(e => e.lastError)?.lastError;
 
@@ -595,12 +608,7 @@ function PendingRefundBanner({ entries }: { entries: PendingSurveyVisitEntry[] }
           ? `Refund request couldn't sync${firstError ? ` — ${firstError}` : ''}.`
           : "Refund request pending sync — it'll be sent when you're back online."}
       </span>
-      {anyFailed && (
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button style={sxSecondaryBtn} disabled={busy} onClick={handleRetry}>Retry</button>
-          <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }} disabled={busy} onClick={handleDiscard}>Discard</button>
-        </div>
-      )}
+      {anyFailed && <PendingRefundActions entries={failedEntries} />}
     </div>
   );
 }
