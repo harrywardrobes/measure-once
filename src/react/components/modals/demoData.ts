@@ -188,6 +188,100 @@ export const DEMO_ROOMS = [
   },
 ];
 
+// ── Survey-visit wizard demo fixtures ─────────────────────────────────────────
+
+/**
+ * Sample whole-visit questionnaire questions (scope='visit') shown in the
+ * survey visit wizard demo so the review step renders a representative
+ * "Questionnaire" section. Mirrors the shape returned by
+ * GET /api/visit-questions?applies_to=survey.
+ */
+export const DEMO_SURVEY_VISIT_QUESTIONS: VisitQuestion[] = [
+  {
+    id: 9201,
+    scope: 'visit',
+    applies_to: ['survey'],
+    label: 'Is the customer the property owner?',
+    type: 'yesno',
+    options: [],
+    required: false,
+    sort_order: 1,
+  },
+  {
+    id: 9202,
+    scope: 'visit',
+    applies_to: ['survey'],
+    label: 'How did the customer hear about us?',
+    type: 'choice',
+    options: ['Referral', 'Online search', 'Social media', 'Returning customer'],
+    required: false,
+    sort_order: 2,
+  },
+  {
+    id: 9203,
+    scope: 'visit',
+    applies_to: ['survey'],
+    label: 'Any access restrictions on the day?',
+    type: 'text',
+    options: [],
+    required: false,
+    sort_order: 3,
+  },
+];
+
+/** Demo answers to the whole-visit survey questions, keyed by question id. */
+export const DEMO_SURVEY_VISIT_ANSWERS: AnswerMap = {
+  9201: true,
+  9202: 'Referral',
+  9203: 'Parking available on the driveway',
+};
+
+/**
+ * Sample per-room questionnaire questions (scope='room') shown in the survey
+ * visit wizard demo. Each demo room carries its own answers via DEMO_ROOMS.
+ */
+export const DEMO_SURVEY_ROOM_QUESTIONS: VisitQuestion[] = [
+  {
+    id: 9301,
+    scope: 'room',
+    applies_to: ['survey'],
+    label: "What is the room's primary use?",
+    type: 'choice',
+    options: ['Cooking', 'Dining', 'Storage', 'Laundry'],
+    required: false,
+    sort_order: 1,
+  },
+  {
+    id: 9302,
+    scope: 'room',
+    applies_to: ['survey'],
+    label: 'Are there existing appliances to integrate?',
+    type: 'yesno',
+    options: [],
+    required: false,
+    sort_order: 2,
+  },
+  {
+    id: 9303,
+    scope: 'room',
+    applies_to: ['survey'],
+    label: 'Additional surveyor notes',
+    type: 'text',
+    options: [],
+    required: false,
+    sort_order: 3,
+  },
+];
+
+/**
+ * Per-room answers for the survey visit demo, keyed by room index then
+ * question id. Used to populate DEMO_ROOMS' answers for survey demo mode.
+ */
+export const DEMO_SURVEY_ROOM_ANSWERS: AnswerMap[] = [
+  { 9301: 'Cooking', 9302: true,  9303: 'Wants to keep the existing range cooker' },
+  { 9301: 'Laundry', 9302: false, 9303: '' },
+];
+
 // ── Photo-review drawer demo fixtures ─────────────────────────────────────────
 
 /**

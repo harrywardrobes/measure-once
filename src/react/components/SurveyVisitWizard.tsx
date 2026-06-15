@@ -21,6 +21,10 @@ import {
   DEMO_TERMS_TEXT,
   DEMO_STEP1,
   DEMO_ROOMS,
+  DEMO_SURVEY_VISIT_QUESTIONS,
+  DEMO_SURVEY_ROOM_QUESTIONS,
+  DEMO_SURVEY_VISIT_ANSWERS,
+  DEMO_SURVEY_ROOM_ANSWERS,
 } from './modals/demoData';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
 import type { CatalogueSuggestion } from './CatalogueDropdowns';
@@ -275,7 +279,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   });
 
   const [rooms, setRooms] = useState<RoomData[]>(() => {
-    if (demo) return DEMO_ROOMS.map(r => ({ ...r }));
+    if (demo) return DEMO_ROOMS.map((r, i) => ({ ...r, answers: DEMO_SURVEY_ROOM_ANSWERS[i] ?? {} }));
     if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
       if (draft) return draft.rooms;
@@ -287,12 +291,12 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     existingVisit?.design_visit_id ?? null
   );
 
-  const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>([]);
-  const [roomQuestions, setRoomQuestions] = useState<VisitQuestion[]>([]);
+  const [visitQuestions, setVisitQuestions] = useState<VisitQuestion[]>(demo ? DEMO_SURVEY_VISIT_QUESTIONS : []);
+  const [roomQuestions, setRoomQuestions] = useState<VisitQuestion[]>(demo ? DEMO_SURVEY_ROOM_QUESTIONS : []);
   const [showRoomAnswerValidation, setShowRoomAnswerValidation] = useState(false);
   const [s2Error, setS2Error] = useState('');
   const [answers, setAnswers] = useState<AnswerMap>(() => {
-    if (demo) return {};
+    if (demo) return { ...DEMO_SURVEY_VISIT_ANSWERS };
     if (!editMode && orphanedDraftKeys.length === 0) {
       const draft = loadDraft(storageKey);
       if (draft?.answers) return draft.answers;
