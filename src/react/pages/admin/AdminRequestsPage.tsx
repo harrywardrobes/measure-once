@@ -13,6 +13,7 @@ import LanguageIcon from '@mui/icons-material/Language';
 import LinkIcon from '@mui/icons-material/Link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhoneIcon from '@mui/icons-material/Phone';
+import UndoIcon from '@mui/icons-material/Undo';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
 import {
   findPhoneDuplicate,
@@ -90,6 +91,8 @@ function addressSummary(sub: UnmatchedSub): string {
   return [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ') || '—';
 }
 
+const UNDO_GRACE_MS = 6000;
+
 function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
@@ -106,6 +109,41 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState<ContactOption | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Grace-period undo state: set after a successful link; card stays visible
+  // until either the admin clicks Undo or the timer fires.
+  const [linkedTo, setLinkedTo] = useState<{ label: string; email: string } | null>(null);
+  const [unlinkBusy, setUnlinkBusy] = useState(false);
+  const autoRemoveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoRemoveTimer.current) clearTimeout(autoRemoveTimer.current);
+    };
+  }, []);
+
+  function scheduleAutoRemove() {
+    if (autoRemoveTimer.current) clearTimeout(autoRemoveTimer.current);
+    autoRemoveTimer.current = setTimeout(() => {
+      onLinked(sub.id);
+    }, UNDO_GRACE_MS);
+  }
+
+  async function handleUndo() {
+    if (autoRemoveTimer.current) clearTimeout(autoRemoveTimer.current);
+    setUnlinkBusy(true);
+    try {
+      await api('PATCH', `/api/customer-info/${sub.id}/unlink-contact`, {});
+      setLinkedTo(null);
+      toast('Link undone — submission returned to unmatched list');
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+      // Re-schedule removal in case undo failed so the card doesn't get stuck
+      scheduleAutoRemove();
+    } finally {
+      setUnlinkBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!linkOpen) return;
@@ -159,8 +197,10 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
         contact_id: linkSelected.id,
         contact_name: linkSelected.label !== '(no name)' ? linkSelected.label : undefined,
       });
-      toast('Submission linked to customer');
-      setLinkSuccess(linkSelected);
+      setLinkOpen(false);
+      setLinkedTo({ label: linkSelected.label, email: linkSelected.email });
+      setOpen(true);
+      scheduleAutoRemove();
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
     } finally {
@@ -283,20 +323,45 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
                   </Box>
                 </Box>
               )}
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <Alert severity="warning" sx={{ py: 0.5, flex: 1 }}>
-                  This submission hasn't been matched to a HubSpot contact.
-                </Alert>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<LinkIcon />}
-                  onClick={openLinkDialog}
-                  sx={{ flexShrink: 0 }}
+              {linkedTo ? (
+                <Alert
+                  severity="success"
+                  sx={{ py: 0.5 }}
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      startIcon={unlinkBusy
+                        ? <CircularProgress size={14} color="inherit" />
+                        : <UndoIcon fontSize="small" />
+                      }
+                      onClick={handleUndo}
+                      disabled={unlinkBusy}
+                    >
+                      Undo
+                    </Button>
+                  }
                 >
-                  Link to customer
-                </Button>
-              </Stack>
+                  Linked to <strong>{linkedTo.label}</strong>
+                  {linkedTo.email ? ` (${linkedTo.email})` : ''}
+                  {' '}— this card will disappear shortly.
+                </Alert>
+              ) : (
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <Alert severity="warning" sx={{ py: 0.5, flex: 1 }}>
+                    This submission hasn't been matched to a HubSpot contact.
+                  </Alert>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<LinkIcon />}
+                    onClick={openLinkDialog}
+                    sx={{ flexShrink: 0 }}
+                  >
+                    Link to customer
+                  </Button>
+                </Stack>
+              )}
             </Stack>
           </Box>
         </Collapse>

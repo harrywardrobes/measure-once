@@ -1844,6 +1844,56 @@ router.patch('/api/customer-info/:id/link-contact',
   },
 );
 
+// PATCH /api/customer-info/:id/unlink-contact
+// Admin-only: undo a recent manual link, setting contact_id back to NULL.
+// Only works on generic submitted rows that were manually linked
+// (is_generic = true, submitted_at IS NOT NULL, contact_id IS NOT NULL).
+router.patch('/api/customer-info/:id/unlink-contact',
+  isAuthenticated,
+  requireAdmin,
+  async (req, res) => {
+    const submissionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(submissionId) || submissionId <= 0) {
+      return res.status(400).json({ error: 'Invalid submission ID.' });
+    }
+
+    try {
+      const result = await pool.query(
+        `UPDATE customer_info_submissions
+            SET contact_id   = NULL,
+                contact_name = NULL,
+                updated_at   = NOW()
+          WHERE id           = $1
+            AND contact_id   IS NOT NULL
+            AND is_generic   = true
+            AND submitted_at IS NOT NULL
+          RETURNING id`,
+        [submissionId],
+      );
+
+      if (result.rowCount === 0) {
+        const check = await pool.query(
+          `SELECT contact_id, is_generic, submitted_at FROM customer_info_submissions WHERE id = $1`,
+          [submissionId],
+        );
+        if (check.rowCount === 0) {
+          return res.status(404).json({ error: 'Submission not found.' });
+        }
+        return res.status(409).json({ error: 'Submission cannot be unlinked.' });
+      }
+
+      logger.info(
+        { submissionId, adminUser: req.user?.id },
+        '[customer-info] Admin unlinked submission from contact (undo)',
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      logger.error({ err: e.message }, '[customer-info] PATCH /unlink-contact error');
+      res.status(500).json({ error: 'Failed to unlink submission.' });
+    }
+  },
+);
+
 module.exports = {
   router,
   ensureResendLogTable,
