@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-  DialogContent, DialogTitle, FormControl, Grid, InputLabel, LinearProgress, Link,
+  Alert, AlertTitle, Box, Button, Card, CardContent, Chip, Collapse, Dialog, DialogActions,
+  DialogContent, DialogTitle, FormControl, Grid, IconButton, InputLabel, LinearProgress, Link,
   MenuItem, Select, Skeleton, Stack, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, TextField, Typography,
+  TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlined';
+import HomeIcon from '@mui/icons-material/Home';
 import LanguageIcon from '@mui/icons-material/Language';
 import PhoneIcon from '@mui/icons-material/Phone';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
@@ -41,6 +45,22 @@ type TradeSub = {
   contacts?: Contact[]; submitter_name?: string; submitter_email?: string; created_at?: string;
 };
 type JobRole = { name: string };
+type UnmatchedSub = {
+  id: number;
+  contact_name: string | null;
+  contact_email: string | null;
+  corrected_email: string | null;
+  corrected_mobile: string | null;
+  address_line1: string | null;
+  city: string | null;
+  postcode: string | null;
+  room_count: string | null;
+  room_notes: string | null;
+  photo_keys: string[];
+  photoUrls: string[];
+  submitted_at: string;
+  created_at: string;
+};
 
 function safeUrl(url?: string): string {
   const s = (url || '').trim();
@@ -52,6 +72,142 @@ function safeUrl(url?: string): string {
   } catch { return ''; }
 }
 
+function roomLabel(count: string | null): string {
+  if (!count) return '—';
+  if (count === '1') return '1 room';
+  if (count === '2') return '2 rooms';
+  return '3+ rooms';
+}
+
+function addressSummary(sub: UnmatchedSub): string {
+  return [sub.address_line1, sub.city, sub.postcode].filter(Boolean).join(', ') || '—';
+}
+
+function UnmatchedSubCard({ sub }: { sub: UnmatchedSub }) {
+  const [open, setOpen] = useState(false);
+  const displayName = sub.contact_name || '—';
+  const displayEmail = sub.corrected_email || sub.contact_email || '—';
+  const displayPhone = sub.corrected_mobile || '—';
+  const photoCount = Array.isArray(sub.photoUrls) ? sub.photoUrls.length : 0;
+
+  return (
+    <Box
+      sx={{
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        overflow: 'hidden',
+      }}
+    >
+      {/* Summary row */}
+      <Box
+        onClick={() => setOpen(v => !v)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          px: 2,
+          py: 1.5,
+          cursor: 'pointer',
+          userSelect: 'none',
+          '&:hover': { bgcolor: 'action.hover' },
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{displayName}</Typography>
+            <Typography variant="caption" color="text.secondary">{displayEmail}</Typography>
+            {displayPhone !== '—' && (
+              <Typography variant="caption" color="text.secondary">· {displayPhone}</Typography>
+            )}
+          </Stack>
+          <Stack direction="row" spacing={1} sx={{ mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
+            <HomeIcon sx={{ fontSize: 13, color: 'text.disabled' }} />
+            <Typography variant="caption" color="text.secondary">{addressSummary(sub)}</Typography>
+            <Typography variant="caption" color="text.disabled">·</Typography>
+            <Typography variant="caption" color="text.secondary">{roomLabel(sub.room_count)}</Typography>
+            {photoCount > 0 && (
+              <>
+                <Typography variant="caption" color="text.disabled">·</Typography>
+                <Typography variant="caption" color="text.secondary">{photoCount} photo{photoCount !== 1 ? 's' : ''}</Typography>
+              </>
+            )}
+          </Stack>
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+          {fmtDate(sub.submitted_at)}
+        </Typography>
+        <IconButton size="small" aria-label={open ? 'Collapse' : 'Expand'} sx={{ flexShrink: 0 }}>
+          {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+
+      {/* Expandable detail */}
+      <Collapse in={open}>
+        <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Stack spacing={1}>
+            {sub.room_notes && (
+              <Box>
+                <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
+                <Typography variant="body2" color="text.secondary">{sub.room_notes}</Typography>
+              </Box>
+            )}
+            {photoCount === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                No photos uploaded.
+              </Typography>
+            ) : (
+              <Box>
+                <Typography variant="overline" sx={{ fontSize: '0.65rem', display: 'block', mb: 0.5 }}>
+                  Photos ({photoCount})
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                    gap: 1,
+                  }}
+                >
+                  {sub.photoUrls.map((url, i) => (
+                    <Box
+                      key={i}
+                      component="a"
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{
+                        display: 'block',
+                        aspectRatio: '1',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Box
+                        component="img"
+                        src={url}
+                        alt={`Photo ${i + 1}`}
+                        loading="lazy"
+                        sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+            <Alert severity="warning" sx={{ py: 0.5 }}>
+              This submission hasn't been matched to a HubSpot contact. To link it, find or create
+              the contact in HubSpot, then it will appear automatically in their customer record once
+              the ID is resolved.
+            </Alert>
+          </Stack>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
 export function AdminRequestsPage() {
   usePageTitle('Access Requests · Measure Once');
   const [loading, setLoading] = useState(true);
@@ -61,6 +217,7 @@ export function AdminRequestsPage() {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);
+  const [unmatched, setUnmatched] = useState<UnmatchedSub[]>([]);
 
   const [photoProgress, setPhotoProgress] = useState<Record<string, number | undefined>>({});
   const [photoRejecting, setPhotoRejecting] = useState<Record<string, boolean>>({});
@@ -88,13 +245,14 @@ export function AdminRequestsPage() {
 
   async function load() {
     try {
-      const [r, p, t, jr, u, a] = await Promise.all([
+      const [r, p, t, jr, u, a, um] = await Promise.all([
         api<Req[]>('GET', '/api/admin/requests'),
         api<PhotoReq[]>('GET', '/api/admin/photo-requests'),
         api<TradeSub[]>('GET', '/api/admin/trades/submissions'),
         api<JobRole[]>('GET', '/api/admin/job-roles'),
         api<User[]>('GET', '/api/admin/users'),
         api<Allowed[]>('GET', '/api/admin/allowed'),
+        api<UnmatchedSub[]>('GET', '/api/customer-info/unmatched'),
       ]);
       const reqList = Array.isArray(r) ? r : [];
       const photoList = Array.isArray(p) ? p : [];
@@ -105,6 +263,7 @@ export function AdminRequestsPage() {
       setJobRoles(Array.isArray(jr) ? jr : []);
       setUsers(Array.isArray(u) ? u : []);
       setAllowed(Array.isArray(a) ? a : []);
+      setUnmatched(Array.isArray(um) ? um : []);
       const pending = reqList.filter(x => x.status === 'pending').length;
       setRequestsBadge(pending + photoList.length + tradeList.length);
     } catch (e: unknown) {
@@ -537,6 +696,30 @@ export function AdminRequestsPage() {
           </Card>
         );
       })}
+
+      {/* Unmatched form submissions */}
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" spacing={1} sx={{ mb: unmatched.length > 0 ? 2 : 0, alignItems: 'center' }}>
+            <Typography variant="h6">Unmatched form submissions</Typography>
+            {unmatched.length > 0 && <Chip size="small" label={unmatched.length} color="warning" />}
+            <Tooltip
+              title="These submissions came in via the generic form link but couldn't be matched to a HubSpot contact. They won't appear on any customer record until the contact is resolved manually."
+              placement="top"
+              arrow
+            >
+              <HelpOutlineIcon sx={{ fontSize: 18, color: 'text.disabled', cursor: 'help' }} />
+            </Tooltip>
+          </Stack>
+          {unmatched.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No unmatched submissions.</Typography>
+          ) : (
+            <Stack spacing={1}>
+              {unmatched.map(s => <UnmatchedSubCard key={s.id} sub={s} />)}
+            </Stack>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Reject photo dialog */}
       <Dialog open={rejectPhotoTarget !== null} onClose={() => setRejectPhotoTarget(null)} maxWidth="xs" fullWidth>

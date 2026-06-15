@@ -12,7 +12,7 @@ const axios      = require('axios').create({ timeout: 12000 });
 const path       = require('path');
 const fs         = require('fs');
 const os         = require('os');
-const { isAuthenticated, requirePrivilege } = require('./auth');
+const { isAuthenticated, requirePrivilege, requireAdmin } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./shared/handler-outcomes.cjs');
@@ -1739,6 +1739,46 @@ async function logNullFormLinkCount() {
     logger.warn({ err: e.message }, `${label} could not count null form_link rows:`);
   }
 }
+
+// Admin-only: list generic form submissions that could not be resolved to a
+// HubSpot contact (contact_id IS NULL, is_generic = true, submitted_at IS NOT NULL).
+// These rows were successfully submitted by the customer but the automatic
+// HubSpot contact creation/lookup failed, so they are orphaned — no contact
+// record links them, and they do not appear in any per-contact submission rail.
+// GET /api/customer-info/unmatched
+router.get('/api/customer-info/unmatched',
+  isAuthenticated,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT id, contact_name, contact_email, corrected_email, corrected_mobile,
+                address_line1, city, postcode, structured_address,
+                room_count, room_notes, photo_keys, submitted_at, created_at,
+                email_skipped_count
+         FROM customer_info_submissions
+         WHERE contact_id IS NULL
+           AND is_generic = true
+           AND submitted_at IS NOT NULL
+         ORDER BY submitted_at DESC
+         LIMIT 200`,
+      );
+      const rows = r.rows.map(row => {
+        const structuredAddress = row.structured_address
+          || hubspotToAddress({ address: row.address_line1, city: row.city, zip: row.postcode, country: 'United Kingdom' });
+        return {
+          ...row,
+          structuredAddress,
+          photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
+        };
+      });
+      res.json(rows);
+    } catch (e) {
+      logger.error({ err: e.message }, '[customer-info] GET /unmatched error');
+      res.status(500).json({ error: 'Failed to load unmatched submissions.' });
+    }
+  }
+);
 
 module.exports = {
   router,
