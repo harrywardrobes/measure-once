@@ -86,6 +86,13 @@ export const PeopleGroupActive: Story = {
   ),
 };
 
+export const VisitsGroupActive: Story = {
+  name: 'Visits group active',
+  render: () => (
+    <Interactive tabs={ALL_TABS} initialGroup="visits" initialTab="designvisit" />
+  ),
+};
+
 export const ConfigurationGroupActive: Story = {
   name: 'Configuration group active',
   render: () => (
