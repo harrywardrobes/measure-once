@@ -2339,6 +2339,14 @@ function normaliseAppliesTo(v) {
   if (typeof v === 'string' && v.trim()) return v.split(',').map(x => x.trim()).filter(Boolean);
   return [];
 }
+
+const VALID_VISIT_TYPES = ['design', 'survey'];
+function normaliseRequiredOn(v) {
+  const raw = Array.isArray(v) ? v
+    : (typeof v === 'string' && v.trim()) ? v.split(',')
+    : [];
+  return [...new Set(raw.map(x => String(x).trim().toLowerCase()).filter(x => VALID_VISIT_TYPES.includes(x)))];
+}
 function normaliseOptions(v) {
   if (Array.isArray(v)) return v.map(x => String(x));
   return [];
@@ -2403,14 +2411,17 @@ router.post('/api/admin/visit-questions', isAuthenticated, requireAdmin, async (
   if (!VISIT_QUESTION_TYPES.includes(type)) return res.status(400).json({ error: `type must be one of: ${VISIT_QUESTION_TYPES.join(', ')}` });
   const appliesTo = normaliseAppliesTo(req.body?.applies_to);
   const options = normaliseOptions(req.body?.options);
-  const required = !!req.body?.required;
+  const requiredOn = req.body?.required_on !== undefined
+    ? normaliseRequiredOn(req.body.required_on)
+    : (req.body?.required ? normaliseAppliesTo(req.body?.applies_to) : []);
+  const required = requiredOn.length > 0;
   const active = req.body?.active === undefined ? true : !!req.body.active;
   const sortOrder = parseInt(req.body?.sort_order, 10) || 0;
   try {
     const r = await pool.query(
-      `INSERT INTO visit_questions (scope, applies_to, label, type, options, required, active, sort_order)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8) RETURNING *`,
-      [scope, appliesTo, label, type, JSON.stringify(options), required, active, sortOrder],
+      `INSERT INTO visit_questions (scope, applies_to, label, type, options, required, required_on, active, sort_order)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9) RETURNING *`,
+      [scope, appliesTo, label, type, JSON.stringify(options), required, requiredOn, active, sortOrder],
     );
     res.status(201).json(r.rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -2461,7 +2472,18 @@ router.patch('/api/admin/visit-questions/:id', isAuthenticated, requireAdmin, as
   }
   if (req.body?.applies_to !== undefined) add('applies_to', normaliseAppliesTo(req.body.applies_to));
   if (req.body?.options !== undefined) { vals.push(JSON.stringify(normaliseOptions(req.body.options))); sets.push(`options = $${vals.length}::jsonb`); }
-  if (req.body?.required !== undefined) add('required', !!req.body.required);
+  if (req.body?.required_on !== undefined) {
+    const requiredOn = normaliseRequiredOn(req.body.required_on);
+    add('required_on', requiredOn);
+    add('required', requiredOn.length > 0);
+  } else if (req.body?.required !== undefined) {
+    // Legacy callers that send only `required` — keep columns in sync by
+    // clearing required_on when setting required=false, and leaving it
+    // unchanged when setting required=true (avoids silently overwriting a
+    // meaningful required_on array with an empty one).
+    if (!req.body.required) add('required_on', []);
+    add('required', !!req.body.required);
+  }
   if (req.body?.active !== undefined) add('active', !!req.body.active);
   if (req.body?.sort_order !== undefined) add('sort_order', parseInt(req.body.sort_order, 10) || 0);
   if (!sets.length) return res.status(400).json({ error: 'No fields to update' });
@@ -2489,10 +2511,18 @@ router.get('/api/visit-questions', isAuthenticated, requirePrivilege('member'), 
   try {
     const params = [];
     const where = ['active = TRUE'];
-    if (req.query.applies_to) { params.push(String(req.query.applies_to)); where.push(`$${params.length} = ANY(applies_to)`); }
+    const appliesTo = req.query.applies_to ? String(req.query.applies_to) : null;
+    let appliesToParamIdx = null;
+    if (appliesTo) { params.push(appliesTo); appliesToParamIdx = params.length; where.push(`$${appliesToParamIdx} = ANY(applies_to)`); }
     if (req.query.scope && VISIT_QUESTION_SCOPES.includes(String(req.query.scope))) { params.push(String(req.query.scope)); where.push(`scope = $${params.length}`); }
+    // Compute effective `required` per visit type:
+    //   with applies_to param → true if the requested type is in required_on
+    //   without applies_to   → true if required_on is non-empty (legacy behaviour)
+    const requiredExpr = appliesToParamIdx != null
+      ? `($${appliesToParamIdx} = ANY(required_on)) AS required`
+      : `(cardinality(required_on) > 0) AS required`;
     const r = await pool.query(
-      `SELECT id, scope, applies_to, label, type, options, required, sort_order
+      `SELECT id, scope, applies_to, label, type, options, required_on, ${requiredExpr}, sort_order
          FROM visit_questions
         WHERE ${where.join(' AND ')}
         ORDER BY scope ASC, sort_order ASC, id ASC`,
