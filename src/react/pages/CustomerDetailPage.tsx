@@ -28,7 +28,7 @@ import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offli
 import Alert from '@mui/material/Alert';
 import { useToast } from '../contexts/ToastContext';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
-import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { LEAD_STATUS_REMOVED_MESSAGE, GET, isGoogleAuthError } from '../utils/api';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 
@@ -235,13 +235,16 @@ export function CustomerDetailPage() {
     if (!email) return;
     setEmailsLoading(true);
     try {
-      const d = await apiFetch<{ connected?: boolean; emails?: GoogleEmail[] }>(
+      const d = await GET<{ connected?: boolean; emails?: GoogleEmail[] }>(
         `/api/emails?email=${encodeURIComponent(email)}`,
       );
       if (d.connected === false) { setGoogleConnected(false); return; }
       setGoogleConnected(true);
       setEmails(d.emails || []);
-    } catch { setEmailsError('load-error'); }
+    } catch (e) {
+      if (isGoogleAuthError(e)) { setGoogleConnected(false); }
+      else { setEmailsError('load-error'); }
+    }
     finally { setEmailsLoading(false); }
   }, []);
 
