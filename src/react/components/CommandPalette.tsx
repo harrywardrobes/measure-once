@@ -35,6 +35,7 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import LockIcon from '@mui/icons-material/Lock';
 import HistoryIcon from '@mui/icons-material/History';
 import BuildIcon from '@mui/icons-material/Build';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import EmailIcon from '@mui/icons-material/Email';
 import BugReportIcon from '@mui/icons-material/BugReport';
@@ -65,6 +66,7 @@ const ALL_ACTIONS: Action[] = [
   { id: 'go-customers',    label: 'All customers',          hint: 'Browse your customer list',              category: 'Navigate', icon: <GroupIcon fontSize="small" />,           href: '/customers' },
   { id: 'go-home',         label: 'Home dashboard',         hint: 'Go to the main dashboard',               category: 'Navigate', icon: <HomeIcon fontSize="small" />,            href: '/' },
   { id: 'go-projects',     label: 'Projects tracker',       hint: 'Active workshop and delivery jobs',      category: 'Navigate', icon: <ViewKanbanIcon fontSize="small" />,      href: '/projects' },
+  { id: 'go-survey',       label: 'Survey visits',          hint: 'View and manage survey visits',          category: 'Navigate', icon: <AssignmentIcon fontSize="small" />,      href: '/survey' },
   { id: 'go-invoices',     label: 'Invoices & payments',    hint: 'View and send invoices via QuickBooks',  category: 'Navigate', icon: <ReceiptLongIcon fontSize="small" />,     href: '/invoices' },
   { id: 'go-admin',        label: 'Admin panel',            hint: 'Manage users and team access',           category: 'Navigate', icon: <AdminPanelSettingsIcon fontSize="small" />, href: '/admin' },
   { id: 'go-profile',      label: 'Your profile',           hint: 'Update your account details',            category: 'Account',  icon: <PersonIcon fontSize="small" />,          href: '/profile' },

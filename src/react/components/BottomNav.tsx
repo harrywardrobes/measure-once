@@ -21,6 +21,8 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 
 /**
@@ -73,6 +75,7 @@ export const NAV: NavItem[] = [
   { key: 'home',      href: '/',          label: 'Home',      Icon: HomeIcon,             IconOutlined: HomeOutlinedIcon },
   { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
   { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon },
+  { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,    IconOutlined: AssignmentOutlinedIcon },
   { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
 ];
 
@@ -91,6 +94,7 @@ const ITEM_WIDTH = 80;
 
 function accentFor(key: string, theme: Theme): string {
   if (key === 'projects') return theme.palette.stage.order.bg;
+  if (key === 'survey') return theme.palette.stage.survey.bg;
   return theme.palette.primary.main;
 }
 

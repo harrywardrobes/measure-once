@@ -3370,6 +3370,9 @@ app.get('/access-restricted', isAuthenticated, (_req, res) => {
 app.get('/projects', isAuthenticated, (_req, res) => {
   res.render('projects', { title: 'Projects · Measure Once', description: 'Track active and completed wardrobe projects from design through to installation.' });
 });
+app.get('/survey', isAuthenticated, (_req, res) => {
+  res.render('survey', { title: 'Survey · Measure Once', description: 'View and manage survey visits.' });
+});
 app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
   res.render('invoices', { title: 'Invoices · Measure Once', description: 'Review, manage, and send customer invoices for completed wardrobe projects.' });
 });

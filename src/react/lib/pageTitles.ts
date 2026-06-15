@@ -3,6 +3,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/customers': 'Customers',
   '/projects': 'Projects',
   '/invoices': 'Invoices',
+  '/survey': 'Survey',
   '/admin': 'Admin',
   '/profile': 'Profile',
 };
