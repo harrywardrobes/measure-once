@@ -1,0 +1,44 @@
+Apply consistent phone-number formatting to the customer-corrected mobile in
+the upload-photos flow. We store numbers in canonical E.164 and format for
+display. UK is the default country but international numbers (with their own
+country code) must be preserved. Use libphonenumber-js — do NOT hand-roll regex.
+
+If a shared helper `shared/phone.js` doesn't already exist, create it:
+  - `normalizePhone(input, defaultCountry = 'GB')` → returns canonical E.164
+    (e.g. "+447902819990") or `null` if the number can't be parsed as valid.
+    Respect an existing country code on the input (e.g. "+353…", "+1…").
+  - `formatPhone(e164)` → returns display form "+44 7902 819990"
+    (libphonenumber-js `formatInternational()`). Returns the input unchanged
+    if it can't be parsed.
+Add unit tests for the helper covering: UK mobile "07902 819990",
+UK landline "020 7946 0000", already-E.164 input, an international number,
+and an invalid/too-short number.
+
+Backend — customer-info.js submission endpoint (around line 888–983):
+  - After validating inputs, normalize `correctedMobile` with
+    `normalizePhone(correctedMobile, 'GB')`.
+  - If the customer entered a mobile but it normalizes to `null` (invalid),
+    return `res.status(400).json({ error: 'Please enter a valid mobile number.' })`.
+  - Store the E.164 result in `corrected_mobile` instead of the raw string.
+    Keep the existing "empty → null" behaviour when no number is provided.
+
+Frontend — src/react/pages/CustomerInfoPage.tsx:
+  - For the `correctedMobile` field (input ~line 662), format the value for
+    display when the field loses focus (onBlur): run it through the same
+    normalize+format logic so the customer sees "+44 7902 819990". Keep raw
+    keystrokes while typing; only reformat on blur. If it can't be parsed,
+    leave the customer's input as-is and show an inline validation message.
+  - Mirror the backend validation so an invalid mobile is caught before submit.
+
+Display — show the stored E.164 in pretty form wherever corrected_mobile is
+rendered to staff:
+  - src/react/components/modals/ReviewCustomerPhotosDrawer.tsx (~line 511)
+  - src/react/pages/customer-detail/CustomerInfoSubmissionsRail.tsx (~line 926)
+  Wrap the value in `formatPhone()` (add a small shared client-side formatter
+  if the existing helper is server-only).
+
+Add/extend tests under test/ to cover an upload-photos submission where the
+customer corrects their mobile in a messy format and assert it's stored as
+E.164 and rendered in display form. Run the relevant tests and the existing
+customer-info / phone-directory / duplicate-phone-warnings suites to confirm
+nothing regresses.
