@@ -94,7 +94,7 @@ function ActionCell({
       <Button
         variant="contained"
         size="small"
-        href={connectUrl}
+        onClick={() => connectUrl && onConnectNewTab && onConnectNewTab(connectUrl)}
         data-testid={`connect-action-${serviceKey}`}
       >
         Connect
@@ -214,9 +214,10 @@ export function ConnectServicesModal({ open, onClose, highlightService, message 
     window.open(`${connectUrl}?popup=1`, '_blank');
   }, []);
 
-  // Listen for the postMessage sent by the QuickBooks OAuth callback page when
-  // it runs in popup/new-tab mode.  On success, mark QB as connected and clear
-  // the per-session auto-open flag so the modal can re-open if needed.
+  // Listen for postMessages sent by OAuth callback pages when they run in
+  // popup/new-tab mode (both QuickBooks and Google Calendar).
+  // On success, mark the service as connected and clear the per-session
+  // auto-open flag so the modal can re-open if needed.
   useEffect(() => {
     function onMessage(evt: MessageEvent) {
       if (evt.origin !== window.location.origin) return;
@@ -225,6 +226,10 @@ export function ConnectServicesModal({ open, onClose, highlightService, message 
         notifyReconnected('quickbooks');
         // Clear the per-session flag so the modal can auto-open again next time
         // the connection drops (e.g. if a future reconnect fails).
+        try { sessionStorage.removeItem(CONNECT_MODAL_SHOWN_KEY); } catch { /* quota */ }
+      }
+      if (data?.type === 'google-connected') {
+        notifyReconnected('google');
         try { sessionStorage.removeItem(CONNECT_MODAL_SHOWN_KEY); } catch { /* quota */ }
       }
     }

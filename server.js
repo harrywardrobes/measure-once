@@ -1037,6 +1037,9 @@ const GOOGLE_SCOPES = [
 app.get('/auth/google', isAuthenticated, (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.googleOAuthState = state;
+  // When the connect button opens a new tab (popup=1), record that so the
+  // callback can post a message to the opener instead of doing a full redirect.
+  req.session.googleOAuthPopup = req.query.popup === '1';
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: GOOGLE_SCOPES,
@@ -1046,10 +1049,44 @@ app.get('/auth/google', isAuthenticated, (req, res) => {
   res.redirect(url);
 });
 
+/**
+ * Returns a minimal HTML page for the Google popup/new-tab OAuth flow.
+ * On success it posts { type: 'google-connected' } to the opener then closes.
+ * On error it posts { type: 'google-error', reason } to the opener then closes.
+ */
+function googlePopupPage(outcome, reason) {
+  const message = outcome === 'connected'
+    ? JSON.stringify({ type: 'google-connected' })
+    : JSON.stringify({ type: 'google-error', reason: reason || 'unknown' });
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Google Calendar${outcome === 'connected' ? ' Connected' : ' Error'}</title></head>
+<body>
+<script>
+  (function () {
+    try {
+      if (window.opener) {
+        window.opener.postMessage(${message}, window.location.origin);
+      }
+    } catch (e) {}
+    window.close();
+  })();
+</script>
+<p style="font-family:sans-serif;text-align:center;margin-top:2rem;color:#555">
+  ${outcome === 'connected' ? 'Google Calendar connected — you can close this tab.' : 'Something went wrong — you can close this tab.'}
+</p>
+</body>
+</html>`;
+}
+
 app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
+  const isPopup = !!req.session.googleOAuthPopup;
+  delete req.session.googleOAuthPopup;
+
   const expectedState = req.session.googleOAuthState;
   delete req.session.googleOAuthState;
   if (!expectedState || req.query.state !== expectedState) {
+    if (isPopup) return res.send(googlePopupPage('error', 'invalid_state'));
     return res.redirect('/?error=google_auth_failed');
   }
   try {
@@ -1057,8 +1094,10 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
     req.session.googleTokens = tokens;
     req.session.googleTokensBoundTo = String(req.user.claims.sub);
     await saveGoogleTokens(String(req.user.claims.sub), tokens);
+    if (isPopup) return res.send(googlePopupPage('connected'));
     res.redirect('/?connected=true');
   } catch (e) {
+    if (isPopup) return res.send(googlePopupPage('error', e.message));
     res.redirect('/?error=google_auth_failed');
   }
 });
