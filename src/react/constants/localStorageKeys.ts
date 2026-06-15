@@ -68,6 +68,9 @@ export const EMAIL_TEMPLATE_DRAFT_PREFIX = 'emailTemplateDraft:';
 /** Customer-info form drafts: `${CUSTOMER_INFO_DRAFT_PREFIX}${token}` */
 export const CUSTOMER_INFO_DRAFT_PREFIX = 'ci_draft_';
 
+/** Generic (token-less) customer-info draft token: persisted on mount, cleared after submit */
+export const GENERIC_CI_DRAFT_TOKEN_KEY = 'ci_generic_draft_token';
+
 /** Contact edit modal drafts: `${CONTACT_EDIT_DRAFT_PREFIX}${contactId}` */
 export const CONTACT_EDIT_DRAFT_PREFIX = 'mo-contact-edit-';
 

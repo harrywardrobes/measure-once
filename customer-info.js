@@ -192,7 +192,7 @@ async function sendAdminNotificationEmail(submission) {
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
   const { id: submissionId, contact_id, contact_name, contact_email,
-          address_line1, city, postcode, room_count, room_notes } = submission;
+          address_line1, city, postcode, room_count, room_notes, have_we_spoken } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
   const addressParts = [address_line1, city, postcode].filter(Boolean);
@@ -274,7 +274,7 @@ async function sendAdminNotificationEmail(submission) {
   const customerEmail = contact_email || '—';
   const notesValue    = room_notes || '—';
   const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
-  const { subject, text, html } = renderEmail(tmpl, {
+  let { subject, text, html } = renderEmail(tmpl, {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
       notes: notesValue, photoSummary: photoSummaryText,
@@ -288,6 +288,11 @@ async function sendAdminNotificationEmail(submission) {
       photoSummary:  photoSummaryHtml,
     },
   });
+  if (have_we_spoken && String(have_we_spoken).trim()) {
+    const hws = String(have_we_spoken).trim();
+    text += `\n\nHave we spoken?\n${hws}`;
+    html += `\n<p><strong>Have we spoken?</strong><br>${escapeHtml(hws).replace(/\n/g, '<br>')}</p>`;
+  }
   try {
     await transport.sendMail({
       from, replyTo,
@@ -336,9 +341,63 @@ async function fetchContactFromHubSpot(contactId) {
   const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`;
   const r = await axios.get(url, {
     headers: getHubSpotHeaders(),
-    params: { properties: 'email,phone,mobilephone,firstname,lastname' },
+    params: { properties: 'email,phone,mobilephone,firstname,lastname,hs_lead_status' },
   });
   return r.data;
+}
+
+// Search HubSpot contacts by email. Returns the first matching contact or null.
+async function searchHubSpotContactByEmail(email) {
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts/search`;
+  try {
+    const r = await axios.post(url, {
+      filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ', value: email }] }],
+      properties: ['email', 'firstname', 'lastname', 'phone', 'mobilephone', 'hs_lead_status'],
+      limit: 1,
+    }, { headers: getHubSpotHeaders() });
+    const results = r.data?.results || [];
+    return results[0] || null;
+  } catch (err) {
+    logger.error({ err: err.message }, '[customer-info] HubSpot contact search failed:');
+    return null;
+  }
+}
+
+// Create a new HubSpot contact. Returns the created contact object.
+async function createHubSpotContact(name, email, phone) {
+  const url = `${getHubSpotBaseUrl()}/crm/v3/objects/contacts`;
+  const nameParts = (name || '').trim().split(/\s+/);
+  const firstname = nameParts[0] || '';
+  const lastname  = nameParts.slice(1).join(' ') || '';
+  const properties = { email, hs_lead_status: 'AWAITING_PHOTOS' };
+  if (firstname) properties.firstname = firstname;
+  if (lastname)  properties.lastname  = lastname;
+  if (phone)     properties.phone     = phone;
+  const r = await axios.post(url, { properties }, { headers: getHubSpotHeaders() });
+  return r.data;
+}
+
+// Compare hs_lead_status against AWAITING_PHOTOS sort_order.
+// Returns true when the current status is strictly past the photos stage
+// (i.e. has a higher sort_order), meaning the status must not be downgraded.
+async function isLeadStatusPastPhotos(currentStatus) {
+  if (!currentStatus) return false;
+  if (currentStatus === 'AWAITING_PHOTOS') return false;
+  try {
+    const r = await pool.query(
+      `SELECT key, sort_order FROM lead_status_config
+       WHERE key = ANY($1::text[]) AND is_null_row IS NOT TRUE`,
+      [[currentStatus, 'AWAITING_PHOTOS']]
+    );
+    const rows = r.rows;
+    const awaitingRow  = rows.find(x => x.key === 'AWAITING_PHOTOS');
+    const currentRow   = rows.find(x => x.key === currentStatus);
+    if (!awaitingRow || !currentRow) return false;
+    return currentRow.sort_order > awaitingRow.sort_order;
+  } catch (err) {
+    logger.warn({ err: err.message }, '[customer-info] Could not compare lead status sort orders — defaulting to not past photos');
+    return false;
+  }
 }
 
 // ── Photo upload (multer → object storage) ───────────────────────────────────
@@ -844,6 +903,26 @@ router.post('/api/card-actions/upload-photos-and-info',
   }
 );
 
+// Public: create an anonymous generic draft row and return its token
+// POST /api/customer-info/draft
+router.post('/api/customer-info/draft', express.json({ limit: '1kb' }), async (req, res) => {
+  const rawToken  = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    await pool.query(
+      `INSERT INTO customer_info_submissions
+         (contact_id, token_hash, expires_at, is_generic)
+       VALUES (NULL, $1, $2, true)`,
+      [tokenHash, expiresAt.toISOString()]
+    );
+  } catch (err) {
+    logger.error({ err: err.message }, '[customer-info] Failed to create generic draft row:');
+    return res.status(500).json({ error: 'Could not create form. Please try again.' });
+  }
+  res.json({ token: rawToken });
+});
+
 // Public: get form data for a token
 // GET /api/customer-info/:token
 router.get('/api/customer-info/:token', async (req, res) => {
@@ -862,6 +941,10 @@ router.get('/api/customer-info/:token', async (req, res) => {
   }
   if (row.submitted_at) {
     return res.status(410).json({ error: 'You have already submitted this form. Thank you!', status: 'submitted' });
+  }
+  // Generic (token-less) rows: no masked contact info, just signal isGeneric
+  if (row.is_generic) {
+    return res.json({ isGeneric: true });
   }
   res.json({
     maskedEmail:  row.masked_email,
@@ -890,7 +973,23 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     structuredAddress,
     roomCount, roomNotes,
     photoKeys,
+    // Generic-mode fields (only required when row.is_generic is true)
+    name: submittedName, email: submittedEmail, phone: submittedPhone,
+    haveWeSpoken,
   } = req.body;
+
+  // Generic-mode extra validation (before opening a transaction)
+  if (preRow.is_generic) {
+    if (!submittedName || typeof submittedName !== 'string' || !submittedName.trim()) {
+      return res.status(400).json({ error: 'Full name is required.' });
+    }
+    if (!submittedEmail || typeof submittedEmail !== 'string' || !submittedEmail.trim() || !submittedEmail.includes('@')) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+    if (!submittedPhone || typeof submittedPhone !== 'string' || !submittedPhone.trim()) {
+      return res.status(400).json({ error: 'Phone number is required.' });
+    }
+  }
 
   // Validate inputs before opening the transaction.
   if (!['1', '2', '3+'].includes(roomCount)) {
@@ -938,6 +1037,8 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   const client = await pool.connect();
   let fresh;
   let lockedContactId;
+  let submittedRowId;
+  let isGenericRow = false;
   try {
     await client.query('BEGIN');
 
@@ -948,7 +1049,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
       [tokenHash]
     );
     const row = lockR.rows[0];
-    if (row) lockedContactId = row.contact_id;
+    if (row) { lockedContactId = row.contact_id; isGenericRow = !!row.is_generic; }
 
     if (!row) {
       await client.query('ROLLBACK');
@@ -964,48 +1065,85 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     }
 
     // Mark submitted (clear form_link so staff can no longer use the stale URL).
-    await client.query(
-      `UPDATE customer_info_submissions SET
-         submitted_at       = NOW(),
-         form_link          = NULL,
-         corrected_email    = $1,
-         corrected_mobile   = $2,
-         address_line1      = $3,
-         city               = $4,
-         postcode           = $5,
-         structured_address = $6::jsonb,
-         room_count         = $7,
-         room_notes         = $8,
-         photo_keys         = $9::jsonb
-       WHERE id = $10`,
-      [
-        correctedEmail  || null,
-        correctedMobile || null,
-        addressLine1.trim(),
-        city.trim(),
-        postcode.trim(),
-        JSON.stringify(address),
-        roomCount,
-        roomNotes || null,
-        JSON.stringify(keys),
-        row.id,
-      ]
-    );
+    // For generic rows, also persist contact_name/email from the submitted body and have_we_spoken.
+    if (isGenericRow) {
+      await client.query(
+        `UPDATE customer_info_submissions SET
+           submitted_at       = NOW(),
+           form_link          = NULL,
+           contact_name       = $1,
+           contact_email      = $2,
+           masked_email       = $3,
+           address_line1      = $4,
+           city               = $5,
+           postcode           = $6,
+           structured_address = $7::jsonb,
+           room_count         = $8,
+           room_notes         = $9,
+           photo_keys         = $10::jsonb,
+           have_we_spoken     = $11
+         WHERE id = $12`,
+        [
+          submittedName.trim(),
+          submittedEmail.trim().toLowerCase(),
+          maskEmail(submittedEmail.trim().toLowerCase()),
+          addressLine1.trim(),
+          city.trim(),
+          postcode.trim(),
+          JSON.stringify(address),
+          roomCount,
+          roomNotes || null,
+          JSON.stringify(keys),
+          (haveWeSpoken && typeof haveWeSpoken === 'string' && haveWeSpoken.trim()) ? haveWeSpoken.trim() : null,
+          row.id,
+        ]
+      );
+    } else {
+      await client.query(
+        `UPDATE customer_info_submissions SET
+           submitted_at       = NOW(),
+           form_link          = NULL,
+           corrected_email    = $1,
+           corrected_mobile   = $2,
+           address_line1      = $3,
+           city               = $4,
+           postcode           = $5,
+           structured_address = $6::jsonb,
+           room_count         = $7,
+           room_notes         = $8,
+           photo_keys         = $9::jsonb
+         WHERE id = $10`,
+        [
+          correctedEmail  || null,
+          correctedMobile || null,
+          addressLine1.trim(),
+          city.trim(),
+          postcode.trim(),
+          JSON.stringify(address),
+          roomCount,
+          roomNotes || null,
+          JSON.stringify(keys),
+          row.id,
+        ]
+      );
 
-    // Expire every other active-pending link for this contact so a spare bearer
-    // token that was issued before this submission cannot be used to submit a
-    // second, fraudulent response after the legitimate one has gone through.
-    const siblingResult = await client.query(
-      `UPDATE customer_info_submissions
-       SET expires_at = NOW()
-       WHERE contact_id = $1 AND id != $2
-         AND submitted_at IS NULL AND expires_at > NOW()`,
-      [row.contact_id, row.id]
-    );
-    if (siblingResult.rowCount > 0) {
-      logger.info(`[customer-info] Expired ${siblingResult.rowCount} sibling link(s) for contact ${row.contact_id} after submission`);
+      // Expire every other active-pending link for this contact so a spare bearer
+      // token that was issued before this submission cannot be used to submit a
+      // second, fraudulent response after the legitimate one has gone through.
+      // (For generic rows, sibling invalidation happens after HubSpot contact resolution.)
+      const siblingResult = await client.query(
+        `UPDATE customer_info_submissions
+         SET expires_at = NOW()
+         WHERE contact_id = $1 AND id != $2
+           AND submitted_at IS NULL AND expires_at > NOW()`,
+        [row.contact_id, row.id]
+      );
+      if (siblingResult.rowCount > 0) {
+        logger.info(`[customer-info] Expired ${siblingResult.rowCount} sibling link(s) for contact ${row.contact_id} after submission`);
+      }
     }
 
+    submittedRowId = row.id;
     await client.query('COMMIT');
 
     // Fetch fresh row for emails (outside the transaction — lock is released).
@@ -1018,23 +1156,99 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     client.release();
   }
 
-  // Update HubSpot lead status + structured address (non-fatal).
-  // HubSpot remains the source of truth for the contact address, so expand the
-  // structured object into the raw address/city/state/zip/country properties.
-  try {
-    if (process.env.HUBSPOT_ACCESS_TOKEN) {
+  // ── Generic-row post-submission: resolve or create HubSpot contact ─────────
+  if (isGenericRow && process.env.HUBSPOT_ACCESS_TOKEN) {
+    try {
+      const normEmail = submittedEmail.trim().toLowerCase();
+      let existingContact = null;
+      try { existingContact = await searchHubSpotContactByEmail(normEmail); } catch (_) { /* non-fatal */ }
+
+      let resolvedContactId = null;
+      let resolvedName      = submittedName.trim();
       const hsAddr = addressToHubspot(address);
-      await _patchContactProperties(lockedContactId, {
-        hs_lead_status: 'AWAITING_PHOTOS',
-        address: hsAddr.address,
-        city:    hsAddr.city,
-        state:   hsAddr.state,
-        zip:     hsAddr.zip,
-        country: hsAddr.country,
-      });
+
+      if (existingContact) {
+        resolvedContactId = String(existingContact.id);
+        resolvedName = [
+          existingContact.properties?.firstname,
+          existingContact.properties?.lastname,
+        ].filter(Boolean).join(' ') || resolvedName;
+        const currentStatus = (existingContact.properties?.hs_lead_status || '').trim();
+        const pastPhotos = await isLeadStatusPastPhotos(currentStatus);
+        const patchProps = {
+          address: hsAddr.address,
+          city:    hsAddr.city,
+          state:   hsAddr.state,
+          zip:     hsAddr.zip,
+          country: hsAddr.country,
+        };
+        if (!pastPhotos) patchProps.hs_lead_status = 'AWAITING_PHOTOS';
+        await _patchContactProperties(resolvedContactId, patchProps);
+      } else {
+        try {
+          const newContact = await createHubSpotContact(submittedName.trim(), normEmail, submittedPhone.trim());
+          resolvedContactId = String(newContact.id);
+          // Patch address fields onto the newly created contact
+          const patchProps = {
+            address: hsAddr.address,
+            city:    hsAddr.city,
+            state:   hsAddr.state,
+            zip:     hsAddr.zip,
+            country: hsAddr.country,
+          };
+          await _patchContactProperties(resolvedContactId, patchProps);
+        } catch (createErr) {
+          logger.error({ err: createErr.message }, '[customer-info] Failed to create HubSpot contact for generic submission (non-fatal):');
+        }
+      }
+
+      if (resolvedContactId) {
+        lockedContactId = resolvedContactId;
+        // Store contact_id on the submission row and expire sibling links
+        await pool.query(
+          `UPDATE customer_info_submissions SET contact_id = $1, contact_name = $2 WHERE id = $3`,
+          [resolvedContactId, resolvedName, submittedRowId]
+        );
+        // Refresh the fresh row with the resolved contact info
+        const freshR2 = await pool.query(`SELECT * FROM customer_info_submissions WHERE id = $1`, [submittedRowId]);
+        if (freshR2.rows[0]) fresh = freshR2.rows[0];
+        // Expire any other active pending links for this contact (from non-generic or previous generic flows)
+        const siblingResult = await pool.query(
+          `UPDATE customer_info_submissions
+           SET expires_at = NOW()
+           WHERE contact_id = $1 AND id != $2
+             AND submitted_at IS NULL AND expires_at > NOW()`,
+          [resolvedContactId, submittedRowId]
+        );
+        if (siblingResult.rowCount > 0) {
+          logger.info(`[customer-info] Generic: expired ${siblingResult.rowCount} sibling link(s) for contact ${resolvedContactId} after submission`);
+        }
+      }
+    } catch (err) {
+      logger.error({ err: err.message }, '[customer-info] Generic submission HubSpot resolution failed (non-fatal):');
     }
-  } catch (err) {
-    logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
+  } else if (isGenericRow) {
+    // HubSpot not configured — just update the row with the submitted name/email
+    logger.info('[customer-info] HUBSPOT_ACCESS_TOKEN not set — skipping contact resolution for generic submission');
+  }
+
+  if (!isGenericRow) {
+    // Update HubSpot lead status + structured address (non-fatal) for token-gated rows.
+    try {
+      if (process.env.HUBSPOT_ACCESS_TOKEN) {
+        const hsAddr = addressToHubspot(address);
+        await _patchContactProperties(lockedContactId, {
+          hs_lead_status: 'AWAITING_PHOTOS',
+          address: hsAddr.address,
+          city:    hsAddr.city,
+          state:   hsAddr.state,
+          zip:     hsAddr.zip,
+          country: hsAddr.country,
+        });
+      }
+    } catch (err) {
+      logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
+    }
   }
 
   // Notify all connected dashboard tabs so the "Photos received" badge appears

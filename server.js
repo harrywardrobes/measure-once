@@ -266,6 +266,19 @@ app.get('/survey-visit/sign-off', async (req, res) => {
   });
 });
 
+// Public customer-info form page — generic (no token) version
+app.get('/customer-info', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.render('customer-info', {
+    title: 'Tell us about your home · Measure Once',
+    description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
+    ogTitle: 'Tell us about your home · Harry Wardrobes',
+    ogDescription: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
+    ogUrl: `${baseUrl}/customer-info`,
+    ogImage: `${baseUrl}/harry-wardrobes-logo.png`,
+  });
+});
+
 // Public customer-info form page (no auth required — token-gated)
 app.get('/customer-info/:token', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -498,7 +511,8 @@ app.use('/api', (req, res, next) => {
   if (/^\/design-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
   // Public survey-visit sign-off routes (/api/survey-visits/sign-off/:token)
   if (/^\/survey-visits\/sign-off\/[^/]+$/.test(req.path)) return next();
-  // Public customer-info routes (/api/customer-info/:token, /photos, /resend-expired)
+  // Public customer-info routes (/api/customer-info/draft, /:token, /photos, /resend-expired)
+  if (/^\/customer-info\/draft$/.test(req.path)) return next();
   if (/^\/customer-info\/[^/]+(\/photos|\/resend-expired)?$/.test(req.path)) return next();
   return isAuthenticated(req, res, next);
 });

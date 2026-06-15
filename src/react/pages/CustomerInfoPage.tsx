@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CUSTOMER_INFO_DRAFT_PREFIX } from '../constants/localStorageKeys';
+import {
+  CUSTOMER_INFO_DRAFT_PREFIX,
+  GENERIC_CI_DRAFT_TOKEN_KEY,
+} from '../constants/localStorageKeys';
 import {
   Alert,
   Box,
@@ -36,34 +39,56 @@ interface FormData {
   roomNotes:         string;
 }
 
+interface GenericFields {
+  name:         string;
+  email:        string;
+  phone:        string;
+  haveWeSpoken: string;
+}
+
 interface DraftPayload extends FormData {
   savedPhotoKeys?: string[];
 }
 
 interface UploadedPhoto {
-  key:      string;
+  key:        string;
   previewUrl: string;
-  name:     string;
+  name:       string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const MAX_PHOTOS = 15;
-const TARGET_COMPRESSED_BYTES = 1.5 * 1024 * 1024; // 1.5 MB target after compression
+const TARGET_COMPRESSED_BYTES = 1.5 * 1024 * 1024;
 const MAX_CANVAS_DIM = 2048;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── URL helpers ───────────────────────────────────────────────────────────────
 
-function getToken(): string {
+/**
+ * Returns the token from the URL path, or an empty string if at /customer-info
+ * (generic mode — no token).
+ */
+function getUrlToken(): string {
   const parts = window.location.pathname.split('/').filter(Boolean);
-  return parts[parts.length - 1] || '';
+  // /customer-info          → parts = ['customer-info']            → no token
+  // /customer-info/:token   → parts = ['customer-info', '<token>'] → token present
+  if (parts.length >= 2 && parts[0] === 'customer-info') return parts[1];
+  return '';
 }
+
+/** Returns true when the page was loaded at /customer-info (no token in the URL). */
+function isGenericUrl(): boolean {
+  return getUrlToken() === '';
+}
+
+// ── Draft helpers ─────────────────────────────────────────────────────────────
 
 function lsKey(token: string): string {
   return CUSTOMER_INFO_DRAFT_PREFIX + token;
 }
 
 function loadDraft(token: string): Partial<DraftPayload> {
+  if (!token) return {};
   try {
     const raw = localStorage.getItem(lsKey(token));
     if (raw) return JSON.parse(raw);
@@ -72,6 +97,7 @@ function loadDraft(token: string): Partial<DraftPayload> {
 }
 
 function saveDraft(token: string, data: FormData, photoKeys: string[]) {
+  if (!token) return;
   try {
     const payload: DraftPayload = { ...data, savedPhotoKeys: photoKeys };
     localStorage.setItem(lsKey(token), JSON.stringify(payload));
@@ -79,10 +105,22 @@ function saveDraft(token: string, data: FormData, photoKeys: string[]) {
 }
 
 function clearDraft(token: string) {
+  if (!token) return;
   try {
     localStorage.removeItem(lsKey(token));
+    localStorage.removeItem(GENERIC_CI_DRAFT_TOKEN_KEY);
   } catch { /* ignore */ }
 }
+
+function getStoredGenericToken(): string {
+  try { return localStorage.getItem(GENERIC_CI_DRAFT_TOKEN_KEY) || ''; } catch { return ''; }
+}
+
+function setStoredGenericToken(token: string) {
+  try { localStorage.setItem(GENERIC_CI_DRAFT_TOKEN_KEY, token); } catch { /* ignore */ }
+}
+
+// ── Image compression ─────────────────────────────────────────────────────────
 
 async function compressImage(file: File): Promise<File> {
   return new Promise(resolve => {
@@ -228,14 +266,12 @@ function useTurnstileResend(containerId: string, active: boolean) {
           document.head.appendChild(script);
         }
       } else {
-        setSiteKey(''); // disabled / not configured
+        setSiteKey('');
       }
     }).catch(() => setSiteKey(''));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-attempt rendering whenever the widget becomes active (element enters the DOM)
-  // or when siteKey first resolves. attemptedRef prevents double-render.
   useEffect(() => {
     if (active && siteKey !== null) {
       setTimeout(() => renderWidget(), 50);
@@ -253,7 +289,6 @@ function useTurnstileResend(containerId: string, active: boolean) {
     if (id != null && tw) { tw.reset(id); }
   }, []);
 
-  // siteKey===null means still loading; siteKey==='' means disabled (no captcha required)
   const ready = siteKey !== null && (siteKey === '' || captchaToken.length > 0);
   return { siteKey, captchaToken, captchaError, ready, resetWidget };
 }
@@ -261,9 +296,13 @@ function useTurnstileResend(containerId: string, active: boolean) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CustomerInfoPage() {
-  const token = getToken();
+  // URL token: empty string means we're at /customer-info (generic mode).
+  const urlToken = getUrlToken();
+  const startGeneric = isGenericUrl();
 
   const [pageState, setPageState]   = useState<PageState>('loading');
+  const [isGeneric, setIsGeneric]   = useState(startGeneric);
+  const [genericDraftToken, setGenericDraftToken] = useState('');
   const [maskedEmail, setMaskedEmail] = useState('');
   const [maskedPhone, setMaskedPhone] = useState('');
   const [contactName, setContactName] = useState('');
@@ -277,13 +316,17 @@ export function CustomerInfoPage() {
     roomNotes:         '',
   });
 
+  const [genericFields, setGenericFields] = useState<GenericFields>({
+    name: '', email: '', phone: '', haveWeSpoken: '',
+  });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const [photos, setPhotos]         = useState<UploadedPhoto[]>([]);
   const [uploading, setUploading]   = useState(false);
   const [uploadErr, setUploadErr]   = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr]   = useState('');
 
-  // Resend-expired flow
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [resendErr, setResendErr]     = useState('');
   const turnstile = useTurnstileResend('ts-resend-expired', pageState === 'expired' && !!maskedEmail);
@@ -291,22 +334,75 @@ export function CustomerInfoPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftSavedRef = useRef(false);
 
-  // Load token data + restore draft
-  useEffect(() => {
-    if (!token) {
-      setErrorMsg('No form token found in the URL.');
+  // The token used for all API calls (photo uploads, submit).
+  // For token-mode: the URL token. For generic-mode: the anonymous draft token.
+  const activeToken = isGeneric ? genericDraftToken : urlToken;
+
+  // ── Obtain or create a generic draft token ─────────────────────────────────
+
+  const initGenericMode = useCallback(async () => {
+    // Check for a stored token from a previous visit
+    const stored = getStoredGenericToken();
+    if (stored) {
+      try {
+        const r = await fetch(`/api/customer-info/${encodeURIComponent(stored)}`);
+        const d = await r.json();
+        if (r.ok && d.isGeneric) {
+          // Stored token is still valid — reuse it
+          setGenericDraftToken(stored);
+          const draft = loadDraft(stored);
+          setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
+          if (draft.savedPhotoKeys?.length) {
+            setPhotos(draft.savedPhotoKeys.map(k => ({
+              key: k,
+              previewUrl: '',
+              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+            })));
+          }
+          setIsGeneric(true);
+          setPageState('main');
+          return;
+        }
+      } catch { /* fall through to create new */ }
+    }
+
+    // Create a new anonymous draft token
+    try {
+      const r = await fetch('/api/customer-info/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      const d = await r.json();
+      if (!r.ok || !d.token) throw new Error(d.error || 'Could not initialise form.');
+      setStoredGenericToken(d.token);
+      setGenericDraftToken(d.token);
+      setIsGeneric(true);
+      setPageState('main');
+    } catch (e) {
+      setErrorMsg((e as Error).message);
       setPageState('error');
+    }
+  }, []);
+
+  // ── Mount effect ───────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (startGeneric) {
+      // Generic page (/customer-info) — no URL token
+      initGenericMode();
       return;
     }
 
-    fetch(`/api/customer-info/${encodeURIComponent(token)}`)
+    // Token-mode: fetch token data; fall back to generic on not_found/expired
+    fetch(`/api/customer-info/${encodeURIComponent(urlToken)}`)
       .then(async r => {
         const d = await r.json();
         if (r.status === 410) {
           if (d.status === 'submitted') { setPageState('already_submitted'); return; }
-          // Capture masked email from the expired response so the resend UI can display it
-          if (d.maskedEmail) setMaskedEmail(d.maskedEmail);
-          setPageState('expired');
+          // expired or not_found → silently enter generic mode (task requirement)
+          if (d.status === 'not_found' || d.status === 'expired') {
+            await initGenericMode();
+            return;
+          }
+          // Fallback for unexpected 410 variants → generic mode
+          await initGenericMode();
           return;
         }
         if (!r.ok) {
@@ -314,18 +410,32 @@ export function CustomerInfoPage() {
           setPageState('error');
           return;
         }
+        // Generic row via token URL (shouldn't normally happen, but handle gracefully)
+        if (d.isGeneric) {
+          setGenericDraftToken(urlToken);
+          setIsGeneric(true);
+          const draft = loadDraft(urlToken);
+          setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
+          if (draft.savedPhotoKeys?.length) {
+            setPhotos(draft.savedPhotoKeys.map(k => ({
+              key: k,
+              previewUrl: '',
+              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+            })));
+          }
+          setPageState('main');
+          return;
+        }
         setMaskedEmail(d.maskedEmail || '');
         setMaskedPhone(d.maskedPhone || '');
         setContactName(d.contactName || '');
 
-        // Restore draft
-        const draft = loadDraft(token);
+        const draft = loadDraft(urlToken);
         setFormData(prev => ({
           ...prev,
           ...draft,
           roomCount: draft.roomCount || '1',
         }));
-        // Restore saved photo keys (preview URLs are session-only so we use a placeholder)
         if (draft.savedPhotoKeys?.length) {
           setPhotos(draft.savedPhotoKeys.map(k => ({
             key: k,
@@ -343,23 +453,30 @@ export function CustomerInfoPage() {
 
   // Draft-save whenever formData or photos change (after initial restore)
   useEffect(() => {
-    if (pageState !== 'main') return;
+    if (pageState !== 'main' || !activeToken) return;
     if (!draftSavedRef.current) { draftSavedRef.current = true; return; }
-    saveDraft(token, formData, photos.map(p => p.key));
+    saveDraft(activeToken, formData, photos.map(p => p.key));
   }, [formData, photos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFieldChange(field: keyof FormData) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setFormData(prev => {
         const updated = { ...prev, [field]: e.target.value };
-        saveDraft(token, updated, photos.map(p => p.key));
+        if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key));
         return updated;
       });
     };
   }
 
+  function handleGenericFieldChange(field: keyof GenericFields) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setGenericFields(prev => ({ ...prev, [field]: e.target.value }));
+      if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
+    };
+  }
+
   async function handlePhotoUpload(files: FileList) {
-    if (!files.length) return;
+    if (!files.length || !activeToken) return;
     setUploadErr('');
 
     const currentCount = photos.length;
@@ -379,7 +496,7 @@ export function CustomerInfoPage() {
       for (const f of compressed) {
         fd.append('photos', f);
       }
-      const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/photos`, {
+      const r = await fetch(`/api/customer-info/${encodeURIComponent(activeToken)}/photos`, {
         method: 'POST',
         body: fd,
       });
@@ -392,7 +509,7 @@ export function CustomerInfoPage() {
       }));
       setPhotos(prev => {
         const updated = [...prev, ...newPhotos];
-        saveDraft(token, formData, updated.map(p => p.key));
+        if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key));
         return updated;
       });
       if (truncated) {
@@ -408,7 +525,7 @@ export function CustomerInfoPage() {
   function removePhoto(key: string) {
     setPhotos(prev => {
       const updated = prev.filter(p => p.key !== key);
-      saveDraft(token, formData, updated.map(p => p.key));
+      if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key));
       return updated;
     });
   }
@@ -416,25 +533,50 @@ export function CustomerInfoPage() {
   async function handleSubmit() {
     setSubmitErr('');
 
+    // Validate generic-specific required fields
+    if (isGeneric) {
+      const errors: Record<string, string> = {};
+      if (!genericFields.name.trim())  errors.name  = 'Please enter your full name.';
+      if (!genericFields.email.trim()) errors.email = 'Please enter your email address.';
+      else if (!genericFields.email.includes('@')) errors.email = 'Please enter a valid email address.';
+      if (!genericFields.phone.trim()) errors.phone = 'Please enter your phone number.';
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        setSubmitErr('Please fill in all required fields above.');
+        return;
+      }
+    }
+
     const addr = formData.structuredAddress;
     if (!(addr.addressLines[0] || '').trim()) { setSubmitErr('Please enter the first line of your address.'); return; }
     if (!(addr.locality || '').trim())        { setSubmitErr('Please enter your city or town.'); return; }
     if (!(addr.postalCode || '').trim())      { setSubmitErr('Please enter your postcode.'); return; }
     if (!formData.roomCount)                  { setSubmitErr('Please select how many rooms.'); return; }
 
+    if (!activeToken) { setSubmitErr('Form not ready — please refresh the page.'); return; }
+
     setSubmitting(true);
     try {
-      const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}`, {
+      const body: Record<string, unknown> = {
+        structuredAddress: formData.structuredAddress,
+        roomCount:         formData.roomCount,
+        roomNotes:         formData.roomNotes.trim() || undefined,
+        photoKeys:         photos.map(p => p.key),
+      };
+      if (isGeneric) {
+        body.name         = genericFields.name.trim();
+        body.email        = genericFields.email.trim();
+        body.phone        = genericFields.phone.trim();
+        body.haveWeSpoken = genericFields.haveWeSpoken.trim() || undefined;
+      } else {
+        body.correctedEmail  = formData.correctedEmail.trim()  || undefined;
+        body.correctedMobile = formData.correctedMobile.trim() || undefined;
+      }
+
+      const r = await fetch(`/api/customer-info/${encodeURIComponent(activeToken)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          correctedEmail:    formData.correctedEmail.trim()  || undefined,
-          correctedMobile:   formData.correctedMobile.trim() || undefined,
-          structuredAddress: formData.structuredAddress,
-          roomCount:         formData.roomCount,
-          roomNotes:         formData.roomNotes.trim() || undefined,
-          photoKeys:         photos.map(p => p.key),
-        }),
+        body: JSON.stringify(body),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -443,7 +585,7 @@ export function CustomerInfoPage() {
         }
         throw new Error(d.error || 'Submission failed');
       }
-      clearDraft(token);
+      clearDraft(activeToken);
       setPageState('submitted');
     } catch (e) {
       setSubmitErr((e as Error).message);
@@ -533,7 +675,6 @@ export function CustomerInfoPage() {
                       Complete the check below, then click the button.
                     </Typography>
 
-                    {/* Turnstile widget */}
                     <Box id="ts-resend-expired" sx={{ mb: 2 }} />
                     {turnstile.captchaError && (
                       <Typography variant="caption" color="error" sx={{ display: 'block', mb: 1 }}>
@@ -556,7 +697,7 @@ export function CustomerInfoPage() {
                         setResendErr('');
                         try {
                           const r = await fetch(
-                            `/api/customer-info/${encodeURIComponent(token)}/resend-expired`,
+                            `/api/customer-info/${encodeURIComponent(urlToken)}/resend-expired`,
                             {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -622,57 +763,109 @@ export function CustomerInfoPage() {
             <Typography variant="h2" sx={{ mb: 0.75 }}>
               Tell us about your home
             </Typography>
-            {contactName && (
+            {!isGeneric && contactName && (
               <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
                 Hi {contactName.split(' ')[0]}, please fill in the details below so we can prepare the best possible quote for you.
+              </Typography>
+            )}
+            {isGeneric && (
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+                Please fill in the details below so we can prepare the best possible quote for you.
               </Typography>
             )}
 
             {/* Section 1 — Your Information */}
             <SectionCard title="Your Information">
               <Stack spacing={2}>
-                {(maskedEmail || maskedPhone) && (
-                  <Box
-                    sx={{
-                      bgcolor: 'grey.50',
-                      border: '1px solid',
-                      borderColor: 'grey.200',
-                      borderRadius: 1.5,
-                      p: 1.5,
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
-                      We have these details on file
-                    </Typography>
-                    {maskedEmail && (
-                      <Typography variant="body2">Email: <strong>{maskedEmail}</strong></Typography>
+                {isGeneric ? (
+                  /* Generic mode: full name / email / phone required */
+                  <>
+                    <TextField
+                      label="Full name"
+                      placeholder="e.g. Jane Smith"
+                      value={genericFields.name}
+                      onChange={handleGenericFieldChange('name')}
+                      fullWidth
+                      size="small"
+                      required
+                      error={!!fieldErrors.name}
+                      helperText={fieldErrors.name}
+                      disabled={submitting}
+                    />
+                    <TextField
+                      label="Email address"
+                      placeholder="e.g. jane@example.com"
+                      value={genericFields.email}
+                      onChange={handleGenericFieldChange('email')}
+                      fullWidth
+                      size="small"
+                      required
+                      type="email"
+                      error={!!fieldErrors.email}
+                      helperText={fieldErrors.email}
+                      disabled={submitting}
+                    />
+                    <TextField
+                      label="Phone number"
+                      placeholder="e.g. 07700 900123"
+                      value={genericFields.phone}
+                      onChange={handleGenericFieldChange('phone')}
+                      fullWidth
+                      size="small"
+                      required
+                      type="tel"
+                      error={!!fieldErrors.phone}
+                      helperText={fieldErrors.phone}
+                      disabled={submitting}
+                    />
+                  </>
+                ) : (
+                  /* Token mode: show masked details with optional corrections */
+                  <>
+                    {(maskedEmail || maskedPhone) && (
+                      <Box
+                        sx={{
+                          bgcolor: 'grey.50',
+                          border: '1px solid',
+                          borderColor: 'grey.200',
+                          borderRadius: 1.5,
+                          p: 1.5,
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                          We have these details on file
+                        </Typography>
+                        {maskedEmail && (
+                          <Typography variant="body2">Email: <strong>{maskedEmail}</strong></Typography>
+                        )}
+                        {maskedPhone && (
+                          <Typography variant="body2">Phone: <strong>{maskedPhone}</strong></Typography>
+                        )}
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                          If anything looks wrong, you can correct it below.
+                        </Typography>
+                      </Box>
                     )}
-                    {maskedPhone && (
-                      <Typography variant="body2">Phone: <strong>{maskedPhone}</strong></Typography>
-                    )}
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                      If anything looks wrong, you can correct it below.
-                    </Typography>
-                  </Box>
-                )}
 
-                <TextField
-                  label="Correct my mobile number (optional)"
-                  placeholder="e.g. 07700 900123"
-                  value={formData.correctedMobile}
-                  onChange={handleFieldChange('correctedMobile')}
-                  fullWidth
-                  size="small"
-                />
-                <TextField
-                  label="Correct my email address (optional)"
-                  placeholder="e.g. me@example.com"
-                  value={formData.correctedEmail}
-                  onChange={handleFieldChange('correctedEmail')}
-                  fullWidth
-                  size="small"
-                  type="email"
-                />
+                    <TextField
+                      label="Correct my mobile number (optional)"
+                      placeholder="e.g. 07700 900123"
+                      value={formData.correctedMobile}
+                      onChange={handleFieldChange('correctedMobile')}
+                      fullWidth
+                      size="small"
+                    />
+                    <TextField
+                      label="Correct my email address (optional)"
+                      placeholder="e.g. me@example.com"
+                      value={formData.correctedEmail}
+                      onChange={handleFieldChange('correctedEmail')}
+                      fullWidth
+                      size="small"
+                      type="email"
+                    />
+                  </>
+                )}
 
                 <Divider sx={{ my: 0.5 }} />
 
@@ -681,7 +874,7 @@ export function CustomerInfoPage() {
                   onChange={(next) => {
                     setFormData(prev => {
                       const updated = { ...prev, structuredAddress: next };
-                      saveDraft(token, updated, photos.map(p => p.key));
+                      if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key));
                       return updated;
                     });
                   }}
@@ -725,10 +918,9 @@ export function CustomerInfoPage() {
                     Please upload photos of the {roomLabel} — the more angles the better. Include any tricky corners, alcoves, or features.
                   </Typography>
 
-                  {/* Drop zone */}
                   {(() => {
                     const atLimit = photos.length >= MAX_PHOTOS;
-                    const disabled = uploading || atLimit;
+                    const disabled = uploading || atLimit || !activeToken;
                     return (
                       <Box
                         component={disabled ? 'div' : 'label'}
@@ -808,7 +1000,6 @@ export function CustomerInfoPage() {
                     </Typography>
                   )}
 
-                  {/* Preview thumbnails */}
                   {photos.length > 0 && (
                     <Box
                       sx={{
@@ -888,6 +1079,23 @@ export function CustomerInfoPage() {
                     The more detail the better — include measurements (even rough ones), style preferences, any awkward areas, and anything else you think we should know. Diagrams or sketches in the photos are really helpful too.
                   </Typography>
                 </Box>
+
+                {/* Have we spoken? — generic mode only */}
+                {isGeneric && (
+                  <Box>
+                    <TextField
+                      label="Have we spoken? (optional)"
+                      placeholder="I messaged you on Instagram a few weeks ago..."
+                      value={genericFields.haveWeSpoken}
+                      onChange={handleGenericFieldChange('haveWeSpoken')}
+                      fullWidth
+                      multiline
+                      minRows={3}
+                      size="small"
+                      disabled={submitting}
+                    />
+                  </Box>
+                )}
               </Stack>
             </SectionCard>
 

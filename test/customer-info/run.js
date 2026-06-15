@@ -56,7 +56,11 @@ const skip = makeSkip3(findings);
 
 // ── Mock HubSpot server ────────────────────────────────────────────────────────
 function startMockHubSpot(contactId, contactProps) {
-  const state = { patches: [] };
+  // Counter for contacts created via the generic flow so each gets a unique id
+  let genericContactSeq = 800000000;
+  // searchResultsByEmail: optional map of email→contact to return for specific searches.
+  // If not set for a given email, returns empty results (new contact path).
+  const state = { patches: [], createdContacts: [], searchResultsByEmail: {} };
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', c => { raw += c; });
@@ -75,11 +79,31 @@ function startMockHubSpot(contactId, contactProps) {
           properties: contactProps,
         }));
       }
-      // PATCH contact (lead status + substatus updates)
-      if (req.method === 'PATCH' && req.url.startsWith(`/crm/v3/objects/contacts/${contactId}`)) {
-        state.patches.push(body);
+      // PATCH contact (lead status + substatus updates) — match any numeric id
+      if (req.method === 'PATCH' && /^\/crm\/v3\/objects\/contacts\/\d+/.test(req.url)) {
+        const idM = req.url.match(/\/contacts\/(\d+)/);
+        state.patches.push({ id: idM ? idM[1] : contactId, body });
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ id: contactId, properties: {} }));
+        return res.end(JSON.stringify({ id: idM ? idM[1] : contactId, properties: {} }));
+      }
+      // POST search — return configured contact for that email, or empty results
+      if (req.method === 'POST' && req.url === '/crm/v3/objects/contacts/search') {
+        const filters = body?.filterGroups?.[0]?.filters || [];
+        const emailFilter = filters.find(f => f.propertyName === 'email');
+        const emailVal = emailFilter?.value || '';
+        const configured = state.searchResultsByEmail[emailVal] || null;
+        const results = configured ? [configured] : [];
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ results, total: results.length }));
+      }
+      // POST create contact — generic flow creates a new HubSpot contact
+      if (req.method === 'POST' && req.url === '/crm/v3/objects/contacts') {
+        genericContactSeq += 1;
+        const newId = String(genericContactSeq);
+        const created = { id: newId, properties: { ...(body.properties || {}) } };
+        state.createdContacts.push(created);
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify(created));
       }
       // POST lead_substatuses are inserted in the DB, not HubSpot, so only
       // contacts calls are expected. Catch-all 404 for anything unexpected.
@@ -281,6 +305,7 @@ async function main() {
 
   let exitCode = 1;
   let rawToken = null;
+  let genericToken = null;
 
   try {
     await waitForServer();
@@ -728,6 +753,331 @@ async function main() {
         ? `POST 410 status=submitted`
         : `status=${subPostRes.status} body=${JSON.stringify(subPostBody).slice(0, 200)}`);
 
+    // ── CI-G1: POST /api/customer-info/draft → anonymous token returned ─────────
+    const draftRes = await fetch(`${BASE}/api/customer-info/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const draftBody = await draftRes.json().catch(() => null);
+    genericToken = draftBody?.token || null;
+    const draftOk = draftRes.status === 200 && typeof genericToken === 'string' && genericToken.length === 64;
+    record('CI-G1.draft-token', draftOk,
+      draftOk
+        ? `POST 200 token.length=${genericToken.length}`
+        : `status=${draftRes.status} body=${JSON.stringify(draftBody).slice(0, 200)}`);
+
+    // Verify DB row has is_generic=true and contact_id IS NULL
+    if (genericToken) {
+      const tokenHash = crypto.createHash('sha256').update(genericToken).digest('hex');
+      const dbRow = await pool.query(
+        `SELECT is_generic, contact_id FROM customer_info_submissions WHERE token_hash = $1`,
+        [tokenHash]
+      );
+      const gRow = dbRow.rows[0];
+      const dbOk = gRow && gRow.is_generic === true && gRow.contact_id === null;
+      record('CI-G1.db-row', dbOk,
+        dbOk
+          ? `DB row: is_generic=true, contact_id=null`
+          : `DB row: ${JSON.stringify(gRow)}`);
+    } else {
+      record('CI-G1.db-row', false, 'skipped — no generic token');
+    }
+
+    // ── CI-G2: GET /api/customer-info/:genericToken → { isGeneric: true } ──────
+    if (genericToken) {
+      const gGetRes = await fetch(`${BASE}/api/customer-info/${genericToken}`);
+      const gGetBody = await gGetRes.json().catch(() => null);
+      const gGetOk = gGetRes.status === 200 && gGetBody?.isGeneric === true;
+      record('CI-G2.get-generic', gGetOk,
+        gGetOk
+          ? `GET 200 isGeneric=true`
+          : `status=${gGetRes.status} body=${JSON.stringify(gGetBody).slice(0, 200)}`);
+    } else {
+      record('CI-G2.get-generic', false, 'skipped — no generic token');
+    }
+
+    // ── CI-G3: Generic submit — missing required fields → 400 ─────────────────
+    if (genericToken) {
+      const validGenericBase = {
+        name: 'Jane Smith', email: 'jane@generic.local', phone: '07700900000',
+        structuredAddress: {
+          addressLines: ['10 Generic Lane'],
+          locality: 'Manchester', postalCode: 'M1 1GG',
+          administrativeArea: '', country: 'GB',
+        },
+        roomCount: '1', roomNotes: '', photoKeys: [],
+      };
+
+      // Missing name
+      const gV1 = await postSubmit(BASE, genericToken, { ...validGenericBase, name: '' });
+      record('CI-G3.missing-name',
+        gV1.status === 400 && !!gV1.json?.error,
+        gV1.status === 400 ? `400 error="${gV1.json.error}"` : `status=${gV1.status}`);
+
+      // Missing email
+      const gV2 = await postSubmit(BASE, genericToken, { ...validGenericBase, email: '' });
+      record('CI-G3.missing-email',
+        gV2.status === 400 && !!gV2.json?.error,
+        gV2.status === 400 ? `400 error="${gV2.json.error}"` : `status=${gV2.status}`);
+
+      // Invalid email (no @)
+      const gV3 = await postSubmit(BASE, genericToken, { ...validGenericBase, email: 'not-an-email' });
+      record('CI-G3.invalid-email',
+        gV3.status === 400 && !!gV3.json?.error,
+        gV3.status === 400 ? `400 error="${gV3.json.error}"` : `status=${gV3.status}`);
+
+      // Missing phone
+      const gV4 = await postSubmit(BASE, genericToken, { ...validGenericBase, phone: '' });
+      record('CI-G3.missing-phone',
+        gV4.status === 400 && !!gV4.json?.error,
+        gV4.status === 400 ? `400 error="${gV4.json.error}"` : `status=${gV4.status}`);
+    } else {
+      for (const id of ['CI-G3.missing-name', 'CI-G3.missing-email', 'CI-G3.missing-email', 'CI-G3.missing-phone']) {
+        record(id, false, 'skipped — no generic token');
+      }
+    }
+
+    // ── CI-G4: Generic submit → creates HubSpot contact, populates DB row ──────
+    const mailsBeforeGeneric = readMailJsonl(mailFile).length;
+    if (genericToken) {
+      const gSubmitBody = {
+        name: 'Jane Generic', email: `jane-generic-${runId}@generic.local`,
+        phone: '07700900001',
+        haveWeSpoken: 'I emailed you last Tuesday about my walk-in wardrobe.',
+        structuredAddress: {
+          addressLines: ['10 Generic Lane'],
+          locality: 'Manchester', postalCode: 'M1 1GG',
+          administrativeArea: '', country: 'GB',
+        },
+        roomCount: '2', roomNotes: 'Two bedrooms needing fitted wardrobes.', photoKeys: [],
+      };
+      const gSubmitRes = await fetch(`${BASE}/api/customer-info/${genericToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gSubmitBody),
+      });
+      const gSubmitData = await gSubmitRes.json().catch(() => null);
+      const gSubmitOk = gSubmitRes.status === 200 && gSubmitData?.ok === true;
+      record('CI-G4.submit-200', gSubmitOk,
+        gSubmitOk
+          ? `POST 200 ok=true`
+          : `status=${gSubmitRes.status} body=${JSON.stringify(gSubmitData).slice(0, 300)}`);
+
+      if (gSubmitOk) {
+        // DB row should have contact_name, contact_email, have_we_spoken populated
+        const gTokenHash = crypto.createHash('sha256').update(genericToken).digest('hex');
+        const gDbR = await pool.query(
+          `SELECT contact_name, contact_email, have_we_spoken, submitted_at, address_line1
+           FROM customer_info_submissions WHERE token_hash = $1`,
+          [gTokenHash]
+        );
+        const gRow = gDbR.rows[0];
+        const gDbOk = gRow
+          && gRow.contact_name === 'Jane Generic'
+          && gRow.contact_email === `jane-generic-${runId}@generic.local`
+          && gRow.have_we_spoken === 'I emailed you last Tuesday about my walk-in wardrobe.'
+          && gRow.submitted_at !== null
+          && gRow.address_line1 === '10 Generic Lane';
+        record('CI-G4.db-row-populated', gDbOk,
+          gDbOk
+            ? `DB: contact_name="${gRow.contact_name}" contact_email="${gRow.contact_email}" have_we_spoken present`
+            : `DB row: ${JSON.stringify(gRow).slice(0, 300)}`);
+
+        // HubSpot contact should have been created
+        const hsCreated = mockHs.state.createdContacts.length > 0;
+        record('CI-G4.hs-contact-created', hsCreated,
+          hsCreated
+            ? `HubSpot create called: id=${mockHs.state.createdContacts[0].id} email=${mockHs.state.createdContacts[0].properties.email}`
+            : `No HubSpot contacts created in mock`);
+
+        // Admin email should contain have_we_spoken text
+        let adminEmailGeneric = null;
+        await pollFn(async () => {
+          const mails = readMailJsonl(mailFile);
+          adminEmailGeneric = mails.slice(mailsBeforeGeneric)
+            .find(m => typeof m.to === 'string' && m.to.includes(`admin-ci-${runId}@privtest.local`));
+          return adminEmailGeneric ? true : null;
+        }, 4000, 100);
+        const hwsInEmail = adminEmailGeneric
+          && (adminEmailGeneric.text || adminEmailGeneric.html || '')
+            .includes('walk-in wardrobe');
+        record('CI-G4.have-we-spoken-in-email', !!hwsInEmail,
+          hwsInEmail
+            ? `"have_we_spoken" text found in admin notification email`
+            : `"have_we_spoken" text NOT found in admin email. Email captured: ${!!adminEmailGeneric}`);
+      } else {
+        record('CI-G4.db-row-populated', false, 'skipped — generic submit failed');
+        record('CI-G4.hs-contact-created', false, 'skipped — generic submit failed');
+        record('CI-G4.have-we-spoken-in-email', false, 'skipped — generic submit failed');
+      }
+
+      // ── CI-G5: Double-submit of same generic token → 410 submitted ──────────
+      const gDouble = await postSubmit(BASE, genericToken, {
+        name: 'Jane Generic', email: `jane-generic-${runId}@generic.local`,
+        phone: '07700900001',
+        structuredAddress: {
+          addressLines: ['10 Generic Lane'],
+          locality: 'Manchester', postalCode: 'M1 1GG',
+          administrativeArea: '', country: 'GB',
+        },
+        roomCount: '1', roomNotes: '', photoKeys: [],
+      });
+      const gDoubleOk = gDouble.status === 410 && gDouble.json?.status === 'submitted';
+      record('CI-G5.double-submit-rejected', gDoubleOk,
+        gDoubleOk
+          ? `410 status=submitted (duplicate prevented)`
+          : `status=${gDouble.status} body=${JSON.stringify(gDouble.json).slice(0, 200)}`);
+    } else {
+      for (const id of ['CI-G4.submit-200', 'CI-G4.db-row-populated', 'CI-G4.hs-contact-created',
+                         'CI-G4.have-we-spoken-in-email', 'CI-G5.double-submit-rejected']) {
+        record(id, false, 'skipped — no generic token');
+      }
+    }
+
+    // ── CI-G6: Expired generic token → GET returns 410 expired ──────────────
+    // (Client redirects to generic mode; server-side contract is 410+status:expired.)
+    {
+      const expGenericToken  = crypto.randomBytes(32).toString('hex');
+      const expGenericHash   = crypto.createHash('sha256').update(expGenericToken).digest('hex');
+      const expiredAt        = new Date(Date.now() - 60000);
+      await pool.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, token_hash, expires_at, is_generic)
+         VALUES (NULL, $1, $2, true)`,
+        [expGenericHash, expiredAt.toISOString()]
+      );
+      const expGRes = await fetch(`${BASE}/api/customer-info/${expGenericToken}`);
+      const expGBody = await expGRes.json().catch(() => null);
+      const expGOk = expGRes.status === 410 && expGBody?.status === 'expired';
+      record('CI-G6.expired-generic-token',
+        expGOk,
+        expGOk
+          ? `GET 410 status=expired for expired generic row`
+          : `status=${expGRes.status} body=${JSON.stringify(expGBody).slice(0, 200)}`);
+      // clean up
+      await pool.query(`DELETE FROM customer_info_submissions WHERE token_hash = $1`, [expGenericHash]).catch(() => {});
+    }
+
+    // ── CI-G7: Generic submit with existing HubSpot contact past-photos ──────
+    // Seed lead_status_config so isLeadStatusPastPhotos can do a real comparison,
+    // then configure mock to return that contact for a specific email search.
+    {
+      const pastEmail = `past-photos-${runId}@generic.local`;
+      const pastContactId = '800000099';
+
+      // Seed AWAITING_PHOTOS (sort 10) and BOOKED_SURVEY (sort 30) into
+      // lead_status_config. Use ON CONFLICT DO NOTHING so existing rows are
+      // preserved and we don't upset other tests.
+      let g7SeedOk = false;
+      try {
+        await pool.query(`
+          INSERT INTO lead_status_config (key, label, sort_order, is_null_row)
+          VALUES ('AWAITING_PHOTOS', 'Awaiting Photos', 10, false),
+                 ('BOOKED_SURVEY',  'Booked Survey',   30, false)
+          ON CONFLICT (key) DO NOTHING
+        `);
+        g7SeedOk = true;
+      } catch (seedErr) {
+        // Table may not exist or schema may differ — skip CI-G7 gracefully
+        skip('CI-G7.submit-existing-contact', `skipped — lead_status_config seed failed: ${seedErr.message}`);
+        skip('CI-G7.no-downgrade-on-past-photos', `skipped — lead_status_config seed failed: ${seedErr.message}`);
+        skip('CI-G7.contact-id-stored', `skipped — lead_status_config seed failed: ${seedErr.message}`);
+      }
+
+      if (g7SeedOk) {
+      // Configure mock to return an existing contact with BOOKED_SURVEY status
+      // for this specific email address.
+      mockHs.state.searchResultsByEmail[pastEmail] = {
+        id: pastContactId,
+        properties: { email: pastEmail, hs_lead_status: 'BOOKED_SURVEY', firstname: 'Past', lastname: 'Photos' },
+      };
+
+      // Capture PATCH calls count before this test
+      const patchesBeforeG7 = mockHs.state.patches.length;
+
+      // Create a draft token and submit
+      const draftG7 = await fetch(`${BASE}/api/customer-info/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const draftG7Body = await draftG7.json().catch(() => null);
+      const tokenG7 = draftG7Body?.token;
+
+      if (tokenG7) {
+        const subG7Res = await fetch(`${BASE}/api/customer-info/${tokenG7}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Past Photos', email: pastEmail, phone: '07700900002',
+            structuredAddress: {
+              addressLines: ['5 Past Road'],
+              locality: 'Manchester', postalCode: 'M1 1PP',
+              administrativeArea: '', country: 'GB',
+            },
+            roomCount: '1', roomNotes: '', photoKeys: [],
+          }),
+        });
+        const subG7Data = await subG7Res.json().catch(() => null);
+        const subG7Ok = subG7Res.status === 200 && subG7Data?.ok === true;
+        record('CI-G7.submit-existing-contact', subG7Ok,
+          subG7Ok
+            ? `POST 200 ok=true for existing-contact path`
+            : `status=${subG7Res.status} body=${JSON.stringify(subG7Data).slice(0, 300)}`);
+
+        if (subG7Ok) {
+          // The mock PATCH should have been called for the existing contact
+          const newPatches = mockHs.state.patches.slice(patchesBeforeG7);
+          const patchForExisting = newPatches.find(p => String(p.id) === pastContactId);
+
+          // hs_lead_status must NOT be in the patch body (past photos guard)
+          const noStatusInPatch = patchForExisting && !('hs_lead_status' in (patchForExisting.body?.properties || {}));
+          record('CI-G7.no-downgrade-on-past-photos',
+            !!noStatusInPatch,
+            noStatusInPatch
+              ? `PATCH called for existing contact ${pastContactId} without hs_lead_status (not downgraded)`
+              : `PATCH: ${JSON.stringify(patchForExisting).slice(0, 300)}`);
+
+          // But other side-effects must still run: DB row must have contact_id set
+          const g7Hash = crypto.createHash('sha256').update(tokenG7).digest('hex');
+          const g7DbR  = await pool.query(
+            `SELECT contact_id, submitted_at FROM customer_info_submissions WHERE token_hash = $1`,
+            [g7Hash]
+          );
+          const g7Row = g7DbR.rows[0];
+          const contactIdSet = g7Row && String(g7Row.contact_id) === pastContactId && !!g7Row.submitted_at;
+          record('CI-G7.contact-id-stored',
+            !!contactIdSet,
+            contactIdSet
+              ? `DB contact_id=${g7Row.contact_id} set from existing contact`
+              : `DB row: ${JSON.stringify(g7Row)}`);
+        } else {
+          record('CI-G7.no-downgrade-on-past-photos', false, 'skipped — submit failed');
+          record('CI-G7.contact-id-stored', false, 'skipped — submit failed');
+        }
+
+        // clean up
+        await pool.query(`DELETE FROM customer_info_submissions WHERE token_hash = $1`,
+          [crypto.createHash('sha256').update(tokenG7).digest('hex')]).catch(() => {});
+      } else {
+        record('CI-G7.submit-existing-contact', false, 'skipped — draft token creation failed');
+        record('CI-G7.no-downgrade-on-past-photos', false, 'skipped — draft token creation failed');
+        record('CI-G7.contact-id-stored', false, 'skipped — draft token creation failed');
+      }
+
+      // Clean up seeded lead_status_config rows (only if we added them)
+      await pool.query(`
+        DELETE FROM lead_status_config WHERE key IN ('AWAITING_PHOTOS', 'BOOKED_SURVEY')
+          AND label IN ('Awaiting Photos', 'Booked Survey')
+      `).catch(() => {});
+      // Clear the configured mock search result
+      delete mockHs.state.searchResultsByEmail[pastEmail];
+
+      // Also clean up any submission rows for past-photos contact
+      await pool.query(
+        `DELETE FROM customer_info_submissions WHERE contact_id = $1`, [pastContactId]
+      ).catch(() => {});
+      } // end if (g7SeedOk)
+    }
+
     // ── CI-UI-A/B: Puppeteer — Resend button visible for admin, hidden for viewer
     const CI_UI_PROBE_LABELS = [
       'CI-UI-A.admin-sees-resend-btn',
@@ -904,6 +1254,24 @@ async function main() {
     try { await cleanup(pool, `${contactId}-exp`); } catch {}
     try { await cleanup(pool, `${contactId}-sub`); } catch {}
     try { await cleanup(pool, contactIdC); } catch {}
+    // Clean up generic rows (contact_id = NULL) created during this run.
+    // They share no contact_id, so we identify them by a token hash we would have
+    // computed during the test. Use the token if captured, otherwise clean up old
+    // generic rows from this test via email column.
+    if (typeof genericToken !== 'undefined' && genericToken) {
+      try {
+        const tHash = crypto.createHash('sha256').update(genericToken).digest('hex');
+        await pool.query(
+          `DELETE FROM customer_info_submissions WHERE token_hash = $1`,
+          [tHash]
+        );
+      } catch {}
+    }
+    try {
+      await pool.query(
+        `DELETE FROM customer_info_submissions WHERE is_generic = true AND contact_email LIKE '%generic.local%'`
+      );
+    } catch {}
     try { await cleanupTestData(pool); } catch {}
     try { child.kill('SIGTERM'); } catch {}
     try { mockHs.server.close(); } catch {}
