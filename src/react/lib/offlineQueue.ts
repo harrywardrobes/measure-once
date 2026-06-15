@@ -449,8 +449,8 @@ export interface ConflictResolvedDetail {
 /**
  * Map a resolved conflict to the structured read-cache entry that still holds
  * the queued edit, so it can be evicted after a restore. Prefers the stable
- * `recordKey` (`contact:`/`visit:`/`design-visit:`/`dv:`) and falls back to
- * parsing the write URL. Returns `null` when no cache entry can be derived.
+ * `recordKey` (`contact:`/`visit:`/`dv:`) and falls back to parsing the write
+ * URL. Returns `null` when no cache entry can be derived.
  */
 function cacheTargetForConflict(conflict: { recordKey?: string; url: string }): { store: CacheStore; id: string } | null {
   const rk = conflict.recordKey;
@@ -462,7 +462,7 @@ function cacheTargetForConflict(conflict: { recordKey?: string; url: string }): 
       if (id) {
         if (type === 'contact' || type === 'customer') return { store: 'customers', id };
         if (type === 'visit') return { store: 'visits', id: `v:${id}` };
-        if (type === 'dv' || type === 'design-visit') return { store: 'visits', id: `dv:${id}` };
+        if (type === 'dv') return { store: 'visits', id: `dv:${id}` };
         if (type === 'sv') return { store: 'visits', id: `sv:${id}` };
       }
     }

@@ -71,14 +71,14 @@ function contactIdFor(conflict: RouteSource): string | null {
 
 /**
  * Best-effort lookup of the visit id a *visit* conflict touched, checked across
- * the record key (`dv:<id>` / `design-visit:<id>` for design visits,
- * `visit:<id>` for arrange visits), the attempted write body, the server
+ * the record key (`dv:<id>` for design visits, `visit:<id>` for arrange
+ * visits), the attempted write body, the server
  * snapshot, and finally the request URL (`/api/design-visits/<id>` or
  * `/api/visits/<id>`). Returns `null` when none can be derived.
  */
 function visitIdFor(conflict: RouteSource): string | null {
   const parts = recordKeyParts(conflict.recordKey);
-  if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'visit' || parts.type === 'sv')) {
+  if (parts && (parts.type === 'dv' || parts.type === 'visit' || parts.type === 'sv')) {
     const id = asId(parts.id);
     if (id) return id;
   }
@@ -107,7 +107,7 @@ function isArrangeVisit(source: RouteSource): boolean {
   if (source.recordKey) {
     const parts = recordKeyParts(source.recordKey);
     if (parts?.type === 'visit') return true;
-    if (parts && (parts.type === 'dv' || parts.type === 'design-visit' || parts.type === 'sv')) return false;
+    if (parts && (parts.type === 'dv' || parts.type === 'sv')) return false;
   }
   if (/\/api\/survey-visits\//.test(source.url)) return false;
   return /\/api\/visits\//.test(source.url);
@@ -168,7 +168,7 @@ function submissionIdFor(conflict: RouteSource): string | null {
  * - **visit** edits (arrange visit) → the owning customer page with a
  *   `#upcoming-visits-section` fragment so the browser scrolls to the visits
  *   section. Arrange visits use `/api/visits/:id` and `visit:<id>` record keys
- *   (distinct from the `dv:` / `design-visit:` keys used by design visits).
+ *   (distinct from the `dv:` keys used by design visits).
  */
 function resolveRoute(source: RouteSource): string | null {
   const contactId = contactIdFor(source);

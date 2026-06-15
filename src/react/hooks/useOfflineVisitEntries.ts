@@ -65,8 +65,8 @@ function parseEntry(e: QueueEntry): PendingVisitEntry | null {
   );
 
   let editVisitId: number | null = null;
-  if (e.recordKey && e.recordKey.startsWith('design-visit:')) {
-    const n = Number(e.recordKey.slice('design-visit:'.length));
+  if (e.recordKey && e.recordKey.startsWith('dv:')) {
+    const n = Number(e.recordKey.slice('dv:'.length));
     editVisitId = Number.isFinite(n) ? n : null;
   }
 

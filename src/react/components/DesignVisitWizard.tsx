@@ -626,11 +626,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         ...(editMode
           ? {
               conflictCheckUrl: `/api/design-visits/${encodeURIComponent(String(editVisitId))}`,
-              recordKey: `design-visit:${editVisitId}`,
+              recordKey: `dv:${editVisitId}`,
               // Same key as recordKey so a second edit of this visit (e.g.
               // resuming queued changes and re-saving) replaces the existing
               // outbox entry in place instead of appending a conflicting one.
-              dedupeKey: `design-visit:${editVisitId}`,
+              dedupeKey: `dv:${editVisitId}`,
               baseVersion: existingVisit?.version ?? null,
               baseUpdatedAt: existingVisit?.updated_at ?? null,
             }
