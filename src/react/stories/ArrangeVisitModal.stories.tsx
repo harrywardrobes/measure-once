@@ -1,5 +1,7 @@
+import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { ArrangeVisitModal } from '../components/modals/ArrangeVisitModal';
+import { useConnectionToast } from '../context/ConnectionToastContext';
 
 const meta: Meta<typeof ArrangeVisitModal> = {
   title: 'Modals/ArrangeVisitModal',
@@ -212,5 +214,51 @@ export const SendingState: Story = {
       }));
     }
     return <ArrangeVisitModal {...args} />;
+  },
+};
+
+function GoogleDisconnectedDecorator({ children }: { children: React.ReactNode }) {
+  const { notifyDisconnected } = useConnectionToast();
+  useEffect(() => {
+    notifyDisconnected('google');
+  }, [notifyDisconnected]);
+  return <>{children}</>;
+}
+
+export const GoogleDisconnected: Story = {
+  name: 'Google disconnected — inline warning on email step',
+  args: {
+    demo: false,
+  },
+  render: (args) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('mo-arrange-visit-draft-12345', JSON.stringify({
+        step: 'email',
+        address: '14 Oak Street, London, SW1A 1AA',
+        bookedSlotIso: null,
+        emailSubject: 'Booking your design visit — getting in touch',
+        emailBody: 'Hi Jane,\n\nI tried calling but couldn\'t reach you. Could you let us know your availability?\n\nBest regards',
+      }));
+      const origFetch = window.fetch;
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+        if (url.includes('arrange-visit') && !url.includes('outcome')) {
+          return new Response(JSON.stringify({
+            visitType: 'design',
+            contactName: 'Jane Smith',
+            contactPhone: '07700 900123',
+            contactMobilePhone: '',
+            contactEmail: 'jane@example.com',
+            contactAddress: '14 Oak Street, London, SW1A 1AA',
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return origFetch(input, init);
+      };
+    }
+    return (
+      <GoogleDisconnectedDecorator>
+        <ArrangeVisitModal {...args} />
+      </GoogleDisconnectedDecorator>
+    );
   },
 };

@@ -19,7 +19,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
@@ -135,6 +135,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const draft = demo ? {} : loadDraft(key);
 
   const showToast = useToast();
+  const serviceStatuses = useServiceStatuses();
+  const googleDisconnected = serviceStatuses.get('google') === 'error';
 
   const [step, setStep] = useState<Step>(demo ? 'call' : 'loading');
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(demo ? DEMO_CONTACT_INFO : null);
@@ -684,6 +686,22 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
+                {googleDisconnected && !demo && (
+                  <Alert
+                    severity="warning"
+                    action={
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={() => openConnectModal('google', 'Reconnect Google to send emails.')}
+                      >
+                        Reconnect
+                      </Button>
+                    }
+                  >
+                    Google is disconnected — emails can&apos;t be sent until you reconnect.
+                  </Alert>
+                )}
                 <Typography variant="body2" color="text.secondary">
                   We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
                 </Typography>
