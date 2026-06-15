@@ -35,7 +35,10 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { GET, PUT, POST } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { COUNTRIES } from '../../../../shared/address';
-import { invalidateGoogleMapsConfig } from '../../lib/googleMapsConfig';
+import {
+  invalidateGoogleMapsConfig,
+  testMapsJsBrowserLoad,
+} from '../../lib/googleMapsConfig';
 
 const CLOUD_CONSOLE_CREDENTIALS_URL =
   'https://console.cloud.google.com/google/maps-apis/credentials';
@@ -73,8 +76,13 @@ const CHECK_META: Record<
     label: 'Maps JavaScript API',
     docUrl: 'https://console.cloud.google.com/apis/library/maps-backend.googleapis.com',
     docLabel: 'Enable the Maps JavaScript API →',
+  },
+  browserMapsJs: {
+    label: 'Maps JavaScript API (browser)',
+    docUrl: 'https://console.cloud.google.com/google/maps-apis/credentials',
+    docLabel: 'Check API key restrictions →',
     note:
-      'Key, HTTP-referrer and IP restrictions only surface fully when the library loads in the browser — this server-side check can pass even when a restriction is still blocking real page traffic.',
+      'Loads the Maps JS library directly from this browser tab. HTTP-referrer and key restrictions that pass the server-side check will surface as failures here.',
   },
 };
 
@@ -155,6 +163,7 @@ interface TestResponse {
   ok: boolean;
   keyPresent: boolean;
   keyLast4?: string | null;
+  apiKey?: string | null;
   error?: string;
   checks: Record<string, CheckResult>;
 }
@@ -202,6 +211,12 @@ export function GoogleMapsPage() {
 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResponse | null>(null);
+  const [browserMapsJsResult, setBrowserMapsJsResult] = useState<{
+    ok: boolean;
+    latencyMs: number;
+    error?: string;
+    reason?: string;
+  } | null>(null);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
   const [historyRange, setHistoryRange] = useState<'7d' | '30d'>('7d');
@@ -267,8 +282,20 @@ export function GoogleMapsPage() {
   const handleTest = useCallback(async () => {
     setTesting(true);
     setTestResult(null);
+    setBrowserMapsJsResult(null);
     try {
-      setTestResult(await POST<TestResponse>('/api/admin/google-maps/test-connection'));
+      // Server-side test first — its response includes the raw API key so the
+      // browser probe can run without a second round-trip and without depending
+      // on /api/google-maps/config (which hides the key when the master switch
+      // is off).
+      const serverResult = await POST<TestResponse>('/api/admin/google-maps/test-connection');
+      setTestResult(serverResult);
+      if (serverResult.apiKey) {
+        const browserResult = await testMapsJsBrowserLoad(serverResult.apiKey);
+        setBrowserMapsJsResult(browserResult);
+      }
+      // If no key came back the browser probe is not attempted; browserMapsJsResult
+      // stays null and the browser-check row is simply not rendered.
     } catch (e) {
       setTestResult({ ok: false, keyPresent, error: (e as Error).message, checks: {} });
     } finally {
@@ -362,8 +389,14 @@ export function GoogleMapsPage() {
 
           {testResult && (
             <Box sx={{ mt: 2 }}>
-              <Alert severity={testResult.ok ? 'success' : 'error'} variant="outlined" sx={{ mb: 1 }}>
-                {testResult.ok
+              <Alert
+                severity={
+                  testResult.ok && browserMapsJsResult?.ok !== false ? 'success' : 'error'
+                }
+                variant="outlined"
+                sx={{ mb: 1 }}
+              >
+                {testResult.ok && browserMapsJsResult?.ok !== false
                   ? 'All Google APIs responded successfully.'
                   : testResult.error || 'One or more Google APIs failed — see details below.'}
               </Alert>
@@ -440,6 +473,66 @@ export function GoogleMapsPage() {
                     </Stack>
                   );
                 })}
+
+                {/* Browser-side Maps JS check — appears after the server checks */}
+                {browserMapsJsResult !== null && (() => {
+                  const meta = CHECK_META.browserMapsJs;
+                  const br = browserMapsJsResult;
+                  return (
+                    <Stack spacing={0.25}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        {br.ok ? (
+                          <CheckCircleOutlinedIcon color="success" fontSize="small" />
+                        ) : (
+                          <ErrorOutlinedIcon color="error" fontSize="small" />
+                        )}
+                        <Typography variant="body2" sx={{ minWidth: 180 }}>
+                          {meta.label}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {br.ok ? `${br.latencyMs} ms` : br.error || 'Failed'}
+                        </Typography>
+                      </Stack>
+                      {!br.ok && (
+                        <Stack
+                          direction="row"
+                          spacing={2}
+                          sx={{ pl: 3.5, alignItems: 'center', flexWrap: 'wrap' }}
+                        >
+                          <Link
+                            href={meta.docUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            variant="caption"
+                          >
+                            {meta.docLabel}
+                          </Link>
+                        </Stack>
+                      )}
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ pl: 3.5, display: 'block' }}
+                      >
+                        {meta.note}
+                      </Typography>
+                    </Stack>
+                  );
+                })()}
+
+                {/* While browser test is still running (server test done but browser pending) */}
+                {testing && browserMapsJsResult === null && (
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <CircularProgress size={14} />
+                    <Typography variant="caption" color="text.secondary">
+                      {CHECK_META.browserMapsJs.label} — loading…
+                    </Typography>
+                  </Stack>
+                )}
               </Stack>
             </Box>
           )}

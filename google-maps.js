@@ -507,7 +507,10 @@ router.post('/api/admin/google-maps/test-connection', isAuthenticated, requireAd
   checks.mapsJs = slim(js);
 
   const ok = Object.values(checks).every((c) => c.ok);
-  res.json({ ok, keyPresent: true, keyLast4: key.slice(-4), checks });
+  // Include the raw key so the admin panel can run a browser-side load test
+  // from the same response without a second round-trip. This route is
+  // admin-only (requireAdmin) so returning the key here is intentional.
+  res.json({ ok, keyPresent: true, keyLast4: key.slice(-4), apiKey: key, checks });
 });
 
 // Admin: usage diagnostics (DB-persisted counters + recent errors).

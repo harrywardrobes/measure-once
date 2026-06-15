@@ -217,6 +217,111 @@ export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<vo
   return _scriptPromise;
 }
 
+/**
+ * One-shot browser-side load test for the Maps JavaScript API.
+ * Intended exclusively for the admin Test Connection panel — not for production
+ * autocomplete surfaces.
+ *
+ * HTTP-referrer and key restrictions only fire when the browser loads the
+ * script, so a server-side check can pass while the browser load is still
+ * blocked. This function surfaces that gap by actually attempting the load.
+ *
+ * - If the Maps JS bootstrap is already in the page (loaded by a live surface)
+ *   it calls `importLibrary('maps')` to confirm the loaded instance works.
+ * - Otherwise it injects a temporary script tag, waits for load/error, then
+ *   cleans up regardless of outcome.
+ */
+export async function testMapsJsBrowserLoad(apiKey: string): Promise<{
+  ok: boolean;
+  latencyMs: number;
+  error?: string;
+  reason?: string;
+}> {
+  if (typeof window === 'undefined') {
+    return { ok: false, latencyMs: 0, error: 'No browser window available' };
+  }
+
+  const w = window as unknown as {
+    google?: { maps?: { importLibrary?: (lib: string) => Promise<unknown> } };
+    [key: string]: unknown;
+  };
+
+  const t0 = Date.now();
+
+  // Fast path: Maps JS bootstrap already loaded — just confirm importLibrary works.
+  if (typeof w.google?.maps?.importLibrary === 'function') {
+    try {
+      await w.google.maps.importLibrary('maps');
+      return { ok: true, latencyMs: Date.now() - t0 };
+    } catch {
+      return {
+        ok: false,
+        latencyMs: Date.now() - t0,
+        error: 'Maps library import failed',
+        reason: 'restriction',
+      };
+    }
+  }
+
+  // Slow path: inject a test script tag and wait for it to load or fail.
+  // Use a unique callback name and a distinct element id so this does not
+  // collide with the production google-maps-places-js script.
+  const CALLBACK = '__mosMapsTestCb' + Date.now();
+  const SCRIPT_ID = 'google-maps-test-js';
+
+  return new Promise((resolve) => {
+    let settled = false;
+
+    const settle = (result: { ok: boolean; latencyMs: number; error?: string; reason?: string }) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      delete (w as Record<string, unknown>)[CALLBACK];
+      const el = document.getElementById(SCRIPT_ID);
+      if (el) el.remove();
+      resolve(result);
+    };
+
+    const timer = window.setTimeout(() => {
+      settle({
+        ok: false,
+        latencyMs: Date.now() - t0,
+        error: 'Maps JS load timed out — check referrer or key restrictions',
+        reason: 'restriction',
+      });
+    }, 12_000);
+
+    // The Maps JS bootstrap calls this global when it is ready.
+    (w as Record<string, unknown>)[CALLBACK] = () => {
+      settle({ ok: true, latencyMs: Date.now() - t0 });
+    };
+
+    // Remove any leftover test element before injecting a fresh one.
+    const existing = document.getElementById(SCRIPT_ID);
+    if (existing) existing.remove();
+
+    const script = document.createElement('script');
+    script.id = SCRIPT_ID;
+    script.async = true;
+    const params = new URLSearchParams({
+      key: apiKey,
+      v: 'weekly',
+      loading: 'async',
+      callback: CALLBACK,
+    });
+    script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
+    script.onerror = () => {
+      settle({
+        ok: false,
+        latencyMs: Date.now() - t0,
+        error: 'Maps JS script failed to load — check referrer or key restrictions',
+        reason: 'restriction',
+      });
+    };
+    document.head.appendChild(script);
+  });
+}
+
 /** Build a Google Static Maps URL for a formatted address string. */
 export function staticMapUrl(
   cfg: GoogleMapsConfig,
