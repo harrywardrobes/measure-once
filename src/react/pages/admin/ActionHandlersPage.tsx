@@ -1142,7 +1142,7 @@ export function ActionHandlersPage() {
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.style.animation = 'none';
-      el.getBoundingClientRect();
+      el.getBoundingClientRect(); // reflow-ok: intentional one-shot CSS animation restart trick (forces style recalc to clear animation state)
       el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
     } catch { /* ignore */ }
   }, [loading]);

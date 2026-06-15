@@ -32,7 +32,15 @@
   <% } %>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <!--
+    Non-blocking font load: media="print" causes the browser to fetch the CSS
+    without blocking first render; onload switches it to screen-media so fonts
+    apply as soon as the stylesheet is ready. The <noscript> fallback restores
+    the blocking load for environments with JavaScript disabled.
+    Note: removing Google Fonts entirely is out of scope (design decision).
+  -->
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Anton&family=Source+Code+Pro:wght@400;500;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Anton&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet"></noscript>
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/app-styles.css">
 </head>

@@ -271,6 +271,7 @@ function PreviewPanel({ templateKey, fields }: PreviewPanelProps) {
                 onLoad={(e) => {
                   const iframe = e.currentTarget;
                   try {
+                    // reflow-ok: fires once per iframe load (not a hot path); sizes the iframe to its content height.
                     const h = iframe.contentDocument?.body?.scrollHeight;
                     if (h && h > 0) iframe.style.height = `${h + 32}px`;
                   } catch (_) { /* cross-origin guard */ }
@@ -1007,7 +1008,7 @@ export default function EmailTemplatesPage() {
         if (!el) return;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.style.animation = 'none';
-        el.getBoundingClientRect();
+        el.getBoundingClientRect(); // reflow-ok: intentional one-shot CSS animation restart trick (forces style recalc to clear animation state)
         el.style.animation = 'adm-deep-link-flash 1.8s ease-out forwards';
       }));
     } catch { /* ignore */ }

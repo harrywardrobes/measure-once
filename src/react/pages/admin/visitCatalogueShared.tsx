@@ -329,10 +329,16 @@ export function CatalogueTable<T extends AnyItem>({
   type, items, columns, showImage, onMove, onReorder, onEdit, onDelete,
 }: CatalogueTableProps<T>) {
   const sorted = [...items].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
-  const dragId  = useRef<number | null>(null);
+  const dragId     = useRef<number | null>(null);
   const dragOverEl = useRef<HTMLElement | null>(null);
+  // Pending rAF id for deferred border writes — cancelled on dragend/unmount.
+  const dragRafId  = useRef<number | null>(null);
 
   const clearMarkers = () => {
+    if (dragRafId.current !== null) {
+      cancelAnimationFrame(dragRafId.current);
+      dragRafId.current = null;
+    }
     if (dragOverEl.current) {
       dragOverEl.current.style.borderTop = '';
       dragOverEl.current.style.borderBottom = '';
@@ -374,20 +380,30 @@ export function CatalogueTable<T extends AnyItem>({
                 if (dragId.current === item.id) return;
                 e.preventDefault();
                 const tr = e.currentTarget as HTMLElement;
+                // Read bounding rect immediately while the event is live so
+                // cursor position is accurate. Style writes are deferred to the
+                // next animation frame so rapid dragover events don't interleave
+                // reads and writes across frames (layout thrashing).
                 const rect = tr.getBoundingClientRect();
                 const before = (e.clientY - rect.top) < rect.height / 2;
-                if (dragOverEl.current && dragOverEl.current !== tr) {
-                  dragOverEl.current.style.borderTop = '';
-                  dragOverEl.current.style.borderBottom = '';
-                }
+                const prevEl = (dragOverEl.current !== tr) ? dragOverEl.current : null;
                 dragOverEl.current = tr;
-                tr.style.borderTop    = before ? '2px solid #2563eb' : '';
-                tr.style.borderBottom = before ? '' : '2px solid #2563eb';
+                if (dragRafId.current !== null) cancelAnimationFrame(dragRafId.current);
+                dragRafId.current = requestAnimationFrame(() => {
+                  dragRafId.current = null;
+                  if (prevEl) {
+                    prevEl.style.borderTop = '';
+                    prevEl.style.borderBottom = '';
+                  }
+                  tr.style.borderTop    = before ? '2px solid #2563eb' : '';
+                  tr.style.borderBottom = before ? '' : '2px solid #2563eb';
+                });
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 clearMarkers();
                 if (dragId.current == null || dragId.current === item.id) return;
+                // reflow-ok: fires once per drop (not a hot path); no style write follows in the same frame.
                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                 const before = (e.clientY - rect.top) < rect.height / 2;
                 const fromIdx = sorted.findIndex(x => x.id === dragId.current);

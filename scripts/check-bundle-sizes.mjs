@@ -42,15 +42,19 @@
  *
  *   Chunk pattern          Threshold   Measured at introduction
  *   ─────────────────────  ─────────   ────────────────────────
- *   main.js                  38 kB     38.0 kB  (raised: Source Code Pro MONO_FONT_FAMILY token added to theme)
+ *   main.js                  48 kB     36.3 kB  (raised headroom after ScheduleVisitModal made lazy; was 47.1 kB before)
  *   vendor-react-*           58 kB     44.5 kB  (react + react-dom + scheduler)
  *   vendor-emotion-*         14 kB     10.5 kB  (@emotion/*)
  *   vendor-mui-*            136 kB    104.4 kB  (@mui/material + @mui/system + …)
  *   vendor-mui-icons-*       15 kB     4.4 kB   (icons used by GlobalHeader/BottomNav)
- *   vendor-mui-datepickers-* 75 kB     56.8 kB  (@mui/x-date-pickers + pro; added when date-picker support was introduced)
  *
- * Lazy chunks (vendor-zxcvbn) are printed in the table but never fail the
- * build — only a warning is emitted if they grow beyond their soft limit.
+ * Lazy chunks are printed in the table but never fail the build — only a
+ * warning is emitted if they grow beyond their soft warnAt limit:
+ *   vendor-zxcvbn-*         warnAt 450 kB  (zxcvbn; loaded on demand in ProfilePage)
+ *   vendor-mui-datepickers-* warnAt 100 kB  (@mui/x-date-pickers + pro; lazy since
+ *                                            ScheduleVisitModal converted to React.lazy
+ *                                            in CardActionModalsHost — saves ~58 kB gzip
+ *                                            from every page load)
  */
 
 import { gzipSync } from 'zlib';
@@ -111,11 +115,14 @@ const THRESHOLDS = [
     threshold: 14 * 1024,       // 14 kB — @emotion/*
   },
   // vendor-mui-datepickers must come before the vendor-mui catch-all below.
+  // alwaysLoaded: false — ScheduleVisitModal (the only statically-imported datepicker consumer
+  // in the always-loaded shell) was converted to a lazy import in CardActionModalsHost.tsx so
+  // this chunk is only downloaded when a scheduling form actually mounts.
   {
     prefix: 'vendor-mui-datepickers',
-    label: 'vendor-mui-datepickers',
-    alwaysLoaded: true,
-    threshold: 75 * 1024,       // 75 kB — @mui/x-date-pickers + pro (added when date-picker support was introduced)
+    label: 'vendor-mui-datepickers (lazy)',
+    alwaysLoaded: false,
+    warnAt: 100 * 1024,         // 100 kB soft limit — warn if pickers swell unexpectedly
   },
   {
     prefix: 'vendor-mui',

@@ -839,6 +839,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
                   onLoad={(e) => {
                     const iframe = e.currentTarget;
                     try {
+                      // reflow-ok: fires once per iframe load (not a hot path); sizes the iframe to its content height.
                       const h = iframe.contentDocument?.body?.scrollHeight;
                       if (h && h > 0) iframe.style.height = `${h + 24}px`;
                     } catch (_) { /* cross-origin guard */ }
@@ -1006,6 +1007,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
                   onLoad={(e) => {
                     const iframe = e.currentTarget;
                     try {
+                      // reflow-ok: fires once per iframe load (not a hot path); sizes the iframe to its content height.
                       const h = iframe.contentDocument?.body?.scrollHeight;
                       if (h && h > 0) iframe.style.height = `${h + 24}px`;
                     } catch (_) { /* cross-origin guard */ }

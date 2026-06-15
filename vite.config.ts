@@ -26,7 +26,10 @@ import { resolve } from 'path';
  *   vendor-emotion-*        @emotion/*
  *   vendor-mui-*            @mui/material + @mui/system + … (excluding icons + pickers)
  *   vendor-mui-icons-*      icons used by GlobalHeader and BottomNav
- *   vendor-mui-datepickers-* @mui/x-date-pickers + pro (scheduling forms)
+ *
+ * Lazy chunks downloaded on demand:
+ *   vendor-mui-datepickers-* @mui/x-date-pickers + pro (only when a scheduling form mounts;
+ *                            ScheduleVisitModal is lazy-imported in CardActionModalsHost)
  *
  * Real gzip sizes are measured automatically after every build by
  * scripts/check-bundle-sizes.mjs, which also enforces per-chunk thresholds

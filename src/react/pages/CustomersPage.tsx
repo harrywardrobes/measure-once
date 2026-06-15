@@ -530,6 +530,7 @@ function QBBadge({
 
 function saveCustomersScroll() {
   try {
+    // reflow-ok: reads scrollY (not getBoundingClientRect); fires on navigation/unmount, not in a tight loop.
     const y =
       window.scrollY ||
       window.pageYOffset ||

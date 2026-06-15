@@ -419,6 +419,8 @@ export const TokenHighlightField = React.forwardRef<
     if (!multiline) return;
     const ta = textareaRef.current;
     if (!ta) return;
+    // reflow-ok: scrollHeight read + height write inside useLayoutEffect runs before paint —
+    // the correct pattern for auto-sizing textareas; no interleaving with user-visible frames.
     ta.style.height = 'auto';
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value, multiline]);

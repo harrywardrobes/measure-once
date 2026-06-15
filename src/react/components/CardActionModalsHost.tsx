@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { MessagePopupModal } from './modals/MessagePopupModal';
-import { ScheduleVisitModal } from './modals/ScheduleVisitModal';
 import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
+// ScheduleVisitModal uses @mui/x-date-pickers; lazy-import keeps the date-picker
+// chunk out of the always-loaded bundle (it's only downloaded when the modal opens).
+const ScheduleVisitModal = React.lazy(() =>
+  import('./modals/ScheduleVisitModal').then(m => ({ default: m.ScheduleVisitModal }))
+);
 import { UploadPhotosModal } from './modals/UploadPhotosModal';
 const DesignVisitWizard = React.lazy(() =>
   import('./DesignVisitWizard').then(m => ({ default: m.DesignVisitWizard }))
@@ -126,13 +130,15 @@ export function CardActionModalsHost() {
         <MessagePopupModal handler={modal.handler} open onClose={close} />
       )}
       {modal.type === 'schedule_visit' && (
-        <ScheduleVisitModal
-          handler={modal.handler}
-          ctx={modal.ctx}
-          visitType={modal.handler.config?.visitType as string | undefined}
-          open
-          onClose={close}
-        />
+        <React.Suspense fallback={null}>
+          <ScheduleVisitModal
+            handler={modal.handler}
+            ctx={modal.ctx}
+            visitType={modal.handler.config?.visitType as string | undefined}
+            open
+            onClose={close}
+          />
+        </React.Suspense>
       )}
       {modal.type === 'summarise_phone_call' && (
         <PhoneSummaryModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
