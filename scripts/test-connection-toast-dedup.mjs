@@ -30,7 +30,12 @@ const TMP  = resolve(ROOT, 'node_modules/.cache/test-connection-toast-dedup.cjs'
 mkdirSync(dirname(TMP), { recursive: true });
 
 execSync(
-  `node_modules/.bin/esbuild "${SRC}" --bundle=false --platform=node --format=cjs --out-extension:.js=.cjs --outfile="${TMP}"`,
+  // bundle=true so intra-project imports (e.g. localStorageKeys) are inlined;
+  // React / MUI / browser APIs are marked external so they don't resolve.
+  `node_modules/.bin/esbuild "${SRC}" --bundle=true --platform=node --format=cjs ` +
+  `--external:react --external:react-dom --external:"react/*" ` +
+  `--external:"@mui/*" --external:"@mui/icons-material" ` +
+  `--out-extension:.js=.cjs --outfile="${TMP}"`,
   { cwd: ROOT, stdio: 'pipe' },
 );
 

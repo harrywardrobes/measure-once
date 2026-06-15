@@ -97,3 +97,12 @@ export const OPEN_DEAL_DRAFT_PREFIX = 'mo-open-deal-draft-';
 
 /** Deposit-invoice followup modal drafts: `${DEPOSIT_INVOICE_DRAFT_PREFIX}${contactId}` */
 export const DEPOSIT_INVOICE_DRAFT_PREFIX = 'mo-deposit-invoice-draft-';
+
+// ── Connect-services modal ─────────────────────────────────────────────────────
+/**
+ * sessionStorage — set once per browser session when the "Connect your services"
+ * modal auto-opens due to an error state.  Prevents the modal from re-opening
+ * automatically on subsequent status updates within the same session.
+ * The user can still open the modal manually via the navbar icons at any time.
+ */
+export const CONNECT_MODAL_SHOWN_KEY = 'mo:connectModalShownThisSession';

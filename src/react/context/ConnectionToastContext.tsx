@@ -5,6 +5,7 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
+import { CONNECT_MODAL_SHOWN_KEY } from '../constants/localStorageKeys';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -173,6 +174,10 @@ function _notifyReconnected(service: ConnectionService): void {
   _fire(service, 'reconnected');
 }
 
+function _notifyDisconnected(service: ConnectionService): void {
+  _fire(service, 'disconnected');
+}
+
 const _checkServicesOnMount: () => Promise<void> = _createDedupedCheck(
   () => Promise.allSettled([
     _checkService('hubspot',    '/api/hubspot/status'),
@@ -181,6 +186,36 @@ const _checkServicesOnMount: () => Promise<void> = _createDedupedCheck(
     _checkService('database',   '/api/database/status'),
   ]).then(() => undefined),
 );
+
+// ── Modal state ───────────────────────────────────────────────────────────────
+// Module-level so the modal and the navbar share state across React roots.
+
+let _modalOpen = false;
+let _modalHighlight: ConnectionService | undefined;
+const _modalCallbacks = new Set<() => void>();
+
+function _notifyModalAll(): void {
+  for (const cb of _modalCallbacks) cb();
+}
+
+/**
+ * Open the "Connect your services" modal, optionally pre-highlighting a service.
+ * This is the manual (always-allowed) path — no session-flag check.
+ */
+export function openConnectModal(service?: ConnectionService): void {
+  _modalOpen = true;
+  _modalHighlight = service;
+  _notifyModalAll();
+}
+
+/**
+ * Close the "Connect your services" modal.
+ */
+export function closeConnectModal(): void {
+  _modalOpen = false;
+  _modalHighlight = undefined;
+  _notifyModalAll();
+}
 
 // ── Context value ─────────────────────────────────────────────────────────────
 
@@ -197,6 +232,9 @@ interface ConnectionToastContextValue {
   notifyApiWarning: (service: ConnectionService) => void;
   /** Clear the service's error/warning status (e.g. after a successful retry). */
   notifyReconnected: (service: ConnectionService) => void;
+  /** Explicitly mark a service as disconnected — e.g. after a manual disconnect
+   *  action succeeds and the user initiated the disconnect intentionally. */
+  notifyDisconnected: (service: ConnectionService) => void;
 }
 
 const ConnectionToastContext = createContext<ConnectionToastContextValue | null>(null);
@@ -207,6 +245,7 @@ const STABLE_CONTEXT_VALUE: ConnectionToastContextValue = {
   notifyApiError:       _notifyApiError,
   notifyApiWarning:     _notifyApiWarning,
   notifyReconnected:    _notifyReconnected,
+  notifyDisconnected:   _notifyDisconnected,
 };
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -238,9 +277,10 @@ export function ConnectionToastProvider({ children }: { children: React.ReactNod
       // Register a window shim so vanilla-JS callers can trigger status updates
       const w = window as unknown as {
         __connectionToast?: {
-          notifyApiError:   typeof _notifyApiError;
-          notifyApiWarning: typeof _notifyApiWarning;
+          notifyApiError:    typeof _notifyApiError;
+          notifyApiWarning:  typeof _notifyApiWarning;
           notifyReconnected: typeof _notifyReconnected;
+          openConnectModal:  typeof openConnectModal;
         };
       };
       if (!w.__connectionToast) {
@@ -248,6 +288,7 @@ export function ConnectionToastProvider({ children }: { children: React.ReactNod
           notifyApiError:    _notifyApiError,
           notifyApiWarning:  _notifyApiWarning,
           notifyReconnected: _notifyReconnected,
+          openConnectModal,
         };
       }
 
@@ -258,6 +299,57 @@ export function ConnectionToastProvider({ children }: { children: React.ReactNod
       };
     }
     return undefined;
+  }, []);
+
+  // Auto-open: watch for service error transitions and open the modal once per
+  // session when the device is online and the session flag hasn't been set yet.
+  useEffect(() => {
+    // Snapshot of statuses at the time we subscribe, so we can detect transitions.
+    let prevSnapshot = new Map(_lastKnown);
+
+    const cb = () => {
+      // Skip auto-open while offline — every status would fail and the modal
+      // is not actionable anyway.
+      if (!_online) {
+        prevSnapshot = new Map(_lastKnown);
+        return;
+      }
+
+      // Find any connectable service that just transitioned into 'error'.
+      // We intentionally exclude 'status-only' services (e.g. Database) because
+      // they have no row in the modal — highlighting them would open the modal
+      // with no visible highlighted service, which is confusing. The modal still
+      // opens without a highlight so the user sees the overview.
+      const CONNECTABLE: ReadonlySet<ConnectionService> = new Set(['google', 'quickbooks', 'hubspot']);
+      let firstNewError: ConnectionService | undefined;
+      for (const [svc, status] of _lastKnown) {
+        if (status === 'error' && prevSnapshot.get(svc) !== 'error') {
+          if (!firstNewError && CONNECTABLE.has(svc)) firstNewError = svc;
+        }
+      }
+      prevSnapshot = new Map(_lastKnown);
+
+      if (!firstNewError) return;
+
+      // Only auto-open once per browser session.
+      let alreadyShown = false;
+      try {
+        alreadyShown = !!sessionStorage.getItem(CONNECT_MODAL_SHOWN_KEY);
+      } catch {
+        // Private browsing / quota — treat as not shown.
+      }
+      if (alreadyShown) return;
+
+      try {
+        sessionStorage.setItem(CONNECT_MODAL_SHOWN_KEY, '1');
+      } catch {
+        // Quota / private browsing — still open the modal, just won't persist.
+      }
+      openConnectModal(firstNewError);
+    };
+
+    _updateCallbacks.add(cb);
+    return () => { _updateCallbacks.delete(cb); };
   }, []);
 
   // Bridge: listen for legacy Google auth window events emitted by core.js
@@ -355,4 +447,39 @@ export function useOnlineStatus(): boolean {
   }, []);
 
   return _online;
+}
+
+/**
+ * Returns the current state of the "Connect your services" modal, and helpers
+ * to open/close it. Re-renders when the modal state changes.
+ *
+ * `openConnectModal(service?)` — opens the modal, optionally pre-highlighting
+ * the named service. This is the manual path and always works regardless of
+ * the per-session auto-open flag.
+ *
+ * `closeConnectModal()` — closes the modal.
+ *
+ * @example
+ * const { open, highlightService, openConnectModal, closeConnectModal } = useConnectModal();
+ */
+export function useConnectModal(): {
+  open: boolean;
+  highlightService: ConnectionService | undefined;
+  openConnectModal: typeof openConnectModal;
+  closeConnectModal: typeof closeConnectModal;
+} {
+  const [, forceRender] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => {
+    const cb = () => forceRender();
+    _modalCallbacks.add(cb);
+    return () => { _modalCallbacks.delete(cb); };
+  }, []);
+
+  return {
+    open: _modalOpen,
+    highlightService: _modalHighlight,
+    openConnectModal,
+    closeConnectModal,
+  };
 }

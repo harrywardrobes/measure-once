@@ -11,16 +11,20 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
-import HubIcon from '@mui/icons-material/Hub';
-import EventIcon from '@mui/icons-material/Event';
-import ReceiptIcon from '@mui/icons-material/Receipt';
-import StorageIcon from '@mui/icons-material/Storage';
 import CloudOffIcon from '@mui/icons-material/CloudOff';
 import type { CurrentUser } from '../hooks/useCurrentUser';
 import { useAuth } from '../contexts/AuthContext';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrivilegeSync } from '../hooks/usePrivilegeSync';
-import { useServiceStatuses, useConnectionToast, useOnlineStatus, type ConnectionService, type ServiceStatus } from '../context/ConnectionToastContext';
+import {
+  useServiceStatuses,
+  useConnectionToast,
+  useOnlineStatus,
+  openConnectModal,
+  type ConnectionService,
+  type ServiceStatus,
+} from '../context/ConnectionToastContext';
+import { SERVICE_DESCRIPTORS, SERVICE_KEYS, statusLabel, statusBadgeColor } from '../lib/connectionServices';
 import { BRAND_COLORS, SYNC_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
 
@@ -74,38 +78,8 @@ const ICON_BTN_ACTIVE_SX = {
 } as const;
 
 // ── Service status icon config ─────────────────────────────────────────────────
-
-const SERVICE_CONFIG: Record<ConnectionService, {
-  label: string;
-  Icon: React.ComponentType<{ fontSize?: 'small' | 'medium' }>;
-}> = {
-  hubspot:    { label: 'HubSpot',    Icon: HubIcon },
-  google:     { label: 'Google',     Icon: EventIcon },
-  quickbooks: { label: 'QuickBooks', Icon: ReceiptIcon },
-  database:   { label: 'Database',   Icon: StorageIcon },
-};
-
-const SERVICE_KEYS: ConnectionService[] = ['hubspot', 'google', 'quickbooks', 'database'];
-
-function statusLabel(service: ConnectionService, status: ServiceStatus): string {
-  const name = SERVICE_CONFIG[service].label;
-  if (status === 'checking') return `Checking ${name} connection…`;
-  if (status === 'error') return `${name} — disconnected`;
-  if (status === 'warning') return `${name} — degraded`;
-  return `${name} — connected`;
-}
-
-function statusBadgeColor(status: ServiceStatus): string {
-  if (status === 'error') return '#ef4444';              // red-500
-  if (status === 'warning') return '#f59e0b';            // amber-500
-  if (status === 'ok') return '#22c55e';                 // green-500
-  return 'rgba(255,255,255,0.35)';                       // checking — neutral grey
-}
-
-interface ServiceStatusBadgeProps {
-  service: ConnectionService;
-  status: ServiceStatus;
-}
+// Derived from the central SERVICE_DESCRIPTORS registry in connectionServices.ts.
+// Adding a new integration only requires one new ServiceDescriptor entry there.
 
 const CHECKING_PULSE_KEYFRAMES = {
   '@keyframes mo-status-pulse': {
@@ -114,8 +88,14 @@ const CHECKING_PULSE_KEYFRAMES = {
   },
 };
 
-export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps) {
-  const { label, Icon } = SERVICE_CONFIG[service];
+interface ServiceStatusBadgeProps {
+  service: ConnectionService;
+  status: ServiceStatus;
+  onClick?: () => void;
+}
+
+export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBadgeProps) {
+  const { label, Icon } = SERVICE_DESCRIPTORS.find((d) => d.key === service)!;
   const badgeColor = statusBadgeColor(status);
   const tip = statusLabel(service, status);
   const isChecking = status === 'checking';
@@ -123,9 +103,9 @@ export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps)
   const ariaLabel = `${label} status: ${statusWord}`;
 
   const iconColor =
-    status === 'error'    ? '#fca5a5' :
-    status === 'warning'  ? '#fcd34d' :
-    status === 'ok'       ? '#86efac' :
+    status === 'error'    ? '#fca5a5' : // hex-color-ok: status icon tint, no theme token
+    status === 'warning'  ? '#fcd34d' : // hex-color-ok: status icon tint, no theme token
+    status === 'ok'       ? '#86efac' : // hex-color-ok: status icon tint, no theme token
     'rgba(255,255,255,0.5)';
 
   const borderColor =
@@ -135,11 +115,23 @@ export function ServiceStatusBadge({ service, status }: ServiceStatusBadgeProps)
     'rgba(255,255,255,0.12)';
 
   return (
-    <Tooltip title={tip}>
+    <Tooltip title={onClick ? `${tip} — click to manage connections` : tip}>
       <Box
-        component="span"
-        aria-label={ariaLabel}
-        sx={{ display: 'inline-flex', position: 'relative' }}
+        component={onClick ? 'button' : 'span'}
+        onClick={onClick}
+        aria-label={onClick ? `${ariaLabel} — manage service connections` : ariaLabel}
+        sx={{
+          display: 'inline-flex',
+          position: 'relative',
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          cursor: onClick ? 'pointer' : 'default',
+          borderRadius: '8px',
+          '&:focus-visible': onClick
+            ? { outline: '2px solid rgba(255,255,255,0.5)', outlineOffset: 2 }
+            : undefined,
+        }}
       >
         <Badge
           variant="dot"
@@ -281,8 +273,6 @@ export function GlobalHeader() {
   const photoSrc = user ? resolvePhotoSrc(user) : null;
   const initials = user ? resolveInitials(user) : '';
 
-  const visibleServices = SERVICE_KEYS;
-
   const onBack = () => {
     if (window.history.length > 1) window.history.back();
     else window.location.href = '/';
@@ -358,7 +348,9 @@ export function GlobalHeader() {
               <OfflinePill />
             </Box>
           ) : (
-            /* Service status icons — visible with checking/ok/error/warning states */
+            /* Service status icons — visible with checking/ok/error/warning states.
+               Each icon is a clickable button that opens the ConnectServicesModal
+               pre-highlighting that service. */
             <Box
               sx={{
                 display: 'flex',
@@ -369,11 +361,12 @@ export function GlobalHeader() {
               role="group"
               aria-label="Service status"
             >
-              {visibleServices.map((svc) => (
+              {SERVICE_KEYS.map((svc) => (
                 <ServiceStatusBadge
                   key={svc}
                   service={svc}
                   status={serviceStatuses.get(svc) ?? 'checking'}
+                  onClick={() => openConnectModal(svc)}
                 />
               ))}
             </Box>

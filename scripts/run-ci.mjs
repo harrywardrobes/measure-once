@@ -170,6 +170,7 @@ const STEPS = [
   'test:conflict-digest-settings:ci',
   'test:settings-tab-load:ci',
   'test:profile-google-calendar:ci',
+  'test:connect-services-modal:ci',
   'test:scheduling-past-time-guard:ci',
   'test:customer-card-action-strip:ci',
   'test:upload-photos-resend-mode:ci',

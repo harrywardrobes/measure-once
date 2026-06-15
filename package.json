@@ -238,6 +238,8 @@
     "test:conflict-digest-settings:ci": "node scripts/with-test-db.js test/conflict-digest-settings/run.js",
     "test:settings-tab-load": "node test/settings-tab-load/run.js",
     "test:settings-tab-load:ci": "node scripts/with-test-db.js test/settings-tab-load/run.js",
+    "test:connect-services-modal": "node test/connect-services-modal/run.js",
+    "test:connect-services-modal:ci": "node scripts/with-test-db.js test/connect-services-modal/run.js",
     "test:profile-google-calendar": "node test/profile-google-calendar/run.js",
     "test:profile-google-calendar:ci": "node scripts/with-test-db.js test/profile-google-calendar/run.js",
     "test:scheduling-past-time-guard": "node test/scheduling-past-time-guard/run.js",

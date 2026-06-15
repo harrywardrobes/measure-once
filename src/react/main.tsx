@@ -4,7 +4,8 @@ import { AppThemeProvider } from './AppThemeProvider';
 import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { CardActionModalsHost } from './components/CardActionModalsHost';
-import { ConnectionToastProvider } from './context/ConnectionToastContext';
+import { ConnectServicesModal } from './components/modals/ConnectServicesModal';
+import { ConnectionToastProvider, useConnectModal } from './context/ConnectionToastContext';
 import { WorkflowDataProvider } from './context/WorkflowDataContext';
 import { openCardActionModal } from './utils/cardActionModalRegistry';
 import {
@@ -250,8 +251,42 @@ function initCardActionModalsHost() {
   );
 }
 
+function ConnectServicesModalHost() {
+  const { open, highlightService, closeConnectModal } = useConnectModal();
+  return (
+    <ConnectServicesModal
+      open={open}
+      onClose={closeConnectModal}
+      highlightService={highlightService}
+    />
+  );
+}
+
+function initConnectServicesModalHost() {
+  if (document.getElementById('connect-services-modal-host')) return;
+
+  // Mirror the same suppression policy as ConnectionToastProvider: skip pages
+  // that only contain public/auth islands (login, set-password, onboarding,
+  // customer-info, design-visit sign-off). On those pages the status endpoints
+  // return 401, no error transitions occur, and the modal is never actionable.
+  const hasAuthenticatedMount = MOUNTS.some(
+    (m) => !CONN_TOAST_EXCLUDED.has(m.id) && !!document.getElementById(m.id),
+  );
+  if (!hasAuthenticatedMount) return;
+
+  const container = document.createElement('div');
+  container.id = 'connect-services-modal-host';
+  document.body.appendChild(container);
+  createRoot(container).render(
+    <AppThemeProvider>
+      <ConnectServicesModalHost />
+    </AppThemeProvider>,
+  );
+}
+
 function mount() {
   initCardActionModalsHost();
+  initConnectServicesModalHost();
   const mountedAny = mountKnown() > 0;
   if (mountedAny) return;
 
