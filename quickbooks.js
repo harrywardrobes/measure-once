@@ -5,6 +5,7 @@ const crypto  = require('crypto');
 const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
+const { encrypt: qbEncrypt, decrypt: qbDecrypt } = require('./qb-token-crypto.cjs');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
@@ -90,7 +91,13 @@ async function checkSendRateLimit(userId) {
 
 async function getStoredTokens() {
   const r = await pool.query('SELECT * FROM qb_tokens ORDER BY id DESC LIMIT 1');
-  return r.rows[0] || null;
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    access_token:  qbDecrypt(row.access_token),
+    refresh_token: qbDecrypt(row.refresh_token),
+  };
 }
 
 async function persistTokens({ access_token, refresh_token, realm_id, expires_in }) {
@@ -98,7 +105,7 @@ async function persistTokens({ access_token, refresh_token, realm_id, expires_in
   await pool.query('DELETE FROM qb_tokens');
   await pool.query(
     'INSERT INTO qb_tokens (access_token, refresh_token, realm_id, expires_at) VALUES ($1, $2, $3, $4)',
-    [access_token, refresh_token, realm_id, expires_at]
+    [qbEncrypt(access_token), qbEncrypt(refresh_token), realm_id, expires_at]
   );
   return { access_token, refresh_token, realm_id, expires_at };
 }
