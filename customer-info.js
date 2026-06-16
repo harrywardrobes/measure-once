@@ -19,7 +19,7 @@ const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./sh
 const {
   structuredAddressSchema, hubspotToAddress, addressToHubspot, formatAddress, isAddressEmpty,
 } = require('./shared/address.cjs');
-const { normalizePhone } = require('./shared/phone.cjs');
+const { normalizePhone, formatPhone } = require('./shared/phone.cjs');
 
 // Email template keys resolved from the central registry (single source of
 // truth). The customer invite is the upload_photos_and_info / link_sent
@@ -193,7 +193,8 @@ async function sendAdminNotificationEmail(submission) {
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
   const { id: submissionId, contact_id, contact_name, contact_email,
-          address_line1, city, postcode, room_count, room_notes, have_we_spoken } = submission;
+          address_line1, city, postcode, room_count, room_notes, have_we_spoken,
+          corrected_mobile } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
   const addressParts = [address_line1, city, postcode].filter(Boolean);
@@ -274,19 +275,28 @@ async function sendAdminNotificationEmail(submission) {
   const customerName  = contact_name || contact_email || 'Unknown';
   const customerEmail = contact_email || '—';
   const notesValue    = room_notes || '—';
+
+  const formattedMobile = corrected_mobile ? formatPhone(corrected_mobile) : null;
+  const correctedMobileText = formattedMobile ? `Mobile:       ${formattedMobile}` : '';
+  const correctedMobileHtml = formattedMobile
+    ? `<tr><td><strong>Mobile (corrected)</strong></td><td>${escapeHtml(formattedMobile)}</td></tr>`
+    : '';
+
   const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
   let { subject, text, html } = renderEmail(tmpl, {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
       notes: notesValue, photoSummary: photoSummaryText,
+      correctedMobile: correctedMobileText,
     },
     htmlVars: {
-      customerName:  escapeHtml(customerName),
-      customerEmail: escapeHtml(customerEmail),
-      address:       escapeHtml(address),
-      rooms:         escapeHtml(roomLabel),
-      notes:         escapeHtml(notesValue),
-      photoSummary:  photoSummaryHtml,
+      customerName:    escapeHtml(customerName),
+      customerEmail:   escapeHtml(customerEmail),
+      address:         escapeHtml(address),
+      rooms:           escapeHtml(roomLabel),
+      notes:           escapeHtml(notesValue),
+      photoSummary:    photoSummaryHtml,
+      correctedMobile: correctedMobileHtml,
     },
   });
   if (have_we_spoken && String(have_we_spoken).trim()) {
