@@ -584,11 +584,39 @@ async function main() {
         thankYouEmail
           ? `thank-you email captured subject="${thankYouEmail.subject}"`
           : `no thank-you email (${newMails.length} new mail(s): ${newMails.map(m => m.to + ' subj=' + m.subject).join(' | ')})`);
+
+      // CI-4 submits without a phone number — the phone row must be absent from
+      // both the text and HTML bodies of the admin notification email.
+      // Text body: the template renders contactPhone as "Phone:        <number>"
+      //   so an absent phone renders as an empty string (no "Phone:" line at all).
+      // HTML body: an absent phone renders no <tr> row, so "<strong>Phone</strong>"
+      //   must not appear.
+      const noPhoneInText = adminEmail
+        ? (typeof adminEmail.text !== 'string' || !adminEmail.text.includes('Phone:'))
+        : null;
+      record('CI-4.no-phone-in-email-text', noPhoneInText === true,
+        noPhoneInText === true
+          ? `phone row correctly absent from admin email text body`
+          : noPhoneInText === null
+            ? `skipped — no admin email captured`
+            : `unexpected "Phone:" found in admin email text body (contact_phone should be null)`);
+
+      const noPhoneInHtml = adminEmail
+        ? (typeof adminEmail.html !== 'string' || !adminEmail.html.includes('<strong>Phone</strong>'))
+        : null;
+      record('CI-4.no-phone-in-email-html', noPhoneInHtml === true,
+        noPhoneInHtml === true
+          ? `phone row correctly absent from admin email HTML body`
+          : noPhoneInHtml === null
+            ? `skipped — no admin email captured`
+            : `unexpected phone <tr> found in admin email HTML body (contact_phone should be null)`);
     } else {
       record('CI-4.submit', false, 'skipped — no rawToken');
       record('CI-4.submission-in-db', false, 'skipped — no rawToken');
       record('CI-4.admin-email', false, 'skipped — no rawToken');
       record('CI-4.thankyou-email', false, 'skipped — no rawToken');
+      record('CI-4.no-phone-in-email-text', false, 'skipped — no rawToken');
+      record('CI-4.no-phone-in-email-html', false, 'skipped — no rawToken');
     }
 
     // ── CI-5: GET /api/customer-info/by-contact/:contactId ───────────────────
@@ -906,19 +934,29 @@ async function main() {
             ? `"have_we_spoken" text found in admin notification email`
             : `"have_we_spoken" text NOT found in admin email. Email captured: ${!!adminEmailGeneric}`);
 
-        // Admin email should contain the formatted phone number
-        const phoneInEmail = adminEmailGeneric
-          && (adminEmailGeneric.text || adminEmailGeneric.html || '')
-            .includes('+44 7902 819990');
-        record('CI-G4.phone-in-email', !!phoneInEmail,
-          phoneInEmail
-            ? `formatted phone "+44 7902 819990" found in admin notification email`
-            : `formatted phone NOT found in admin email. Email captured: ${!!adminEmailGeneric}`);
+        // Admin email should contain the formatted phone number (text body)
+        const phoneInEmailText = adminEmailGeneric
+          && typeof adminEmailGeneric.text === 'string'
+          && adminEmailGeneric.text.includes('+44 7902 819990');
+        record('CI-G4.phone-in-email-text', !!phoneInEmailText,
+          phoneInEmailText
+            ? `formatted phone "+44 7902 819990" found in admin email text body`
+            : `formatted phone NOT found in admin email text body. Email captured: ${!!adminEmailGeneric}`);
+
+        // Admin email should contain the formatted phone number (HTML body)
+        const phoneInEmailHtml = adminEmailGeneric
+          && typeof adminEmailGeneric.html === 'string'
+          && adminEmailGeneric.html.includes('+44 7902 819990');
+        record('CI-G4.phone-in-email-html', !!phoneInEmailHtml,
+          phoneInEmailHtml
+            ? `formatted phone "+44 7902 819990" found in admin email HTML body`
+            : `formatted phone NOT found in admin email HTML body. Email captured: ${!!adminEmailGeneric}`);
       } else {
         record('CI-G4.db-row-populated', false, 'skipped — generic submit failed');
         record('CI-G4.hs-contact-created', false, 'skipped — generic submit failed');
         record('CI-G4.have-we-spoken-in-email', false, 'skipped — generic submit failed');
-        record('CI-G4.phone-in-email', false, 'skipped — generic submit failed');
+        record('CI-G4.phone-in-email-text', false, 'skipped — generic submit failed');
+        record('CI-G4.phone-in-email-html', false, 'skipped — generic submit failed');
       }
 
       // ── CI-G5: Double-submit of same generic token → 410 submitted ──────────
@@ -939,8 +977,8 @@ async function main() {
           : `status=${gDouble.status} body=${JSON.stringify(gDouble.json).slice(0, 200)}`);
     } else {
       for (const id of ['CI-G4.submit-200', 'CI-G4.db-row-populated', 'CI-G4.hs-contact-created',
-                         'CI-G4.have-we-spoken-in-email', 'CI-G4.phone-in-email',
-                         'CI-G5.double-submit-rejected']) {
+                         'CI-G4.have-we-spoken-in-email', 'CI-G4.phone-in-email-text',
+                         'CI-G4.phone-in-email-html', 'CI-G5.double-submit-rejected']) {
         record(id, false, 'skipped — no generic token');
       }
     }
