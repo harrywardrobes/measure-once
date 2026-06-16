@@ -194,7 +194,7 @@ async function sendAdminNotificationEmail(submission) {
   const replyTo = buildReplyTo();
   const { id: submissionId, contact_id, contact_name, contact_email,
           address_line1, city, postcode, room_count, room_notes, have_we_spoken,
-          corrected_mobile } = submission;
+          corrected_mobile, contact_phone } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
   const addressParts = [address_line1, city, postcode].filter(Boolean);
@@ -282,12 +282,19 @@ async function sendAdminNotificationEmail(submission) {
     ? `<tr><td><strong>Mobile (corrected)</strong></td><td>${escapeHtml(formattedMobile)}</td></tr>`
     : '';
 
+  const formattedPhone = contact_phone ? formatPhone(contact_phone) : null;
+  const contactPhoneText = formattedPhone ? `Phone:        ${formattedPhone}` : '';
+  const contactPhoneHtml = formattedPhone
+    ? `<tr><td><strong>Phone</strong></td><td>${escapeHtml(formattedPhone)}</td></tr>`
+    : '';
+
   const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
   let { subject, text, html } = renderEmail(tmpl, {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
       notes: notesValue, photoSummary: photoSummaryText,
       correctedMobile: correctedMobileText,
+      contactPhone: contactPhoneText,
     },
     htmlVars: {
       customerName:    escapeHtml(customerName),
@@ -297,6 +304,7 @@ async function sendAdminNotificationEmail(submission) {
       notes:           escapeHtml(notesValue),
       photoSummary:    photoSummaryHtml,
       correctedMobile: correctedMobileHtml,
+      contactPhone:    contactPhoneHtml,
     },
   });
   if (have_we_spoken && String(have_we_spoken).trim()) {

@@ -905,10 +905,20 @@ async function main() {
           hwsInEmail
             ? `"have_we_spoken" text found in admin notification email`
             : `"have_we_spoken" text NOT found in admin email. Email captured: ${!!adminEmailGeneric}`);
+
+        // Admin email should contain the formatted phone number
+        const phoneInEmail = adminEmailGeneric
+          && (adminEmailGeneric.text || adminEmailGeneric.html || '')
+            .includes('+44 7902 819990');
+        record('CI-G4.phone-in-email', !!phoneInEmail,
+          phoneInEmail
+            ? `formatted phone "+44 7902 819990" found in admin notification email`
+            : `formatted phone NOT found in admin email. Email captured: ${!!adminEmailGeneric}`);
       } else {
         record('CI-G4.db-row-populated', false, 'skipped — generic submit failed');
         record('CI-G4.hs-contact-created', false, 'skipped — generic submit failed');
         record('CI-G4.have-we-spoken-in-email', false, 'skipped — generic submit failed');
+        record('CI-G4.phone-in-email', false, 'skipped — generic submit failed');
       }
 
       // ── CI-G5: Double-submit of same generic token → 410 submitted ──────────
@@ -929,7 +939,8 @@ async function main() {
           : `status=${gDouble.status} body=${JSON.stringify(gDouble.json).slice(0, 200)}`);
     } else {
       for (const id of ['CI-G4.submit-200', 'CI-G4.db-row-populated', 'CI-G4.hs-contact-created',
-                         'CI-G4.have-we-spoken-in-email', 'CI-G5.double-submit-rejected']) {
+                         'CI-G4.have-we-spoken-in-email', 'CI-G4.phone-in-email',
+                         'CI-G5.double-submit-rejected']) {
         record(id, false, 'skipped — no generic token');
       }
     }
