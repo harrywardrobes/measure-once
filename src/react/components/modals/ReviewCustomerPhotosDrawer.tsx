@@ -33,6 +33,7 @@ interface Submission {
   contactId: string;
   contactName: string | null;
   contactEmail: string | null;
+  contactPhone: string | null;
   maskedEmail: string | null;
   addressLine1: string | null;
   city: string | null;
@@ -503,6 +504,9 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 <Typography variant="overline" color="text.disabled" sx={{ display: 'block', mb: 1 }}>
                   Submitted details
                 </Typography>
+                {submission.contactPhone && (
+                  <DetailRow label="Phone" value={formatPhone(submission.contactPhone)} />
+                )}
                 <DetailRow label="Address" value={[submission.addressLine1, submission.city, submission.postcode].filter(Boolean).join(', ')} />
                 <DetailRow label="Rooms" value={roomCountLabel(submission.roomCount)} />
                 {submission.correctedEmail && (

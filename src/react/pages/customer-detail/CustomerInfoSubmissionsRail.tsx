@@ -40,6 +40,7 @@ interface Submission {
   expires_at: string;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
   corrected_email: string | null;
   corrected_mobile: string | null;
   address_line1: string | null;
@@ -63,6 +64,7 @@ interface CachedPhotoSubmission {
   id: number;
   contactName: string | null;
   contactEmail: string | null;
+  contactPhone?: string | null;
   addressLine1: string | null;
   city: string | null;
   postcode: string | null;
@@ -92,6 +94,7 @@ function cachedToSubmission(c: CachedPhotoSubmission): Submission {
     expires_at: '',
     contact_name: c.contactName ?? null,
     contact_email: c.contactEmail ?? null,
+    contact_phone: c.contactPhone ?? null,
     corrected_email: c.correctedEmail ?? null,
     corrected_mobile: c.correctedMobile ?? null,
     address_line1: c.addressLine1 ?? null,
@@ -905,6 +908,16 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
                   Submitted {fmtDate(sub.submitted_at)}
                   {(sub.corrected_email || sub.corrected_mobile) && ' · Customer provided corrections'}
                 </Typography>
+              )}
+
+              {/* Phone */}
+              {sub.contact_phone && (
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.25 }}>
+                    Phone
+                  </Typography>
+                  <Typography variant="body2">{formatPhone(sub.contact_phone)}</Typography>
+                </Box>
               )}
 
               {/* Address */}

@@ -1686,7 +1686,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
   }
 
   const r = await pool.query(
-    `SELECT id, contact_name, contact_email, created_at, expires_at, submitted_at,
+    `SELECT id, contact_name, contact_email, contact_phone, created_at, expires_at, submitted_at,
             corrected_email, corrected_mobile, address_line1, city, postcode,
             structured_address,
             room_count, room_notes, photo_keys, masked_email, email_skipped_count,
