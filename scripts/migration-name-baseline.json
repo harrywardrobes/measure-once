@@ -63,5 +63,6 @@
   "1783700000000_encrypt-google-tokens",
   "1783800000000_encrypt-qb-tokens",
   "1783900000000_add-corrected-mobile-to-admin-notification-email",
-  "1783900000000_customer-info-contact-phone"
+  "1783900000000_customer-info-contact-phone",
+  "1784000000000_add-contact-phone-to-admin-notification-email"
 ]

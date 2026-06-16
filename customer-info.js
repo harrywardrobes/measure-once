@@ -194,7 +194,7 @@ async function sendAdminNotificationEmail(submission) {
   const replyTo = buildReplyTo();
   const { id: submissionId, contact_id, contact_name, contact_email,
           address_line1, city, postcode, room_count, room_notes, have_we_spoken,
-          corrected_mobile, contact_phone } = submission;
+          contact_phone, corrected_mobile } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
   const addressParts = [address_line1, city, postcode].filter(Boolean);
@@ -276,16 +276,16 @@ async function sendAdminNotificationEmail(submission) {
   const customerEmail = contact_email || '—';
   const notesValue    = room_notes || '—';
 
-  const formattedMobile = corrected_mobile ? formatPhone(corrected_mobile) : null;
-  const correctedMobileText = formattedMobile ? `Mobile:       ${formattedMobile}` : '';
-  const correctedMobileHtml = formattedMobile
-    ? `<tr><td><strong>Mobile (corrected)</strong></td><td>${escapeHtml(formattedMobile)}</td></tr>`
-    : '';
-
   const formattedPhone = contact_phone ? formatPhone(contact_phone) : null;
   const contactPhoneText = formattedPhone ? `Phone:        ${formattedPhone}` : '';
   const contactPhoneHtml = formattedPhone
     ? `<tr><td><strong>Phone</strong></td><td>${escapeHtml(formattedPhone)}</td></tr>`
+    : '';
+
+  const formattedMobile = corrected_mobile ? formatPhone(corrected_mobile) : null;
+  const correctedMobileText = formattedMobile ? `Mobile:       ${formattedMobile}` : '';
+  const correctedMobileHtml = formattedMobile
+    ? `<tr><td><strong>Mobile (corrected)</strong></td><td>${escapeHtml(formattedMobile)}</td></tr>`
     : '';
 
   const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
@@ -293,8 +293,8 @@ async function sendAdminNotificationEmail(submission) {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
       notes: notesValue, photoSummary: photoSummaryText,
-      correctedMobile: correctedMobileText,
       contactPhone: contactPhoneText,
+      correctedMobile: correctedMobileText,
     },
     htmlVars: {
       customerName:    escapeHtml(customerName),
@@ -303,8 +303,8 @@ async function sendAdminNotificationEmail(submission) {
       rooms:           escapeHtml(roomLabel),
       notes:           escapeHtml(notesValue),
       photoSummary:    photoSummaryHtml,
-      correctedMobile: correctedMobileHtml,
       contactPhone:    contactPhoneHtml,
+      correctedMobile: correctedMobileHtml,
     },
   });
   if (have_we_spoken && String(have_we_spoken).trim()) {
