@@ -1002,6 +1002,16 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     }
   }
 
+  // Normalise submittedPhone to E.164 (generic flow only).
+  // Reject early if the number cannot be parsed as a valid phone number.
+  let normalisedPhone = null;
+  if (preRow.is_generic && submittedPhone && typeof submittedPhone === 'string' && submittedPhone.trim()) {
+    normalisedPhone = normalizePhone(submittedPhone.trim(), 'GB');
+    if (normalisedPhone === null) {
+      return res.status(400).json({ error: 'Please enter a valid phone number (e.g. 07700 900123).' });
+    }
+  }
+
   // Normalise correctedMobile to E.164 (non-generic flow only).
   // If a mobile was provided but cannot be parsed as a valid number, reject early.
   let normalisedMobile = null;
@@ -1094,19 +1104,21 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
            form_link          = NULL,
            contact_name       = $1,
            contact_email      = $2,
-           masked_email       = $3,
-           address_line1      = $4,
-           city               = $5,
-           postcode           = $6,
-           structured_address = $7::jsonb,
-           room_count         = $8,
-           room_notes         = $9,
-           photo_keys         = $10::jsonb,
-           have_we_spoken     = $11
-         WHERE id = $12`,
+           contact_phone      = $3,
+           masked_email       = $4,
+           address_line1      = $5,
+           city               = $6,
+           postcode           = $7,
+           structured_address = $8::jsonb,
+           room_count         = $9,
+           room_notes         = $10,
+           photo_keys         = $11::jsonb,
+           have_we_spoken     = $12
+         WHERE id = $13`,
         [
           submittedName.trim(),
           submittedEmail.trim().toLowerCase(),
+          normalisedPhone || null,
           maskEmail(submittedEmail.trim().toLowerCase()),
           addressLine1.trim(),
           city.trim(),
@@ -1207,7 +1219,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
         await _patchContactProperties(resolvedContactId, patchProps);
       } else {
         try {
-          const newContact = await createHubSpotContact(submittedName.trim(), normEmail, submittedPhone.trim());
+          const newContact = await createHubSpotContact(submittedName.trim(), normEmail, normalisedPhone || submittedPhone.trim());
           resolvedContactId = String(newContact.id);
           // Patch address fields onto the newly created contact
           const patchProps = {

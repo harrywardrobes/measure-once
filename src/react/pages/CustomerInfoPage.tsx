@@ -331,6 +331,7 @@ export function CustomerInfoPage() {
   const [submitErr, setSubmitErr]   = useState('');
 
   const [mobileError, setMobileError] = useState('');
+  const [phoneError, setPhoneError]   = useState('');
 
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [resendErr, setResendErr]     = useState('');
@@ -541,6 +542,25 @@ export function CustomerInfoPage() {
     });
   }
 
+  // Blur handler for the generic phone field.
+  // Reformats the raw input to international display form and validates.
+  function handlePhoneBlur() {
+    const raw = genericFields.phone.trim();
+    if (!raw) {
+      setPhoneError('');
+      return;
+    }
+    const e164 = normalizePhone(raw, 'GB');
+    if (e164 === null) {
+      setPhoneError('Please enter a valid phone number (e.g. 07700 900123).');
+    } else {
+      const displayVal = formatPhone(e164);
+      setGenericFields(prev => ({ ...prev, phone: displayVal }));
+      setPhoneError('');
+      if (activeToken) saveDraft(activeToken, formData, photos.map(p => p.key), { ...genericFields, phone: displayVal });
+    }
+  }
+
   // Blur handler for the correctedMobile field (non-generic flow only).
   // Reformats the raw input to international display form and validates.
   function handleMobileBlur() {
@@ -570,7 +590,12 @@ export function CustomerInfoPage() {
       if (!genericFields.name.trim())  errors.name  = 'Please enter your full name.';
       if (!genericFields.email.trim()) errors.email = 'Please enter your email address.';
       else if (!genericFields.email.includes('@')) errors.email = 'Please enter a valid email address.';
-      if (!genericFields.phone.trim()) errors.phone = 'Please enter your phone number.';
+      if (!genericFields.phone.trim()) {
+        errors.phone = 'Please enter your phone number.';
+      } else {
+        const phoneNorm = normalizePhone(genericFields.phone.trim(), 'GB');
+        if (phoneNorm === null) errors.phone = 'Please enter a valid phone number (e.g. 07700 900123).';
+      }
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors);
         setSubmitErr('Please fill in all required fields above.');
@@ -850,13 +875,17 @@ export function CustomerInfoPage() {
                       label="Phone number"
                       placeholder="e.g. 07700 900123"
                       value={genericFields.phone}
-                      onChange={handleGenericFieldChange('phone')}
+                      onChange={e => {
+                        handleGenericFieldChange('phone')(e);
+                        if (phoneError) setPhoneError('');
+                      }}
+                      onBlur={handlePhoneBlur}
                       fullWidth
                       size="small"
                       required
                       type="tel"
-                      error={!!fieldErrors.phone}
-                      helperText={fieldErrors.phone}
+                      error={!!(fieldErrors.phone || phoneError)}
+                      helperText={fieldErrors.phone || phoneError || undefined}
                       disabled={submitting}
                     />
                   </>

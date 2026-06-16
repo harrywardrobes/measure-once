@@ -558,7 +558,7 @@ async function main() {
       record('CI-4.submission-in-db', dbOk,
         dbOk
           ? `DB row has submitted_at, address_line1="${row.address_line1}", room_count="${row.room_count}"`
-          : `DB row missing or incorrect: ${JSON.stringify(row).slice(0, 200)}`);
+          : `DB row missing or incorrect: ${JSON.stringify(row ?? null).slice(0, 200)}`);
 
       // Wait briefly for emails to land
       let mailsAfter = readMailJsonl(mailFile);
@@ -608,7 +608,7 @@ async function main() {
       record('CI-5.photo-urls', hasPhotoUrls,
         hasPhotoUrls
           ? `photoUrls field present (${submittedRow.photoUrls.length} url(s))`
-          : `photoUrls missing on submitted row: ${JSON.stringify(submittedRow).slice(0, 200)}`);
+          : `photoUrls missing on submitted row: ${JSON.stringify(submittedRow ?? null).slice(0, 200)}`);
     } else {
       record('CI-5.photo-urls', false, 'skipped — list response was not 200 array');
     }
@@ -799,7 +799,7 @@ async function main() {
     // ── CI-G3: Generic submit — missing required fields → 400 ─────────────────
     if (genericToken) {
       const validGenericBase = {
-        name: 'Jane Smith', email: 'jane@generic.local', phone: '07700900000',
+        name: 'Jane Smith', email: 'jane@generic.local', phone: '07911123456',
         structuredAddress: {
           addressLines: ['10 Generic Lane'],
           locality: 'Manchester', postalCode: 'M1 1GG',
@@ -842,7 +842,7 @@ async function main() {
     if (genericToken) {
       const gSubmitBody = {
         name: 'Jane Generic', email: `jane-generic-${runId}@generic.local`,
-        phone: '07700900001',
+        phone: '07902 819 990',
         haveWeSpoken: 'I emailed you last Tuesday about my walk-in wardrobe.',
         structuredAddress: {
           addressLines: ['10 Generic Lane'],
@@ -914,7 +914,7 @@ async function main() {
       // ── CI-G5: Double-submit of same generic token → 410 submitted ──────────
       const gDouble = await postSubmit(BASE, genericToken, {
         name: 'Jane Generic', email: `jane-generic-${runId}@generic.local`,
-        phone: '07700900001',
+        phone: '07902 819 990',
         structuredAddress: {
           addressLines: ['10 Generic Lane'],
           locality: 'Manchester', postalCode: 'M1 1GG',
@@ -1007,7 +1007,7 @@ async function main() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: 'Past Photos', email: pastEmail, phone: '07700900002',
+            name: 'Past Photos', email: pastEmail, phone: '07911223344',
             structuredAddress: {
               addressLines: ['5 Past Road'],
               locality: 'Manchester', postalCode: 'M1 1PP',
@@ -1034,7 +1034,7 @@ async function main() {
             !!noStatusInPatch,
             noStatusInPatch
               ? `PATCH called for existing contact ${pastContactId} without hs_lead_status (not downgraded)`
-              : `PATCH: ${JSON.stringify(patchForExisting).slice(0, 300)}`);
+              : `PATCH: ${JSON.stringify(patchForExisting ?? null).slice(0, 300)}`);
 
           // But other side-effects must still run: DB row must have contact_id set
           const g7Hash = crypto.createHash('sha256').update(tokenG7).digest('hex');
@@ -1178,6 +1178,79 @@ async function main() {
       await pool.query(
         `DELETE FROM customer_info_submissions WHERE contact_id = $1`, [contactIdM]
       ).catch(() => {});
+    }
+
+    // ── CI-M2: Generic phone normalisation ───────────────────────────────────
+    // Exercises the E.164 normalisation path for submittedPhone (generic flow):
+    //   a) Invalid phone → POST returns 400
+    //   b) Messy UK mobile → DB stores E.164 in contact_phone
+    {
+      const validAddress = {
+        addressLines: ['5 Generic Road'],
+        locality: 'Birmingham', postalCode: 'B1 1BB',
+        administrativeArea: '', country: 'GB',
+      };
+      const genericBase = {
+        name: 'Phone Test User', email: `phonetest-${runId}@generic.local`,
+        structuredAddress: validAddress,
+        roomCount: '1', roomNotes: '', photoKeys: [],
+      };
+
+      // ── CI-M2a: invalid phone → 400 ──────────────────────────────────────
+      const m2TokenA = await (async () => {
+        const r = await fetch(`${BASE}/api/customer-info/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const d = await r.json().catch(() => ({}));
+        return r.ok && d.token ? d.token : null;
+      })();
+
+      if (m2TokenA) {
+        const m2V1 = await postSubmit(BASE, m2TokenA, { ...genericBase, phone: '12345' });
+        const m2V1Ok = m2V1.status === 400 && !!m2V1.json?.error;
+        record('CI-M2a.invalid-phone-400',
+          m2V1Ok,
+          m2V1Ok
+            ? `400 error="${m2V1.json.error}"`
+            : `status=${m2V1.status} body=${JSON.stringify(m2V1.json).slice(0, 200)}`);
+      } else {
+        record('CI-M2a.invalid-phone-400', false, 'skipped — could not create draft token');
+      }
+
+      // ── CI-M2b: messy UK mobile → DB stores E.164 ────────────────────────
+      const m2TokenB = await (async () => {
+        const r = await fetch(`${BASE}/api/customer-info/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const d = await r.json().catch(() => ({}));
+        return r.ok && d.token ? d.token : null;
+      })();
+
+      if (m2TokenB) {
+        const m2SubmitRes = await postSubmit(BASE, m2TokenB, { ...genericBase, phone: '07902 819 990' });
+        const m2SubmitOk = m2SubmitRes.status === 200 && m2SubmitRes.json?.ok === true;
+        record('CI-M2b.messy-phone-submit-200',
+          m2SubmitOk,
+          m2SubmitOk
+            ? `POST 200 ok=true`
+            : `status=${m2SubmitRes.status} body=${JSON.stringify(m2SubmitRes.json).slice(0, 200)}`);
+
+        if (m2SubmitOk) {
+          const m2HashB = crypto.createHash('sha256').update(m2TokenB).digest('hex');
+          const m2DbR = await pool.query(
+            `SELECT contact_phone FROM customer_info_submissions WHERE token_hash = $1`,
+            [m2HashB]
+          );
+          const m2DbPhone = m2DbR.rows[0]?.contact_phone;
+          const m2DbOk = m2DbPhone === '+447902819990';
+          record('CI-M2b.e164-in-db',
+            m2DbOk,
+            m2DbOk
+              ? `contact_phone="${m2DbPhone}" (E.164)`
+              : `expected "+447902819990", got "${m2DbPhone}"`);
+        } else {
+          record('CI-M2b.e164-in-db', false, 'skipped — submit failed');
+        }
+      } else {
+        record('CI-M2b.messy-phone-submit-200', false, 'skipped — could not create draft token');
+        record('CI-M2b.e164-in-db', false, 'skipped — could not create draft token');
+      }
     }
 
     // ── CI-UI-A/B: Puppeteer — Resend button visible for admin, hidden for viewer
