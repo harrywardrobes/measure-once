@@ -6406,6 +6406,159 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
   }
 );
 
+// ── contact_customer: render follow-up email preview ─────────────────────────
+// Member-accessible. Loads the live contact_customer_followup template, derives
+// firstName from HubSpot, and returns { subject, text, html } using the same
+// renderEmail pipeline as other preview endpoints.
+app.post('/api/card-actions/contact-customer/:contactId/email-preview',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = req.params.contactId;
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'firstname' }, timeout: 15000 }
+      );
+      const rawFirst = String(r.data?.properties?.firstname || '').trim();
+      const firstName = rawFirst.split(' ')[0].trim() || 'there';
+      const template = await getEmailTemplate('contact_customer_followup');
+      const vars     = { firstName };
+      const htmlVars = Object.fromEntries(
+        Object.entries(vars).map(([k, v]) => [k, escapeHtml(String(v))])
+      );
+      const rendered = renderEmail(template, { textVars: vars, htmlVars });
+      if (!template.body_html || !template.body_html.trim()) {
+        rendered.html = rendered.text
+          .split('\n')
+          .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
+          .join('');
+      }
+      res.json(rendered);
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.message }, 'POST /api/card-actions/contact-customer/:contactId/email-preview error:');
+      res.status(500).json({ error: 'Could not render email preview.' });
+    }
+  }
+);
+
+// ── contact_customer: send follow-up email + log attempt atomically ───────────
+// Member-accessible. Fetches the contact email from HubSpot, sends via SMTP
+// transport, then in a single transaction upserts contact_attempt_tracking
+// (email_sent=true) and inserts a contact_attempt_log row with the auto-note.
+// Returns the same response shape as /attempts.
+app.post('/api/card-actions/contact-customer/:contactId/send-email',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = req.params.contactId;
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const subject = String(req.body?.subject || '').trim();
+    const body    = String(req.body?.body    || '').trim();
+    if (!subject) return res.status(400).json({ error: 'subject is required.' });
+    if (!body)    return res.status(400).json({ error: 'body is required.' });
+
+    try {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+        null,
+        { params: { properties: 'email' }, timeout: 15000 }
+      );
+      const contactEmail = String(r.data?.properties?.email || '').trim();
+      if (!contactEmail) {
+        return res.status(400).json({ error: 'This contact has no email address on record.' });
+      }
+
+      const transport = _createMailTransport();
+      if (!transport) {
+        return res.status(500).json({ error: 'Email is not configured on this server. Please contact your administrator.' });
+      }
+
+      const replyTo = _buildReplyTo();
+      const html = body
+        .split('\n')
+        .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
+        .join('');
+      await transport.sendMail({
+        from:    _buildFromHeader(),
+        ...(replyTo ? { replyTo } : {}),
+        to:      contactEmail,
+        subject,
+        text:    body,
+        html:    html || body,
+      });
+
+      const userId   = req.user?.id;
+      const autoNote = `Follow-up email sent: "${subject}"`;
+      const client   = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows } = await client.query(
+          `INSERT INTO contact_attempt_tracking
+             (hubspot_contact_id, email_sent, attempted_at, attempted_by, updated_at)
+           VALUES ($1, TRUE, NOW(), $2, NOW())
+           ON CONFLICT (hubspot_contact_id) DO UPDATE
+           SET email_sent = TRUE, attempted_at = NOW(), attempted_by = $2, updated_at = NOW()
+           RETURNING call_attempted, email_sent, whatsapp_sent, attempted_at`,
+          [contactId, userId || null]
+        );
+        await client.query(
+          `INSERT INTO contact_attempt_log (hubspot_contact_id, method, attempted_by, note)
+           VALUES ($1, 'email', $2, $3)`,
+          [contactId, userId || null, autoNote]
+        );
+        const { rows: logRows } = await client.query(
+          `SELECT cal.method, cal.attempted_at, cal.note,
+                  COALESCE(NULLIF(TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')), ''), u.email) AS attempted_by_name
+           FROM contact_attempt_log cal
+           LEFT JOIN users u ON u.id = cal.attempted_by
+           WHERE cal.hubspot_contact_id = $1
+             AND cal.attempted_at > COALESCE(
+               (SELECT MAX(attempted_at) FROM contact_attempt_history_log
+                 WHERE hubspot_contact_id = $1),
+               '-infinity'::timestamptz)
+           ORDER BY cal.attempted_at DESC`,
+          [contactId]
+        );
+        await client.query('COMMIT');
+        res.json({
+          ...rows[0],
+          attemptLog: logRows.map(row => ({
+            method:      row.method,
+            attemptedAt: row.attempted_at,
+            attemptedBy: row.attempted_by_name || null,
+            note:        row.note || null,
+          })),
+        });
+      } catch (e) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw e;
+      } finally {
+        client.release();
+      }
+    } catch (e) {
+      if (res.headersSent) return;
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.message }, 'POST /api/card-actions/contact-customer/:contactId/send-email error:');
+      res.status(500).json({ error: 'Could not send email. Please try again.' });
+    }
+  }
+);
+
 // ── contact_customer: advance lead status ────────────────────────────────────
 app.post('/api/card-actions/contact-customer/:contactId/advance-status',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,

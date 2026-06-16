@@ -146,6 +146,8 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/contact-customer/0/attempts',                level: 'member', body: { method: 'call', note: 'test note' } },
   { method: 'POST',   path: '/api/card-actions/contact-customer/0/advance-status',          level: 'member', body: { target: 'attempted_to_contact' }, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/contact-customer/0/email-preview',           level: 'member', body: {}, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/contact-customer/0/send-email',              level: 'member', body: { subject: 'Test', body: 'Hello' }, needsHubspot: true },
 
   // Design-visit member-level surface (design-visits.js).
   { method: 'GET',    path: '/api/design-visits',              level: 'member' },

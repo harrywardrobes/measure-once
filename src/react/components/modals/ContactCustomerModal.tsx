@@ -87,6 +87,12 @@ const METHOD_LABEL: Record<Method, string> = {
   whatsapp: 'WhatsApp',
 };
 
+const METHOD_BUTTON_LABEL: Record<Method, string> = {
+  call:     'Log Call',
+  email:    'Send Email',
+  whatsapp: 'Log WhatsApp',
+};
+
 const METHODS: Method[] = ['call', 'email', 'whatsapp'];
 
 const DEMO_CONTACT_DATA: ContactData = {
@@ -142,6 +148,16 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [submitError,        setSubmitError]        = useState('');
   const [submitErrorRetry,   setSubmitErrorRetry]   = useState(false);
 
+  // Email flow state
+  const [emailFlow,           setEmailFlow]           = useState<'idle' | 'preview' | 'sending'>('idle');
+  const [emailSubject,        setEmailSubject]        = useState('');
+  const [emailBody,           setEmailBody]           = useState('');
+  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
+  const [emailPreviewError,   setEmailPreviewError]   = useState('');
+  const [emailSubmitError,    setEmailSubmitError]    = useState('');
+  const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
+  const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
+
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -186,6 +202,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   function openNotePanel(method: Method) {
+    closeEmailFlow();
     setOpenPanel(method);
     setNoteText('');
     setSubmitError('');
@@ -197,6 +214,96 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setNoteText('');
     setSubmitError('');
     setSubmitErrorRetry(false);
+  }
+
+  function closeEmailFlow() {
+    setEmailFlow('idle');
+    setEmailSubject('');
+    setEmailBody('');
+    setEmailPreviewError('');
+    setEmailSubmitError('');
+    setEmailSubmitRetry(false);
+    setEmailPreviewLoading(false);
+    setEmailSentConfirm('');
+  }
+
+  async function openEmailPreview() {
+    closeNotePanel();
+    setEmailFlow('preview');
+    setEmailPreviewError('');
+    setEmailSubmitError('');
+    setEmailSubmitRetry(false);
+
+    if (demo) {
+      setEmailSubject('Getting in touch');
+      setEmailBody(
+        "Hi there,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team",
+      );
+      return;
+    }
+
+    setEmailPreviewLoading(true);
+    try {
+      const result = await POST(
+        `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/email-preview`,
+        {},
+      ) as { subject: string; text: string; html: string };
+      setEmailSubject(result.subject || '');
+      setEmailBody(result.text || '');
+    } catch (e) {
+      const err = e as ApiError;
+      setEmailPreviewError(err.message || 'Could not load email preview.');
+    } finally {
+      setEmailPreviewLoading(false);
+    }
+  }
+
+  async function handleSendEmail() {
+    if (demo) {
+      closeEmailFlow();
+      return;
+    }
+    if (!emailSubject.trim() || !emailBody.trim()) return;
+    setEmailFlow('sending');
+    setEmailSubmitError('');
+    setEmailSubmitRetry(false);
+    try {
+      const result = await POST(
+        `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/send-email`,
+        { subject: emailSubject.trim(), body: emailBody.trim() },
+      ) as {
+        call_attempted: boolean;
+        email_sent: boolean;
+        whatsapp_sent: boolean;
+        attempted_at: string;
+        attemptLog: AttemptLogEntry[];
+      };
+      setCallAttempted(result.call_attempted);
+      setEmailSent(result.email_sent);
+      setWhatsappSent(result.whatsapp_sent);
+      setAttemptLog(result.attemptLog);
+      if (result.attempted_at) {
+        setLastAttemptAt(result.attempted_at);
+        const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
+        setLastAttemptBy(fullName || null);
+      }
+      setEmailSentConfirm(emailSubject.trim());
+      closeEmailFlow();
+      broadcastContactAttemptLogged(contactId);
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.status === 400) {
+        setEmailSubmitError(err.message || 'Please check your input and try again.');
+        setEmailSubmitRetry(false);
+      } else if (err.status != null && err.status >= 500) {
+        setEmailSubmitError('Something went wrong on our end.');
+        setEmailSubmitRetry(true);
+      } else {
+        setEmailSubmitError(err.message || 'Could not send the email. Please try again.');
+        setEmailSubmitRetry(false);
+      }
+      setEmailFlow('preview');
+    }
   }
 
   async function handleConfirmAttempt(method: Method) {
@@ -327,7 +434,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
 
   const titleStr =
     phase === 'loading' ? 'Contact Customer'
-    : phase === 'contact' ? `Call ${displayName}`
+    : phase === 'contact' ? `Contact ${displayName}`
     : phase === 'no_response_confirm' ? 'Mark as No Response?'
     : phase === 'advancing' ? 'Updating status…'
     : 'Done';
@@ -427,10 +534,22 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   Contact methods tried:
                 </Typography>
+                {emailSentConfirm && (
+                  <Alert
+                    severity="success"
+                    data-testid="email-sent-confirm"
+                    onClose={() => setEmailSentConfirm('')}
+                    sx={{ mb: 1, py: 0.25 }}
+                  >
+                    Email sent: <strong>{emailSentConfirm}</strong>
+                  </Alert>
+                )}
                 <Stack spacing={1}>
                   {METHODS.map((method) => {
-                    const logged  = methodLogged[method];
-                    const isOpen  = openPanel === method;
+                    const logged   = methodLogged[method];
+                    const isEmail  = method === 'email';
+                    const isOpen   = isEmail ? emailFlow !== 'idle' : openPanel === method;
+                    const contactEmailAddr = contactData?.contactEmail || contactEmail;
                     return (
                       <Box key={method}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -439,13 +558,15 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                             variant="outlined"
                             size="small"
                             onClick={() => {
-                              if (isOpen) {
-                                closeNotePanel();
+                              if (isEmail) {
+                                if (isOpen) { closeEmailFlow(); }
+                                else { void openEmailPreview(); }
                               } else {
-                                openNotePanel(method);
+                                if (isOpen) { closeNotePanel(); }
+                                else { openNotePanel(method); }
                               }
                             }}
-                            disabled={submitting}
+                            disabled={submitting || emailFlow === 'sending'}
                             sx={logged ? {
                               borderColor: 'grey.400',
                               color: 'text.secondary',
@@ -453,13 +574,13 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                               '&:hover': { bgcolor: 'grey.200', borderColor: 'grey.500' },
                             } : {}}
                           >
-                            {logged ? `✓ ${METHOD_LABEL[method]}` : METHOD_LABEL[method]}
+                            {logged ? `✓ ${METHOD_BUTTON_LABEL[method]}` : METHOD_BUTTON_LABEL[method]}
                           </Button>
                           {logged && !isOpen && (
                             <Typography
                               component="button"
                               variant="caption"
-                              onClick={() => openNotePanel(method)}
+                              onClick={() => isEmail ? void openEmailPreview() : openNotePanel(method)}
                               sx={{
                                 color: 'primary.main',
                                 cursor: 'pointer',
@@ -475,7 +596,115 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                           )}
                         </Box>
 
-                        {isOpen && (
+                        {isOpen && isEmail && (
+                          <Box
+                            data-testid="email-preview-panel"
+                            sx={{
+                              mt: 1,
+                              pl: 1.5,
+                              borderLeft: '2px solid',
+                              borderColor: 'primary.main',
+                            }}
+                          >
+                            {!contactEmailAddr ? (
+                              <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
+                                No email address is on record for this contact. Add one in HubSpot before sending.
+                              </Typography>
+                            ) : emailPreviewLoading ? (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+                                <CircularProgress size={16} />
+                                <Typography variant="caption" color="text.secondary">Loading preview…</Typography>
+                              </Box>
+                            ) : (
+                              <>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                  To:{' '}
+                                  <strong>
+                                    {(contactData?.contactName || contactName)
+                                      ? `${contactData?.contactName || contactName} <${contactEmailAddr}>`
+                                      : contactEmailAddr}
+                                  </strong>
+                                </Typography>
+                                <TextField
+                                  data-testid="email-preview-subject"
+                                  label="Subject"
+                                  size="small"
+                                  fullWidth
+                                  value={emailSubject}
+                                  onChange={(e) => setEmailSubject(e.target.value)}
+                                  disabled={emailFlow === 'sending'}
+                                  sx={{ mb: 1 }}
+                                />
+                                <TextField
+                                  data-testid="email-preview-body"
+                                  label="Body"
+                                  size="small"
+                                  multiline
+                                  minRows={4}
+                                  fullWidth
+                                  value={emailBody}
+                                  onChange={(e) => setEmailBody(e.target.value)}
+                                  disabled={emailFlow === 'sending'}
+                                  sx={{ mb: 0.75 }}
+                                />
+                                {emailPreviewError && (
+                                  <Alert severity="error" sx={{ mb: 0.75, py: 0 }}>{emailPreviewError}</Alert>
+                                )}
+                                {emailSubmitError && (
+                                  <Typography variant="caption" color="error" sx={{ display: 'block', mb: 0.5 }}>
+                                    {emailSubmitError}
+                                    {emailSubmitRetry && (
+                                      <>
+                                        {' '}
+                                        <Box
+                                          component="button"
+                                          onClick={() => void handleSendEmail()}
+                                          disabled={emailFlow === 'sending'}
+                                          sx={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: 'pointer',
+                                            color: 'error.main',
+                                            fontWeight: 600,
+                                            fontSize: 'inherit',
+                                            textDecoration: 'underline',
+                                            '&:hover': { color: 'error.dark' },
+                                            '&:disabled': { opacity: 0.5, cursor: 'default' },
+                                          }}
+                                        >
+                                          Try again
+                                        </Box>
+                                      </>
+                                    )}
+                                  </Typography>
+                                )}
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                  <Button
+                                    data-testid="email-preview-send-btn"
+                                    size="small"
+                                    variant="contained"
+                                    disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
+                                    onClick={() => void handleSendEmail()}
+                                    startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
+                                  >
+                                    Send Email
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={closeEmailFlow}
+                                    disabled={emailFlow === 'sending'}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </Box>
+                              </>
+                            )}
+                          </Box>
+                        )}
+
+                        {isOpen && !isEmail && (
                           <Box
                             sx={{
                               mt: 1,

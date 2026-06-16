@@ -19,12 +19,12 @@ export default meta;
 type Story = StoryObj<typeof ContactCustomerModal>;
 
 export const Demo: Story = {
-  name: 'Demo mode — all three method buttons available',
+  name: 'Demo mode — Log Call, Send Email, Log WhatsApp buttons',
   parameters: {
     docs: {
       description: {
         story:
-          'Default state in demo mode. Each contact method (Called, Emailed, WhatsApp) is an outlined button that opens an inline note panel when clicked — replacing the old checkbox UI.',
+          'Default state in demo mode. Buttons now read "Log Call", "Send Email", and "Log WhatsApp". The modal title is "Contact [Name]". Clicking "Send Email" opens the email preview panel; clicking "Log Call" or "Log WhatsApp" opens the note panel.',
       },
     },
   },
@@ -34,12 +34,12 @@ export const Demo: Story = {
 };
 
 export const DemoNotePanelOpen: Story = {
-  name: 'Demo mode — note panel open',
+  name: 'Demo mode — Log Call note panel open',
   parameters: {
     docs: {
       description: {
         story:
-          'Clicking a method button (here "Called") opens the inline note panel. The Confirm button stays disabled until a note is entered, enforcing the confirm-before-save flow.',
+          'Clicking "Log Call" opens the inline note panel. The Confirm button stays disabled until a note is entered.',
       },
     },
   },
@@ -58,7 +58,7 @@ export const DemoNotePanelOpen: Story = {
 };
 
 export const DemoNotePanelWithText: Story = {
-  name: 'Demo mode — note panel with text (Confirm enabled)',
+  name: 'Demo mode — Log Call note panel with text (Confirm enabled)',
   parameters: {
     docs: {
       description: {
@@ -73,13 +73,42 @@ export const DemoNotePanelWithText: Story = {
   play: async ({ canvasElement }) => {
     const { within, userEvent, expect } = await import('@storybook/test');
     const canvas = within(canvasElement);
-    const btn = await canvas.findByTestId('contact-method-email-btn');
+    const btn = await canvas.findByTestId('contact-method-call-btn');
     await userEvent.click(btn);
     await canvas.findByTestId('contact-attempt-note-field');
     const noteField = await canvas.findByRole('textbox');
     await userEvent.type(noteField, 'Left a voicemail asking to schedule the design visit.');
     const confirm = await canvas.findByTestId('contact-attempt-confirm-btn');
     await expect(confirm).toBeEnabled();
+  },
+};
+
+export const DemoEmailPreviewOpen: Story = {
+  name: 'Demo mode — Send Email preview panel open',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Clicking "Send Email" opens the email preview panel with an editable Subject and Body field pre-filled from the template. In demo mode the send is a no-op and the actual API call is skipped.',
+      },
+    },
+  },
+  args: {
+    demo: true,
+  },
+  play: async ({ canvasElement }) => {
+    const { within, userEvent, expect } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const btn = await canvas.findByTestId('contact-method-email-btn');
+    await userEvent.click(btn);
+    const panel = await canvas.findByTestId('email-preview-panel');
+    await expect(panel).toBeInTheDocument();
+    const subjectField = await canvas.findByTestId('email-preview-subject');
+    await expect(subjectField).toBeInTheDocument();
+    const bodyField = await canvas.findByTestId('email-preview-body');
+    await expect(bodyField).toBeInTheDocument();
+    const sendBtn = await canvas.findByTestId('email-preview-send-btn');
+    await expect(sendBtn).toBeEnabled();
   },
 };
 
@@ -130,12 +159,12 @@ function FetchMockProvider({
 }
 
 export const OneMethodLogged: Story = {
-  name: 'One method already logged (greyed ✓ + "+ log another")',
+  name: 'One method already logged (greyed ✓ Send Email + "+ log another")',
   parameters: {
     docs: {
       description: {
         story:
-          'A call has already been logged this session. The "Called" button renders greyed with a ✓ and a "+ log another" link appears next to it so staff can record a further attempt. This variant runs in non-demo mode (with a mocked fetch) because the already-logged state is derived from the server response, which demo mode cannot represent.',
+          'An email has already been sent this session. The "Send Email" button renders greyed with a ✓ and a "+ log another" link appears next to it so staff can send a further email. This variant runs in non-demo mode (with a mocked fetch) because the already-logged state is derived from the server response, which demo mode cannot represent.',
       },
     },
   },
@@ -152,17 +181,17 @@ export const OneMethodLogged: Story = {
           mobile: '07700 900456',
           whatsapp: '07700 900456',
           leadStatus: null,
-          callAttempted: true,
-          emailSent: false,
+          callAttempted: false,
+          emailSent: true,
           whatsappSent: false,
           lastAttemptAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           lastAttemptBy: 'Alex Carter',
           attemptLog: [
             {
-              method: 'call',
+              method: 'email',
               attemptedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
               attemptedBy: 'Alex Carter',
-              note: 'No answer — left a voicemail.',
+              note: 'Follow-up email sent: "Getting in touch"',
             },
           ],
           historySessionCount: 0,

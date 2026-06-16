@@ -430,6 +430,29 @@ const TEMPLATE_DEFS = {
     footer_text: 'Warm regards,\nThe Measure Once team',
   },
 
+  contact_customer_followup: {
+    label: 'Contact customer — follow-up',
+    description: 'Sent to a customer as a follow-up when using the "Send Email" button in the Contact Customer modal.',
+    audience: 'customer',
+    variables: ['firstName'],
+    variableDescriptions: {
+      firstName: "Customer's first name. Empty if no first name is recorded.",
+    },
+    subject: 'Getting in touch',
+    body_text: [
+      'Hi {{firstName}},',
+      '',
+      "I hope you're doing well. I wanted to reach out and follow up on your enquiry with us.",
+      '',
+      "Please don't hesitate to get in touch if you have any questions — we're happy to help.",
+      '',
+      'Kind regards,',
+      'The team',
+    ].join('\n'),
+    body_html: '',
+    footer_text: '',
+  },
+
   survey_refund_request: {
     label: 'Survey refund request (admin)',
     description: 'Sent to admins when a survey deposit refund is requested ("customer changed their mind"), so the refund can be processed manually in QuickBooks.',
@@ -646,6 +669,9 @@ const SAMPLE_VARS = {
     visitTime: '10:00 AM',
     visitDuration: '60',
     location: '14 Oak Street, London',
+  },
+  contact_customer_followup: {
+    firstName: 'Jane',
   },
   survey_refund_request: {
     customerName:      'Jane Smith',
