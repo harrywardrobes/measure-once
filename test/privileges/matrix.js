@@ -42,7 +42,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/job-roles',                 level: 'auth' },
   { method: 'GET',    path: '/api/page-filter-config',        level: 'auth' },
   { method: 'GET',    path: '/api/nav-role-config',           level: 'auth' },
-  { method: 'GET',    path: '/api/platform-users',            level: 'auth' },
+  { method: 'GET',    path: '/api/platform-users',            level: 'manager' },
   { method: 'GET',    path: '/api/users/me/prefs',            level: 'auth' },
   { method: 'PATCH',  path: '/api/users/me/prefs',            level: 'auth',    body: {} },
   { method: 'POST',   path: '/api/users/me/photo',            level: 'auth',    body: {} },
@@ -203,7 +203,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/trades/0/audit',            level: 'manager' },
   { method: 'DELETE', path: '/api/trades/0',                  level: 'manager' },
   { method: 'POST',   path: '/api/trades/submissions',        level: 'manager', body: {} },
-  { method: 'GET',    path: '/api/admin/phone-directory',     level: 'manager' },
+  { method: 'GET',    path: '/api/admin/phone-directory',     level: 'admin' },
   // QuickBooks invoice read/write/PDF endpoints all live behind requireAdmin
   // in quickbooks.js (the shared-tenant token is admin-scoped); the matrix
   // mirrors that. routeAudit.auditMatrixLevels keeps this row honest.

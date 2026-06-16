@@ -483,6 +483,16 @@ app.use('/api/design-visits', requireOnboardingComplete);
 app.use('/api/survey-visits', requireOnboardingComplete);
 app.use('/api/customer-info', requireOnboardingComplete);
 app.use('/api/photo-reviews', requireOnboardingComplete);
+// Additional prefixes owned by the same early-mounted routers that fall outside
+// the scoped prefixes above.  Without these guards a pre-onboarding session
+// could reach /api/card-actions/*, /api/catalog/*, /api/design-visit-terms,
+// /api/customer-info-photos/*, and /api/visit-questions via the routers before
+// the global /api onboarding middleware runs.
+app.use('/api/card-actions', requireOnboardingComplete);
+app.use('/api/catalog', requireOnboardingComplete);
+app.use('/api/design-visit-terms', requireOnboardingComplete);
+app.use('/api/customer-info-photos', requireOnboardingComplete);
+app.use('/api/visit-questions', requireOnboardingComplete);
 
 app.use(designVisitsRouter);
 app.use(surveyVisitsRouter);
@@ -3750,11 +3760,14 @@ app.delete('/api/trades/:id', isAuthenticated, requireManagerOrAdmin, async (req
 });
 
 // ── Cross-surface phone-number directory ─────────────────────────────────────
-// Used by the admin Team page and the Trades modal to flag a phone number that
-// is already in use somewhere else (team metadata, trade-company contacts, or
-// HubSpot customer contacts). Gated to manager+admin because trades surfaces
-// require that level, and team-side callers are already admin-only.
-app.get('/api/admin/phone-directory', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
+// Used by the admin Team page (and formerly the Trades modal) to flag a phone
+// number that is already in use somewhere else (team metadata, trade-company
+// contacts, or HubSpot customer contacts). Restricted to admins because the
+// response includes employee emergency-contact numbers and pending approved-user
+// contact details from allowed_emails — personnel data that must stay behind the
+// admin boundary.  Manager-only callers (TradesPage) receive an empty directory
+// and lose duplicate-detection; that is the intended security tradeoff.
+app.get('/api/admin/phone-directory', isAuthenticated, requireAdmin, async (req, res) => {
   try {
     const out = { team: [], trades: [], customers: [] };
 

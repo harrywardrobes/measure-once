@@ -1690,7 +1690,7 @@ async function setupAuth(app) {
     }
   });
 
-  app.get('/api/platform-users', isAuthenticated, async (req, res) => {
+  app.get('/api/platform-users', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
     try {
       const r = await pool.query(
         `SELECT id, first_name, last_name, email, profile_image_url, job_role,
