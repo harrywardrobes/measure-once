@@ -522,6 +522,18 @@ async function main() {
       }
     }
 
+    // Seed AWAITING_PHOTOS into lead_status_config so the submit handler's
+    // assertLeadStatusKey guard passes. Uses ON CONFLICT DO NOTHING so it is
+    // safe if the row is already present (e.g. when the full migration seed
+    // ran first, or when CI-G7 has already seeded it on a re-run).
+    try {
+      await pool.query(`
+        INSERT INTO lead_status_config (key, label, sort_order, is_null_row)
+        VALUES ('AWAITING_PHOTOS', 'Awaiting Photos', 10, false)
+        ON CONFLICT (key) DO NOTHING
+      `);
+    } catch { /* table may not exist in very old schemas; submit will 422 and CI-4 will fail naturally */ }
+
     // ── CI-4: POST /api/customer-info/:token (submit) ────────────────────────
     const mailsBeforeSubmit = readMailJsonl(mailFile).length;
     if (rawToken) {
@@ -531,9 +543,11 @@ async function main() {
         body: JSON.stringify({
           correctedEmail:  '',
           correctedMobile: '',
-          addressLine1:    '42 Test Road',
-          city:            'Manchester',
-          postcode:        'M1 1AA',
+          structuredAddress: {
+            addressLines: ['42 Test Road'],
+            locality: 'Manchester', postalCode: 'M1 1AA',
+            administrativeArea: '', country: 'GB',
+          },
           roomCount:       '2',
           roomNotes:       'Living room and bedroom',
           photoKeys:       uploadedKeys,
