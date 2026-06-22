@@ -420,8 +420,8 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
     return (
       <ModalContactHeader
         name={displayName}
-        phone={loaderData?.contactPhone}
-        mobile={loaderData?.contactMobile}
+        phone={loaderData?.contactPhone || ctx.contactPhone}
+        mobile={loaderData?.contactMobile || ctx.contactMobile}
         email={loaderData?.contactEmail}
         address={loaderData?.contactAddress}
         loading={opts?.loading || isLoading || (step !== 'hub' && !loaderData)}

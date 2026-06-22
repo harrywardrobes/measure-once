@@ -509,8 +509,8 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
     return (
       <ModalContactHeader
         name={displayName}
-        phone={contactData?.contactPhone}
-        mobile={contactData?.contactMobile}
+        phone={contactData?.contactPhone || ctx.contactPhone}
+        mobile={contactData?.contactMobile || ctx.contactMobile}
         email={contactData?.contactEmail}
         address={contactData?.contactAddress}
         loading={opts?.loading || step === 'loading' || (step !== 'hub' && !contactData)}
