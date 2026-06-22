@@ -723,8 +723,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
-                  phone={landline}
-                  mobile={mobile}
+                  phone={landline || ctx.contactPhone}
+                  mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
@@ -759,8 +759,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
-                  phone={landline}
-                  mobile={mobile}
+                  phone={landline || ctx.contactPhone}
+                  mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
@@ -805,8 +805,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
               <Stack spacing={2} sx={{ mt: 0.5 }}>
                 <ModalContactHeader
                   name={displayName}
-                  phone={landline}
-                  mobile={mobile}
+                  phone={landline || ctx.contactPhone}
+                  mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />

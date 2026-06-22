@@ -322,8 +322,8 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
           <ModalContactHeader
             name={contactInfo?.contactName}
             email={contactInfo?.contactEmail}
-            phone={contactInfo?.phone}
-            mobile={contactInfo?.mobile}
+            phone={contactInfo?.phone || ctx.contactPhone}
+            mobile={contactInfo?.mobile || ctx.contactMobile}
           />
           <Typography variant="body2" color="text.secondary">
             What happened when you followed up?
