@@ -670,6 +670,21 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               baseUpdatedAt: existingVisit?.updated_at ?? null,
             }
           : {}),
+        // When queued offline, carry calendar metadata so the sync engine can
+        // create the event after replay — mirroring the online-submission path.
+        ...(!editMode && step1.visitDate
+          ? {
+              calendarMeta: {
+                summary: `Survey visit — ${contactName || contactId}`,
+                description: step1.designerName ? `Surveyor: ${step1.designerName}` : '',
+                location: formatAddress(step1.structuredAddress),
+                visitDate: step1.visitDate,
+                durationMins: parseInt(step1.duration, 10) || defaultDuration,
+                moContactId: contactId ? String(contactId) : undefined,
+                moVisitType: 'survey' as const,
+              },
+            }
+          : {}),
       });
       if (!res.queued && !res.ok) {
         const d = res.data as { error?: string; code?: string } | undefined;

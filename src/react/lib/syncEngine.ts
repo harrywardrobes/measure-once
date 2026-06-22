@@ -30,6 +30,7 @@ import {
   reconcileAbortedRestore,
   markSynced,
   type QueueEntry,
+  type CalendarMeta,
   type OfflineArea,
   type QueueMethod,
 } from './offlineQueue';
@@ -88,6 +89,64 @@ export function classifyStatus(status: number): FailureKind {
 // sync engine.
 
 export { detectConflict, type ConflictDecision };
+
+// ── Calendar side-effect after replay ───────────────────────────────────────────
+
+type WindowWithToast = Window & {
+  showToast?: (msg: string, severity?: boolean | string) => void;
+};
+
+/**
+ * After a queued new-visit write replays successfully, attempt to create the
+ * corresponding calendar event via `POST /api/events`. Mirrors the best-effort
+ * calendar step in the wizard's online-submission path.
+ *
+ * Shows a success or warning toast via `window.showToast` (set by
+ * `ToastContext`) so staff get feedback even though the wizard is long closed.
+ */
+async function replayCalendarEvent(entry: QueueEntry, meta: CalendarMeta): Promise<void> {
+  const w = window as WindowWithToast;
+  try {
+    const start = new Date(meta.visitDate);
+    const end = new Date(start.getTime() + meta.durationMins * 60_000);
+    const r = await fetch('/api/events', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: meta.summary,
+        description: meta.description,
+        location: meta.location,
+        start: { dateTime: start.toISOString() },
+        end: { dateTime: end.toISOString() },
+        moContactId: meta.moContactId,
+        moVisitType: meta.moVisitType,
+      }),
+    });
+    if (r.ok) {
+      log('info', 'calendar_ok', { area: entry.area, label: entry.label });
+      if (typeof w.showToast === 'function') {
+        w.showToast(`${entry.label} synced. Calendar event created.`);
+      }
+    } else {
+      log('warn', 'calendar_failed', { area: entry.area, label: entry.label, status: r.status });
+      if (typeof w.showToast === 'function') {
+        w.showToast(
+          `${entry.label} synced — calendar event could not be created (Google disconnected)`,
+          'warning',
+        );
+      }
+    }
+  } catch {
+    log('warn', 'calendar_failed', { area: entry.area, label: entry.label, status: 0 });
+    if (typeof w.showToast === 'function') {
+      w.showToast(
+        `${entry.label} synced — calendar event could not be created (Google disconnected)`,
+        'warning',
+      );
+    }
+  }
+}
 
 // ── User-facing surfacing ────────────────────────────────────────────────────────
 
@@ -275,6 +334,10 @@ async function processEntry(entry: QueueEntry): Promise<void> {
     surfaceSuccess(entry);
     broadcastLeadStatusAfterReplay(entry, result.data);
     log('info', 'sync_ok', { area: entry.area, label: entry.label, status: result.status });
+    // Best-effort calendar event for offline-queued new visits.
+    if (entry.calendarMeta) {
+      await replayCalendarEvent(entry, entry.calendarMeta);
+    }
     return;
   }
   if (result.networkError) {

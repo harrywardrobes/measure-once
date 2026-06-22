@@ -109,6 +109,29 @@ export interface QueueEntry {
    * field.
    */
   dedupeKey?: string;
+  /**
+   * When set on a new-visit write, the sync engine will attempt to create a
+   * calendar event after the visit replays successfully.
+   */
+  calendarMeta?: CalendarMeta;
+}
+
+/**
+ * Calendar-event metadata stored alongside a queued new-visit write.
+ * When the entry replays successfully the sync engine uses this to fire
+ * `POST /api/events` as a best-effort side-effect, mirroring what the wizard
+ * does for online submissions.
+ */
+export interface CalendarMeta {
+  summary: string;
+  description: string;
+  /** Pre-formatted address string ready to send to the Calendar API. */
+  location: string;
+  /** ISO datetime string (local time, no timezone) as typed by the user. */
+  visitDate: string;
+  durationMins: number;
+  moContactId?: string;
+  moVisitType: 'design' | 'survey';
 }
 
 /** Input accepted by {@link enqueue}; bookkeeping fields are filled in here. */
@@ -125,6 +148,11 @@ export interface EnqueueInput {
   recordKey?: string;
   abortOnConflict?: boolean;
   dedupeKey?: string;
+  /**
+   * When set on a new-visit write, the sync engine will attempt to create a
+   * calendar event after the visit replays successfully.
+   */
+  calendarMeta?: CalendarMeta;
 }
 
 export interface ConflictEntry {
@@ -229,6 +257,7 @@ export async function enqueue(input: EnqueueInput): Promise<QueueEntry | null> {
     updatedAt: now,
     nextAttemptAt: now,
     dedupeKey: input.dedupeKey,
+    calendarMeta: input.calendarMeta,
   };
   const id = await outboxAdd(record);
   if (id === null) return null;
