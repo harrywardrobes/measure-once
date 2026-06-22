@@ -49,7 +49,7 @@ type TradeSub = {
   contacts?: Contact[]; submitter_name?: string; submitter_email?: string; created_at?: string;
 };
 type JobRole = { name: string };
-type UnmatchedSub = {
+export type UnmatchedSub = {
   id: number;
   contact_name: string | null;
   contact_email: string | null;
@@ -95,7 +95,7 @@ function addressSummary(sub: UnmatchedSub): string {
 
 const UNDO_GRACE_MS = 6000;
 
-function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
+export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
   const emailCorrected = Boolean(sub.corrected_email);
