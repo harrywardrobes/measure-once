@@ -15,6 +15,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhoneIcon from '@mui/icons-material/Phone';
 import UndoIcon from '@mui/icons-material/Undo';
 import { api, toast, fmtDate, emitAdminChange, onAdminChange, setRequestsBadge } from './adminApi';
+import { formatPhone } from '../../utils/phoneFormatters';
 import {
   findPhoneDuplicate,
   describePhoneDuplicate,
@@ -52,6 +53,7 @@ type UnmatchedSub = {
   id: number;
   contact_name: string | null;
   contact_email: string | null;
+  contact_phone: string | null;
   corrected_email: string | null;
   corrected_mobile: string | null;
   address_line1: string | null;
@@ -97,7 +99,7 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
   const displayEmail = sub.corrected_email || sub.contact_email || '—';
-  const displayPhone = sub.corrected_mobile || '—';
+  const displayPhone = formatPhone(sub.contact_phone) || '—';
   const photoCount = Array.isArray(sub.photoUrls) ? sub.photoUrls.length : 0;
 
   // Link-to-customer dialog state

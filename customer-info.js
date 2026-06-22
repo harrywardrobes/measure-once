@@ -1793,7 +1793,7 @@ router.get('/api/customer-info/unmatched',
   async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT id, contact_name, contact_email, corrected_email, corrected_mobile,
+        `SELECT id, contact_name, contact_email, contact_phone, corrected_email, corrected_mobile,
                 address_line1, city, postcode, structured_address,
                 room_count, room_notes, photo_keys, submitted_at, created_at,
                 email_skipped_count
