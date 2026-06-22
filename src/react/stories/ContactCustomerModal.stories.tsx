@@ -112,12 +112,19 @@ export const DemoEmailPreviewOpen: Story = {
   },
 };
 
-function mockContactFetch(payload: object) {
+const DEMO_EMAIL_PREVIEW = {
+  subject: 'Getting in touch',
+  text: "Hi Jane,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team",
+  html: '<p>Hi Jane,</p><p>I hope you\'re doing well. I wanted to reach out and follow up on your enquiry with us.</p><p>Please don\'t hesitate to get in touch if you have any questions — we\'re happy to help.</p><p>Kind regards,<br>The team</p>',
+};
+
+function mockContactFetch(payload: object, emailPreview: object = DEMO_EMAIL_PREVIEW) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = typeof input === 'string' ? input : (input as Request).url;
     const method = (init?.method ?? 'GET').toUpperCase();
     if (method === 'POST' && url.includes('/api/card-actions/contact-customer')) {
-      return new Response(JSON.stringify(payload), {
+      const responsePayload = url.includes('/email-preview') ? emailPreview : payload;
+      return new Response(JSON.stringify(responsePayload), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -158,6 +165,68 @@ function FetchMockProvider({
   return <>{children}</>;
 }
 
+const BASE_CONTACT_PAYLOAD = {
+  contactName: 'Jane Smith',
+  contactEmail: 'jane.smith@example.com',
+  phone: '020 7946 0123',
+  mobile: '07700 900456',
+  leadStatus: null,
+  callAttempted: false,
+  emailSent: false,
+  whatsappSent: false,
+  lastAttemptAt: null,
+  lastAttemptBy: null,
+  attemptLog: [],
+  historySessionCount: 0,
+  historyTotalAttempts: 0,
+  historyEverCalled: false,
+  historyEverEmailed: false,
+  historyEverWhatsapped: false,
+  historyAttemptLog: [],
+};
+
+export const LiveTemplateEmailPreview: Story = {
+  name: 'Send Email panel — live admin-edited template pre-filled',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Clicking "Send Email" fetches subject and body from the email-preview API endpoint (DB-backed via the admin-editable contact_customer_followup template). The mock returns a custom subject to demonstrate that admin edits flow through to the compose step. The Send button is enabled as soon as loading finishes.',
+      },
+    },
+  },
+  args: {
+    demo: false,
+  },
+  decorators: [
+    (Story) => (
+      <FetchMockProvider
+        fetchImpl={mockContactFetch(BASE_CONTACT_PAYLOAD, {
+          subject: 'Custom admin subject line',
+          text: "Hi Jane,\n\nThis wording was set by an admin in Email Templates.\n\nKind regards,\nThe team",
+          html: '<p>Hi Jane,</p><p>This wording was set by an admin in Email Templates.</p><p>Kind regards,<br>The team</p>',
+        })}
+      >
+        <Story />
+      </FetchMockProvider>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const { within, userEvent, expect } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+    const emailBtn = await canvas.findByTestId('contact-method-email-btn');
+    await userEvent.click(emailBtn);
+    const panel = await canvas.findByTestId('email-preview-panel');
+    await expect(panel).toBeInTheDocument();
+    const subjectField = (await canvas.findByTestId('email-preview-subject')) as HTMLInputElement;
+    await expect(subjectField.value).toBe('Custom admin subject line');
+    const bodyField = (await canvas.findByTestId('email-preview-body')) as HTMLTextAreaElement;
+    await expect(bodyField.value).toContain('This wording was set by an admin');
+    const sendBtn = await canvas.findByTestId('email-preview-send-btn');
+    await expect(sendBtn).toBeEnabled();
+  },
+};
+
 export const OneMethodLogged: Story = {
   name: 'One method already logged (greyed ✓ Send Email + "+ log another")',
   parameters: {
@@ -175,15 +244,8 @@ export const OneMethodLogged: Story = {
     (Story) => (
       <FetchMockProvider
         fetchImpl={mockContactFetch({
-          contactName: 'Jane Smith',
-          contactEmail: 'jane.smith@example.com',
-          phone: '020 7946 0123',
-          mobile: '07700 900456',
-          whatsapp: '07700 900456',
-          leadStatus: null,
-          callAttempted: false,
+          ...BASE_CONTACT_PAYLOAD,
           emailSent: true,
-          whatsappSent: false,
           lastAttemptAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
           lastAttemptBy: 'Alex Carter',
           attemptLog: [
@@ -194,12 +256,6 @@ export const OneMethodLogged: Story = {
               note: 'Follow-up email sent: "Getting in touch"',
             },
           ],
-          historySessionCount: 0,
-          historyTotalAttempts: 0,
-          historyEverCalled: false,
-          historyEverEmailed: false,
-          historyEverWhatsapped: false,
-          historyAttemptLog: [],
         })}
       >
         <Story />
