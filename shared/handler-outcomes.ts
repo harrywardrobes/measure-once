@@ -350,6 +350,11 @@ export const ACTION_LEVEL_EMAIL_TEMPLATES: Record<string, EmailTemplateRefInput[
     { key: 'admin_notification', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
     { key: 'customer_thank_you', system: true, sentFrom: 'customer-info.js', trigger: 'Sent automatically when the customer submits their uploaded photos & info.' },
   ],
+  // Staff-composed follow-up email sent from the Contact Customer modal when
+  // the staff member chooses "Send Email" and confirms the pre-filled draft.
+  contact_customer: [
+    { key: 'contact_customer_followup', system: false, sentFrom: 'server.js', trigger: 'Pre-fills the Send Email panel in the Contact Customer modal. Staff can edit the subject and body before sending.' },
+  ],
 };
 
 /**
