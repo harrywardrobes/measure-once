@@ -7,6 +7,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
@@ -81,6 +83,24 @@ interface ContactData {
   historyAttemptLog: HistorySessionEntry[];
 }
 
+/** Body text colour for the email preview iframe (kept out of React style props). */
+const IFRAME_BODY_COLOR = '#111';
+
+/**
+ * Convert plain-text email body to HTML the way the server does:
+ * each non-blank line becomes a <p> element, HTML-escaped.
+ * Matches the send-path logic in server.js.
+ */
+function bodyTextToHtml(text: string): string {
+  return text
+    .split('\n')
+    .map(l => {
+      if (l.trim() === '') return '';
+      return `<p>${l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</p>`;
+    })
+    .join('');
+}
+
 const METHOD_LABEL: Record<Method, string> = {
   call:     'Called',
   email:    'Emailed',
@@ -152,6 +172,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [emailFlow,           setEmailFlow]           = useState<'idle' | 'preview' | 'sending'>('idle');
   const [emailSubject,        setEmailSubject]        = useState('');
   const [emailBody,           setEmailBody]           = useState('');
+  const [emailViewMode,       setEmailViewMode]       = useState<'edit' | 'preview'>('edit');
   const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
   const [emailPreviewError,   setEmailPreviewError]   = useState('');
   const [emailSubmitError,    setEmailSubmitError]    = useState('');
@@ -220,6 +241,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setEmailFlow('idle');
     setEmailSubject('');
     setEmailBody('');
+    setEmailViewMode('edit');
     setEmailPreviewError('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
@@ -619,36 +641,109 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                               </Box>
                             ) : (
                               <>
-                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                                  To:{' '}
-                                  <strong>
-                                    {(contactData?.contactName || contactName)
-                                      ? `${contactData?.contactName || contactName} <${contactEmailAddr}>`
-                                      : contactEmailAddr}
-                                  </strong>
-                                </Typography>
-                                <TextField
-                                  data-testid="email-preview-subject"
-                                  label="Subject"
-                                  size="small"
-                                  fullWidth
-                                  value={emailSubject}
-                                  onChange={(e) => setEmailSubject(e.target.value)}
-                                  disabled={emailFlow === 'sending'}
-                                  sx={{ mb: 1 }}
-                                />
-                                <TextField
-                                  data-testid="email-preview-body"
-                                  label="Body"
-                                  size="small"
-                                  multiline
-                                  minRows={4}
-                                  fullWidth
-                                  value={emailBody}
-                                  onChange={(e) => setEmailBody(e.target.value)}
-                                  disabled={emailFlow === 'sending'}
-                                  sx={{ mb: 0.75 }}
-                                />
+                                {/* To: header + Edit/Preview toggle on the same row */}
+                                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 0.5, gap: 1 }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                                    To:{' '}
+                                    <strong>
+                                      {(contactData?.contactName || contactName)
+                                        ? `${contactData?.contactName || contactName} <${contactEmailAddr}>`
+                                        : contactEmailAddr}
+                                    </strong>
+                                  </Typography>
+                                  <ToggleButtonGroup
+                                    size="small"
+                                    exclusive
+                                    value={emailViewMode}
+                                    onChange={(_, v) => { if (v) setEmailViewMode(v as 'edit' | 'preview'); }}
+                                    disabled={emailFlow === 'sending'}
+                                  >
+                                    <ToggleButton value="edit" sx={{ px: 1.25, py: 0.25, fontSize: '0.7rem' }}>
+                                      Edit
+                                    </ToggleButton>
+                                    <ToggleButton
+                                      value="preview"
+                                      data-testid="email-html-preview-toggle"
+                                      sx={{ px: 1.25, py: 0.25, fontSize: '0.7rem' }}
+                                    >
+                                      Preview
+                                    </ToggleButton>
+                                  </ToggleButtonGroup>
+                                </Box>
+
+                                {emailViewMode === 'edit' ? (
+                                  <>
+                                    <TextField
+                                      data-testid="email-preview-subject"
+                                      label="Subject"
+                                      size="small"
+                                      fullWidth
+                                      value={emailSubject}
+                                      onChange={(e) => setEmailSubject(e.target.value)}
+                                      disabled={emailFlow === 'sending'}
+                                      sx={{ mb: 1 }}
+                                    />
+                                    <TextField
+                                      data-testid="email-preview-body"
+                                      label="Body"
+                                      size="small"
+                                      multiline
+                                      minRows={4}
+                                      fullWidth
+                                      value={emailBody}
+                                      onChange={(e) => setEmailBody(e.target.value)}
+                                      disabled={emailFlow === 'sending'}
+                                      sx={{ mb: 0.75 }}
+                                    />
+                                  </>
+                                ) : (
+                                  /* HTML preview — mirrors what the recipient will see */
+                                  <Box sx={{ mb: 0.75 }}>
+                                    {/* Subject preview */}
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                                      Subject
+                                    </Typography>
+                                    <Box sx={{
+                                      px: 1.5, py: 0.75,
+                                      border: '1px solid',
+                                      borderColor: 'divider',
+                                      borderRadius: 1,
+                                      bgcolor: 'background.paper',
+                                      mb: 1,
+                                    }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                        {emailSubject.trim() || <em style={{ opacity: 0.5 }}>empty subject</em>}
+                                      </Typography>
+                                    </Box>
+                                    {/* Body HTML preview in sandboxed iframe */}
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
+                                      Body
+                                    </Typography>
+                                    <Box sx={{
+                                      border: '1px solid',
+                                      borderColor: 'divider',
+                                      borderRadius: 1,
+                                      overflow: 'hidden',
+                                      bgcolor: 'common.white',
+                                    }}>
+                                      <iframe
+                                        data-testid="email-html-preview-iframe"
+                                        title="Email HTML preview"
+                                        sandbox="allow-same-origin"
+                                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:${IFRAME_BODY_COLOR};padding:12px 16px;margin:0;}p{margin:0 0 0.6em;}</style></head><body>${bodyTextToHtml(emailBody)}</body></html>`}
+                                        style={{ width: '100%', minHeight: 120, border: 'none', display: 'block' }}
+                                        onLoad={(e) => {
+                                          const iframe = e.currentTarget;
+                                          try {
+                                            const h = iframe.contentDocument?.body?.scrollHeight;
+                                            if (h && h > 0) iframe.style.height = `${h + 24}px`;
+                                          } catch (_) { /* cross-origin guard */ }
+                                        }}
+                                      />
+                                    </Box>
+                                  </Box>
+                                )}
+
                                 {emailPreviewError && (
                                   <Alert severity="error" sx={{ mb: 0.75, py: 0 }}>{emailPreviewError}</Alert>
                                 )}
