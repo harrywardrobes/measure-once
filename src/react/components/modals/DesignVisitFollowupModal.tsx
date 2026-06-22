@@ -541,7 +541,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   const dialogTitle = (() => {
     if (step === 'resend') return 'Resend design visit invite';
     if (step === 'done') return 'Done';
-    return `Design visit follow-up${ctx.contactName ? ` — ${ctx.contactName}` : ''}`;
+    return ctx.contactName ? `Follow up with ${ctx.contactName}` : 'Design visit follow-up';
   })();
 
   return (
