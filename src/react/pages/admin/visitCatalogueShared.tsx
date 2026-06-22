@@ -9,13 +9,19 @@ import {
   Box, Button, CircularProgress, Stack, Typography,
 } from '@mui/material';
 import Alert from '@mui/material/Alert';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
+import OutlinedInput from '@mui/material/OutlinedInput';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
@@ -28,6 +34,7 @@ export interface DvHandle    { id: number; name: string; style?: string; image_u
 export interface DvFurniture { id: number; name: string; description?: string; sort_order?: number; }
 export interface DvDoorStyle { id: number; name: string; image_url?: string; sort_order?: number; }
 export interface DvTerms     { id: number; version: number; text: string; published_at: string; published_by?: string; }
+export interface Supplier    { id: number; name: string; description?: string; website_address?: string; account_number?: string; }
 export type AnyItem = DvHandle | DvFurniture | DvDoorStyle;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -86,26 +93,41 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
   const [imageFile,   setImageFile]    = useState<File | null>(null);
   const [previewSrc,  setPreviewSrc]   = useState('');
 
+  const [allSuppliers,      setAllSuppliers]      = useState<Supplier[]>([]);
+  const [selectedSuppliers, setSelectedSuppliers] = useState<number[]>([]);
+
   const typeLabels: Record<string, string> = {
     handle: 'Handle', furniture: 'Furniture Range', 'door-style': 'Door Style',
   };
-  const hasDescription = type === 'furniture';
-  const hasStyleSelect = type === 'handle';
-  const hasImageUrl    = type !== 'furniture';
-  const hasFileUpload  = type === 'handle' || type === 'door-style';
+  const hasDescription  = type === 'furniture';
+  const hasStyleSelect  = type === 'handle';
+  const hasImageUrl     = type !== 'furniture';
+  const hasFileUpload   = type === 'handle' || type === 'door-style';
+  const hasSuppliers    = type === 'handle' || type === 'door-style';
+
+  const supplierLinkEndpoint = (id: number) =>
+    type === 'handle'
+      ? `/api/admin/catalog/handles/${id}/suppliers`
+      : `/api/admin/catalog/doors/${id}/suppliers`;
 
   useEffect(() => {
     if (!open) {
       setName(''); setStyle(''); setDescription(''); setImageUrl('');
       setImageFile(null); setPreviewSrc(''); setErrMsg('');
       setImageUploadStatus('idle'); setImageUploadProgress(undefined);
+      setSelectedSuppliers([]);
       return;
     }
+
+    GET('/api/admin/catalog/suppliers')
+      .then((list) => setAllSuppliers(Array.isArray(list) ? list as Supplier[] : []))
+      .catch(() => { /* non-fatal */ });
+
     if (!existingId) return;
 
     setLoading(true);
-    GET(endpointFor(type))
-      .then((list) => {
+    const fetches: Promise<unknown>[] = [
+      GET(endpointFor(type)).then((list) => {
         const arr = Array.isArray(list) ? list as Array<Record<string, unknown>> : [];
         const item = arr.find(x => x.id === existingId) ?? null;
         if (item) {
@@ -115,10 +137,19 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
           setImageUrl(String(item.image_url ?? ''));
           if (item.image_url) setPreviewSrc(String(item.image_url));
         }
-      })
-      .catch(() => { /* ignore — fields stay blank */ })
-      .finally(() => setLoading(false));
-  }, [open, existingId, type]);
+      }),
+    ];
+
+    if (hasSuppliers) {
+      fetches.push(
+        GET(supplierLinkEndpoint(existingId))
+          .then((ids) => setSelectedSuppliers(Array.isArray(ids) ? (ids as number[]) : []))
+          .catch(() => { /* non-fatal */ }),
+      );
+    }
+
+    Promise.allSettled(fetches).finally(() => setLoading(false));
+  }, [open, existingId, type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave() {
     setErrMsg('');
@@ -186,7 +217,15 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
 
     setSaving(true);
     try {
-      await (existingId ? PATCH(url, body) : POST(url, body));
+      const saved = await (existingId ? PATCH(url, body) : POST(url, body)) as Record<string, unknown>;
+      const savedId = existingId ?? (saved.id as number);
+      if (hasSuppliers && savedId) {
+        await fetch(supplierLinkEndpoint(savedId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ supplier_ids: selectedSuppliers }),
+        });
+      }
       showToast(existingId ? 'Saved.' : 'Added.');
       broadcastCatalogueChange(type);
       await onSaved();
@@ -294,6 +333,34 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
                 size="small"
                 fullWidth
               />
+            )}
+            {hasSuppliers && allSuppliers.length > 0 && (
+              <FormControl size="small" fullWidth>
+                <InputLabel id="dvie-suppliers-label">Suppliers</InputLabel>
+                <Select
+                  labelId="dvie-suppliers-label"
+                  label="Suppliers"
+                  multiple
+                  value={selectedSuppliers}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedSuppliers(typeof val === 'string' ? val.split(',').map(Number) : val as number[]);
+                  }}
+                  input={<OutlinedInput label="Suppliers" />}
+                  renderValue={(selected) =>
+                    (selected as number[])
+                      .map(id => allSuppliers.find(s => s.id === id)?.name ?? id)
+                      .join(', ')
+                  }
+                >
+                  {allSuppliers.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      <Checkbox checked={selectedSuppliers.includes(s.id)} />
+                      <ListItemText primary={s.name} />
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             )}
             {errMsg && (
               <Alert severity="error" sx={{ mt: 0.5 }}>{errMsg}</Alert>
@@ -586,4 +653,224 @@ export function useCatalogueData(): CatalogueDataState {
     openEditor, closeDialog,
     moveItem, reorderItems, deleteItem,
   };
+}
+
+// ── SuppliersTab ───────────────────────────────────────────────────────────────
+
+interface SupplierEditorDialogProps {
+  open: boolean;
+  supplier: Supplier | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}
+
+function SupplierEditorDialog({ open, supplier, onClose, onSaved }: SupplierEditorDialogProps) {
+  const { notifyApiError } = useConnectionToast();
+  const [saving,  setSaving]  = useState(false);
+  const [errMsg,  setErrMsg]  = useState('');
+  const [name,           setName]           = useState('');
+  const [description,    setDescription]    = useState('');
+  const [websiteAddress, setWebsiteAddress] = useState('');
+  const [accountNumber,  setAccountNumber]  = useState('');
+
+  useEffect(() => {
+    if (!open) { setErrMsg(''); return; }
+    setName(supplier?.name ?? '');
+    setDescription(supplier?.description ?? '');
+    setWebsiteAddress(supplier?.website_address ?? '');
+    setAccountNumber(supplier?.account_number ?? '');
+  }, [open, supplier]);
+
+  async function handleSave() {
+    setErrMsg('');
+    const nameVal = name.trim();
+    if (!nameVal) { setErrMsg('Name is required.'); return; }
+    setSaving(true);
+    try {
+      const body = {
+        name: nameVal,
+        description:     description.trim()    || null,
+        website_address: websiteAddress.trim() || null,
+        account_number:  accountNumber.trim()  || null,
+      };
+      if (supplier) {
+        await PATCH(`/api/admin/catalog/suppliers/${supplier.id}`, body);
+      } else {
+        await POST('/api/admin/catalog/suppliers', body);
+      }
+      showToast(supplier ? 'Saved.' : 'Supplier added.');
+      await onSaved();
+      onClose();
+    } catch (e) {
+      notifyApiError('database', e);
+      setErrMsg((e as Error).message || 'Save failed.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{supplier ? 'Edit Supplier' : 'Add Supplier'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 0.5 }}>
+          <TextField
+            label="Name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 200 } }}
+            size="small"
+            fullWidth
+            autoFocus
+          />
+          <TextField
+            label="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Website"
+            type="url"
+            value={websiteAddress}
+            onChange={(e) => setWebsiteAddress(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 500 } }}
+            placeholder="https://…"
+            size="small"
+            fullWidth
+          />
+          <TextField
+            label="Account number"
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            slotProps={{ htmlInput: { maxLength: 100 } }}
+            size="small"
+            fullWidth
+          />
+          {errMsg && <Alert severity="error">{errMsg}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving}>
+          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+          {supplier ? 'Save' : 'Add'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+export function SuppliersTab() {
+  const { notifyApiError } = useConnectionToast();
+  const [suppliers,    setSuppliers]    = useState<Supplier[]>([]);
+  const [loading,      setLoading]      = useState(false);
+  const [editorOpen,   setEditorOpen]   = useState(false);
+  const [editTarget,   setEditTarget]   = useState<Supplier | null>(null);
+
+  const fetchSuppliers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await GET('/api/admin/catalog/suppliers');
+      setSuppliers(Array.isArray(list) ? list as Supplier[] : []);
+    } catch (e) {
+      notifyApiError('database', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [notifyApiError]);
+
+  useEffect(() => { fetchSuppliers(); }, [fetchSuppliers]);
+
+  async function handleDelete(s: Supplier) {
+    if (!confirm(`Delete supplier "${s.name}"? This will remove it from all linked handles and door styles.`)) return;
+    try {
+      await DELETE(`/api/admin/catalog/suppliers/${s.id}`);
+      showToast('Supplier deleted.');
+      await fetchSuppliers();
+    } catch (e) {
+      notifyApiError('database', e);
+      showToast('Delete failed: ' + (e as Error).message, true);
+    }
+  }
+
+  return (
+    <>
+      <Stack spacing={2} sx={{ mt: 2 }}>
+        <Card variant="outlined" sx={{ bgcolor: 'action.hover' }}>
+          <CardContent sx={{ py: '10px !important' }}>
+            <Typography variant="body2" color="text.secondary">
+              Suppliers can be linked to handles and door styles from within their edit dialogs in the Catalogues tab.
+            </Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
+              <Box>
+                <Typography variant="h6">Suppliers</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Companies that supply handles, door styles, and other catalogue items.
+                </Typography>
+              </Box>
+              <Button variant="contained" sx={{ flexShrink: 0 }} onClick={() => { setEditTarget(null); setEditorOpen(true); }}>
+                + Add supplier
+              </Button>
+            </Box>
+
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress size={28} />
+              </Box>
+            ) : suppliers.length === 0 ? (
+              <p className="admin-msg admin-msg--muted">No suppliers added yet.</p>
+            ) : (
+              <Box sx={{ overflowX: 'auto' }}>
+                <table className="adm-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr className="adm-tr">
+                      <th className="adm-th">Name</th>
+                      <th className="adm-th">Description</th>
+                      <th className="adm-th">Website</th>
+                      <th className="adm-th">Account no.</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suppliers.map((s, i) => (
+                      <tr key={s.id} className={`adm-tr${i % 2 ? ' adm-tr--alt' : ''}`}>
+                        <td className="adm-td"><strong>{s.name}</strong></td>
+                        <td className="adm-td">{s.description || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>
+                        <td className="adm-td">
+                          {s.website_address
+                            ? <a href={s.website_address} target="_blank" rel="noopener noreferrer">{s.website_address}</a>
+                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
+                        </td>
+                        <td className="adm-td">{s.account_number || <span style={{ color: 'var(--color-text-muted)' }}>—</span>}</td>
+                        <td className="adm-td adm-td--right adm-td--nowrap">
+                          <button className="btn btn-ghost adm-btn-xs" onClick={() => { setEditTarget(s); setEditorOpen(true); }}>Edit</button>
+                          <button className="btn btn-ghost adm-btn-xs adm-btn-xs--danger" onClick={() => handleDelete(s)}>Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      </Stack>
+
+      <SupplierEditorDialog
+        open={editorOpen}
+        supplier={editTarget}
+        onClose={() => setEditorOpen(false)}
+        onSaved={fetchSuppliers}
+      />
+    </>
+  );
 }

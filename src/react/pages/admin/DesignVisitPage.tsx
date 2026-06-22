@@ -11,14 +11,16 @@ import { ADMIN_VISITS_SUBTAB_KEY } from '../../constants/localStorageKeys';
 import {
   DvHandle, DvFurniture, DvDoorStyle, DvTerms, AnyItem,
   CatalogueTable, DvItemEditorDialog, useCatalogueData,
+  SuppliersTab,
   showToast,
 } from './visitCatalogueShared';
 
-type VisitsSubtab = 'catalogues' | 'questionnaire' | 'terms';
+type VisitsSubtab = 'catalogues' | 'questionnaire' | 'terms' | 'suppliers';
 const VISITS_SUBTABS: { key: VisitsSubtab; label: string }[] = [
   { key: 'catalogues',    label: 'Catalogues' },
   { key: 'questionnaire', label: 'Questionnaire' },
   { key: 'terms',         label: 'Terms' },
+  { key: 'suppliers',     label: 'Suppliers' },
 ];
 
 // ── Module-level refs ──────────────────────────────────────────────────────────
@@ -330,6 +332,8 @@ export function DesignVisitPage() {
         </Card>
       </Stack>
       )}
+
+      {subtab === 'suppliers' && <SuppliersTab />}
 
       <DvItemEditorDialog
         open={dialogState.open}

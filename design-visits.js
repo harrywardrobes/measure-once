@@ -1075,6 +1075,125 @@ router.post('/api/admin/terms-conditions/versions', isAuthenticated, requireAdmi
   }
 });
 
+// ── Admin: suppliers CRUD ─────────────────────────────────────────────────────
+
+router.get('/api/admin/catalog/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT * FROM suppliers ORDER BY name ASC`);
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/api/admin/catalog/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const description     = req.body?.description     ? String(req.body.description).trim()     : null;
+  const website_address = req.body?.website_address ? String(req.body.website_address).trim() : null;
+  const account_number  = req.body?.account_number  ? String(req.body.account_number).trim()  : null;
+  try {
+    const r = await pool.query(
+      `INSERT INTO suppliers (name, description, website_address, account_number)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, description, website_address, account_number],
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/api/admin/catalog/suppliers/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const sets = [], vals = [];
+  const addField = (col, maxLen) => {
+    if (req.body?.[col] !== undefined) {
+      vals.push(req.body[col] === null || req.body[col] === '' ? null : String(req.body[col]).trim().slice(0, maxLen));
+      sets.push(`${col} = $${vals.length}`);
+    }
+  };
+  if (req.body?.name !== undefined) {
+    const n = String(req.body.name).trim();
+    if (!n) return res.status(400).json({ error: 'name cannot be empty' });
+    vals.push(n); sets.push(`name = $${vals.length}`);
+  }
+  addField('description',     500);
+  addField('website_address', 500);
+  addField('account_number',  100);
+  if (!sets.length) {
+    const cur = await pool.query(`SELECT * FROM suppliers WHERE id=$1`, [id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Not found' });
+    return res.json(cur.rows[0]);
+  }
+  vals.push(id);
+  try {
+    const r = await pool.query(
+      `UPDATE suppliers SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${vals.length} RETURNING *`,
+      vals,
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/admin/catalog/suppliers/:id', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const r = await pool.query(`DELETE FROM suppliers WHERE id=$1 RETURNING id`, [id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: catalog item ↔ supplier links ──────────────────────────────────────
+
+router.get('/api/admin/catalog/handles/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const r = await pool.query('SELECT supplier_id FROM catalog_handle_suppliers WHERE handle_id=$1', [id]);
+    res.json(r.rows.map(row => row.supplier_id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/admin/catalog/handles/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const ids = Array.isArray(req.body?.supplier_ids) ? req.body.supplier_ids.map(Number).filter(Number.isFinite) : [];
+  try {
+    await pool.query('DELETE FROM catalog_handle_suppliers WHERE handle_id=$1', [id]);
+    if (ids.length) {
+      const placeholders = ids.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
+      const vals = ids.flatMap(sid => [id, sid]);
+      await pool.query(`INSERT INTO catalog_handle_suppliers (handle_id, supplier_id) VALUES ${placeholders} ON CONFLICT DO NOTHING`, vals);
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/api/admin/catalog/doors/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const r = await pool.query('SELECT supplier_id FROM catalog_door_suppliers WHERE door_id=$1', [id]);
+    res.json(r.rows.map(row => row.supplier_id));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/admin/catalog/doors/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
+  const ids = Array.isArray(req.body?.supplier_ids) ? req.body.supplier_ids.map(Number).filter(Number.isFinite) : [];
+  try {
+    await pool.query('DELETE FROM catalog_door_suppliers WHERE door_id=$1', [id]);
+    if (ids.length) {
+      const placeholders = ids.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
+      const vals = ids.flatMap(sid => [id, sid]);
+      await pool.query(`INSERT INTO catalog_door_suppliers (door_id, supplier_id) VALUES ${placeholders} ON CONFLICT DO NOTHING`, vals);
+    }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Public catalogue reads (for wizard — any authenticated user) ──────────────
 function mountCatalogRead(slug, table, cols) {
   router.get(`/api/catalog/${slug}`, isAuthenticated, async (req, res) => {
