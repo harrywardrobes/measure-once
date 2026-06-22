@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Skeleton from '@mui/material/Skeleton';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
@@ -700,9 +701,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                 No email address is on record for this contact. Add one in HubSpot before sending.
                               </Typography>
                             ) : emailPreviewLoading ? (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-                                <CircularProgress size={16} />
-                                <Typography variant="caption" color="text.secondary">Loading preview…</Typography>
+                              <Box sx={{ py: 0.5 }}>
+                                <Skeleton variant="rounded" width="100%" height={40} sx={{ mb: 1 }} />
+                                <Skeleton variant="rounded" width="100%" height={118} />
                               </Box>
                             ) : (
                               <>
