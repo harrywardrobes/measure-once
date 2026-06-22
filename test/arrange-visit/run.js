@@ -26,6 +26,11 @@
 //   (F.2)     POST /api/events passes location + description from body through
 //             to Google Calendar unchanged — verifies the booking-path event
 //             payload (address + notes) reaches the calendar API
+//   (G.1-3)   Static source assertions: the offline cancellation toast string
+//             ("Existing visit cancelled — new booking saved offline and will
+//             sync when you reconnect") and the plain offline booking toast are
+//             both present in ArrangeVisitModal.tsx, and the cancellation toast
+//             is inside a res.queued branch in doBook()
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:arrange-visit
@@ -650,6 +655,57 @@ async function main() {
     );
   }
 
+  // ── (G) Static source assertions — offline-booking toast strings ────────────
+  // The offline cancellation toast is a purely frontend concern: ArrangeVisitModal
+  // calls showToast() inside the `if (res.queued)` branch of doBook().  No server
+  // or browser is needed to guard it — a source-text assertion is the right tool.
+  //
+  // (G.1) When doBook() is called with a cancelledEvent while the queue is active
+  //       the toast must read the combined cancellation+offline message.
+  // (G.2) When doBook() is called without a cancelledEvent while queued, the
+  //       plain offline booking toast must be present (sibling branch guard).
+  console.log('\n  — offline-booking toast strings (G, static) —');
+
+  {
+    const modalSrc = fs.readFileSync(
+      path.resolve(__dirname, '..', '..', 'src', 'react', 'components', 'modals', 'ArrangeVisitModal.tsx'),
+      'utf8',
+    );
+
+    const CANCELLED_TOAST =
+      'Existing visit cancelled \u2014 new booking saved offline and will sync when you reconnect';
+    const PLAIN_OFFLINE_TOAST = 'Booking saved offline \u2014 it will sync when you reconnect';
+
+    const hasCancelledToast = modalSrc.includes(CANCELLED_TOAST);
+    record(
+      '(G.1) doBook queued+cancelledEvent → offline-cancellation toast string present in source',
+      `"${CANCELLED_TOAST}"`,
+      hasCancelledToast ? 'found' : 'NOT FOUND',
+      hasCancelledToast,
+    );
+
+    const hasPlainToast = modalSrc.includes(PLAIN_OFFLINE_TOAST);
+    record(
+      '(G.2) doBook queued+no-cancelledEvent → plain offline-booking toast string present in source',
+      `"${PLAIN_OFFLINE_TOAST}"`,
+      hasPlainToast ? 'found' : 'NOT FOUND',
+      hasPlainToast,
+    );
+
+    // Confirm both strings sit inside the same if (res.queued) block in doBook.
+    // We look for the controlling branch text in the ~300 chars before the
+    // cancellation-toast string so a copy-paste to a different branch is caught.
+    const cancelledIdx  = modalSrc.indexOf(CANCELLED_TOAST);
+    const contextBefore = cancelledIdx >= 0 ? modalSrc.slice(Math.max(0, cancelledIdx - 300), cancelledIdx) : '';
+    const inQueuedBranch = contextBefore.includes('res.queued');
+    record(
+      '(G.3) offline-cancellation toast is inside a res.queued branch in doBook',
+      'res.queued in preceding context',
+      inQueuedBranch ? 'res.queued found' : 'res.queued NOT found in context',
+      inQueuedBranch,
+    );
+  }
+
   // ── Summary + report ───────────────────────────────────────────────────────
   const passed = findings.filter(f => f.ok).length;
   const failed = findings.filter(f => !f.ok && !f.skipped).length;
@@ -727,6 +783,14 @@ async function writeReport(runId, findings) {
     '  Verifies that the formatted address (→ `location`) and visit notes (→ `description`) from the',
     '  React form are forwarded unchanged through the server route to the calendar API.',
     '  Also confirms `moContactId` is set as an extendedProperty (enables contactId-based event lookup).',
+    '- **(G.1)** Static source assertion: the offline cancellation toast string',
+    '  (`"Existing visit cancelled — new booking saved offline and will sync when you reconnect"`)',
+    '  is present in `ArrangeVisitModal.tsx`. Guards against accidental edits to the toast copy.',
+    '- **(G.2)** Static source assertion: the plain offline booking toast',
+    '  (`"Booking saved offline — it will sync when you reconnect"`) is present in',
+    '  `ArrangeVisitModal.tsx`. Guards the sibling `!cancelledEvent` branch of the queued path.',
+    '- **(G.3)** The offline cancellation toast string sits inside a `res.queued` branch in `doBook()`.',
+    '  Guards against the string being moved to an unrelated branch by a refactor.',
   ];
   const outPath = path.join(dir, 'arrange-visit.md');
   fs.writeFileSync(outPath, lines.join('\n') + '\n');
