@@ -58,6 +58,7 @@ interface ContactInfo {
   contactAddress: string;
   contactStructuredAddress: StructuredAddress;
   leadStatus?: string;
+  visitNotes?: string;
 }
 
 interface CalendarEventStub {
@@ -229,12 +230,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         setContactInfo(d);
         setContactLoading(false);
         if (!hasDraft) {
-          // Fresh open: initialise address and step from the API response.
+          // Fresh open: initialise address, notes, and step from the API response.
           // Use functional update so a stale response from a rapid reopen
           // never clobbers a step that has already advanced past 'loading'.
           setStructuredAddress(d.contactStructuredAddress || emptyAddress());
+          setNotes(d.visitNotes ?? '');
           setStep(prev => prev === 'loading' ? 'call' : prev);
-          saveDraft(key, { step: 'call', structuredAddress: d.contactStructuredAddress || emptyAddress(), bookedSlotIso: null, emailSubject: '', emailBody: '' });
+          saveDraft(key, { step: 'call', structuredAddress: d.contactStructuredAddress || emptyAddress(), bookedSlotIso: null, notes: d.visitNotes ?? '', emailSubject: '', emailBody: '' });
         }
 
         // Pre-fetch the no-answer email template using the actual contact name

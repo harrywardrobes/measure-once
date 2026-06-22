@@ -6199,7 +6199,34 @@ app.post('/api/card-actions/arrange-visit',
         address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
       });
       const contactAddress = formatAddress(contactStructuredAddress);
-      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status });
+
+      // Best-effort: fetch the most recent note body from HubSpot to pre-fill the visit notes field.
+      let visitNotes = '';
+      try {
+        const assocR = await hubspotRequestWithRetry('get',
+          `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}/associations/notes`,
+          null,
+          { timeout: 8000 }
+        );
+        const noteIds = (assocR.data?.results || []).map(r => r.id);
+        if (noteIds.length) {
+          const noteR = await hubspotRequestWithRetry('post',
+            `${HS}/crm/v3/objects/notes/batch/read`,
+            { properties: ['hs_note_body', 'hs_timestamp'], inputs: noteIds.map(id => ({ id })) },
+            { timeout: 8000 }
+          );
+          const sorted = (noteR.data?.results || [])
+            .filter(n => n.properties?.hs_note_body)
+            .sort((a, b) => {
+              const ta = new Date(a.properties?.hs_timestamp || 0).getTime();
+              const tb = new Date(b.properties?.hs_timestamp || 0).getTime();
+              return tb - ta;
+            });
+          if (sorted.length) visitNotes = String(sorted[0].properties.hs_note_body || '');
+        }
+      } catch { /* best-effort — visitNotes stays empty on any HubSpot error */ }
+
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status, visitNotes });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
