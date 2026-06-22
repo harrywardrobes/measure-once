@@ -179,7 +179,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
   const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
 
-  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailConfirmTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (demo) {
@@ -216,6 +217,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
 
     return () => {
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+      if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
@@ -246,7 +248,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
     setEmailPreviewLoading(false);
-    setEmailSentConfirm('');
   }
 
   async function openEmailPreview() {
@@ -255,6 +256,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setEmailPreviewError('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
+    setEmailSentConfirm('');
+    if (emailConfirmTimerRef.current) {
+      clearTimeout(emailConfirmTimerRef.current);
+      emailConfirmTimerRef.current = null;
+    }
 
     if (demo) {
       setEmailSubject('Getting in touch');
@@ -309,8 +315,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
         setLastAttemptBy(fullName || null);
       }
-      setEmailSentConfirm(emailSubject.trim());
+      const sentSubject = emailSubject.trim();
       closeEmailFlow();
+      setEmailSentConfirm(sentSubject);
+      if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
+      emailConfirmTimerRef.current = setTimeout(() => setEmailSentConfirm(''), 3000);
       broadcastContactAttemptLogged(contactId);
     } catch (e) {
       const err = e as ApiError;
