@@ -417,10 +417,12 @@ async function runUiSmoke({ users, runId, clients }) {
 
       await page.setBypassServiceWorker(true);
       await page.setRequestInterception(true);
+      const contactsAllLog = [];
       page.on('request', req => {
         const u = req.url();
         if (u.includes('/api/contacts-all')) {
           const reqPage = new URL(u).searchParams.get('page');
+          contactsAllLog.push({ ts: Date.now(), url: u.replace(/^[^?]*/, ''), page: reqPage });
           const body = reqPage === '2' ? mockPage2Payload : mockPage1Payload;
           req.respond({ status: 200, contentType: 'application/json', body });
         } else if (u.includes('/api/open-leads')) {
@@ -429,6 +431,16 @@ async function runUiSmoke({ users, runId, clients }) {
           req.respond({ status: 200, contentType: 'application/json', body: '[]' });
         } else if (u.includes('/api/contacts-lead-status-counts')) {
           req.respond({ status: 200, contentType: 'application/json', body: '{}' });
+        } else if (u.includes('/api/page-filter-config')) {
+          // Mock page-filter-config so async network latency cannot race with
+          // the Next-page click and trigger a concurrent setCustomersPageSize
+          // that lands in the same React render batch as setPage(2), causing
+          // filtersChanged to evaluate as true and reset the page to 1.
+          req.respond({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ customers_page_size: 25 }),
+          });
         } else {
           req.continue();
         }
@@ -466,7 +478,13 @@ async function runUiSmoke({ users, runId, clients }) {
         }, { timeout: 5000 }).catch(() => {});
 
         // (b) click Next → page 2 (the 26th contact)
-        await page.click('button[aria-label="Go to next page"]');
+        // Use in-page evaluate: Puppeteer's CDP page.click() does not reliably
+        // trigger MUI Pagination's React onChange in headless mode; a synchronous
+        // btn.click() dispatched from within the page context does.
+        await page.evaluate(() => {
+          const btn = document.querySelector('button[aria-label="Go to next page"]');
+          if (btn) btn.click();
+        });
         // Wait for page 2 to actually render: check for "Showing 26" specifically
         // (page 1 shows "Showing 1–25 of 26" which does not match /Showing 26/,
         // so the waitForFunction correctly waits until the page-2 response arrives).
@@ -584,6 +602,8 @@ async function runUiSmoke({ users, runId, clients }) {
           req.respond({ status: 200, contentType: 'application/json', body: '[]' });
         } else if (u.includes('/api/contacts-lead-status-counts')) {
           req.respond({ status: 200, contentType: 'application/json', body: '{}' });
+        } else if (u.includes('/api/page-filter-config')) {
+          req.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ customers_page_size: 25 }) });
         } else {
           req.continue();
         }
@@ -609,7 +629,13 @@ async function runUiSmoke({ users, runId, clients }) {
         }, { timeout: 5000 }).catch(() => {});
 
         // Step 2: advance to page 2
-        await page.click('button[aria-label="Go to next page"]');
+        // Use in-page evaluate: Puppeteer's CDP page.click() does not reliably
+        // trigger MUI Pagination's React onChange in headless mode; a synchronous
+        // btn.click() dispatched from within the page context does.
+        await page.evaluate(() => {
+          const btn = document.querySelector('button[aria-label="Go to next page"]');
+          if (btn) btn.click();
+        });
         // Wait specifically for "Showing 26" — page 1 shows "Showing 1–25 of 26"
         // which contains '26' but NOT "Showing 26", so the old `includes('26')`
         // condition resolved immediately on page 1 before the click took effect.
@@ -621,25 +647,31 @@ async function runUiSmoke({ users, runId, clients }) {
 
         // Step 3: apply a filter that keeps contacts-all as the data source so
         // the list remains non-empty after the reset and we can assert page 1.
-        // - "[data-tab-key='__all__']" always calls loadContactsPage (mocked →
-        //   25 contacts) and sets currentPage=1.
-        // - "#archived-toggle" (showArchived false→true) also calls
-        //   loadContactsPage and sets currentPage=1 — used as a fallback.
-        // Avoid "[data-tab-key='__active__']" / any tab that triggers
-        // open-leads (mocked empty), which removes pagination entirely.
-        // Use waitForSelector (not page.$) to give the StageTabGroup time to
-        // render — pagination may appear before the tab group fully mounts.
-        const allTab = await page.waitForSelector('[data-tab-key="__all__"]', { timeout: 3000 }).catch(() => null);
-        if (allTab) {
-          await allTab.click();
-          filterApplied = true;
-        } else {
-          const archivedBtn = await page.$('#archived-toggle');
-          if (archivedBtn) {
-            await archivedBtn.click();
-            filterApplied = true;
-          }
-        }
+        //
+        // Strategy: change the native lead-status <select id="lead-status-filter">
+        // to any non-current value by setting .value directly and dispatching a
+        // native 'change' event.  The CustomersPage onChange handler calls
+        // setLeadStatus(v) and setPage(1), making filtersChanged=true in
+        // usePaginatedContacts and resetting currentPage to 1.
+        //
+        // The mock interceptor returns the same 25-contact payload regardless of
+        // query params, so the pagination bar stays visible after the filter fires.
+        //
+        // Do NOT click the __all__ stage tab: it is already the active tab on
+        // page load (stage === ''), so clicking it again is a no-op — stage
+        // does not change, filtersChanged stays false, and the page never resets.
+        filterApplied = await page.evaluate(() => {
+          const sel = document.getElementById('lead-status-filter');
+          if (!sel) return false;
+          // Pick the first <option> whose value differs from the current value;
+          // fall back to '__no_status__' which is always present.
+          const opts = Array.from(sel.options);
+          const target = opts.find(o => o.value !== sel.value && o.value !== '') || opts.find(o => o.value !== sel.value);
+          if (!target) return false;
+          sel.value = target.value;
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        });
 
         if (filterApplied) {
           // Step 4: wait for re-render and assert page 1
@@ -689,7 +721,10 @@ async function runUiSmoke({ users, runId, clients }) {
           // Use /Showing 26/ (not includes('26')) — page 1 shows "Showing 1–25 of 26"
           // which also contains '26', so the looser check resolves before the click
           // takes effect.  /Showing 26/ only matches "Showing 26–26 of 26" (page 2).
-          await page.click('button[aria-label="Go to next page"]').catch(() => {});
+          await page.evaluate(() => {
+            const btn = document.querySelector('button[aria-label="Go to next page"]');
+            if (btn) btn.click();
+          }).catch(() => {});
           await page.waitForFunction(() => {
             const info = document.querySelector('[data-testid="contacts-pagination-info"]');
             return info && /Showing 26/.test(info.textContent);
