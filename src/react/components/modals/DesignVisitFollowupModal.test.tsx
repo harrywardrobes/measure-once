@@ -198,6 +198,31 @@ describe('DesignVisitFollowupModal — duplicate-visit guard', () => {
     });
   });
 
+  it('Cancel existing — DELETE 500 keeps guard open and shows an error message', async () => {
+    restoreFetch = mockFetch({ eventsItems: [FUTURE_EVENT], deleteStatus: 500 });
+    const user = userEvent.setup();
+
+    renderModal();
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-confirmed'));
+    await waitFor(() => { expect(screen.getByText('Existing visit found')).toBeTruthy(); });
+
+    await user.click(screen.getByTestId('dvf-duplicate-cancel-existing'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('schedule-visit-modal')).toBeNull();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Existing visit found')).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+  });
+
   it('Reschedule existing — opens a second ScheduleVisitModal pre-populated with the existing event', async () => {
     restoreFetch = mockFetch({ eventsItems: [FUTURE_EVENT] });
     const user = userEvent.setup();
