@@ -365,7 +365,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
    * Runs the actual booking: outcome POST + calendar event creation.
    * Call after the duplicate-check guard has passed (or been confirmed).
    */
-  async function doBook() {
+  async function doBook(cancelledEvent?: CalendarEventStub) {
     setSubmitting(true);
     setActionError('');
     try {
@@ -427,11 +427,24 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         } catch { /* calendar is best-effort */ }
 
         const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
+        const cancelledLabel = (() => {
+          if (!cancelledEvent) return null;
+          const dt = cancelledEvent.start?.dateTime;
+          if (dt) {
+            return `Existing visit cancelled (${dayjs(dt).format('D MMM, h:mma')}) — new visit booked`;
+          }
+          return 'Existing visit cancelled — new visit booked';
+        })();
         if (calendarCreated) {
-          const baseMsg = conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated';
-          showToast(`${baseMsg} and calendar event created`, false);
+          const baseMsg = cancelledLabel
+            ? `${cancelledLabel} and calendar event created`
+            : conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated';
+          showToast(baseMsg, false);
         } else {
-          showToast(conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated', false);
+          showToast(
+            cancelledLabel ?? (conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated'),
+            false,
+          );
           showToastWithAction(
             'Visit booked — calendar event could not be created (Google disconnected)',
             {
@@ -504,8 +517,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     }
     setCancellingExisting(false);
     setShowDuplicateConfirm(false);
+    const cancelled = duplicateEvent;
     setDuplicateEvent(null);
-    await doBook();
+    await doBook(cancelled ?? undefined);
   }
 
   /** Open the ScheduleVisitModal pre-populated with the existing event's details. */
