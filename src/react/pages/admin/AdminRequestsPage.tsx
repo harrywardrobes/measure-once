@@ -307,6 +307,12 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
                   )}
                 </Box>
               )}
+              {(sub.address_line1 || sub.city || sub.postcode) && (
+                <Box>
+                  <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Address</Typography>
+                  <Typography variant="body2" color="text.secondary">{addressSummary(sub)}</Typography>
+                </Box>
+              )}
               {sub.room_notes && (
                 <Box>
                   <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
