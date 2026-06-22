@@ -28,6 +28,8 @@ interface Props {
   contactId: string;
   contactName: string;
   contactEmail: string;
+  contactPhone?: string;
+  contactMobile?: string;
   onClose: () => void;
   demo?: boolean;
 }
@@ -135,7 +137,7 @@ const DEMO_CONTACT_DATA: ContactData = {
   historyAttemptLog: [],
 };
 
-export function ContactCustomerModal({ contactId, contactName, contactEmail, onClose, demo }: Props) {
+export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo }: Props) {
   const { user: currentUser } = useAuth();
 
   const [phase, setPhase] = useState<Phase>(demo ? 'contact' : 'loading');
@@ -493,8 +495,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   }
 
   const displayName = contactData?.contactName || contactName || 'the customer';
-  const phone  = contactData?.phone  || '';
-  const mobile = contactData?.mobile || '';
+  const phone  = contactData?.phone  || contactPhone  || '';
+  const mobile = contactData?.mobile || contactMobile || '';
 
   const methodLogged: Record<Method, boolean> = {
     call:     callAttempted,
@@ -576,28 +578,32 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       footer={footerNode || undefined}
     >
       {phase === 'loading' && (
-        <>
+        <Stack spacing={2} sx={{ mt: 0.5 }}>
+          <ModalContactHeader
+            name={contactName || 'the customer'}
+            phone={contactPhone || ''}
+            mobile={contactMobile || ''}
+            email={contactEmail}
+          />
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress size={36} />
           </Box>
           {loadError && (
             <Alert severity="error" sx={{ mt: 1 }}>{loadError}</Alert>
           )}
-        </>
+        </Stack>
       )}
 
       {phase === 'contact' && (
             <Stack spacing={2} sx={{ mt: 0.5 }}>
+              <ModalContactHeader
+                name={displayName}
+                phone={phone}
+                mobile={mobile}
+                email={contactData?.contactEmail || contactEmail}
+              />
               {loadError && (
                 <Alert severity="warning">{loadError}</Alert>
-              )}
-              {!loadError && (
-                <ModalContactHeader
-                  name={displayName}
-                  phone={phone}
-                  mobile={mobile}
-                  email={contactData?.contactEmail || contactEmail}
-                />
               )}
 
               <Box>
@@ -1292,14 +1298,12 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         const anyEver        = everCalled || everEmailed || everWhatsapped;
         return (
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            {!loadError && (
-              <ModalContactHeader
-                name={displayName}
-                phone={phone}
-                mobile={mobile}
-                email={contactData?.contactEmail || contactEmail}
-              />
-            )}
+            <ModalContactHeader
+              name={displayName}
+              phone={phone}
+              mobile={mobile}
+              email={contactData?.contactEmail || contactEmail}
+            />
             <Typography variant="body2">
               This will advance the lead status to <strong>No Response</strong>.
             </Typography>

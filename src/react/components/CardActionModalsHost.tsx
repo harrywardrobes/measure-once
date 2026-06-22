@@ -49,7 +49,7 @@ type ModalState =
   | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string }
+  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string; contactPhone?: string; contactMobile?: string }
   | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'open_deal';                     handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'deposit_invoice_followup';      handler: CardActionHandlerData; ctx: CardActionContext };
@@ -91,7 +91,7 @@ export function CardActionModalsHost() {
           setModal({ type: 'arrange_visit', handler, ctx });
           break;
         case 'contact_customer':
-          setModal({ type: 'contact_customer', contactId: ctx.contactId, contactName: ctx.contactName, contactEmail: ctx.contactEmail });
+          setModal({ type: 'contact_customer', contactId: ctx.contactId, contactName: ctx.contactName, contactEmail: ctx.contactEmail, contactPhone: ctx.contactPhone, contactMobile: ctx.contactMobile });
           break;
         case 'design_visit_followup':
           setModal({ type: 'design_visit_followup', handler, ctx });
@@ -182,6 +182,8 @@ export function CardActionModalsHost() {
             contactId={modal.contactId}
             contactName={modal.contactName}
             contactEmail={modal.contactEmail}
+            contactPhone={modal.contactPhone}
+            contactMobile={modal.contactMobile}
             onClose={close}
           />
         </React.Suspense>
