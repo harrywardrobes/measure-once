@@ -12,7 +12,9 @@ import Typography from '@mui/material/Typography';
 import { FullScreenModal } from './modals/FullScreenModal';
 import { VisitWizardShell } from './VisitWizardShell';
 import { useToastContext } from '../contexts/ToastContext';
-import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { LEAD_STATUS_REMOVED_MESSAGE, POST } from '../utils/api';
+import { openConnectModal } from '../context/ConnectionToastContext';
+import { formatAddress } from '../../../shared/address';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import {
   DEMO_TOOLTIP,
@@ -330,7 +332,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState('');
 
-  const { showToastWithAction } = useToastContext();
+  const { showToast, showToastWithAction } = useToastContext();
 
   const intermediateStatusFiredRef = useRef(false);
 
@@ -683,22 +685,49 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         broadcastLeadStatusChange(contactId, { hs_lead_status: cfg.submittedLeadStatus });
       }
       setOpen(false);
+
+      // Best-effort calendar event (new visits only, when online and visitDate is set).
+      let calendarCreated = false;
+      if (!res.queued && !editMode && step1.visitDate) {
+        try {
+          const start = new Date(step1.visitDate);
+          const durationMins = parseInt(step1.duration, 10) || defaultDuration;
+          const end = new Date(start.getTime() + durationMins * 60000);
+          await POST('/api/events', {
+            summary: `Survey visit — ${contactName || contactId}`,
+            description: step1.designerName ? `Surveyor: ${step1.designerName}` : '',
+            location: formatAddress(step1.structuredAddress),
+            start: { dateTime: start.toISOString() },
+            end: { dateTime: end.toISOString() },
+            moContactId: contactId ? String(contactId) : undefined,
+            moVisitType: 'survey',
+          });
+          calendarCreated = true;
+        } catch { /* calendar is best-effort */ }
+      }
+
       setTimeout(() => {
         onClose();
-        const msg = res.queued
+        const baseMsg = res.queued
           ? (editMode
               ? "Survey visit saved offline — it'll sync and send the sign-off email when you're back online."
               : "Survey visit saved offline — it'll submit and send the sign-off email when you're back online.")
           : (editMode
               ? 'Survey visit updated. A fresh sign-off email has been sent.'
               : 'Survey visit submitted. Customer sign-off email sent.');
-        const w = window as unknown as Record<string, unknown>;
-        if (typeof w['toast'] === 'function') {
-          (w['toast'] as (m: string) => void)(msg);
-        } else if (typeof w['showToast'] === 'function') {
-          (w['showToast'] as (m: string) => void)(msg);
-        } else {
-          alert(msg);
+        const successMsg = (!res.queued && !editMode && step1.visitDate && calendarCreated)
+          ? `${baseMsg} Calendar event created.`
+          : baseMsg;
+        showToast(successMsg, false);
+        if (!res.queued && !editMode && step1.visitDate && !calendarCreated) {
+          showToastWithAction(
+            'Visit submitted — calendar event could not be created (Google disconnected)',
+            {
+              label: 'Reconnect',
+              onClick: () => openConnectModal('google', 'Reconnect Google to create calendar events when booking visits.'),
+            },
+            { severity: 'warning', duration: 8000 },
+          );
         }
       }, 300);
     } catch (e: unknown) {
