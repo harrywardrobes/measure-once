@@ -869,15 +869,20 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                       />
                                     </Box>
                                     {/* Send / Cancel inline below the iframe so staff don't need to scroll */}
-                                    {!emailPreviewLoading && (
+                                    {!emailPreviewLoading && emailFlow === 'sending' && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                                        <CircularProgress size={14} />
+                                        <Typography variant="caption" color="text.secondary">Sending…</Typography>
+                                      </Box>
+                                    )}
+                                    {!emailPreviewLoading && emailFlow !== 'sending' && (
                                       <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                                         <Button
                                           data-testid="email-preview-send-btn-inline"
                                           size="small"
                                           variant="contained"
-                                          disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
+                                          disabled={!emailSubject.trim() || !emailBody.trim()}
                                           onClick={() => void handleSendEmail()}
-                                          startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
                                         >
                                           Send Email
                                         </Button>
@@ -885,7 +890,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                           size="small"
                                           variant="text"
                                           onClick={closeEmailFlow}
-                                          disabled={emailFlow === 'sending'}
                                         >
                                           Cancel
                                         </Button>
