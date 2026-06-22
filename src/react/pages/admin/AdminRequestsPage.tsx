@@ -275,6 +275,17 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
         <Collapse in={open}>
           <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
             <Stack spacing={1}>
+              {(sub.corrected_email || sub.corrected_mobile) && (
+                <Box>
+                  <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Contact corrections</Typography>
+                  {sub.corrected_email && (
+                    <Typography variant="body2" color="text.secondary">Email: {sub.corrected_email}</Typography>
+                  )}
+                  {sub.corrected_mobile && (
+                    <Typography variant="body2" color="text.secondary">Mobile: {formatPhone(sub.corrected_mobile)}</Typography>
+                  )}
+                </Box>
+              )}
               {sub.room_notes && (
                 <Box>
                   <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Notes</Typography>
