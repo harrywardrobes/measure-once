@@ -9,7 +9,7 @@
 // downloadAsBytes call or the nodemailer `attachments` field would be
 // invisible.
 //
-// Two probes:
+// Three probes:
 //
 //   (ATT-1)  Happy path — 2 photos uploaded and submitted:
 //              • admin email has 2 entries in `attachments`
@@ -19,10 +19,17 @@
 //              • HTML body does NOT contain an `<a href` signed-URL link
 //                (photos travel as attachments, not inline links)
 //              • text body contains "2 attached"
+//              • no "Mobile:" row in text body (correctedMobile is empty)
+//              • no "Mobile (corrected)" row in HTML body
 //
 //   (ATT-2)  Skip path — 1 real key + 1 key absent from storage:
 //              • admin email has 1 entry in `attachments`
 //              • HTML body contains "1 skipped"
+//
+//   (ATT-3)  correctedMobile path — submitted with a UK mobile number:
+//              • admin email text body contains "Mobile: +44 7902 819990"
+//              • admin email HTML body contains "Mobile (corrected)" row
+//                with "+44 7902 819990"
 //
 // Overrides used:
 //   HUBSPOT_API_BASE_OVERRIDE        — local mock for contact GET + PATCH
@@ -146,13 +153,13 @@ async function uploadPhoto(base, rawToken, buf, mime = 'image/jpeg', filename = 
 }
 
 // ── Submit the customer-info form ─────────────────────────────────────────────
-async function submitForm(base, rawToken, photoKeys) {
+async function submitForm(base, rawToken, photoKeys, opts = {}) {
   const res = await fetch(`${base}/api/customer-info/${rawToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       correctedEmail:  '',
-      correctedMobile: '',
+      correctedMobile: opts.correctedMobile || '',
       addressLine1:    '10 Attachment Lane',
       city:            'Bristol',
       postcode:        'BS1 1AA',
@@ -344,6 +351,19 @@ async function main() {
         textSummaryOk
           ? 'text contains "2 attached"'
           : `text photo summary missing; text snippet: ${text.slice(0, 400)}`);
+
+      // ATT-1 submits with empty correctedMobile — no mobile row must appear.
+      const noMobileText = !text.includes('Mobile:');
+      record('ATT-1.no-mobile-in-email-text', noMobileText,
+        noMobileText
+          ? 'mobile row correctly absent from admin email text body'
+          : `unexpected "Mobile:" found in admin email text (correctedMobile was empty)`);
+
+      const noMobileHtml = !html.includes('Mobile (corrected)');
+      record('ATT-1.no-mobile-in-email-html', noMobileHtml,
+        noMobileHtml
+          ? 'mobile row correctly absent from admin email HTML body'
+          : `unexpected "Mobile (corrected)" found in admin email HTML (correctedMobile was empty)`);
     }
 
     // ── (ATT-2) Skip path: 1 real key + 1 absent key → 1 attachment, 1 skipped
@@ -397,6 +417,55 @@ async function main() {
         skippedOk
           ? 'HTML contains "1 skipped"'
           : `HTML skipped summary missing; html snippet: ${html2.slice(0, 400)}`);
+    }
+
+    // ── (ATT-3) correctedMobile path: formatted mobile appears in admin email ──
+    // Submits with correctedMobile = '07902 819 990' (a messy UK mobile).
+    // The server normalises it to E.164 (+447902819990) and the email template
+    // renders it via formatPhone as '+44 7902 819990'.
+    // Text body:  "Mobile:       +44 7902 819990"
+    // HTML body:  <tr><td><strong>Mobile (corrected)</strong></td><td>+44 7902 819990</td></tr>
+    console.log('\n  --- ATT-3: correctedMobile present in admin email ---');
+
+    const token3 = await getToken(BASE, mailFile, adminRecipient, contactId, contactProps, memberClient);
+
+    const mailsBefore3 = readMailJsonl(mailFile).length;
+    const submit3 = await submitForm(BASE, token3, [], { correctedMobile: '07902 819 990' });
+    const submit3Ok = submit3.status === 200;
+    record('ATT-3.submit', submit3Ok,
+      submit3Ok ? 'POST 200' : `status=${submit3.status}`);
+
+    let adminMail3 = null;
+    if (submit3Ok) {
+      await pollFn(async () => {
+        const mails = readMailJsonl(mailFile);
+        adminMail3 = mails.slice(mailsBefore3).find(m =>
+          typeof m.to === 'string' && m.to.includes(adminRecipient)
+        );
+        return adminMail3 ? true : null;
+      }, 6000, 100);
+    }
+
+    if (!adminMail3) {
+      record('ATT-3.admin-email-captured', false, 'admin email not found after correctedMobile submit');
+      record('ATT-3.mobile-in-email-text', false, 'no email to inspect');
+      record('ATT-3.mobile-in-email-html', false, 'no email to inspect');
+    } else {
+      record('ATT-3.admin-email-captured', true, `subject="${adminMail3.subject}"`);
+
+      const text3 = adminMail3.text || '';
+      const mobileInText = text3.includes('Mobile:') && text3.includes('+44 7902 819990');
+      record('ATT-3.mobile-in-email-text', mobileInText,
+        mobileInText
+          ? '"Mobile: +44 7902 819990" found in admin email text body'
+          : `formatted mobile NOT found in admin email text body; snippet: ${text3.slice(0, 400)}`);
+
+      const html3 = adminMail3.html || '';
+      const mobileInHtml = html3.includes('Mobile (corrected)') && html3.includes('+44 7902 819990');
+      record('ATT-3.mobile-in-email-html', mobileInHtml,
+        mobileInHtml
+          ? '"Mobile (corrected)" row with "+44 7902 819990" found in admin email HTML body'
+          : `formatted mobile NOT found in admin email HTML body; snippet: ${html3.slice(0, 400)}`);
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
