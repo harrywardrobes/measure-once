@@ -1,0 +1,53 @@
+The contact header block in our card-action modals isn't showing customers' phone
+numbers — only the email shows. This is the contact-info block at the top of modals
+like "Contact Customer". Please find the real cause and fix it consistently across
+EVERY place this contact block is used.
+
+Key files:
+- src/react/components/modals/ModalContactHeader.tsx  ← shared contact-header component
+- src/react/components/modals/ContactCustomerModal.tsx ← the "Contact Customer" modal
+- src/react/utils/dispatchCardActionHandler.ts        ← CardActionContext type
+- src/react/components/CardActionModalsHost.tsx        ← builds the modal context
+- server.js around line 6030                           ← /api/card-actions/contact-customer
+
+There are two distinct problems — please verify each with real data before/after:
+
+PROBLEM 1 — Several modals never pass phone numbers into the header.
+PhoneSummaryModal (~line 157), ScheduleVisitModal (~line 352), UploadPhotosModal
+(~line 802) and VisitWizardShell (~line 92) render:
+    <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+with no phone/mobile/whatsapp props, so phone numbers can never appear there.
+The root cause is that CardActionContext only carries contactId, contactName and
+contactEmail — it has no phone fields. Please:
+  - Add contactPhone / contactMobile / contactWhatsapp to CardActionContext and
+    populate them wherever the context is built (CardActionModalsHost and the click
+    delegation that reads the card's data attributes — add the matching data
+    attributes/HubSpot props if they aren't already provided).
+  - Pass those phone props into ModalContactHeader in ALL modals that render it.
+
+PROBLEM 2 — ContactCustomerModal fetches phones but they come back empty.
+The /api/card-actions/contact-customer route requests
+'phone,mobilephone,hs_whatsapp_phone_number'. Confirm in the actual API response
+(log it or inspect the Network tab) whether these fields are present and non-empty:
+  - If HubSpot returns a 400 because hs_whatsapp_phone_number isn't a defined property
+    in our portal, the entire request fails and no numbers render. Make the property
+    fetch resilient (only request properties that exist, or handle the missing-property
+    error and still return phone + mobilephone).
+  - Confirm the contact's number actually lives in HubSpot's `phone` / `mobilephone`
+    properties and not a different custom property; read whichever property actually
+    holds the data.
+  - In ContactCustomerModal, email has a prop fallback but phone/mobile/whatsapp do
+    not — make sure a partial/failed load still shows whatever numbers we do have.
+
+Layout: phone numbers should appear directly UNDER the email address in the contact
+block (currently they render above it). Adjust the order in ModalContactHeader so
+email is first, then Phone / Mobile / WhatsApp beneath it, keeping the tel: links.
+
+Acceptance:
+  - Opening "Contact Customer" for a contact that has a phone/mobile in HubSpot shows
+    those numbers as tappable tel: links beneath the email.
+  - The same contact block shows numbers in every other modal that uses it
+    (Phone Summary, Schedule Visit, Upload Photos, visit wizard, etc.).
+  - No regression when a contact genuinely has no phone number (the existing
+    "No contact details" warning still behaves correctly).
+Please run the build / existing tests and confirm nothing breaks.
