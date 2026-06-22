@@ -48,6 +48,7 @@ import {
   removeEntry,
   markSynced,
   type QueueEntry,
+  type CalendarMeta,
 } from './offlineQueue';
 import { flushQueue } from './syncEngine';
 import {
@@ -56,6 +57,16 @@ import {
 } from '../utils/broadcastLeadStatus';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const BASE_CALENDAR_META: CalendarMeta = {
+  summary: 'Design Visit — Test Contact',
+  description: 'Offline-queued design visit',
+  location: '1 Test Street, London',
+  visitDate: '2026-07-01T10:00:00',
+  durationMins: 90,
+  moContactId: 'contact-abc',
+  moVisitType: 'design',
+};
 
 function makeEntry(overrides: Partial<QueueEntry> = {}): QueueEntry {
   return {
@@ -223,5 +234,96 @@ describe('broadcastLeadStatusAfterReplay — arrange-visit same-tab delivery', (
     }
 
     expect(received).toHaveLength(0);
+  });
+});
+
+// ── replayCalendarEvent ───────────────────────────────────────────────────────
+
+describe('replayCalendarEvent — Reconnect toast behaviour', () => {
+  let showToastWithAction: ReturnType<typeof vi.fn>;
+  let showToast: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    showToastWithAction = vi.fn();
+    showToast = vi.fn();
+    (window as Record<string, unknown>).showToastWithAction = showToastWithAction;
+    (window as Record<string, unknown>).showToast = showToast;
+  });
+
+  afterEach(() => {
+    delete (window as Record<string, unknown>).showToastWithAction;
+    delete (window as Record<string, unknown>).showToast;
+  });
+
+  it('calls showToast (not showToastWithAction) when POST /api/events succeeds', async () => {
+    mockGetEntries.mockResolvedValue([
+      makeEntry({ calendarMeta: BASE_CALENDAR_META }),
+    ]);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      });
+
+    await flushQueue();
+
+    expect(showToast).toHaveBeenCalledOnce();
+    expect(showToast.mock.calls[0][0]).toMatch(/calendar event created/i);
+    expect(showToastWithAction).not.toHaveBeenCalled();
+  });
+
+  it('calls showToastWithAction with Reconnect label and severity warning when POST /api/events returns non-2xx', async () => {
+    mockGetEntries.mockResolvedValue([
+      makeEntry({ calendarMeta: BASE_CALENDAR_META }),
+    ]);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'unauthorized' }),
+      });
+
+    await flushQueue();
+
+    expect(showToastWithAction).toHaveBeenCalledOnce();
+    const [_msg, action, options] = showToastWithAction.mock.calls[0] as [string, { label: string; onClick: () => void }, { severity: string }];
+    expect(action.label).toBe('Reconnect');
+    expect(options.severity).toBe('warning');
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('calls showToastWithAction with Reconnect label and severity warning when fetch throws (network error)', async () => {
+    mockGetEntries.mockResolvedValue([
+      makeEntry({ calendarMeta: BASE_CALENDAR_META }),
+    ]);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await flushQueue();
+
+    expect(showToastWithAction).toHaveBeenCalledOnce();
+    const [_msg, action, options] = showToastWithAction.mock.calls[0] as [string, { label: string; onClick: () => void }, { severity: string }];
+    expect(action.label).toBe('Reconnect');
+    expect(options.severity).toBe('warning');
+    expect(showToast).not.toHaveBeenCalled();
   });
 });
