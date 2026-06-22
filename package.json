@@ -106,6 +106,8 @@
     "test:deposit-invoice-followup:ci": "node scripts/with-test-db.js test/deposit-invoice-followup/run.js",
     "test:contact-customer-email-send": "node test/contact-customer-email-send/run.js",
     "test:contact-customer-email-send:ci": "node scripts/with-test-db.js test/contact-customer-email-send/run.js",
+    "test:contact-customer-email-preview": "node test/contact-customer-email-preview/run.js",
+    "test:contact-customer-email-preview:ci": "node scripts/with-test-db.js test/contact-customer-email-preview/run.js",
     "test:qb-payment-history": "node test/qb-payment-history/run.js",
     "test:qb-payment-history:ci": "node scripts/with-test-db.js test/qb-payment-history/run.js",
     "test:payment-history-component": "vitest run src/react/components/PaymentHistory.test.tsx",
