@@ -319,6 +319,12 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
                   <Typography variant="body2" color="text.secondary">{sub.room_notes}</Typography>
                 </Box>
               )}
+              {!!sub.room_count && (
+                <Box>
+                  <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Rooms</Typography>
+                  <Typography variant="body2" color="text.secondary">{sub.room_count}</Typography>
+                </Box>
+              )}
               {photoCount === 0 ? (
                 <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                   No photos uploaded.
