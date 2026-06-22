@@ -9,7 +9,7 @@
  * update until a manual refresh.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Module mocks (must come before any imports that pull these in) ────────────
 
@@ -246,13 +246,13 @@ describe('replayCalendarEvent — Reconnect toast behaviour', () => {
   beforeEach(() => {
     showToastWithAction = vi.fn();
     showToast = vi.fn();
-    (window as Record<string, unknown>).showToastWithAction = showToastWithAction;
-    (window as Record<string, unknown>).showToast = showToast;
+    (window as unknown as Record<string, unknown>).showToastWithAction = showToastWithAction;
+    (window as unknown as Record<string, unknown>).showToast = showToast;
   });
 
   afterEach(() => {
-    delete (window as Record<string, unknown>).showToastWithAction;
-    delete (window as Record<string, unknown>).showToast;
+    delete (window as unknown as Record<string, unknown>).showToastWithAction;
+    delete (window as unknown as Record<string, unknown>).showToast;
   });
 
   it('calls showToast (not showToastWithAction) when POST /api/events succeeds', async () => {
