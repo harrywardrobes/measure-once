@@ -105,10 +105,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
 
+  const showToastWithActionRef = useRef(showToastWithAction);
+  showToastWithActionRef.current = showToastWithAction;
+
   useEffect(() => {
     const w = window as unknown as {
       toast?: (m: string, e?: boolean | ToastSeverity) => void;
       showToast?: (m: string, e?: boolean | ToastSeverity) => void;
+      showToastWithAction?: (
+        msg: string,
+        action: ToastAction,
+        options?: { duration?: number; severity?: ToastSeverity },
+      ) => void;
       __toastProvider?: boolean;
     };
     if (!w.__toastProvider) {
@@ -119,6 +127,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         } else {
           showToastRef.current(m, !!e);
         }
+      };
+      w.showToastWithAction = (
+        msg: string,
+        action: ToastAction,
+        options?: { duration?: number; severity?: ToastSeverity },
+      ) => {
+        showToastWithActionRef.current(msg, action, options);
       };
     }
   }, []);

@@ -36,6 +36,7 @@ import {
 } from './offlineQueue';
 import { detectConflict, type ConflictDecision } from './conflictDetection';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { openConnectModal } from '../context/ConnectionToastContext';
 
 
 // ── Tunables ────────────────────────────────────────────────────────────────────
@@ -92,8 +93,15 @@ export { detectConflict, type ConflictDecision };
 
 // ── Calendar side-effect after replay ───────────────────────────────────────────
 
+type ToastSeverity = 'success' | 'error' | 'warning' | 'info';
+interface ToastAction { label: string; onClick: () => void; }
 type WindowWithToast = Window & {
   showToast?: (msg: string, severity?: boolean | string) => void;
+  showToastWithAction?: (
+    msg: string,
+    action: ToastAction,
+    options?: { duration?: number; severity?: ToastSeverity },
+  ) => void;
 };
 
 /**
@@ -101,11 +109,30 @@ type WindowWithToast = Window & {
  * corresponding calendar event via `POST /api/events`. Mirrors the best-effort
  * calendar step in the wizard's online-submission path.
  *
- * Shows a success or warning toast via `window.showToast` (set by
- * `ToastContext`) so staff get feedback even though the wizard is long closed.
+ * On success: shows a plain success toast via `window.showToast`.
+ * On failure: shows a warning toast with a "Reconnect" action button (via
+ * `window.showToastWithAction`) that opens the Google OAuth connect modal,
+ * matching the behaviour of the online-submission path in DesignVisitWizard.
  */
 async function replayCalendarEvent(entry: QueueEntry, meta: CalendarMeta): Promise<void> {
   const w = window as WindowWithToast;
+
+  const showCalendarFailedToast = (): void => {
+    const msg = `${entry.label} synced — calendar event could not be created (Google disconnected)`;
+    if (typeof w.showToastWithAction === 'function') {
+      w.showToastWithAction(
+        msg,
+        {
+          label: 'Reconnect',
+          onClick: () => openConnectModal('google', 'Reconnect Google to create calendar events when booking visits.'),
+        },
+        { severity: 'warning', duration: 8000 },
+      );
+    } else if (typeof w.showToast === 'function') {
+      w.showToast(msg, 'warning');
+    }
+  };
+
   try {
     const start = new Date(meta.visitDate);
     const end = new Date(start.getTime() + meta.durationMins * 60_000);
@@ -130,21 +157,11 @@ async function replayCalendarEvent(entry: QueueEntry, meta: CalendarMeta): Promi
       }
     } else {
       log('warn', 'calendar_failed', { area: entry.area, label: entry.label, status: r.status });
-      if (typeof w.showToast === 'function') {
-        w.showToast(
-          `${entry.label} synced — calendar event could not be created (Google disconnected)`,
-          'warning',
-        );
-      }
+      showCalendarFailedToast();
     }
   } catch {
     log('warn', 'calendar_failed', { area: entry.area, label: entry.label, status: 0 });
-    if (typeof w.showToast === 'function') {
-      w.showToast(
-        `${entry.label} synced — calendar event could not be created (Google disconnected)`,
-        'warning',
-      );
-    }
+    showCalendarFailedToast();
   }
 }
 
