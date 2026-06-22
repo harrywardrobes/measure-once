@@ -21,6 +21,11 @@
 //             SURVEY_SCHEDULED__SRSC_SUGGESTED, DESIGN_SCHEDULED__DSSC_SUGGESTED,
 //             not_suitable (×2, empty substatus)
 //   (B.bad)   Invalid outcome → 400
+//   (F.1)     GET /api/events?contactId returns future events when Google is
+//             connected — exercises the duplicate-visit guard server path
+//   (F.2)     POST /api/events passes location + description from body through
+//             to Google Calendar unchanged — verifies the booking-path event
+//             payload (address + notes) reaches the calendar API
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:arrange-visit
@@ -52,6 +57,7 @@ const CONTACT_STUBS = {
   '111111': 'awaiting_deposit',
   '222222': 'OPEN_DEAL',
   '333333': '',
+  '444444': 'DESIGN_INVITED',
 };
 
 // Captures the last PATCH sent to the fake HubSpot server so probes can
@@ -113,6 +119,123 @@ function startFakeHubspot() {
   });
 }
 
+// ── Fake Google Calendar stub ─────────────────────────────────────────────────
+// Handles the googleapis Calendar v3 endpoints so the test can exercise
+// GET /api/events (duplicate-guard) and POST /api/events (booking-path) with
+// a real request/response cycle but without real Google credentials.
+//
+// The server captures the last event-insert body so tests can assert that
+// fields like `location` and `description` reach the calendar API unchanged.
+//
+// Server.js activates this stub when:
+//   GOOGLE_APIS_BASE_URL  = http://127.0.0.1:<port>/
+//   GOOGLE_TEST_TOKENS    = {"access_token":"...", "expiry_date": <far future>}
+//   GOOGLE_CLIENT_ID      = test-client-id
+//   GOOGLE_CLIENT_SECRET  = test-client-secret
+//   GOOGLE_SHARED_CALENDAR_ID = test-calendar-id
+function startFakeGoogleCalendar() {
+  return new Promise((resolve, reject) => {
+    let lastEventInsert = null;
+
+    // A single fixed future event returned for every list request.
+    // contactId=444444 is the DESIGN_INVITED stub used in C/D/F tests.
+    const FUTURE_EVENT = {
+      id: 'gcal-fake-event-1',
+      summary: 'Design Visit — Existing Booking',
+      status: 'confirmed',
+      start: { dateTime: new Date(Date.now() + 86400000).toISOString() },
+      end:   { dateTime: new Date(Date.now() + 90000000).toISOString() },
+      extendedProperties: {
+        private: { moContactId: '444444', moSource: 'measure-once' },
+      },
+    };
+
+    const server = http.createServer((req, res) => {
+      let rawBody = '';
+      req.on('data', c => { rawBody += c; });
+      req.on('end', () => {
+        const url = req.url.split('?')[0];
+        const isCalendarPath = url.includes('/calendar/v3/calendars/');
+
+        if (isCalendarPath && req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ kind: 'calendar#events', items: [FUTURE_EVENT] }));
+          return;
+        }
+
+        if (isCalendarPath && req.method === 'POST') {
+          let body = null;
+          try { body = JSON.parse(rawBody); } catch {}
+          lastEventInsert = body;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            id: 'gcal-new-fake-event-id',
+            htmlLink: 'https://calendar.google.com/fake',
+            status: 'confirmed',
+            ...(body || {}),
+          }));
+          return;
+        }
+
+        // Catch-all: any other googleapis call (discovery, token info, etc.)
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({}));
+      });
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      resolve({
+        server,
+        port: server.address().port,
+        getLastInsert: () => lastEventInsert,
+        clearLastInsert: () => { lastEventInsert = null; },
+      });
+    });
+    server.on('error', reject);
+  });
+}
+
+// ── Minimal fetch client for a custom base URL ────────────────────────────────
+// Used by the Google-auth test section (F) to target the second test server
+// (port 5055) while reusing the member session cookie from the first server.
+function makeClientAt(base, cookie) {
+  async function req(method, urlPath, body) {
+    const opts = {
+      method,
+      headers: {
+        Accept: 'application/json',
+        'X-Forwarded-Proto': 'https',
+        ...(cookie ? { cookie } : {}),
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      redirect: 'manual',
+    };
+    const res = await fetch(`${base}${urlPath}`, opts);
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch {}
+    return { status: res.status, text, json };
+  }
+  return {
+    get:  (p)       => req('GET',  p),
+    post: (p, body) => req('POST', p, body),
+  };
+}
+
+// Wait for an Express server to be ready on an arbitrary port.
+async function waitForPort(port, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/api/turnstile-config`);
+      if (r.ok) return;
+    } catch {}
+    await new Promise(r => setTimeout(r, 300));
+  }
+  throw new Error(`Server on port ${port} did not start within ${timeoutMs}ms`);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const hasTestDb   = !!process.env.DATABASE_URL_TEST;
@@ -140,25 +263,36 @@ async function main() {
 
   await cleanupTestData(pool);
 
-  // Start the fake HubSpot stub before spawning the Express server so the
-  // HUBSPOT_API_URL env var is already known when the child boots.
+  // Start both fake stubs before spawning any Express server so their URLs
+  // are known when child processes boot.
   const { server: fakeHs, port: fakeHsPort } = await startFakeHubspot();
   const fakeHsUrl = `http://127.0.0.1:${fakeHsPort}`;
   console.log(`  Fake HubSpot stub on ${fakeHsUrl}`);
+
+  const fakeGcal = await startFakeGoogleCalendar();
+  const fakeGcalUrl = `http://127.0.0.1:${fakeGcal.port}/`;
+  console.log(`  Fake Google Calendar stub on ${fakeGcalUrl}`);
 
   const users = await seedUsers(pool, runId);
   console.log(
     `  Seeded users  admin=${users.admin.email}  member=${users.member.email}  viewer=${users.viewer.email}`,
   );
 
+  // ── Server 1: primary (A-E tests, no Google auth) ──────────────────────────
   const { child, logBuf } = spawnServer({
     extraEnv: {
       HUBSPOT_API_URL:      fakeHsUrl,
       HUBSPOT_ACCESS_TOKEN: 'privtest-fake-hs-token',
     },
   });
-  let exited = false;
+  let exited  = false;
+  let child2  = null;
+  let exited2 = false;
+  let logBuf2 = [];
   child.on('exit', () => { exited = true; });
+
+  const GCAL_TEST_PORT = 5055;
+  const gcalBase = `http://127.0.0.1:${GCAL_TEST_PORT}`;
 
   const findings = [];
   function record(name, expected, observed, ok, detail = '') {
@@ -176,8 +310,10 @@ async function main() {
   const cleanupAndExit = async (code) => {
     if (teardownInFlight) return;
     teardownInFlight = true;
-    try { if (!exited) child.kill('SIGTERM'); } catch {}
+    try { if (!exited)  child.kill('SIGTERM');  } catch {}
+    try { if (child2 && !exited2) child2.kill('SIGTERM'); } catch {}
     try { fakeHs.close(); } catch {}
+    try { fakeGcal.server.close(); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
     process.exit(code);
@@ -188,14 +324,50 @@ async function main() {
   process.on('uncaughtException',  (e) => { console.error('Uncaught:', e);  cleanupAndExit(2); });
   process.on('unhandledRejection', (e) => { console.error('Unhandled:', e); cleanupAndExit(2); });
 
-  // ── Boot test server ───────────────────────────────────────────────────────
+  // ── Boot test server 1 (A-E tests) ────────────────────────────────────────
+  // Wait for server 1 to be fully up (migrations applied) before spawning
+  // server 2, so the two servers don't race on the node-pg-migrate lock.
   try {
     await waitForServer();
     await resetRateLimitStore(pool);
-    console.log(`  Server up at ${BASE}`);
+    console.log(`  Server 1 up at ${BASE}`);
   } catch (e) {
-    console.error('Server boot failed:', e.message);
+    console.error('Server 1 boot failed:', e.message);
     console.error(logBuf.join('').slice(-2000));
+    await cleanupAndExit(2);
+    return;
+  }
+
+  // ── Spawn + boot server 2 (F tests — Google-enabled) ─────────────────────
+  // Spawned AFTER server 1 is up so migrations don't race.
+  const fakeGoogleTokens = JSON.stringify({
+    access_token: 'fake-gcal-test-token',
+    token_type: 'Bearer',
+    expiry_date: 9999999999000,
+  });
+  { const s2 = spawnServer({
+    extraEnv: {
+      PORT:                      String(GCAL_TEST_PORT),
+      APP_URL:                   gcalBase,
+      HUBSPOT_API_URL:           fakeHsUrl,
+      HUBSPOT_ACCESS_TOKEN:      'privtest-fake-hs-token',
+      GOOGLE_APIS_BASE_URL:      fakeGcalUrl,
+      GOOGLE_TEST_TOKENS:        fakeGoogleTokens,
+      GOOGLE_SHARED_CALENDAR_ID: 'test-calendar-id',
+      GOOGLE_CLIENT_ID:          'test-client-id',
+      GOOGLE_CLIENT_SECRET:      'test-client-secret',
+    },
+  });
+  child2  = s2.child;
+  logBuf2 = s2.logBuf;
+  child2.on('exit', () => { exited2 = true; }); }
+
+  try {
+    await waitForPort(GCAL_TEST_PORT, 25000);
+    console.log(`  Server 2 up at ${gcalBase}`);
+  } catch (e) {
+    console.error('Server 2 boot failed:', e.message);
+    console.error(logBuf2.join('').slice(-2000));
     await cleanupAndExit(2);
     return;
   }
@@ -282,38 +454,36 @@ async function main() {
   // ── (B) Outcome → HubSpot status mapping ──────────────────────────────────
   console.log('\n  — outcome → HubSpot status mapping (B) —');
 
+  // Note: hw_lead_substatus helpers were removed from server.js.
+  // These tests verify only hs_lead_status (the parent field).
   const OUTCOME_CASES = [
-    { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SURVEY_SCHEDULED__SRSC_AGREED' },
-    { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DESIGN_SCHEDULED__DSSC_AGREED' },
-    { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED', expectedSubStatus: 'SURVEY_SCHEDULED__SRSC_SUGGESTED' },
-    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED', expectedSubStatus: 'DESIGN_SCHEDULED__DSSC_SUGGESTED' },
-    { outcome: 'not_proceeding', visitType: 'survey', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
-    { outcome: 'not_proceeding', visitType: 'design', expectedLeadStatus: 'NOT_SUITABLE',      expectedSubStatus: '' },
+    { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED' },
+    { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED' },
+    { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED' },
+    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_INVITED'   },
+    { outcome: 'not_proceeding', visitType: 'survey', expectedLeadStatus: 'NOT_SUITABLE'      },
+    { outcome: 'not_proceeding', visitType: 'design', expectedLeadStatus: 'NOT_SUITABLE'      },
   ];
 
-  for (const { outcome, visitType, expectedLeadStatus, expectedSubStatus } of OUTCOME_CASES) {
+  for (const { outcome, visitType, expectedLeadStatus } of OUTCOME_CASES) {
     lastPatch = null;
     const r = await memberClient.post('/api/card-actions/arrange-visit/outcome', {
       contactId: '111111',
       outcome,
       visitType,
     });
-    // The route responds with { ok: true, hs_lead_status, hw_lead_substatus } and also PATCHes HubSpot.
+    // The route responds with { ok: true, hs_lead_status } and also PATCHes HubSpot.
     // Verify both the response body and the values sent to the fake stub.
     const responseLeadStatus = r.json?.hs_lead_status;
-    const responseSubStatus  = r.json?.hw_lead_substatus;
     const patchedLeadStatus  = lastPatch?.body?.properties?.hs_lead_status;
-    const patchedSubStatus   = lastPatch?.body?.properties?.hw_lead_substatus;
     const ok = r.status === 200
       && r.json?.ok === true
       && responseLeadStatus === expectedLeadStatus
-      && responseSubStatus  === expectedSubStatus
-      && patchedLeadStatus  === expectedLeadStatus
-      && patchedSubStatus   === expectedSubStatus;
+      && patchedLeadStatus  === expectedLeadStatus;
     record(
-      `(B) outcome=${outcome} visitType=${visitType} → hs_lead_status=${expectedLeadStatus} hw_lead_substatus=${expectedSubStatus}`,
-      `200 ok=true hs_lead_status=${expectedLeadStatus} hw_lead_substatus=${expectedSubStatus} patched_lead=${expectedLeadStatus} patched_sub=${expectedSubStatus}`,
-      `HTTP ${r.status} hs_lead_status=${responseLeadStatus} hw_lead_substatus=${responseSubStatus} patched_lead=${patchedLeadStatus} patched_sub=${patchedSubStatus}`,
+      `(B) outcome=${outcome} visitType=${visitType} → hs_lead_status=${expectedLeadStatus}`,
+      `200 ok=true hs_lead_status=${expectedLeadStatus} patched_lead=${expectedLeadStatus}`,
+      `HTTP ${r.status} hs_lead_status=${responseLeadStatus} patched_lead=${patchedLeadStatus}`,
       ok,
       r.status !== 200 ? r.text : '',
     );
@@ -328,6 +498,155 @@ async function main() {
     record(
       '(B.bad) outcome=invalid_outcome → 400',
       '400', String(r.status), r.status === 400,
+    );
+  }
+
+  // ── (C) leadStatus field in arrange-visit response ─────────────────────────
+  console.log('\n  — leadStatus in arrange-visit response (C) —');
+
+  {
+    const r = await memberClient.post('/api/card-actions/arrange-visit', { contactId: '444444' });
+    const leadStatus = r.json?.leadStatus;
+    record(
+      '(C.1) DESIGN_INVITED contact → leadStatus=DESIGN_INVITED returned',
+      'DESIGN_INVITED', String(leadStatus),
+      r.status === 200 && leadStatus === 'DESIGN_INVITED',
+      r.status !== 200 ? `HTTP ${r.status}: ${r.text}` : '',
+    );
+  }
+  {
+    const r = await memberClient.post('/api/card-actions/arrange-visit', { contactId: '333333' });
+    const leadStatus = r.json?.leadStatus;
+    record(
+      '(C.2) Empty lead status contact → leadStatus="" returned',
+      '', String(leadStatus ?? ''),
+      r.status === 200 && (leadStatus === '' || leadStatus === null || leadStatus === undefined),
+      r.status !== 200 ? `HTTP ${r.status}: ${r.text}` : '',
+    );
+  }
+
+  // ── (D) Calendar event endpoints gate correctly without Google auth ─────────
+  console.log('\n  — calendar event endpoints without Google auth (D) —');
+
+  {
+    const r = await memberClient.get('/api/events?contactId=444444');
+    record(
+      '(D.1) GET /api/events?contactId without Google auth → 401 GOOGLE_AUTH',
+      '401', String(r.status),
+      r.status === 401 && r.json?.code === 'GOOGLE_AUTH',
+      r.status !== 401 ? `HTTP ${r.status}: ${r.text}` : '',
+    );
+  }
+  {
+    const r = await memberClient.post('/api/events', {
+      summary: 'Design visit — Test Contact',
+      description: 'Some notes',
+      location: '1 Test St, Testville',
+      start: { dateTime: new Date(Date.now() + 3600000).toISOString() },
+      end:   { dateTime: new Date(Date.now() + 7200000).toISOString() },
+    });
+    record(
+      '(D.2) POST /api/events without Google auth → 401 GOOGLE_AUTH',
+      '401', String(r.status),
+      r.status === 401 && r.json?.code === 'GOOGLE_AUTH',
+      r.status !== 401 ? `HTTP ${r.status}: ${r.text}` : '',
+    );
+  }
+  {
+    const r = await anonClient.post('/api/events', {
+      summary: 'Design visit — Test Contact',
+      start: { dateTime: new Date(Date.now() + 3600000).toISOString() },
+      end:   { dateTime: new Date(Date.now() + 7200000).toISOString() },
+    });
+    record(
+      '(D.3) POST /api/events unauthenticated → 401',
+      '401', String(r.status),
+      r.status === 401,
+    );
+  }
+
+  // ── (E) DESIGN_INVITED outcome=booked → DESIGN_SCHEDULED, no substatus ─────
+  console.log('\n  — DESIGN_INVITED confirm-appointment path (E) —');
+
+  {
+    lastPatch = null;
+    const r = await memberClient.post('/api/card-actions/arrange-visit/outcome', {
+      contactId: '444444',
+      outcome: 'booked',
+      visitType: 'design',
+    });
+    const responseLeadStatus  = r.json?.hs_lead_status;
+    const patchedLeadStatus   = lastPatch?.body?.properties?.hs_lead_status;
+    const patchedSubStatus    = lastPatch?.body?.properties?.hw_lead_substatus;
+    const ok = r.status === 200
+      && r.json?.ok === true
+      && responseLeadStatus === 'DESIGN_SCHEDULED'
+      && patchedLeadStatus  === 'DESIGN_SCHEDULED'
+      && patchedSubStatus   === undefined;
+    record(
+      '(E.1) outcome=booked visitType=design → DESIGN_SCHEDULED, no substatus in HubSpot patch',
+      '200 ok=true hs_lead_status=DESIGN_SCHEDULED patched=DESIGN_SCHEDULED substatus=undefined',
+      `HTTP ${r.status} ok=${r.json?.ok} hs_lead_status=${responseLeadStatus} patched=${patchedLeadStatus} substatus=${patchedSubStatus}`,
+      ok,
+      r.status !== 200 ? r.text : '',
+    );
+  }
+
+  // ── (F) Google Calendar integration — duplicate guard + event payload ────────
+  // Uses server 2 (Google-enabled) with a fake Google Calendar stub so the full
+  // server-side path is exercised end-to-end without real credentials.
+  //
+  // The session cookie from the member's server-1 login is reused — both servers
+  // share the same DB and SESSION_SECRET.
+  console.log('\n  — Google Calendar with fake stub (F) —');
+
+  const gcalMemberClient = makeClientAt(gcalBase, memberClient.cookie);
+
+  // (F.1) GET /api/events?contactId returns future events
+  // This is the server path the React modal's duplicate-visit guard calls. When
+  // Google is connected it must return an events list so the modal can decide
+  // whether to show the duplicate-confirm dialog.
+  {
+    const r = await gcalMemberClient.get('/api/events?contactId=444444');
+    const items = r.json?.items;
+    const hasItem = Array.isArray(items) && items.length > 0;
+    record(
+      '(F.1) GET /api/events?contactId with Google connected → 200 with items array',
+      '200 items.length>=1',
+      `HTTP ${r.status} items=${JSON.stringify(items?.length ?? r.text)}`,
+      r.status === 200 && hasItem,
+      r.status !== 200 ? `HTTP ${r.status}: ${r.text}` : '',
+    );
+  }
+
+  // (F.2) POST /api/events passes location + description to Google Calendar
+  // This is the server path called by ArrangeVisitModal.doBook() after a
+  // successful booking. It verifies the event body (address → location,
+  // visit notes → description) passes through to the calendar API unchanged.
+  {
+    fakeGcal.clearLastInsert();
+    const eventStart = new Date(Date.now() + 3600000).toISOString();
+    const eventEnd   = new Date(Date.now() + 7200000).toISOString();
+    const r = await gcalMemberClient.post('/api/events', {
+      summary:     'Design Visit — Test Contact',
+      description: 'Notes from the booking form',
+      location:    '1 Test St, Testville, TE1 1ST',
+      start:       { dateTime: eventStart },
+      end:         { dateTime: eventEnd },
+      moContactId: '444444',
+      moVisitType: 'design',
+    });
+    const inserted = fakeGcal.getLastInsert();
+    const locationOk     = inserted?.location    === '1 Test St, Testville, TE1 1ST';
+    const descriptionOk  = inserted?.description === 'Notes from the booking form';
+    const extPropOk      = inserted?.extendedProperties?.private?.moContactId === '444444';
+    const ok = r.status === 200 && locationOk && descriptionOk && extPropOk;
+    record(
+      '(F.2) POST /api/events passes location + description to Google Calendar body',
+      '200 location="1 Test St…" description="Notes…" moContactId=444444',
+      `HTTP ${r.status} location=${inserted?.location} description=${inserted?.description} moContactId=${inserted?.extendedProperties?.private?.moContactId}`,
+      ok,
+      r.status !== 200 ? `HTTP ${r.status}: ${r.text}` : (ok ? '' : `inserted=${JSON.stringify(inserted)}`),
     );
   }
 
@@ -382,11 +701,32 @@ async function writeReport(runId, findings) {
     '- **(A.bad)** Non-numeric `contactId` → 400.',
     '  Guards the `!/^\\d+$/.test(contactId)` input validation.',
     '- **(B.1-6)** All six valid outcome × visitType combinations map to the',
-    '  correct HubSpot `hs_lead_status` (parent) and `hw_lead_substatus` (sub-status)',
-    '  values. Both the JSON response and the values actually sent in the PATCH body',
-    '  to HubSpot are verified for both properties.',
+    '  correct HubSpot `hs_lead_status` value. Both the JSON response body and the',
+    '  PATCH sent to HubSpot are verified. (Note: `hw_lead_substatus` helpers were',
+    '  removed from server.js; only the parent `hs_lead_status` field is tested.)',
     '- **(B.bad)** Unknown `outcome` value → 400.',
     '  Guards the `OUTCOME_STATUS[outcome]` lookup validation.',
+    '- **(C.1)** `DESIGN_INVITED` contact → `leadStatus="DESIGN_INVITED"` in response.',
+    '  Guards the new `leadStatus` field added to the arrange-visit execute response.',
+    '- **(C.2)** Empty lead status → `leadStatus=""` in response (raw property forwarded).',
+    '- **(D.1)** `GET /api/events?contactId` without Google auth → 401 GOOGLE_AUTH.',
+    '  Used by the duplicate-visit guard in the React modal to check for existing events.',
+    '- **(D.2)** `POST /api/events` without Google auth → 401 GOOGLE_AUTH.',
+    '  Guards the calendar-event creation that runs after a successful booking.',
+    '- **(D.3)** `POST /api/events` unauthenticated → 401.',
+    '  Guards the `isAuthenticated` middleware on the events route.',
+    '- **(E.1)** outcome=booked visitType=design → `DESIGN_SCHEDULED` with no `hw_lead_substatus` in PATCH.',
+    '  Confirms the confirm-appointment path sets only the parent lead status, no substatus side-effect.',
+    '- **(F.1)** `GET /api/events?contactId` with Google connected → 200 with items array.',
+    '  Exercises the full server path used by the React modal duplicate-visit guard. When Google is',
+    '  connected, the route returns a list of future calendar events so the modal can detect conflicts.',
+    '  Uses a fake Google Calendar stub (GOOGLE_APIS_BASE_URL + GOOGLE_TEST_TOKENS) on a second',
+    '  Express instance (port 5055) so no real Google credentials are needed.',
+    '- **(F.2)** `POST /api/events` with location + description → Google Calendar receives those fields.',
+    '  Exercises the booking-path calendar event creation called by `ArrangeVisitModal.doBook()`.',
+    '  Verifies that the formatted address (→ `location`) and visit notes (→ `description`) from the',
+    '  React form are forwarded unchanged through the server route to the calendar API.',
+    '  Also confirms `moContactId` is set as an extendedProperty (enables contactId-based event lookup).',
   ];
   const outPath = path.join(dir, 'arrange-visit.md');
   fs.writeFileSync(outPath, lines.join('\n') + '\n');

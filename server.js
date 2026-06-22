@@ -2,6 +2,23 @@ require('dotenv').config();
 const express = require('express');
 const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
+// Test-only: helper functions that override rootUrl on individual API clients
+// when GOOGLE_APIS_BASE_URL is set (non-production only).  google.options() does
+// not propagate rootUrl in googleapis v128; it must be passed per-client.
+function getCalendarClient(auth) {
+  const opts = { version: 'v3', auth };
+  if (process.env.GOOGLE_APIS_BASE_URL && process.env.NODE_ENV !== 'production') {
+    opts.rootUrl = process.env.GOOGLE_APIS_BASE_URL;
+  }
+  return google.calendar(opts);
+}
+function getGmailClient(auth) {
+  const opts = { version: 'v1', auth };
+  if (process.env.GOOGLE_APIS_BASE_URL && process.env.NODE_ENV !== 'production') {
+    opts.rootUrl = process.env.GOOGLE_APIS_BASE_URL;
+  }
+  return google.gmail(opts);
+}
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -2596,6 +2613,13 @@ async function getVerifiedGoogleTokens(req) {
     : null;
   if (!currentUser) return null;
 
+  // Test-only: bypass token DB lookup when GOOGLE_TEST_TOKENS is set.
+  // Never active in production (NODE_ENV check) — used only by the
+  // arrange-visit E2E test harness that runs a fake Google Calendar server.
+  if (process.env.GOOGLE_TEST_TOKENS && process.env.NODE_ENV !== 'production') {
+    try { return JSON.parse(process.env.GOOGLE_TEST_TOKENS); } catch {}
+  }
+
   const sessionTokens = req.session.googleTokens;
   if (sessionTokens) {
     const boundTo = req.session.googleTokensBoundTo;
@@ -2622,7 +2646,7 @@ app.get('/api/emails', isAuthenticated, async (req, res) => {
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(googleTokens);
-    const gmail = google.gmail({ version: 'v1', auth });
+    const gmail = getGmailClient(auth);
     const { email } = req.query;
     const q = email ? `from:${email} OR to:${email}` : '';
     const list = await gmail.users.messages.list({ userId: 'me', q, maxResults: 15 });
@@ -2659,7 +2683,7 @@ app.post('/api/emails/send', isAuthenticated, requirePrivilege('member'), gmailS
   if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
   try {
     const auth = getGoogleClient(googleTokens);
-    const gmail = google.gmail({ version: 'v1', auth });
+    const gmail = getGmailClient(auth);
     const { to, subject, body } = req.body;
 
     const raw = Buffer.from(
@@ -2683,7 +2707,7 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(googleTokens);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const calendar = getCalendarClient(auth);
     const contactId = String(req.query.contactId || '').trim();
     const listParams = {
       calendarId,
@@ -2715,7 +2739,7 @@ app.post('/api/events', isAuthenticated, requirePrivilege('member'), calendarEve
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(googleTokens);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const calendar = getCalendarClient(auth);
     // Extract tagging fields from body and attach as extendedProperties.
     // These are used by GET /api/events?contactId to filter by contact.
     const { moContactId, moVisitType, ...eventBody } = req.body;
@@ -2743,7 +2767,7 @@ app.patch('/api/events/:id', isAuthenticated, requirePrivilege('member'), async 
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(googleTokens);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const calendar = getCalendarClient(auth);
     const event = await calendar.events.patch({ calendarId, eventId, requestBody: req.body });
     res.json(event.data);
   } catch (e) {
@@ -2762,7 +2786,7 @@ app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async
   catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
     const auth = getGoogleClient(googleTokens);
-    const calendar = google.calendar({ version: 'v3', auth });
+    const calendar = getCalendarClient(auth);
     await calendar.events.delete({ calendarId, eventId });
     res.json({ success: true });
   } catch (e) {
@@ -6175,7 +6199,7 @@ app.post('/api/card-actions/arrange-visit',
         address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
       });
       const contactAddress = formatAddress(contactStructuredAddress);
-      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress });
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {

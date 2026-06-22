@@ -18,7 +18,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { GET, POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToast } from '../../contexts/ToastContext';
@@ -57,12 +57,19 @@ interface ContactInfo {
   contactEmail: string;
   contactAddress: string;
   contactStructuredAddress: StructuredAddress;
+  leadStatus?: string;
+}
+
+interface CalendarEventStub {
+  summary?: string;
+  start?: { dateTime?: string };
 }
 
 interface DraftState {
   step: Step;
   structuredAddress: StructuredAddress;
   bookedSlotIso: string | null;
+  notes: string;
   emailSubject: string;
   emailBody: string;
   proposedEmailDateIso: string | null;
@@ -166,8 +173,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     draft.bookedSlotIso ? dayjs(draft.bookedSlotIso) : dayjs(nowDateTime()),
   );
 
+  const [notes, setNotes] = useState(draft.notes ?? '');
+
   const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
   const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
+
+  const [duplicateEvent, setDuplicateEvent] = useState<CalendarEventStub | null>(null);
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
 
   const [proposedEmailDate, setProposedEmailDate] = useState<Dayjs | null>(
     draft.proposedEmailDateIso ? dayjs(draft.proposedEmailDateIso) : dayjs(nowDate()),
@@ -202,6 +214,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       setStep(draft.step as Step);
       if (draft.structuredAddress) setStructuredAddress(draft.structuredAddress);
       if (draft.bookedSlotIso) setBookedSlot(dayjs(draft.bookedSlotIso));
+      if (draft.notes) setNotes(draft.notes);
       if (draft.emailSubject) setEmailSubject(draft.emailSubject);
       if (draft.emailBody) setEmailBody(draft.emailBody);
       // Fall through: still fetch contactInfo in the background so phone
@@ -255,12 +268,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       step,
       structuredAddress,
       bookedSlotIso: bookedSlot?.toISOString() ?? null,
+      notes,
       emailSubject,
       emailBody,
       proposedEmailDateIso: proposedEmailDate?.toISOString() ?? null,
       proposedEmailTimeIso: proposedEmailTime?.toISOString() ?? null,
     });
-  }, [key, step, structuredAddress, bookedSlot, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
+  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
 
   // Re-fetch the no-answer email template whenever the proposed date/time changes
   // while the user is on the email step (same pattern as DesignVisitFollowupModal).
@@ -336,22 +350,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     }
   }
 
-  async function handleBooked() {
-    if (demo) return;
-    if (!bookedSlot || !bookedSlot.isValid()) {
-      setActionError('Please select a date and time.');
-      return;
-    }
+  /**
+   * Runs the actual booking: outcome POST + calendar event creation.
+   * Call after the duplicate-check guard has passed (or been confirmed).
+   */
+  async function doBook() {
     setSubmitting(true);
     setActionError('');
     try {
-      // Offline-aware: the booking status change is queued and replayed on
-      // reconnect. The calendar-event side effect requires a live Google
-      // session, so it is dispatched only when the write actually went through
-      // now (skipped when queued offline).
       // Persist any address edits back to the contact (HubSpot source of truth).
-      // Best-effort: a failure here (e.g. offline) must not block the booking,
-      // which is itself offline-aware via sendOrQueue below.
+      // Best-effort: a failure here (e.g. offline) must not block the booking.
       try {
         await PATCH(`/api/contacts/${encodeURIComponent(ctx.contactId)}`, { structuredAddress });
       } catch { /* address save is best-effort; booking still proceeds */ }
@@ -366,7 +374,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           contactId: ctx.contactId,
           outcome: ARRANGE_VISIT_KEY.booked,
           visitType: contactInfo?.visitType ?? 'design',
-          slot: bookedSlot.toISOString(),
+          slot: bookedSlot!.toISOString(),
           address: formatAddress(structuredAddress),
         },
       });
@@ -388,22 +396,95 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
-        const calendarHandler = _findCalendarHandler();
-        if (calendarHandler) {
-          const d = window as unknown as {
-            dispatchCardActionHandler?: (h: CardActionHandlerData, c: CardActionContext) => void;
-          };
-          d.dispatchCardActionHandler?.(calendarHandler, {
-            ...ctx,
-            contactName: contactInfo?.contactName || ctx.contactName,
+        // Create the Google Calendar event automatically. Best-effort: the
+        // booking has already succeeded, so a calendar failure is non-fatal.
+        const vt = contactInfo?.visitType ?? 'design';
+        const vLabel = vt === 'survey' ? 'Survey' : 'Design visit';
+        const start = bookedSlot!.toDate();
+        const end = new Date(start.getTime() + 90 * 60000);
+        try {
+          await POST('/api/events', {
+            summary: `${vLabel} — ${contactInfo?.contactName || ctx.contactName}`,
+            description: notes.trim() || '',
+            location: formatAddress(structuredAddress),
+            start: { dateTime: start.toISOString() },
+            end: { dateTime: end.toISOString() },
+            moContactId: ctx.contactId ? String(ctx.contactId) : undefined,
+            moVisitType: vt,
           });
-        }
+        } catch { /* calendar is best-effort */ }
       }
 
       setStep('done');
       onClose();
     } catch (e) {
       setActionError((e as Error).message || 'Could not update status.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleBooked() {
+    if (demo) return;
+    if (!bookedSlot || !bookedSlot.isValid()) {
+      setActionError('Please select a date and time.');
+      return;
+    }
+
+    // Duplicate-visit guard: check whether the contact already has a future
+    // calendar event. Skip silently if Google is not connected or the call
+    // fails — the guard is advisory, not a hard block.
+    try {
+      const events = await GET<{ items?: CalendarEventStub[] }>(
+        `/api/events?contactId=${encodeURIComponent(ctx.contactId)}`
+      );
+      const future = (events.items ?? []).find(e => {
+        const dt = e.start?.dateTime;
+        return dt ? dayjs(dt).isAfter(dayjs()) : false;
+      });
+      if (future) {
+        setDuplicateEvent(future);
+        setShowDuplicateConfirm(true);
+        return;
+      }
+    } catch { /* Google not connected or network error — proceed */ }
+
+    await doBook();
+  }
+
+  /** Called when the user confirms they want to double-book. */
+  async function handleBookedConfirmed() {
+    setShowDuplicateConfirm(false);
+    setDuplicateEvent(null);
+    await doBook();
+  }
+
+  /** Confirm a sent-but-unconfirmed appointment (DESIGN_INVITED) without
+   *  creating a calendar event — just sets the lead status to DESIGN_SCHEDULED. */
+  async function handleConfirmAppointment() {
+    if (demo) return;
+    setSubmitting(true);
+    setActionError('');
+    try {
+      const data = await POST('/api/card-actions/arrange-visit/outcome', {
+        contactId: ctx.contactId,
+        outcome: ARRANGE_VISIT_KEY.booked,
+        visitType: 'design',
+      }) as { hs_lead_status?: string; setsLeadStatus?: string | null };
+      clearDraft(key);
+      const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
+      showToast(conf ? `Appointment confirmed — ${conf.toLowerCase()}` : 'Appointment confirmed', false);
+      broadcastLeadStatusChange(ctx.contactId, {
+        hs_lead_status: data?.hs_lead_status ?? '',
+      });
+      setStep('done');
+      onClose();
+    } catch (e) {
+      if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
+        setActionError(LEAD_STATUS_REMOVED_MESSAGE);
+      } else {
+        setActionError((e as Error).message || 'Could not confirm appointment.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -628,6 +709,24 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
+                {contactInfo?.leadStatus === 'DESIGN_INVITED' && (
+                  <Alert
+                    severity="info"
+                    action={
+                      <Button
+                        color="inherit"
+                        size="small"
+                        onClick={handleConfirmAppointment}
+                        disabled={submitting}
+                        data-testid="av-confirm-appointment"
+                      >
+                        Confirm appointment
+                      </Button>
+                    }
+                  >
+                    An invite has been sent but not yet confirmed.
+                  </Alert>
+                )}
                 <Typography variant="body2">
                   Call {displayName} to book their {label}. What was the outcome?
                 </Typography>
@@ -664,6 +763,18 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   disabled={submitting}
                   idPrefix="av-booked-address"
                   surface="arrangeVisit"
+                />
+                <TextField
+                  id="av-booked-notes"
+                  label="Visit notes (optional)"
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  placeholder="Anything the team should know"
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  size="small"
+                  disabled={submitting}
                 />
                 {actionError && (
                   <Alert severity="error">{actionError}</Alert>
@@ -759,21 +870,36 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         onKeepEditing={handleKeepEditing}
         onDiscard={handleDiscard}
       />
+
+      {/* Duplicate-visit confirmation dialog */}
+      <FullScreenModal
+        open={showDuplicateConfirm}
+        onClose={() => { setShowDuplicateConfirm(false); setDuplicateEvent(null); }}
+        title="Existing visit found"
+        centerContent
+        footer={
+          <>
+            <Button onClick={() => { setShowDuplicateConfirm(false); setDuplicateEvent(null); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleBookedConfirmed}
+              data-testid="av-duplicate-confirm"
+            >
+              Confirm Schedule
+            </Button>
+          </>
+        }
+      >
+        <Typography variant="body2">
+          {displayName} already has a visit booked
+          {duplicateEvent?.start?.dateTime
+            ? ` for ${dayjs(duplicateEvent.start.dateTime).format('dddd D MMMM [at] h:mm A')}`
+            : ''}
+          . Do you want to schedule an additional visit?
+        </Typography>
+      </FullScreenModal>
     </LocalizationProvider>
   );
-}
-
-function _findCalendarHandler(): CardActionHandlerData | null {
-  try {
-    const w = window as unknown as {
-      cardActionHandlerFor?: (
-        stageKey: string,
-        leadStatusKey: string | undefined,
-      ) => CardActionHandlerData | null;
-    };
-    if (typeof w.cardActionHandlerFor !== 'function') return null;
-    return null;
-  } catch {
-    return null;
-  }
 }
