@@ -636,7 +636,22 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
               How would you like to proceed?
             </Typography>
             {cancelExistingError && (
-              <Alert severity="error" sx={{ mt: 1 }}>{cancelExistingError}</Alert>
+              <Alert
+                severity="error"
+                sx={{ mt: 1 }}
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => void handleCancelExisting()}
+                    data-testid="dvf-duplicate-cancel-existing-retry"
+                  >
+                    Try again
+                  </Button>
+                }
+              >
+                {cancelExistingError}
+              </Alert>
             )}
           </Stack>
         </FullScreenModal>

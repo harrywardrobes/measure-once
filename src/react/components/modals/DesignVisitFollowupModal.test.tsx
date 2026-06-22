@@ -198,7 +198,7 @@ describe('DesignVisitFollowupModal — duplicate-visit guard', () => {
     });
   });
 
-  it('Cancel existing — DELETE 500 keeps guard open and shows an error message', async () => {
+  it('Cancel existing — DELETE 500 keeps guard open, shows an error message, and offers a retry button', async () => {
     restoreFetch = mockFetch({ eventsItems: [FUTURE_EVENT], deleteStatus: 500 });
     const user = userEvent.setup();
 
@@ -221,6 +221,19 @@ describe('DesignVisitFollowupModal — duplicate-visit guard', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
+
+    // A "Try again" retry button should be present inside the error alert
+    const retryBtn = screen.getByTestId('dvf-duplicate-cancel-existing-retry');
+    expect(retryBtn).toBeTruthy();
+    expect(retryBtn.textContent).toBe('Try again');
+
+    // Clicking retry triggers a new DELETE attempt; on continued failure the
+    // guard stays open and the error remains visible
+    await user.click(retryBtn);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('schedule-visit-modal')).toBeNull();
   });
 
   it('Reschedule existing — opens a second ScheduleVisitModal pre-populated with the existing event', async () => {
