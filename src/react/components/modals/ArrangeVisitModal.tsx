@@ -399,7 +399,12 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       clearDraft(key);
 
       if (res.queued) {
-        showToast('Booking saved offline — it will sync when you reconnect', false);
+        showToast(
+          cancelledEvent
+            ? 'Existing visit cancelled — new booking saved offline and will sync when you reconnect'
+            : 'Booking saved offline — it will sync when you reconnect',
+          false,
+        );
       } else {
         const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
         broadcastLeadStatusChange(ctx.contactId, {
