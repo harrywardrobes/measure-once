@@ -11,17 +11,13 @@ import {
 import Alert from '@mui/material/Alert';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
-import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import ListItemText from '@mui/material/ListItemText';
 import MenuItem from '@mui/material/MenuItem';
-import OutlinedInput from '@mui/material/OutlinedInput';
 import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
@@ -93,8 +89,8 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
   const [imageFile,   setImageFile]    = useState<File | null>(null);
   const [previewSrc,  setPreviewSrc]   = useState('');
 
-  const [allSuppliers,      setAllSuppliers]      = useState<Supplier[]>([]);
-  const [selectedSuppliers, setSelectedSuppliers] = useState<number[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+  const [supplierId,   setSupplierId]   = useState<number | ''>('');
 
   const typeLabels: Record<string, string> = {
     handle: 'Handle', furniture: 'Furniture Range', 'door-style': 'Door Style',
@@ -105,17 +101,12 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
   const hasFileUpload   = type === 'handle' || type === 'door-style';
   const hasSuppliers    = type === 'handle' || type === 'door-style';
 
-  const supplierLinkEndpoint = (id: number) =>
-    type === 'handle'
-      ? `/api/admin/catalog/handles/${id}/suppliers`
-      : `/api/admin/catalog/doors/${id}/suppliers`;
-
   useEffect(() => {
     if (!open) {
       setName(''); setStyle(''); setDescription(''); setImageUrl('');
       setImageFile(null); setPreviewSrc(''); setErrMsg('');
       setImageUploadStatus('idle'); setImageUploadProgress(undefined);
-      setSelectedSuppliers([]);
+      setSupplierId('');
       return;
     }
 
@@ -136,17 +127,10 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
           setDescription(String(item.description ?? ''));
           setImageUrl(String(item.image_url ?? ''));
           if (item.image_url) setPreviewSrc(String(item.image_url));
+          if (hasSuppliers) setSupplierId(item.supplier_id != null ? (item.supplier_id as number) : '');
         }
       }),
     ];
-
-    if (hasSuppliers) {
-      fetches.push(
-        GET(supplierLinkEndpoint(existingId))
-          .then((ids) => setSelectedSuppliers(Array.isArray(ids) ? (ids as number[]) : []))
-          .catch(() => { /* non-fatal */ }),
-      );
-    }
 
     Promise.allSettled(fetches).finally(() => setLoading(false));
   }, [open, existingId, type]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -214,18 +198,11 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
     }
     if (hasDescription) body.description = description.trim();
     if (hasImageUrl) body.image_url = finalImageUrl || null;
+    if (hasSuppliers) body.supplier_id = supplierId !== '' ? supplierId : null;
 
     setSaving(true);
     try {
-      const saved = await (existingId ? PATCH(url, body) : POST(url, body)) as Record<string, unknown>;
-      const savedId = existingId ?? (saved.id as number);
-      if (hasSuppliers && savedId) {
-        await fetch(supplierLinkEndpoint(savedId), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ supplier_ids: selectedSuppliers }),
-        });
-      }
+      await (existingId ? PATCH(url, body) : POST(url, body));
       showToast(existingId ? 'Saved.' : 'Added.');
       broadcastCatalogueChange(type);
       await onSaved();
@@ -336,28 +313,16 @@ export function DvItemEditorDialog({ open, type, existingId, onClose, onSaved }:
             )}
             {hasSuppliers && allSuppliers.length > 0 && (
               <FormControl size="small" fullWidth>
-                <InputLabel id="dvie-suppliers-label">Suppliers</InputLabel>
+                <InputLabel id="dvie-supplier-label">Supplier</InputLabel>
                 <Select
-                  labelId="dvie-suppliers-label"
-                  label="Suppliers"
-                  multiple
-                  value={selectedSuppliers}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedSuppliers(typeof val === 'string' ? val.split(',').map(Number) : val as number[]);
-                  }}
-                  input={<OutlinedInput label="Suppliers" />}
-                  renderValue={(selected) =>
-                    (selected as number[])
-                      .map(id => allSuppliers.find(s => s.id === id)?.name ?? id)
-                      .join(', ')
-                  }
+                  labelId="dvie-supplier-label"
+                  label="Supplier"
+                  value={supplierId}
+                  onChange={(e) => { const v = e.target.value as number | ''; setSupplierId(v === '' ? '' : Number(v)); }}
                 >
+                  <MenuItem value=""><em>— none —</em></MenuItem>
                   {allSuppliers.map((s) => (
-                    <MenuItem key={s.id} value={s.id}>
-                      <Checkbox checked={selectedSuppliers.includes(s.id)} />
-                      <ListItemText primary={s.name} />
-                    </MenuItem>
+                    <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>

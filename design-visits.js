@@ -768,6 +768,8 @@ const CATALOG_TEXT_COLS = {
   material_type: 100,
 };
 const CATALOG_INT_COLS = ['sort_order', 'price_pence'];
+// Nullable integer FK columns shared across catalogue tables (NULL = no link).
+const CATALOG_NULLABLE_INT_COLS = ['supplier_id'];
 
 // Build INSERT column/value lists from a create body for the shared columns.
 function catalogInsertFields(body, extraCols) {
@@ -780,6 +782,12 @@ function catalogInsertFields(body, extraCols) {
   }
   for (const col of CATALOG_INT_COLS) {
     if (body?.[col] !== undefined) { cols.push(col); vals.push(parseInt(body[col], 10) || 0); }
+  }
+  for (const col of CATALOG_NULLABLE_INT_COLS) {
+    if (body?.[col] !== undefined) {
+      cols.push(col);
+      vals.push(body[col] === null || body[col] === '' ? null : parseInt(body[col], 10) || null);
+    }
   }
   for (const col of extraCols) {
     if (body?.[col] !== undefined) {
@@ -802,6 +810,9 @@ function catalogUpdateFields(body, extraCols) {
   }
   for (const col of CATALOG_INT_COLS) {
     if (body?.[col] !== undefined) add(col, parseInt(body[col], 10) || 0);
+  }
+  for (const col of CATALOG_NULLABLE_INT_COLS) {
+    if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : parseInt(body[col], 10) || null);
   }
   for (const col of extraCols) {
     if (body?.[col] !== undefined) add(col, body[col] === null || body[col] === '' ? null : String(body[col]).trim());
@@ -1144,55 +1155,10 @@ router.delete('/api/admin/catalog/suppliers/:id', isAuthenticated, requireAdmin,
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Admin: catalog item ↔ supplier links ──────────────────────────────────────
-
-router.get('/api/admin/catalog/handles/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  try {
-    const r = await pool.query('SELECT supplier_id FROM catalog_handle_suppliers WHERE handle_id=$1', [id]);
-    res.json(r.rows.map(row => row.supplier_id));
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.put('/api/admin/catalog/handles/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const ids = Array.isArray(req.body?.supplier_ids) ? req.body.supplier_ids.map(Number).filter(Number.isFinite) : [];
-  try {
-    await pool.query('DELETE FROM catalog_handle_suppliers WHERE handle_id=$1', [id]);
-    if (ids.length) {
-      const placeholders = ids.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
-      const vals = ids.flatMap(sid => [id, sid]);
-      await pool.query(`INSERT INTO catalog_handle_suppliers (handle_id, supplier_id) VALUES ${placeholders} ON CONFLICT DO NOTHING`, vals);
-    }
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/api/admin/catalog/doors/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  try {
-    const r = await pool.query('SELECT supplier_id FROM catalog_door_suppliers WHERE door_id=$1', [id]);
-    res.json(r.rows.map(row => row.supplier_id));
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.put('/api/admin/catalog/doors/:id/suppliers', isAuthenticated, requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const ids = Array.isArray(req.body?.supplier_ids) ? req.body.supplier_ids.map(Number).filter(Number.isFinite) : [];
-  try {
-    await pool.query('DELETE FROM catalog_door_suppliers WHERE door_id=$1', [id]);
-    if (ids.length) {
-      const placeholders = ids.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(', ');
-      const vals = ids.flatMap(sid => [id, sid]);
-      await pool.query(`INSERT INTO catalog_door_suppliers (door_id, supplier_id) VALUES ${placeholders} ON CONFLICT DO NOTHING`, vals);
-    }
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// supplier_id is now a plain FK column on catalog_handles and catalog_doors;
+// it is set via the existing PATCH /api/admin/catalog/handles/:id and
+// PATCH /api/admin/catalog/doors/:id routes (supplier_id is already included
+// in the allowed CATALOG_TEXT_COLS-adjacent numeric fields handled below).
 
 // ── Public catalogue reads (for wizard — any authenticated user) ──────────────
 function mountCatalogRead(slug, table, cols) {
