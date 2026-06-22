@@ -6478,6 +6478,9 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
 // Member-accessible. Loads the live contact_customer_followup template, derives
 // firstName from HubSpot, and returns { subject, text, html } using the same
 // renderEmail pipeline as other preview endpoints.
+//
+// Optional body: accepts { body, subject } overrides so the client can re-render
+// with edited text while still getting the template footer/branding applied.
 app.post('/api/card-actions/contact-customer/:contactId/email-preview',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken,
   async (req, res) => {
@@ -6492,12 +6495,23 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
       const rawFirst = String(r.data?.properties?.firstname || '').trim();
       const firstName = rawFirst.split(' ')[0].trim() || 'there';
       const template = await getEmailTemplate('contact_customer_followup');
+
+      // Optional overrides — when provided the client is re-rendering with edited
+      // text; we substitute the custom body/subject but keep the template footer.
+      const customBody    = typeof req.body?.body    === 'string' ? req.body.body    : null;
+      const customSubject = typeof req.body?.subject === 'string' ? req.body.subject : null;
+      const effectiveTemplate = (customBody !== null || customSubject !== null) ? {
+        ...template,
+        ...(customBody    !== null ? { body_text: customBody,    body_html: '' } : {}),
+        ...(customSubject !== null ? { subject:   customSubject               } : {}),
+      } : template;
+
       const vars     = { firstName };
       const htmlVars = Object.fromEntries(
         Object.entries(vars).map(([k, v]) => [k, escapeHtml(String(v))])
       );
-      const rendered = renderEmail(template, { textVars: vars, htmlVars });
-      if (!template.body_html || !template.body_html.trim()) {
+      const rendered = renderEmail(effectiveTemplate, { textVars: vars, htmlVars });
+      if (!effectiveTemplate.body_html || !effectiveTemplate.body_html.trim()) {
         rendered.html = rendered.text
           .split('\n')
           .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)

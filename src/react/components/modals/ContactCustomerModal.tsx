@@ -175,6 +175,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [emailViewMode,       setEmailViewMode]       = useState<'edit' | 'preview'>('edit');
   const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
   const [emailPreviewError,   setEmailPreviewError]   = useState('');
+  const [emailPreviewHtml,    setEmailPreviewHtml]    = useState('');
+  const [emailFetchedBody,    setEmailFetchedBody]    = useState('');
+  const [emailFetchedSubject, setEmailFetchedSubject] = useState('');
   const [emailSubmitError,    setEmailSubmitError]    = useState('');
   const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
   const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
@@ -248,6 +251,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     setEmailBody('');
     setEmailViewMode('edit');
     setEmailPreviewError('');
+    setEmailPreviewHtml('');
+    setEmailFetchedBody('');
+    setEmailFetchedSubject('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
     setEmailPreviewLoading(false);
@@ -281,9 +287,33 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       ) as { subject: string; text: string; html: string };
       setEmailSubject(result.subject || '');
       setEmailBody(result.text || '');
+      setEmailPreviewHtml(result.html || '');
+      setEmailFetchedBody(result.text || '');
+      setEmailFetchedSubject(result.subject || '');
     } catch (e) {
       const err = e as ApiError;
       setEmailPreviewError(err.message || 'Could not load email preview.');
+    } finally {
+      setEmailPreviewLoading(false);
+    }
+  }
+
+
+  async function refetchEmailHtml(subject: string, body: string) {
+    if (demo) return;
+    setEmailPreviewLoading(true);
+    setEmailPreviewError('');
+    try {
+      const result = await POST(
+        `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/email-preview`,
+        { subject, body },
+      ) as { subject: string; text: string; html: string };
+      setEmailPreviewHtml(result.html || '');
+      setEmailFetchedBody(body);
+      setEmailFetchedSubject(subject);
+    } catch (e) {
+      const err = e as ApiError;
+      setEmailPreviewError(err.message || 'Could not refresh email preview.');
     } finally {
       setEmailPreviewLoading(false);
     }
@@ -684,7 +714,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                     size="small"
                                     exclusive
                                     value={emailViewMode}
-                                    onChange={(_, v) => { if (v) setEmailViewMode(v as 'edit' | 'preview'); }}
+                                    onChange={(_, v) => {
+                                      if (!v) return;
+                                      const next = v as 'edit' | 'preview';
+                                      setEmailViewMode(next);
+                                      if (next === 'preview' && !demo) {
+                                        const bodyDirty    = emailBody.trim()    !== emailFetchedBody.trim();
+                                        const subjectDirty = emailSubject.trim() !== emailFetchedSubject.trim();
+                                        if (bodyDirty || subjectDirty) {
+                                          void refetchEmailHtml(emailSubject.trim(), emailBody.trim());
+                                        }
+                                      }
+                                    }}
                                     disabled={emailFlow === 'sending'}
                                   >
                                     <ToggleButton value="edit" sx={{ px: 1.25, py: 0.25, fontSize: '0.7rem' }}>
@@ -754,12 +795,25 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                       borderRadius: 1,
                                       overflow: 'hidden',
                                       bgcolor: 'common.white',
+                                      position: 'relative',
                                     }}>
+                                      {emailPreviewLoading && (
+                                        <Box sx={{
+                                          position: 'absolute', inset: 0,
+                                          display: 'flex', alignItems: 'center', gap: 1,
+                                          px: 2, py: 1.5,
+                                          bgcolor: 'rgba(255,255,255,0.75)',
+                                          zIndex: 1,
+                                        }}>
+                                          <CircularProgress size={16} />
+                                          <Typography variant="caption" color="text.secondary">Refreshing preview…</Typography>
+                                        </Box>
+                                      )}
                                       <iframe
                                         data-testid="email-html-preview-iframe"
                                         title="Email HTML preview"
                                         sandbox="allow-same-origin"
-                                        srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:${IFRAME_BODY_COLOR};padding:12px 16px;margin:0;}p{margin:0 0 0.6em;}</style></head><body>${bodyTextToHtml(emailBody)}</body></html>`}
+                                        srcDoc={emailPreviewHtml || `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:${IFRAME_BODY_COLOR};padding:12px 16px;margin:0;}p{margin:0 0 0.6em;}</style></head><body>${bodyTextToHtml(emailBody)}</body></html>`}
                                         style={{ width: '100%', minHeight: 120, border: 'none', display: 'block' }}
                                         onLoad={(e) => {
                                           const iframe = e.currentTarget;
