@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import { Room, RoomComment, stageColour, STAGE_KEYS } from './types';
+import { STAGE_LABELS } from '../../utils/stageKeys';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { WorkflowDef } from '../../lib/workflowConfig';
 import { nowDate } from '../../utils/dateDefaults';
@@ -151,7 +152,7 @@ export function RoomsTabs({
 
   const stageEntries = workflow?.stages
     ? STAGE_KEYS.map(k => ({ key: k, label: workflow!.stages![k]?.label || k }))
-    : STAGE_KEYS.map(k => ({ key: k, label: k }));
+    : STAGE_KEYS.map(k => ({ key: k, label: STAGE_LABELS[k] }));
 
   const stageLabel = workflow?.stages?.[room?.stageKey]?.label || room?.stageKey || 'Sales';
   const installStart  = room?.installStart;
