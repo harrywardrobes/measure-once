@@ -33,8 +33,9 @@ import { TimePicker } from '@mui/x-date-pickers/TimePicker';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
-import { POST } from '../../utils/api';
+import { GET, POST, DELETE } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import dayjs from 'dayjs';
 import { DEMO_CONTACT } from './demoData';
 import { DemoActionTooltip } from './demoMode';
 import { FullScreenModal } from './FullScreenModal';
@@ -82,6 +83,12 @@ function buildProposedDateLine(date: Dayjs | null, time: Dayjs | null): string {
   return `We have a proposed slot available: ${parts.join(' at ')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
+interface CalendarEventStub {
+  id?: string;
+  summary?: string;
+  start?: { dateTime?: string };
+}
+
 export interface DesignVisitFollowupModalProps {
   handler: CardActionHandlerData;
   ctx: CardActionContext;
@@ -109,6 +116,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [outcomeError, setOutcomeError] = useState('');
 
+  const [duplicateEvent, setDuplicateEvent] = useState<CalendarEventStub | null>(null);
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
+  const [cancellingExisting, setCancellingExisting] = useState(false);
+  const [cancelExistingError, setCancelExistingError] = useState('');
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+
   const fetchedRef = useRef(false);
 
   function goToStep(s: Step) {
@@ -118,6 +131,9 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
 
   function handleClose() {
     clearDraftStep(key);
+    setShowDuplicateConfirm(false);
+    setDuplicateEvent(null);
+    setCancelExistingError('');
     onClose();
   }
 
@@ -195,10 +211,67 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resendDate, resendTime]);
 
-  // "Confirmed" — open ScheduleVisitModal
-  function handleConfirmed() {
+  // "Confirmed" — check for duplicate calendar events then open ScheduleVisitModal
+  async function handleConfirmed() {
+    if (demo) {
+      goToStep('schedule');
+      setScheduleOpen(true);
+      return;
+    }
+    try {
+      const events = await GET<{ items?: CalendarEventStub[] }>(
+        `/api/events?contactId=${encodeURIComponent(ctx.contactId)}`
+      );
+      const future = (events.items ?? []).find(e => {
+        const dt = e.start?.dateTime;
+        return dt ? dayjs(dt).isAfter(dayjs()) : false;
+      });
+      if (future) {
+        setDuplicateEvent(future);
+        setShowDuplicateConfirm(true);
+        return;
+      }
+    } catch { /* Google not connected or network error — proceed */ }
     goToStep('schedule');
     setScheduleOpen(true);
+  }
+
+  /** Book both — dismiss the guard and open ScheduleVisitModal as normal. */
+  function handleBookBoth() {
+    setShowDuplicateConfirm(false);
+    setDuplicateEvent(null);
+    setCancelExistingError('');
+    goToStep('schedule');
+    setScheduleOpen(true);
+  }
+
+  /** Delete the existing event then open ScheduleVisitModal for a new booking. */
+  async function handleCancelExisting() {
+    if (!duplicateEvent?.id) {
+      setCancelExistingError('Could not cancel the existing visit — no event ID was available. Use "Book both" or go back and cancel it manually.');
+      return;
+    }
+    setCancellingExisting(true);
+    setCancelExistingError('');
+    try {
+      await DELETE(`/api/events/${encodeURIComponent(duplicateEvent.id)}`);
+    } catch (e) {
+      setCancellingExisting(false);
+      setCancelExistingError((e as Error).message || 'Could not cancel the existing visit.');
+      return;
+    }
+    setCancellingExisting(false);
+    setShowDuplicateConfirm(false);
+    setDuplicateEvent(null);
+    goToStep('schedule');
+    setScheduleOpen(true);
+  }
+
+  /** Open a second ScheduleVisitModal pre-populated with the existing event's details. */
+  function handleRescheduleExisting() {
+    setShowDuplicateConfirm(false);
+    setCancelExistingError('');
+    setShowRescheduleModal(true);
   }
 
   // Called by ScheduleVisitModal on successful calendar event creation
@@ -290,7 +363,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const hubDialogOpen = open && step !== 'schedule';
+  const hubDialogOpen = open && step !== 'schedule' && !showDuplicateConfirm && !showRescheduleModal;
 
   function renderContent() {
     if (step === 'loading') {
@@ -333,7 +406,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
               variant="contained"
               color="success"
               fullWidth
-              onClick={handleConfirmed}
+              onClick={() => void handleConfirmed()}
               data-testid="dvf-confirmed"
             >
               Customer confirmed — schedule visit
@@ -493,6 +566,96 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
           onSuccess={handleScheduleSuccess}
           demo={demo ?? false}
         />
+
+        {/* Duplicate-visit confirmation dialog */}
+        <FullScreenModal
+          open={showDuplicateConfirm}
+          onClose={() => {
+            if (cancellingExisting) return;
+            setShowDuplicateConfirm(false);
+            setDuplicateEvent(null);
+            setCancelExistingError('');
+          }}
+          title="Existing visit found"
+          centerContent
+          footer={
+            <>
+              <Button
+                onClick={() => {
+                  setShowDuplicateConfirm(false);
+                  setDuplicateEvent(null);
+                  setCancelExistingError('');
+                }}
+                disabled={cancellingExisting}
+              >
+                Keep existing
+              </Button>
+              <Button
+                onClick={handleRescheduleExisting}
+                disabled={cancellingExisting}
+                data-testid="dvf-duplicate-reschedule"
+              >
+                Reschedule existing
+              </Button>
+              <Button
+                color="error"
+                onClick={() => void handleCancelExisting()}
+                disabled={cancellingExisting}
+                data-testid="dvf-duplicate-cancel-existing"
+              >
+                {cancellingExisting ? 'Cancelling…' : 'Cancel existing & book new'}
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleBookBoth}
+                disabled={cancellingExisting}
+                data-testid="dvf-duplicate-book-both"
+              >
+                Book both
+              </Button>
+            </>
+          }
+        >
+          <Stack spacing={1}>
+            <Typography variant="body2">
+              {ctx.contactName || 'This contact'} already has a visit booked
+              {duplicateEvent?.start?.dateTime
+                ? ` for ${dayjs(duplicateEvent.start.dateTime).format('dddd D MMMM [at] h:mm A')}`
+                : ''}
+              .
+            </Typography>
+            <Typography variant="body2">
+              How would you like to proceed?
+            </Typography>
+            {cancelExistingError && (
+              <Alert severity="error" sx={{ mt: 1 }}>{cancelExistingError}</Alert>
+            )}
+          </Stack>
+        </FullScreenModal>
+
+        {/* Reschedule existing visit — pre-populated with the existing event's details */}
+        {showRescheduleModal && (
+          <ScheduleVisitModal
+            ctx={{
+              ...ctx,
+              contactPhone:  contactInfo?.phone  || ctx.contactPhone,
+              contactMobile: contactInfo?.mobile || ctx.contactMobile,
+            }}
+            visitType="design"
+            contactAddress={contactInfo?.contactAddress}
+            initialStartDt={duplicateEvent?.start?.dateTime}
+            initialTitle={duplicateEvent?.summary}
+            existingEventId={duplicateEvent?.id}
+            open={showRescheduleModal}
+            onClose={() => { setShowRescheduleModal(false); setDuplicateEvent(null); }}
+            onSuccess={() => {
+              setShowRescheduleModal(false);
+              setDuplicateEvent(null);
+              showToast('Existing visit rescheduled', false);
+            }}
+            demo={demo ?? false}
+          />
+        )}
       </>
     </LocalizationProvider>
   );
