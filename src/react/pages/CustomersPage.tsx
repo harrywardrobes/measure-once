@@ -84,6 +84,7 @@ type Contact = {
     lastname?: string;
     email?: string;
     phone?: string;
+    mobilephone?: string;
     hs_lead_status?: string;
     customer_number?: string;
     createdate?: string;
@@ -700,6 +701,8 @@ function CustomerCard({
             contactId:    contact.id,
             contactName:  name,
             contactEmail: contact.properties?.email || '',
+            contactPhone:  contact.properties?.phone || '',
+            contactMobile: contact.properties?.mobilephone || '',
           }, visit);
         } catch {
           // Silent failure — user can navigate to customer detail instead
@@ -711,6 +714,8 @@ function CustomerCard({
           contactId:    contact.id,
           contactName:  name,
           contactEmail: contact.properties?.email || '',
+          contactPhone:  contact.properties?.phone || '',
+          contactMobile: contact.properties?.mobilephone || '',
         });
       }
     },

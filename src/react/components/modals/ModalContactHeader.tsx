@@ -68,14 +68,14 @@ export function ModalContactHeader({ name, phone, mobile, email, address, loadin
         )}
         {hasAny ? (
           <Stack spacing={0.75}>
-            {phone    && <PhoneLine label="Phone"     number={phone} />}
-            {mobile   && <PhoneLine label="Mobile"    number={mobile} />}
             {email && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                 <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                 <Typography variant="body2" sx={{ color: 'text.primary' }}>{email}</Typography>
               </Box>
             )}
+            {phone    && <PhoneLine label="Phone"     number={phone} />}
+            {mobile   && <PhoneLine label="Mobile"    number={mobile} />}
             {address && (
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>

@@ -41,6 +41,10 @@ export interface VisitWizardShellProps {
   contactName?: string;
   /** Contact email shown in the modal header strip. */
   contactEmail?: string;
+  /** Contact phone shown in the modal header strip. */
+  contactPhone?: string;
+  /** Contact mobile shown in the modal header strip. */
+  contactMobile?: string;
   /** When true, shows the contact-header skeleton + a body spinner. */
   loading?: boolean;
   /** When true, shows a dismissible "Restoring your draft" notice. */
@@ -73,6 +77,8 @@ export function VisitWizardShell({
   footer,
   contactName,
   contactEmail,
+  contactPhone,
+  contactMobile,
   loading,
   draftNotice,
   onDismissDraftNotice,
@@ -89,7 +95,7 @@ export function VisitWizardShell({
       headerActions={headerActions}
       footer={loading ? undefined : footer}
     >
-      <ModalContactHeader name={contactName} email={contactEmail} loading={loading} />
+      <ModalContactHeader name={contactName} email={contactEmail} phone={contactPhone} mobile={contactMobile} loading={loading} />
       {draftNotice && (
         <Alert
           severity="info"

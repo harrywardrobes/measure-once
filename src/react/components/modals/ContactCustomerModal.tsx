@@ -415,6 +415,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
       contactId,
       contactName: contactData?.contactName || contactName,
       contactEmail: contactData?.contactEmail || contactEmail,
+      contactPhone: contactData?.phone || '',
+      contactMobile: contactData?.mobile || '',
     };
     onClose();
     setTimeout(() => {

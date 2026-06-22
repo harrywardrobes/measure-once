@@ -154,7 +154,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose, demo }: Props) 
         }
       >
         <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-          <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+          <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} />
           <TextField
             id="cah-pc-summary"
             label="What did you discuss?"

@@ -48,6 +48,8 @@ export interface DesignVisitWizardCtx {
   contact_name?: string;
   contactEmail?: string;
   contact_email?: string;
+  contactPhone?: string;
+  contactMobile?: string;
 }
 
 export interface ExistingVisit {
@@ -200,9 +202,11 @@ function extractOrphanedDraftKeys(key: string): string[] {
 export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady, demo }: DesignVisitWizardProps) {
   const cfg = handler.config || {};
   const defaultDuration = cfg.defaultDurationMin || 90;
-  const contactId    = ctx.contactId    || ctx.contact_id    || '';
-  const contactName  = ctx.contactName  || ctx.contact_name  || '';
-  const contactEmail = ctx.contactEmail || ctx.contact_email || '';
+  const contactId     = ctx.contactId    || ctx.contact_id    || '';
+  const contactName   = ctx.contactName  || ctx.contact_name  || '';
+  const contactEmail  = ctx.contactEmail || ctx.contact_email || '';
+  const contactPhone  = ctx.contactPhone  || '';
+  const contactMobile = ctx.contactMobile || '';
   const editMode     = !!(existingVisit && existingVisit.id);
   const editVisitId  = editMode ? existingVisit!.id : null;
   const storageKey   = draftKey(contactId, editVisitId);
@@ -788,6 +792,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       footer={footer}
       contactName={contactName}
       contactEmail={contactEmail}
+      contactPhone={contactPhone}
+      contactMobile={contactMobile}
       loading={catalogueLoading}
       draftNotice={showDraftNotice}
       onDismissDraftNotice={() => setShowDraftNotice(false)}

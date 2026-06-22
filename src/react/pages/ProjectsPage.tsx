@@ -567,6 +567,8 @@ function ProjectCard({
             contactId:    contact.id,
             contactName:  name,
             contactEmail: contact.properties?.email || '',
+            contactPhone:  contact.properties?.phone || '',
+            contactMobile: contact.properties?.mobilephone || '',
           }, visit);
         } catch {
           // Silent failure — user can navigate to customer detail instead
@@ -578,6 +580,8 @@ function ProjectCard({
           contactId:    contact.id,
           contactName:  name,
           contactEmail: contact.properties?.email || '',
+          contactPhone:  contact.properties?.phone || '',
+          contactMobile: contact.properties?.mobilephone || '',
         });
       }
     },

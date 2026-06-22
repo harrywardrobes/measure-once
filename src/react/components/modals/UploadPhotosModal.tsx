@@ -799,7 +799,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       footer={renderActions()}
     >
       {phase !== 'sent' && (
-        <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} />
+        <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} />
       )}
       {renderContent()}
     </FullScreenModal>

@@ -6,6 +6,8 @@ export interface CardActionContext {
   contactId: string;
   contactName: string;
   contactEmail: string;
+  contactPhone?: string;
+  contactMobile?: string;
 }
 
 /**

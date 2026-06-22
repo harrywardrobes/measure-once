@@ -261,7 +261,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       const cardActionHandlerAttrs = (
         stageKey: string,
         leadStatusKey: string,
-        ctx: { contactId?: string; contactName?: string; contactEmail?: string },
+        ctx: { contactId?: string; contactName?: string; contactEmail?: string; contactPhone?: string; contactMobile?: string },
       ) => {
         const h =
           typeof w.cardActionHandlerFor === 'function'
@@ -283,6 +283,12 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
             : '') +
           (ctx?.contactEmail
             ? ` data-card-action-contact-email="${safe(ctx.contactEmail)}"`
+            : '') +
+          (ctx?.contactPhone
+            ? ` data-card-action-contact-phone="${safe(ctx.contactPhone)}"`
+            : '') +
+          (ctx?.contactMobile
+            ? ` data-card-action-contact-mobile="${safe(ctx.contactMobile)}"`
             : '')
         );
       };
@@ -302,6 +308,8 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
             firstname?: string;
             lastname?: string;
             email?: string;
+            phone?: string;
+            mobilephone?: string;
           };
         };
         stageKey?: string;
@@ -318,6 +326,8 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
           contactId: contact.id || '',
           contactName: name,
           contactEmail: props.email || '',
+          contactPhone: props.phone || '',
+          contactMobile: props.mobilephone || '',
         };
         const attrsStr = cardActionHandlerAttrs(
           stageKey2,
@@ -374,6 +384,8 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
         contactId: el.dataset.cardActionContactId ?? '',
         contactName: el.dataset.cardActionContactName ?? '',
         contactEmail: el.dataset.cardActionContactEmail ?? '',
+        contactPhone: el.dataset.cardActionContactPhone ?? '',
+        contactMobile: el.dataset.cardActionContactMobile ?? '',
       };
       const handler =
         (typeof (window as unknown as Record<string, unknown>).cardActionHandlerById === 'function'

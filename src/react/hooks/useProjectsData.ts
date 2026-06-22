@@ -14,6 +14,8 @@ export interface ProjectContact {
     firstname?: string;
     lastname?: string;
     email?: string;
+    phone?: string;
+    mobilephone?: string;
     closedate?: string;
     lastmodifieddate?: string;
     hs_lead_status?: string;

@@ -452,6 +452,8 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           <ModalContactHeader
             name={submission?.contactName ?? ctx.contactName}
             email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
+            phone={ctx.contactPhone}
+            mobile={ctx.contactMobile}
             loading={step === 'loading'}
           />
 
