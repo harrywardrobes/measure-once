@@ -21,7 +21,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { GET, POST, PATCH, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
 import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
-import { useToast } from '../../contexts/ToastContext';
+import { useToastContext } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
@@ -139,7 +139,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const key = draftKey(ctx.contactId);
   const draft = demo ? {} : loadDraft(key);
 
-  const showToast = useToast();
+  const { showToast, showToastWithAction } = useToastContext();
   const serviceStatuses = useServiceStatuses();
   const googleDisconnected = serviceStatuses.get('google') === 'error';
 
@@ -391,17 +391,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         showToast('Booking saved offline — it will sync when you reconnect', false);
       } else {
         const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
-        const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
-        showToast(conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated', false);
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
+
         // Create the Google Calendar event automatically. Best-effort: the
         // booking has already succeeded, so a calendar failure is non-fatal.
         const vt = contactInfo?.visitType ?? 'design';
         const vLabel = vt === 'survey' ? 'Survey' : 'Design visit';
         const start = bookedSlot!.toDate();
         const end = new Date(start.getTime() + 90 * 60000);
+        let calendarCreated = false;
         try {
           await POST('/api/events', {
             summary: `${vLabel} — ${contactInfo?.contactName || ctx.contactName}`,
@@ -412,7 +412,24 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             moContactId: ctx.contactId ? String(ctx.contactId) : undefined,
             moVisitType: vt,
           });
+          calendarCreated = true;
         } catch { /* calendar is best-effort */ }
+
+        const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
+        if (calendarCreated) {
+          const baseMsg = conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated';
+          showToast(`${baseMsg} and calendar event created`, false);
+        } else {
+          showToast(conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated', false);
+          showToastWithAction(
+            'Visit booked — calendar event could not be created (Google disconnected)',
+            {
+              label: 'Reconnect',
+              onClick: () => openConnectModal('google', 'Reconnect Google to create calendar events when booking visits.'),
+            },
+            { severity: 'warning', duration: 8000 },
+          );
+        }
       }
 
       setStep('done');
