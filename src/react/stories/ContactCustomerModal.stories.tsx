@@ -136,6 +136,57 @@ function mockContactFetch(payload: object, emailPreview: object = DEMO_EMAIL_PRE
   };
 }
 
+function mockContactFetchDelayed(
+  payload: object,
+  emailPreview: object = DEMO_EMAIL_PREVIEW,
+  sendDelayMs = 600,
+) {
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (method === 'POST' && url.includes('/api/card-actions/contact-customer')) {
+      if (url.includes('/email-preview')) {
+        return new Response(JSON.stringify(emailPreview), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      await new Promise<void>((r) => setTimeout(r, sendDelayMs));
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+}
+
+function mockContactFetchSendError(emailPreview: object = DEMO_EMAIL_PREVIEW) {
+  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : (input as Request).url;
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (method === 'POST' && url.includes('/api/card-actions/contact-customer')) {
+      if (url.includes('/email-preview')) {
+        return new Response(JSON.stringify(emailPreview), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ message: 'Server error' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+}
+
 /**
  * Installs a mocked `window.fetch` synchronously (before children mount, so the
  * modal's load effect sees it) and restores the original on unmount. This keeps
@@ -262,4 +313,106 @@ export const OneMethodLogged: Story = {
       </FetchMockProvider>
     ),
   ],
+};
+
+export const InlineSendButtonHiddenWhileSending: Story = {
+  name: 'Send Email — inline buttons hidden and Sending… indicator visible during send',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When staff click the inline "Send Email" button, the button row is immediately replaced by a "Sending…" progress indicator while the API call is in flight. The send-email fetch is deliberately delayed (600 ms) so the test can assert the mid-flight state before it resolves. After the send completes the preview panel collapses.',
+      },
+    },
+  },
+  args: {
+    demo: false,
+  },
+  decorators: [
+    (Story) => (
+      <FetchMockProvider
+        fetchImpl={mockContactFetchDelayed(
+          {
+            ...BASE_CONTACT_PAYLOAD,
+            emailSent: true,
+            attempted_at: new Date().toISOString(),
+            attemptLog: [],
+          },
+          DEMO_EMAIL_PREVIEW,
+          600,
+        )}
+      >
+        <Story />
+      </FetchMockProvider>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const { within, userEvent, expect, waitFor } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+
+    const emailBtn = await canvas.findByTestId('contact-method-email-btn');
+    await userEvent.click(emailBtn);
+
+    const inlineSendBtn = await canvas.findByTestId('email-preview-send-btn-inline');
+    await expect(inlineSendBtn).toBeInTheDocument();
+
+    await userEvent.click(inlineSendBtn);
+
+    await waitFor(() => {
+      expect(canvas.queryByTestId('email-preview-send-btn-inline')).not.toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(canvas.getByText('Sending…')).toBeInTheDocument();
+    });
+
+    await waitFor(
+      () => {
+        expect(canvas.queryByTestId('email-preview-panel')).not.toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+  },
+};
+
+export const InlineSendButtonRestoredOnError: Story = {
+  name: 'Send Email — inline buttons reappear after a send error',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When the send-email request returns a 500 error, emailFlow reverts to "preview" and the inline Send / Cancel button row reappears so staff can retry. An error message is shown beneath the buttons.',
+      },
+    },
+  },
+  args: {
+    demo: false,
+  },
+  decorators: [
+    (Story) => (
+      <FetchMockProvider fetchImpl={mockContactFetchSendError()}>
+        <Story />
+      </FetchMockProvider>
+    ),
+  ],
+  play: async ({ canvasElement }) => {
+    const { within, userEvent, expect, waitFor } = await import('@storybook/test');
+    const canvas = within(canvasElement);
+
+    const emailBtn = await canvas.findByTestId('contact-method-email-btn');
+    await userEvent.click(emailBtn);
+
+    const inlineSendBtn = await canvas.findByTestId('email-preview-send-btn-inline');
+    await userEvent.click(inlineSendBtn);
+
+    await waitFor(() => {
+      expect(canvas.queryByTestId('email-preview-send-btn-inline')).not.toBeInTheDocument();
+    });
+
+    const restoredBtn = await canvas.findByTestId('email-preview-send-btn-inline', {}, { timeout: 3000 });
+    await expect(restoredBtn).toBeInTheDocument();
+
+    const panel = canvas.queryByTestId('email-preview-panel');
+    await expect(panel).toBeInTheDocument();
+  },
 };
