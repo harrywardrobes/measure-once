@@ -21,14 +21,14 @@ interface Props {
 
 function PhoneLine({ label, number }: { label: string; number: string }) {
   return (
-    <Box>
+    <Box sx={{ minWidth: 0 }}>
       <Typography variant="body2" color="text.secondary">{label}</Typography>
       <Link
         href={`tel:${number.replace(/\s+/g, '')}`}
         underline="none"
         color="text.primary"
         variant="h6"
-        sx={{ fontWeight: 600, lineHeight: 1.3, display: 'inline-block' }}
+        sx={{ fontWeight: 600, lineHeight: 1.3, display: 'block', wordBreak: 'break-all' }}
       >
         {number}
       </Link>
@@ -69,9 +69,14 @@ export function ModalContactHeader({ name, phone, mobile, email, address, loadin
         {hasAny ? (
           <Stack spacing={0.75}>
             {email && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <EmailIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                <Typography variant="body2" sx={{ color: 'text.primary' }}>{email}</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                <EmailIcon fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                <Typography
+                  variant="body2"
+                  sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+                >
+                  {email}
+                </Typography>
               </Box>
             )}
             {phone    && <PhoneLine label="Phone"     number={phone} />}
