@@ -135,20 +135,6 @@ type Room = {
   roomStatus?: string;
 };
 
-// Fallback stage labels (matches STAGE_COLOURS in workflow-core.js — kept
-// in sync intentionally; if workflow-core.js is loaded on the page we
-// prefer the live globals).
-const DEFAULT_STAGE_LABELS: Record<string, string> = {
-  sales: 'Sales',
-  designvisit: 'Design Visit',
-  survey: 'Survey',
-  order: 'Order',
-  workshop: 'Workshop',
-  packing: 'Packing',
-  delivery: 'Delivery',
-  installation: 'Installation',
-  aftercare: 'Aftercare',
-};
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'priority', label: 'Priority first' },
   { value: 'newest', label: 'Newest first' },

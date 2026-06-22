@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { Box, Card, CardActionArea, Chip, CircularProgress, Stack, Typography } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
+import { STAGE_LABELS as DEFAULT_STAGE_LABELS } from '../utils/stageKeys';
 
 const meta: Meta = {
   title: 'Features/Pages/CustomerCard',
@@ -22,17 +23,6 @@ type Story = StoryObj;
 
 // ── Shared demo card shell ──────────────────────────────────────────────────
 
-const DEFAULT_STAGE_LABELS: Record<string, string> = {
-  sales: 'Sales',
-  designvisit: 'Design Visit',
-  survey: 'Survey',
-  order: 'Order',
-  workshop: 'Workshop',
-  packing: 'Packing',
-  delivery: 'Delivery',
-  installation: 'Installation',
-  aftercare: 'Aftercare',
-};
 
 interface DemoRoom {
   room: string;

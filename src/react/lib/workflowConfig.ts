@@ -3,6 +3,9 @@
 // public/workflow-core.js. Imported by WorkflowDataContext and any React
 // component that needs stage metadata without reading window globals.
 
+import { STAGE_KEYS, STAGE_LABELS } from '../utils/stageKeys';
+export { STAGE_KEYS } from '../utils/stageKeys';
+
 export interface WorkflowStage {
   label?: string;
   statuses?: Array<{ id: string; label: string; hint?: string }>;
@@ -16,21 +19,10 @@ export interface WorkflowDef {
 // Cold-start fallback. The runtime workflow is fetched from /api/workflow;
 // this object is used only when that fetch returns null.
 export const DEFAULT_WORKFLOW: WorkflowDef = {
-  stages: {
-    sales:        { label: 'Sales' },
-    designvisit:  { label: 'Design Visit' },
-    survey:       { label: 'Survey' },
-    order:        { label: 'Order' },
-    workshop:     { label: 'Workshop' },
-    packing:      { label: 'Packing' },
-    delivery:     { label: 'Delivery' },
-    installation: { label: 'Installation' },
-    aftercare:       { label: 'Aftercare' },
-    customerservice: { label: 'Customer Service' },
-  },
+  stages: Object.fromEntries(
+    STAGE_KEYS.map((k) => [k, { label: STAGE_LABELS[k] }])
+  ),
 };
-
-export { STAGE_KEYS } from '../utils/stageKeys';
 
 // ── Shared workflow fetch ──────────────────────────────────────────────────────
 // The runtime workflow definition (/api/workflow) is identical for every page and

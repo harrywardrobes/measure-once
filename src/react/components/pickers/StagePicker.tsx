@@ -1,6 +1,6 @@
 import { Box, Popover, Typography } from '@mui/material';
 import { STAGE_COLORS, BRAND_COLORS } from '../../theme';
-import { STAGE_KEYS as DEFAULT_STAGE_KEYS } from '../../utils/stageKeys';
+import { STAGE_KEYS as DEFAULT_STAGE_KEYS, STAGE_LABELS as DEFAULT_STAGE_LABELS } from '../../utils/stageKeys';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -18,19 +18,6 @@ interface WindowGlobals {
 // ── Default stage ordering ─────────────────────────────────────────────────────
 // The workflow may define fewer stages; only stages that appear in the
 // workflow are shown.
-
-const DEFAULT_STAGE_LABELS: Record<string, string> = {
-  sales:           'Sales',
-  designvisit:     'Design Visit',
-  survey:          'Survey',
-  order:           'Order',
-  workshop:        'Workshop',
-  packing:         'Packing',
-  delivery:        'Delivery',
-  installation:    'Installation',
-  aftercare:       'Aftercare',
-  customerservice: 'Customer Service',
-};
 
 function getStageOptions(): StageOption[] {
   const w = window as unknown as WindowGlobals;

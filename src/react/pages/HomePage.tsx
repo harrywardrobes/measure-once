@@ -1,4 +1,6 @@
 import React from 'react';
+import { STAGE_LABELS } from '../utils/stageKeys';
+import type { StageKey } from '../utils/stageKeys';
 import {
   Alert,
   Box,
@@ -71,17 +73,6 @@ function parseContactRooms(contact: Contact): Room[] {
   }
 }
 
-const DEFAULT_STAGE_LABELS: Record<string, string> = {
-  sales: 'Sales',
-  designvisit: 'Design Visit',
-  survey: 'Survey',
-  order: 'Order',
-  workshop: 'Workshop',
-  packing: 'Packing',
-  delivery: 'Delivery',
-  installation: 'Installation',
-  aftercare: 'Aftercare',
-};
 
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { Accept: 'application/json' } });
@@ -444,7 +435,7 @@ function ProjectsSection({
         );
         const stage = rooms[0]?.stageKey;
         const stageLbl = stage
-          ? workflow?.stages?.[stage]?.label || DEFAULT_STAGE_LABELS[stage] || stage
+          ? workflow?.stages?.[stage]?.label || STAGE_LABELS[stage as StageKey] || stage
           : null;
         return (
           <HomeCard

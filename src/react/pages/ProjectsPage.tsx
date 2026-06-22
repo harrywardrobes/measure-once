@@ -65,21 +65,7 @@ import type {
 import { usePageTitle } from '../hooks/usePageTitle';
 import { UrgencyDot } from '../components/UrgencyDot';
 import type { Urgency } from '../components/UrgencyDot';
-import { STAGE_KEYS, StageKey } from '../utils/stageKeys';
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const STAGE_LABEL_FALLBACK: Record<string, string> = {
-  sales: 'Sales',
-  designvisit: 'Design Visit',
-  survey: 'Survey',
-  order: 'Order',
-  workshop: 'Workshop',
-  packing: 'Packing',
-  delivery: 'Delivery',
-  installation: 'Installation',
-  aftercare: 'Aftercare',
-};
+import { STAGE_KEYS, STAGE_LABELS, StageKey } from '../utils/stageKeys';
 
 // ── Filter-persistence helpers ─────────────────────────────────────────────────
 
@@ -137,7 +123,7 @@ function getContactName(c: ProjectContact): string {
 }
 
 function getStageLabel(stageKey: string, workflow: ProjectWorkflowDef | undefined): string {
-  return workflow?.stages?.[stageKey]?.label || STAGE_LABEL_FALLBACK[stageKey] || stageKey;
+  return workflow?.stages?.[stageKey]?.label || STAGE_LABELS[stageKey as StageKey] || stageKey;
 }
 
 

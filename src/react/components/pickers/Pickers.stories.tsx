@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import { StagePicker } from './StagePicker';
+import { STAGE_LABELS } from '../../utils/stageKeys';
 import { LeadStatusPicker } from './LeadStatusPicker';
 import { SubstagePicker } from './SubstagePicker';
 
@@ -20,16 +21,10 @@ function StagePickerDemo() {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [current, setCurrent] = useState('sales');
 
-  const STAGE_LABELS: Record<string, string> = {
-    sales: 'Sales', designvisit: 'Design Visit', survey: 'Survey', order: 'Order',
-    workshop: 'Workshop', packing: 'Packing', delivery: 'Delivery',
-    installation: 'Installation', aftercare: 'Aftercare', customerservice: 'Customer Service'
-  };
-
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Current stage: <strong>{STAGE_LABELS[current] || current}</strong>
+        Current stage: <strong>{STAGE_LABELS[current as keyof typeof STAGE_LABELS] || current}</strong>
       </Typography>
       <Button variant="outlined" onClick={(e) => setAnchorEl(e.currentTarget)}>
         Change Stage
