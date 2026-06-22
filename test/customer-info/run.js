@@ -8,7 +8,7 @@ const { makeSkip3 } = require('../helpers/report');
 //   (CI-1)  POST /api/card-actions/upload-photos-and-info → 200 ok, token in DB
 //   (CI-2)  GET  /api/customer-info/:token → 200, masked email + name
 //   (CI-3)  POST /api/customer-info/:token/photos → 200, key list returned
-//   (CI-4)  POST /api/customer-info/:token (submit) → 200, emails sent
+//   (CI-4)  POST /api/customer-info/:token (submit) → 200, emails sent; no mobile row when correctedMobile omitted
 //   (CI-5)  GET  /api/customer-info/by-contact/:contactId → list with photoUrls
 //   (CI-R1) POST /api/customer-info/by-contact/:contactId/resend (admin) → 200, new DB row, old rows preserved
 //   (CI-R2) POST /api/customer-info/by-contact/:contactId/resend (viewer) → 403
@@ -624,6 +624,30 @@ async function main() {
           : noPhoneInHtml === null
             ? `skipped — no admin email captured`
             : `unexpected phone <tr> found in admin email HTML body (contact_phone should be null)`);
+
+      // CI-4 submits with an empty correctedMobile — the mobile row must be absent
+      // from both bodies of the admin notification email.
+      // Text body: absent mobile renders as an empty string (no "Mobile:" line at all).
+      // HTML body: absent mobile renders no <tr>, so "Mobile (corrected)" must not appear.
+      const noMobileInText = adminEmail
+        ? (typeof adminEmail.text !== 'string' || !adminEmail.text.includes('Mobile:'))
+        : null;
+      record('CI-4.no-mobile-in-email-text', noMobileInText === true,
+        noMobileInText === true
+          ? `mobile row correctly absent from admin email text body`
+          : noMobileInText === null
+            ? `skipped — no admin email captured`
+            : `unexpected "Mobile:" found in admin email text body (corrected_mobile should be empty)`);
+
+      const noMobileInHtml = adminEmail
+        ? (typeof adminEmail.html !== 'string' || !adminEmail.html.includes('Mobile (corrected)'))
+        : null;
+      record('CI-4.no-mobile-in-email-html', noMobileInHtml === true,
+        noMobileInHtml === true
+          ? `mobile row correctly absent from admin email HTML body`
+          : noMobileInHtml === null
+            ? `skipped — no admin email captured`
+            : `unexpected mobile <tr> found in admin email HTML body (corrected_mobile should be empty)`);
     } else {
       record('CI-4.submit', false, 'skipped — no rawToken');
       record('CI-4.submission-in-db', false, 'skipped — no rawToken');
@@ -631,6 +655,8 @@ async function main() {
       record('CI-4.thankyou-email', false, 'skipped — no rawToken');
       record('CI-4.no-phone-in-email-text', false, 'skipped — no rawToken');
       record('CI-4.no-phone-in-email-html', false, 'skipped — no rawToken');
+      record('CI-4.no-mobile-in-email-text', false, 'skipped — no rawToken');
+      record('CI-4.no-mobile-in-email-html', false, 'skipped — no rawToken');
     }
 
     // ── CI-5: GET /api/customer-info/by-contact/:contactId ───────────────────
@@ -1181,7 +1207,7 @@ async function main() {
           ? `400 error="${mV1.json.error}"`
           : `status=${mV1.status} body=${JSON.stringify(mV1.json).slice(0, 200)}`);
 
-      // ── CI-M1b: messy UK mobile → DB stores E.164 ─────────────────────────
+      // ── CI-M1b: messy UK mobile → DB stores E.164, admin email shows formatted ─
       const mRawTokenB = crypto.randomBytes(32).toString('hex');
       const mHashB     = crypto.createHash('sha256').update(mRawTokenB).digest('hex');
       const mExpiresB  = new Date(Date.now() + 86_400_000);
@@ -1193,6 +1219,7 @@ async function main() {
                  'm***@***.local', '07***0000')`,
         [contactIdM, mHashB, mExpiresB.toISOString()]
       );
+      const mailsBeforeM1b = readMailJsonl(mailFile).length;
       const mSubmitRes = await postSubmit(BASE, mRawTokenB, {
         correctedMobile: '07902 819 990',
         structuredAddress: mValidAddress,
@@ -1232,9 +1259,50 @@ async function main() {
           mApiOk
             ? `by-contact API corrected_mobile="${mApiMobile}"`
             : `expected "+447902819990", got "${mApiMobile}" (row: ${JSON.stringify(mSubmittedRow)?.slice(0, 200)})`);
+
+        // Assert admin notification email contains the formatted mobile number.
+        // formatPhone('+447902819990') → '+44 7902 819990'
+        // Text body:  "Mobile:       +44 7902 819990"
+        // HTML body:  <tr><td><strong>Mobile (corrected)</strong></td><td>+44 7902 819990</td></tr>
+        let mAdminEmail = null;
+        await pollFn(async () => {
+          const mails = readMailJsonl(mailFile);
+          mAdminEmail = mails.slice(mailsBeforeM1b)
+            .find(m => typeof m.to === 'string' && m.to.includes(`admin-ci-${runId}@privtest.local`));
+          return mAdminEmail ? true : null;
+        }, 4000, 100);
+
+        record('CI-M1b.admin-email-captured',
+          !!mAdminEmail,
+          mAdminEmail
+            ? `admin notification email captured subject="${mAdminEmail.subject}"`
+            : `no admin notification email after M1b submit`);
+
+        const mMobileInText = mAdminEmail
+          && typeof mAdminEmail.text === 'string'
+          && mAdminEmail.text.includes('Mobile:')
+          && mAdminEmail.text.includes('+44 7902 819990');
+        record('CI-M1b.mobile-in-email-text',
+          mMobileInText === true,
+          mMobileInText === true
+            ? `"Mobile: +44 7902 819990" found in admin email text body`
+            : `formatted mobile NOT found in admin email text body (email captured: ${!!mAdminEmail})`);
+
+        const mMobileInHtml = mAdminEmail
+          && typeof mAdminEmail.html === 'string'
+          && mAdminEmail.html.includes('Mobile (corrected)')
+          && mAdminEmail.html.includes('+44 7902 819990');
+        record('CI-M1b.mobile-in-email-html',
+          mMobileInHtml === true,
+          mMobileInHtml === true
+            ? `"Mobile (corrected)" row with "+44 7902 819990" found in admin email HTML body`
+            : `formatted mobile NOT found in admin email HTML body (email captured: ${!!mAdminEmail})`);
       } else {
         record('CI-M1b.e164-in-db', false, 'skipped — submit failed');
         record('CI-M1b.e164-in-api-response', false, 'skipped — submit failed');
+        record('CI-M1b.admin-email-captured', false, 'skipped — submit failed');
+        record('CI-M1b.mobile-in-email-text', false, 'skipped — submit failed');
+        record('CI-M1b.mobile-in-email-html', false, 'skipped — submit failed');
       }
 
       // Clean up CI-M1 rows
