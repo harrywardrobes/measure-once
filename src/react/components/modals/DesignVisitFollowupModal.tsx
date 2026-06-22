@@ -368,9 +368,17 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   function renderContent() {
     if (step === 'loading') {
       return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-          <CircularProgress size={28} />
-        </Box>
+        <Stack spacing={2}>
+          <ModalContactHeader
+            name={ctx.contactName}
+            email={ctx.contactEmail}
+            phone={ctx.contactPhone}
+            mobile={ctx.contactMobile}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+            <CircularProgress size={28} />
+          </Box>
+        </Stack>
       );
     }
     if (step === 'done') {

@@ -424,7 +424,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
         mobile={loaderData?.contactMobile || ctx.contactMobile}
         email={loaderData?.contactEmail}
         address={loaderData?.contactAddress}
-        loading={opts?.loading || isLoading || (step !== 'hub' && !loaderData)}
+        loading={opts?.loading}
       />
     );
   }

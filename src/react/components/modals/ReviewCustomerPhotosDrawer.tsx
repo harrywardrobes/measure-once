@@ -454,7 +454,6 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
             email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
             phone={ctx.contactPhone}
             mobile={ctx.contactMobile}
-            loading={step === 'loading'}
           />
 
           {/* Loading / fetch error */}
