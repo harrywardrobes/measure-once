@@ -258,3 +258,50 @@ describe('DesignVisitFollowupModal — duplicate-visit guard', () => {
     expect(rescheduleCall!['initialStartDt']).toBe(FUTURE_DT);
   });
 });
+
+// ── Modal title personalisation ───────────────────────────────────────────────
+
+describe('DesignVisitFollowupModal — modal title', () => {
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch?.();
+    vi.restoreAllMocks();
+  });
+
+  it('shows "Follow up with [Name]" immediately on open, before the API response arrives', () => {
+    const orig = window.fetch;
+    window.fetch = vi.fn(() => new Promise(() => { /* never resolves */ })) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    render(
+      <DesignVisitFollowupModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Follow up with Jane Smith' })).toBeTruthy();
+  });
+
+  it('shows the fallback "Design visit follow-up" title when ctx.contactName is absent', () => {
+    const orig = window.fetch;
+    window.fetch = vi.fn(() => new Promise(() => { /* never resolves */ })) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const ctxWithoutName = { contactId: 'contact-42', contactEmail: 'jane@example.com' };
+
+    render(
+      <DesignVisitFollowupModal
+        handler={HANDLER}
+        ctx={ctxWithoutName as typeof CTX}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Design visit follow-up' })).toBeTruthy();
+  });
+});
