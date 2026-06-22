@@ -6202,6 +6202,7 @@ app.post('/api/card-actions/arrange-visit',
 
       // Best-effort: fetch the most recent note body from HubSpot to pre-fill the visit notes field.
       let visitNotes = '';
+      let visitNotesTimestamp = '';
       try {
         const assocR = await hubspotRequestWithRetry('get',
           `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}/associations/notes`,
@@ -6222,11 +6223,14 @@ app.post('/api/card-actions/arrange-visit',
               const tb = new Date(b.properties?.hs_timestamp || 0).getTime();
               return tb - ta;
             });
-          if (sorted.length) visitNotes = String(sorted[0].properties.hs_note_body || '');
+          if (sorted.length) {
+            visitNotes = String(sorted[0].properties.hs_note_body || '');
+            visitNotesTimestamp = String(sorted[0].properties.hs_timestamp || '');
+          }
         }
       } catch { /* best-effort — visitNotes stays empty on any HubSpot error */ }
 
-      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status, visitNotes });
+      res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status, visitNotes, visitNotesTimestamp });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {

@@ -59,6 +59,7 @@ interface ContactInfo {
   contactStructuredAddress: StructuredAddress;
   leadStatus?: string;
   visitNotes?: string;
+  visitNotesTimestamp?: string;
 }
 
 interface CalendarEventStub {
@@ -175,6 +176,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   );
 
   const [notes, setNotes] = useState(draft.notes ?? '');
+  // True once the user has manually edited the notes field — hides the pre-fill attribution.
+  const [notesEdited, setNotesEdited] = useState(!!draft.notes);
 
   const [emailSubject, setEmailSubject] = useState(draft.emailSubject ?? '');
   const [emailBody, setEmailBody]       = useState(draft.emailBody ?? '');
@@ -235,6 +238,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           // never clobbers a step that has already advanced past 'loading'.
           setStructuredAddress(d.contactStructuredAddress || emptyAddress());
           setNotes(d.visitNotes ?? '');
+          setNotesEdited(false);
           setStep(prev => prev === 'loading' ? 'call' : prev);
           saveDraft(key, { step: 'call', structuredAddress: d.contactStructuredAddress || emptyAddress(), bookedSlotIso: null, notes: d.visitNotes ?? '', emailSubject: '', emailBody: '' });
         }
@@ -787,13 +791,18 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   id="av-booked-notes"
                   label="Visit notes (optional)"
                   value={notes}
-                  onChange={e => setNotes(e.target.value)}
+                  onChange={e => { setNotes(e.target.value); setNotesEdited(true); }}
                   placeholder="Anything the team should know"
                   multiline
                   minRows={2}
                   fullWidth
                   size="small"
                   disabled={submitting}
+                  helperText={
+                    !notesEdited && notes && contactInfo?.visitNotesTimestamp
+                      ? `Pre-filled from note added ${dayjs(contactInfo.visitNotesTimestamp).format('D MMM YYYY')}`
+                      : undefined
+                  }
                 />
                 {actionError && (
                   <Alert severity="error">{actionError}</Alert>
