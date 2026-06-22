@@ -143,6 +143,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/quickbooks/contacts/0/payments',                  level: 'manager' },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/accept-deal',               level: 'manager', body: { estimateId: '1' } },
   { method: 'POST',   path: '/api/quickbooks/contacts/0/decline-deal',              level: 'manager', body: {} },
+  { method: 'POST',   path: '/api/card-actions/start-design-visit',                          level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/contact-customer',                            level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/contact-customer/0/attempts',                level: 'member', body: { method: 'call', note: 'test note' } },
   { method: 'POST',   path: '/api/card-actions/contact-customer/0/advance-status',          level: 'member', body: { target: 'attempted_to_contact' }, needsHubspot: true },

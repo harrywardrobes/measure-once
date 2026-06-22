@@ -6533,10 +6533,16 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
       // text; we substitute the custom body/subject but keep the template footer.
       const customBody    = typeof req.body?.body    === 'string' ? req.body.body    : null;
       const customSubject = typeof req.body?.subject === 'string' ? req.body.subject : null;
+      // Convert plain-text custom body to HTML paragraphs so that renderEmail
+      // can append the template footer (branding/signature). Setting body_html
+      // to '' would strip the footer from the rendered output.
+      const customBodyHtml = customBody !== null
+        ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+        : null;
       const effectiveTemplate = (customBody !== null || customSubject !== null) ? {
         ...template,
-        ...(customBody    !== null ? { body_text: customBody,    body_html: '' } : {}),
-        ...(customSubject !== null ? { subject:   customSubject               } : {}),
+        ...(customBody    !== null ? { body_text: customBody, body_html: customBodyHtml } : {}),
+        ...(customSubject !== null ? { subject:   customSubject                         } : {}),
       } : template;
 
       const vars     = { firstName };

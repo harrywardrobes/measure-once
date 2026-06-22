@@ -186,9 +186,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
   const [logConfirm,          setLogConfirm]          = useState('');
 
-  const autoCloseTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const emailConfirmTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const logConfirmTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logConfirmTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailPreviewDebounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (demo) {
@@ -231,6 +232,34 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
+  // Debounced preview refresh — fires 600 ms after body or subject stops
+  // changing while the user is in Preview mode. This ensures the iframe always
+  // shows the full branded footer even when the staff member has edited the text.
+  // Guard: skip when a fetch is already in flight (emailPreviewLoading) to
+  // avoid a double-fetch with the toggle handler's immediate call.
+  useEffect(() => {
+    if (
+      emailViewMode !== 'preview' ||
+      emailFlow === 'idle' ||
+      emailFlow === 'sending' ||
+      emailPreviewLoading ||
+      demo
+    ) return;
+    const bodyDirty    = emailBody.trim()    !== emailFetchedBody.trim();
+    const subjectDirty = emailSubject.trim() !== emailFetchedSubject.trim();
+    if (!bodyDirty && !subjectDirty) return;
+    if (emailPreviewDebounceRef.current) clearTimeout(emailPreviewDebounceRef.current);
+    emailPreviewDebounceRef.current = setTimeout(() => {
+      void refetchEmailHtml(emailSubject.trim(), emailBody.trim());
+    }, 600);
+    return () => {
+      if (emailPreviewDebounceRef.current) clearTimeout(emailPreviewDebounceRef.current);
+    };
+  // refetchEmailHtml is stable (defined in render scope) — listing only the
+  // values that should actually trigger a re-fetch.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailBody, emailSubject, emailViewMode, emailFlow, emailPreviewLoading]);
+
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   function openNotePanel(method: Method) {
@@ -249,6 +278,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }
 
   function closeEmailFlow() {
+    if (emailPreviewDebounceRef.current) {
+      clearTimeout(emailPreviewDebounceRef.current);
+      emailPreviewDebounceRef.current = null;
+    }
     setEmailFlow('idle');
     setEmailSubject('');
     setEmailBody('');
@@ -729,6 +762,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                         const bodyDirty    = emailBody.trim()    !== emailFetchedBody.trim();
                                         const subjectDirty = emailSubject.trim() !== emailFetchedSubject.trim();
                                         if (bodyDirty || subjectDirty) {
+                                          if (emailPreviewDebounceRef.current) {
+                                            clearTimeout(emailPreviewDebounceRef.current);
+                                            emailPreviewDebounceRef.current = null;
+                                          }
                                           void refetchEmailHtml(emailSubject.trim(), emailBody.trim());
                                         }
                                       }
