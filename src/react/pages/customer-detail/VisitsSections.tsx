@@ -213,14 +213,18 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
   const [googleConnected, setGoogleConnected] = useState(true);
   const [bookOpen, setBookOpen] = useState(false);
 
-  const name    = contactDisplayName(contact);
-  const addr    = contactAddress(contact);
-  const email   = contact.properties.email || '';
+  const name   = contactDisplayName(contact);
+  const addr   = contactAddress(contact);
+  const email  = contact.properties.email       || '';
+  const phone  = contact.properties.phone        || '';
+  const mobile = contact.properties.mobilephone  || '';
 
   const ctx: CardActionContext = {
-    contactId:   contactId,
-    contactName: name,
-    contactEmail: email,
+    contactId:     contactId,
+    contactName:   name,
+    contactEmail:  email,
+    contactPhone:  phone  || undefined,
+    contactMobile: mobile || undefined,
   };
 
   const fetchEvents = useCallback(async () => {
