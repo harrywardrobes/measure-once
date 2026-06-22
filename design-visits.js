@@ -708,6 +708,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
           visit.location   ? `Location: ${visit.location}` : '',
           visit.handle_name          ? `Handle: ${visit.handle_name}` : '',
           visit.furniture_range_name ? `Furniture range: ${visit.furniture_range_name}` : '',
+          visit.visit_notes          ? `Visit notes: ${visit.visit_notes}` : '',
           '',
           'Rooms:',
           ...(visit.rooms || []).map(r => `  • ${r.room_name} (${r.door_style_name || '—'}): ${r.unit_count} unit(s)`),
@@ -726,6 +727,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
     ${visit.location   ? `<tr><td style="padding:3px 14px 3px 0;font-weight:600;">Location</td><td>${_esc(visit.location)}</td></tr>` : ''}
     ${visit.handle_name          ? `<tr><td style="padding:3px 14px 3px 0;font-weight:600;">Handle</td><td>${_esc(visit.handle_name)}</td></tr>` : ''}
     ${visit.furniture_range_name ? `<tr><td style="padding:3px 14px 3px 0;font-weight:600;">Furniture range</td><td>${_esc(visit.furniture_range_name)}</td></tr>` : ''}
+    ${visit.visit_notes          ? `<tr><td style="padding:3px 14px 3px 0;font-weight:600;vertical-align:top;">Visit notes</td><td style="white-space:pre-wrap;">${_esc(visit.visit_notes)}</td></tr>` : ''}
   </table>
   <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem;">
     <thead>
