@@ -72,4 +72,18 @@ describe('UnmatchedSubCard — corrected badges', () => {
     render(<UnmatchedSubCard sub={BASE_SUB} onLinked={noop} />);
     expect(screen.queryAllByText('corrected')).toHaveLength(0);
   });
+
+  it('shows two "corrected" chips when both corrected_email and corrected_mobile are set', () => {
+    render(
+      <UnmatchedSubCard
+        sub={{
+          ...BASE_SUB,
+          corrected_email: 'corrected@example.com',
+          corrected_mobile: '07700900000',
+        }}
+        onLinked={noop}
+      />,
+    );
+    expect(screen.getAllByText('corrected')).toHaveLength(2);
+  });
 });
