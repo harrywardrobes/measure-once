@@ -320,10 +320,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/catalog/suppliers',                    level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/admin/catalog/suppliers/0',                  level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/catalog/suppliers/0',                  level: 'admin' },
-  { method: 'GET',    path: '/api/admin/catalog/handles/0/suppliers',          level: 'admin' },
-  { method: 'PUT',    path: '/api/admin/catalog/handles/0/suppliers',          level: 'admin', body: {} },
-  { method: 'GET',    path: '/api/admin/catalog/doors/0/suppliers',            level: 'admin' },
-  { method: 'PUT',    path: '/api/admin/catalog/doors/0/suppliers',            level: 'admin', body: {} },
+
   { method: 'GET',    path: '/api/admin/catalog/handles',                      level: 'admin' },
   { method: 'POST',   path: '/api/admin/catalog/handles',                      level: 'admin', body: {} },
   { method: 'PATCH',  path: '/api/admin/catalog/handles/0',                    level: 'admin', body: {} },
