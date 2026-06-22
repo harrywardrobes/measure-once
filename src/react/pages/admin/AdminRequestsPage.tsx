@@ -98,8 +98,10 @@ const UNDO_GRACE_MS = 6000;
 function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
+  const emailCorrected = Boolean(sub.corrected_email);
   const displayEmail = sub.corrected_email || sub.contact_email || '—';
-  const displayPhone = formatPhone(sub.contact_phone) || '—';
+  const phoneCorrected = Boolean(sub.corrected_mobile);
+  const displayPhone = formatPhone(sub.corrected_mobile ?? sub.contact_phone) || '—';
   const photoCount = Array.isArray(sub.photoUrls) ? sub.photoUrls.length : 0;
 
   // Link-to-customer dialog state
@@ -246,8 +248,16 @@ function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id:
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>{displayName}</Typography>
               <Typography variant="caption" color="text.secondary">{displayEmail}</Typography>
+              {emailCorrected && (
+                <Chip label="corrected" size="small" color="secondary" variant="outlined"
+                  sx={{ height: 16, fontSize: '0.6rem', '& .MuiChip-label': { px: '5px' } }} />
+              )}
               {displayPhone !== '—' && (
                 <Typography variant="caption" color="text.secondary">· {displayPhone}</Typography>
+              )}
+              {displayPhone !== '—' && phoneCorrected && (
+                <Chip label="corrected" size="small" color="secondary" variant="outlined"
+                  sx={{ height: 16, fontSize: '0.6rem', '& .MuiChip-label': { px: '5px' } }} />
               )}
             </Stack>
             <Stack direction="row" spacing={1} sx={{ mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
