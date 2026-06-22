@@ -38,7 +38,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
-import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
+import { POST, PATCH, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
 import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
@@ -71,6 +71,15 @@ export interface ScheduleVisitModalProps {
   visitType?: string;
   /** Pre-fill the location field (e.g. customer address). */
   contactAddress?: string;
+  /** Pre-fill the start date/time (ISO string). Used when rescheduling an
+   *  existing event. Ignored when a draft already exists for the contact. */
+  initialStartDt?: string;
+  /** Pre-fill the event title. Ignored when a draft already exists. */
+  initialTitle?: string;
+  /** When supplied the modal updates this existing calendar event in place
+   *  via PATCH /api/events/:id (reschedule) instead of creating a new event
+   *  via POST /api/events. */
+  existingEventId?: string;
   open: boolean;
   onClose: () => void;
   /** Called after a successful event creation. When supplied the modal does NOT
@@ -118,6 +127,9 @@ export function ScheduleVisitModal({
   ctx,
   visitType: visitTypeProp,
   contactAddress,
+  initialStartDt,
+  initialTitle,
+  existingEventId,
   open,
   onClose,
   onSuccess,
@@ -146,13 +158,15 @@ export function ScheduleVisitModal({
   const restoredStart = draft.startDt ? dayjs(draft.startDt) : null;
   const restoredStartIsStale =
     restoredStart !== null && restoredStart.isValid() && !restoredStart.isAfter(dayjs());
+  // initialStartDt (from parent, e.g. rescheduling) is used only when no draft exists.
+  const seedStart = (!restoredStart && initialStartDt) ? dayjs(initialStartDt) : null;
   const initialStart =
     restoredStart && restoredStart.isValid() && restoredStart.isAfter(dayjs())
       ? restoredStart
-      : freshStart;
+      : (seedStart && seedStart.isValid() ? seedStart : freshStart);
   const initialStartRef = useRef(initialStart);
 
-  const [title, setTitle] = useState(draft.title ?? defaultTitle(initialVisitType));
+  const [title, setTitle] = useState(draft.title ?? initialTitle ?? defaultTitle(initialVisitType));
   const [startDt, setStartDt] = useState<Dayjs | null>(initialStart);
   const [duration, setDuration] = useState(draft.duration ?? String(defaultDuration));
   const [location, setLocation] = useState(draft.location ?? contactAddress ?? '');
@@ -254,15 +268,27 @@ export function ScheduleVisitModal({
     const end = new Date(start.getTime() + durationInt * 60000);
     setSubmitting(true);
     try {
-      const event: CalendarEvent = await POST('/api/events', {
-        summary: computedTitle.trim(),
-        description: notes.trim() || '',
-        location: location.trim() || '',
-        start: { dateTime: start.toISOString() },
-        end: { dateTime: end.toISOString() },
-        moContactId: ctx.contactId ? String(ctx.contactId) : undefined,
-        moVisitType: visitType,
-      });
+      let event: CalendarEvent;
+      if (existingEventId) {
+        // Reschedule: update the existing event in place via PATCH.
+        event = await PATCH<CalendarEvent>(`/api/events/${encodeURIComponent(existingEventId)}`, {
+          summary: computedTitle.trim(),
+          description: notes.trim() || '',
+          location: location.trim() || '',
+          start: { dateTime: start.toISOString() },
+          end: { dateTime: end.toISOString() },
+        });
+      } else {
+        event = await POST('/api/events', {
+          summary: computedTitle.trim(),
+          description: notes.trim() || '',
+          location: location.trim() || '',
+          start: { dateTime: start.toISOString() },
+          end: { dateTime: end.toISOString() },
+          moContactId: ctx.contactId ? String(ctx.contactId) : undefined,
+          moVisitType: visitType,
+        });
+      }
 
       if (sendEmail && ctx.contactEmail && emailSubject.trim() && emailBody.trim()) {
         try {
