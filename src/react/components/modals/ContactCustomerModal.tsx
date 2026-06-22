@@ -178,9 +178,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
   const [emailSubmitError,    setEmailSubmitError]    = useState('');
   const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
   const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
+  const [logConfirm,          setLogConfirm]          = useState('');
 
   const autoCloseTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailConfirmTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logConfirmTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (demo) {
@@ -218,6 +220,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
     return () => {
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
       if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
+      if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
@@ -365,7 +368,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
         const fullName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
         setLastAttemptBy(fullName || null);
       }
+      const label = method === 'call' ? 'Call logged' : 'WhatsApp logged';
       closeNotePanel();
+      setLogConfirm(label);
+      if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
+      logConfirmTimerRef.current = setTimeout(() => setLogConfirm(''), 3000);
       broadcastContactAttemptLogged(contactId);
     } catch (e) {
       const err = e as ApiError;
@@ -575,6 +582,19 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                     sx={{ mb: 1, py: 0.25 }}
                   >
                     Email sent: <strong>{emailSentConfirm}</strong>
+                  </Alert>
+                )}
+                {logConfirm && (
+                  <Alert
+                    severity="success"
+                    data-testid="log-confirm"
+                    onClose={() => {
+                      if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
+                      setLogConfirm('');
+                    }}
+                    sx={{ mb: 1, py: 0.25 }}
+                  >
+                    {logConfirm}
                   </Alert>
                 )}
                 <Stack spacing={1}>
