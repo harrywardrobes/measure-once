@@ -21,6 +21,7 @@ export interface Step1Data {
   handleId: string;
   furnitureRangeId: string;
   termsAccepted: boolean;
+  visitNotes?: string;
 }
 
 export interface CatalogueItem {
@@ -50,6 +51,14 @@ export interface DesignVisitStep1Props {
    * the Design Visit wizard is unaffected.
    */
   handleSuggestion?: CatalogueSuggestion | null;
+  /**
+   * ISO timestamp of the HubSpot note that was used to pre-fill visitNotes.
+   * When present (and the user has not yet edited the notes field) a
+   * "Pre-filled from note added …" attribution line is shown below the field.
+   */
+  visitNotesTimestamp?: string;
+  /** Called the first time the user edits the visit notes field. */
+  onVisitNotesEdited?: () => void;
 }
 
 /** Parse a stored visitDate string to a Dayjs value, or null if empty/invalid. */
@@ -77,11 +86,17 @@ export function DesignVisitStep1({
   addressIdPrefix = 'dv-step1-address',
   addressSurface = 'designVisit',
   handleSuggestion = null,
+  visitNotesTimestamp,
+  onVisitNotesEdited,
 }: DesignVisitStep1Props) {
   const [data, setData] = useState<Step1Data>(() => ({ ...initialData }));
+  const [visitNotesEdited, setVisitNotesEdited] = useState(false);
 
   const onDataChangeRef = useRef(onDataChange);
   useEffect(() => { onDataChangeRef.current = onDataChange; }, [onDataChange]);
+
+  const onVisitNotesEditedRef = useRef(onVisitNotesEdited);
+  useEffect(() => { onVisitNotesEditedRef.current = onVisitNotesEdited; }, [onVisitNotesEdited]);
 
   // Sync parent with the initialized state (which may include restored draft
   // values) so the wizard's source-of-truth is correct even if the user
@@ -91,6 +106,12 @@ export function DesignVisitStep1({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reset editedness when a new pre-fill timestamp arrives (e.g. wizard
+  // re-opened for a different contact without unmounting).
+  useEffect(() => {
+    setVisitNotesEdited(false);
+  }, [visitNotesTimestamp]);
+
   const update = useCallback((patch: Partial<Step1Data>) => {
     setData(prev => {
       const next = { ...prev, ...patch };
@@ -98,6 +119,19 @@ export function DesignVisitStep1({
       return next;
     });
   }, []);
+
+  const handleVisitNotesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!visitNotesEdited) {
+      setVisitNotesEdited(true);
+      onVisitNotesEditedRef.current?.();
+    }
+    update({ visitNotes: e.target.value });
+  }, [visitNotesEdited, update]);
+
+  const prefillAttribution =
+    !visitNotesEdited && (data.visitNotes ?? '') !== '' && visitNotesTimestamp
+      ? `Pre-filled from note added ${dayjs(visitNotesTimestamp).format('D MMM YYYY')}`
+      : undefined;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -142,6 +176,20 @@ export function DesignVisitStep1({
           slotProps={{ htmlInput: { maxLength: 200 } }}
           value={data.designerName}
           onChange={e => update({ designerName: e.target.value })}
+          sx={{ mb: 1.5 }}
+        />
+
+        <TextField
+          label="Visit notes (optional)"
+          size="small"
+          fullWidth
+          multiline
+          minRows={2}
+          maxRows={6}
+          slotProps={{ htmlInput: { maxLength: 4000 } }}
+          value={data.visitNotes ?? ''}
+          onChange={handleVisitNotesChange}
+          helperText={prefillAttribution}
           sx={{ mb: 1.5 }}
         />
 

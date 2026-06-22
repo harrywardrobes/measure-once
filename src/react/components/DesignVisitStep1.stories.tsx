@@ -109,3 +109,30 @@ export const NoTerms: Story = {
     onDataChange: () => {},
   },
 };
+
+export const PreFilledFromHubSpotNote: Story = {
+  name: 'Visit notes pre-filled from HubSpot note',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When the wizard opens fresh (no draft) and the contact has a recent ' +
+          'HubSpot note, the visit notes field is pre-populated and an attribution ' +
+          'line "Pre-filled from note added D MMM YYYY" is shown. The attribution ' +
+          'disappears once the user edits the field.',
+      },
+    },
+  },
+  args: {
+    initialData: {
+      ...DEFAULT_DATA,
+      visitNotes: 'Customer called to discuss kitchen layout options. Prefers handleless doors and wants to maximise storage in a small space.',
+    },
+    handles: HANDLES,
+    furnitureRanges: FURNITURE_RANGES,
+    termsText: TERMS_TEXT,
+    visitNotesTimestamp: '2026-06-20T14:30:00.000Z',
+    onDataChange: (data) => console.log('[story] onDataChange', data),
+    onVisitNotesEdited: () => console.log('[story] visit notes edited'),
+  },
+};

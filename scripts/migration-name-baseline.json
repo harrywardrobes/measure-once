@@ -56,5 +56,6 @@
   "1784000000000_add-contact-phone-to-admin-notification-email",
   "1784100000000_restore-legacy-catalog-stub-tables",
   "1784200000000_suppliers",
-  "1784200000001_supplier-fk"
+  "1784200000001_supplier-fk",
+  "1785500000000_design-visits-visit-notes"
 ]

@@ -6174,6 +6174,43 @@ app.post('/api/card-actions/phone-call-summary',
   }
 );
 
+/**
+ * Best-effort: fetch the body and timestamp of the most recent HubSpot note
+ * associated with a contact. Returns `{ visitNotes, visitNotesTimestamp }` —
+ * both empty strings on any error or when no notes exist.
+ */
+async function fetchLatestContactNote(contactId) {
+  let visitNotes = '';
+  let visitNotesTimestamp = '';
+  try {
+    const assocR = await hubspotRequestWithRetry('get',
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}/associations/notes`,
+      null,
+      { timeout: 8000 }
+    );
+    const noteIds = (assocR.data?.results || []).map(r => r.id).filter(Boolean);
+    if (noteIds.length) {
+      const noteR = await hubspotRequestWithRetry('post',
+        `${HS}/crm/v3/objects/notes/batch/read`,
+        { properties: ['hs_note_body', 'hs_timestamp'], inputs: noteIds.map(id => ({ id })) },
+        { timeout: 8000 }
+      );
+      const sorted = (noteR.data?.results || [])
+        .filter(n => n.properties?.hs_note_body)
+        .sort((a, b) => {
+          const ta = new Date(a.properties?.hs_timestamp || 0).getTime();
+          const tb = new Date(b.properties?.hs_timestamp || 0).getTime();
+          return tb - ta;
+        });
+      if (sorted.length) {
+        visitNotes = String(sorted[0].properties.hs_note_body || '');
+        visitNotesTimestamp = String(sorted[0].properties.hs_timestamp || '');
+      }
+    }
+  } catch { /* best-effort — empty on any HubSpot error */ }
+  return { visitNotes, visitNotesTimestamp };
+}
+
 // Execute: arrange_visit → fetch contact info, determine visit type from lead status.
 app.post('/api/card-actions/arrange-visit',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
@@ -6200,35 +6237,7 @@ app.post('/api/card-actions/arrange-visit',
       });
       const contactAddress = formatAddress(contactStructuredAddress);
 
-      // Best-effort: fetch the most recent note body from HubSpot to pre-fill the visit notes field.
-      let visitNotes = '';
-      let visitNotesTimestamp = '';
-      try {
-        const assocR = await hubspotRequestWithRetry('get',
-          `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}/associations/notes`,
-          null,
-          { timeout: 8000 }
-        );
-        const noteIds = (assocR.data?.results || []).map(r => r.id);
-        if (noteIds.length) {
-          const noteR = await hubspotRequestWithRetry('post',
-            `${HS}/crm/v3/objects/notes/batch/read`,
-            { properties: ['hs_note_body', 'hs_timestamp'], inputs: noteIds.map(id => ({ id })) },
-            { timeout: 8000 }
-          );
-          const sorted = (noteR.data?.results || [])
-            .filter(n => n.properties?.hs_note_body)
-            .sort((a, b) => {
-              const ta = new Date(a.properties?.hs_timestamp || 0).getTime();
-              const tb = new Date(b.properties?.hs_timestamp || 0).getTime();
-              return tb - ta;
-            });
-          if (sorted.length) {
-            visitNotes = String(sorted[0].properties.hs_note_body || '');
-            visitNotesTimestamp = String(sorted[0].properties.hs_timestamp || '');
-          }
-        }
-      } catch { /* best-effort — visitNotes stays empty on any HubSpot error */ }
+      const { visitNotes, visitNotesTimestamp } = await fetchLatestContactNote(contactId);
 
       res.json({ visitType, contactName, contactPhone, contactMobilePhone, contactEmail, contactAddress, contactStructuredAddress, leadStatus: props.hs_lead_status, visitNotes, visitNotesTimestamp });
     } catch (e) {
@@ -6240,6 +6249,30 @@ app.post('/api/card-actions/arrange-visit',
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/arrange-visit error:');
+      res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// Execute: start_design_visit → fetch the most recent HubSpot note to pre-fill
+// the wizard's visit notes field. Returns { visitNotes, visitNotesTimestamp }.
+app.post('/api/card-actions/start-design-visit',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
+  async (req, res) => {
+    const contactId = String(req.body?.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+    try {
+      const { visitNotes, visitNotesTimestamp } = await fetchLatestContactNote(contactId);
+      res.json({ visitNotes, visitNotesTimestamp });
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/start-design-visit error:');
       res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
     }
   }

@@ -68,6 +68,7 @@ export interface ExistingVisit {
   handle_id?: string | number | null;
   furniture_range_id?: string | number | null;
   notes?: string;
+  visit_notes?: string | null;
   terms_accepted?: boolean;
   rooms?: Array<{
     id?: number | string;
@@ -126,6 +127,7 @@ function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingVisit
     const m = String(ev.notes).match(/^Designer:\s*(.+)$/);
     if (m) s.designerName = m[1].trim();
   }
+  if (ev.visit_notes != null) s.visitNotes = String(ev.visit_notes);
   s.termsAccepted = !!ev.terms_accepted;
   return s;
 }
@@ -310,6 +312,16 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [submitError, setSubmitError] = useState('');
   const [uploading, setUploading]   = useState(false);
 
+  /**
+   * ISO timestamp of the HubSpot note used to pre-fill the visit notes field.
+   * Non-empty only on a fresh open (no draft restored, not edit mode) when the
+   * server found at least one note for the contact.  Never persisted to the
+   * draft — so if the user closes and reopens with a draft in place, the
+   * attribution line won't re-appear (correct behaviour: notes are their own
+   * now).
+   */
+  const [visitNotesTimestamp, setVisitNotesTimestamp] = useState('');
+
   const { showToast, showToastWithAction } = useToastContext();
 
   const intermediateStatusFiredRef = useRef(false);
@@ -352,6 +364,26 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   useEffect(() => {
     if (demo) { onCatalogueReady?.(); return; }
     let cancelled = false;
+    // Pre-fill visit notes from HubSpot on a fresh new-visit open only.
+    // Skip when editing an existing visit or when a draft was already restored
+    // (the draft preserves whatever the user typed previously).
+    const hasDraft = !editMode && orphanedDraftKeys.length === 0 && loadDraft(storageKey) !== null;
+    if (!editMode && !hasDraft && contactId) {
+      fetch('/api/card-actions/start-design-visit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d || cancelled) return;
+          if (d.visitNotes) {
+            setStep1(prev => ({ ...prev, visitNotes: d.visitNotes }));
+            setVisitNotesTimestamp(d.visitNotesTimestamp || '');
+          }
+        })
+        .catch(() => { /* best-effort — notes stay empty on any error */ });
+    }
     async function load() {
       try {
         const [h, fr, ds] = await Promise.all([
@@ -588,6 +620,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         durationMin:      parseInt(step1.duration, 10) || defaultDuration,
         structuredAddress: step1.structuredAddress,
         notes:            step1.designerName ? `Designer: ${step1.designerName}` : undefined,
+        visitNotes:       step1.visitNotes   || undefined,
         termsAccepted:    true,
         rooms: rooms.map(r => ({
           roomName:       r.roomName,
@@ -839,6 +872,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             termsText={termsText}
             termsVersionNumber={termsVersionNumber}
             onDataChange={setStep1}
+            visitNotesTimestamp={visitNotesTimestamp || undefined}
+            onVisitNotesEdited={() => setVisitNotesTimestamp('')}
           />
           {visitQuestions.length > 0 && (
             <Box sx={{ mt: '24px' }}>

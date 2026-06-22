@@ -1383,7 +1383,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
   const {
     contactId, contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
-    structuredAddress, location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, visitNotes, termsAccepted, rooms = [],
     handlerConfig, answers,
   } = req.body;
 
@@ -1413,8 +1413,8 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     const vr = await client.query(`
       INSERT INTO design_visits
         (contact_id, contact_name, contact_email, created_by, handle_id, furniture_range_id,
-         visit_date, duration_min, location, structured_address, notes, terms_accepted, terms_condition_version_id, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,'draft')
+         visit_date, duration_min, location, structured_address, notes, visit_notes, terms_accepted, terms_condition_version_id, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,'draft')
       RETURNING id`,
       [
         String(contactId),
@@ -1427,7 +1427,8 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
         createAddr.location,
         createAddr.address ? JSON.stringify(createAddr.address) : null,
-        notes    ? String(notes).slice(0, 4000)   : null,
+        notes      ? String(notes).slice(0, 4000)      : null,
+        visitNotes ? String(visitNotes).slice(0, 4000) : null,
         !!termsAccepted,
         termsVersionId,
       ]
@@ -1553,7 +1554,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
 router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { structuredAddress, location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
+  const { structuredAddress, location, notes, visitNotes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
   try {
     // Resolve the address only when the caller supplied one (structured or
     // legacy). When neither is present, leave both columns untouched via COALESCE.
@@ -1566,10 +1567,11 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
     // Members may only patch their own draft visits; managers and admins may patch any.
-    const ownerClause = isMemberOnly ? `AND created_by = $9` : '';
+    const ownerClause = isMemberOnly ? `AND created_by = $10` : '';
     const params = [
       patchAddr.location === undefined ? null : patchAddr.location,
-      notes        ? String(notes).slice(0, 4000)   : null,
+      notes        ? String(notes).slice(0, 4000)      : null,
+      visitNotes !== undefined ? (visitNotes ? String(visitNotes).slice(0, 4000) : '') : null,
       visitDate    ? new Date(visitDate).toISOString() : null,
       durationMin  ? parseInt(durationMin, 10) || null : null,
       handleId     ? parseInt(handleId, 10) || null : null,
@@ -1582,13 +1584,14 @@ router.patch('/api/design-visits/:id', isAuthenticated, requirePrivilege('member
       UPDATE design_visits SET
         location           = COALESCE($1, location),
         notes              = COALESCE($2, notes),
-        visit_date         = COALESCE($3, visit_date),
-        duration_min       = COALESCE($4, duration_min),
-        handle_id          = COALESCE($5, handle_id),
-        furniture_range_id = COALESCE($6, furniture_range_id),
-        structured_address = COALESCE($7::jsonb, structured_address),
+        visit_notes        = COALESCE($3, visit_notes),
+        visit_date         = COALESCE($4, visit_date),
+        duration_min       = COALESCE($5, duration_min),
+        handle_id          = COALESCE($6, handle_id),
+        furniture_range_id = COALESCE($7, furniture_range_id),
+        structured_address = COALESCE($8::jsonb, structured_address),
         updated_at         = NOW()
-      WHERE id = $8 AND status = 'draft' ${ownerClause}
+      WHERE id = $9 AND status = 'draft' ${ownerClause}
       RETURNING id`,
       params
     );
@@ -1616,7 +1619,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
   const {
     contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
-    structuredAddress, location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, visitNotes, termsAccepted, rooms = [],
     handlerConfig, answers,
   } = req.body;
 
@@ -1669,8 +1672,9 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         location                   = $7,
         structured_address         = $8::jsonb,
         notes                      = $9,
-        terms_accepted             = $10,
-        terms_condition_version_id = $11,
+        visit_notes                = $10,
+        terms_accepted             = $11,
+        terms_condition_version_id = $12,
         status                     = 'draft',
         superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
           THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
@@ -1678,7 +1682,7 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         signoff_token_hash         = NULL,
         signoff_expires_at         = NULL,
         updated_at                 = NOW()
-      WHERE id = $12`,
+      WHERE id = $13`,
       [
         contactName  ? String(contactName).slice(0, 300)  : null,
         contactEmail ? String(contactEmail).slice(0, 300) : null,
@@ -1688,7 +1692,8 @@ router.put('/api/design-visits/:id', isAuthenticated, requirePrivilege('member')
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
         putAddr.location,
         putAddr.address ? JSON.stringify(putAddr.address) : null,
-        notes    ? String(notes).slice(0, 4000)   : null,
+        notes      ? String(notes).slice(0, 4000)      : null,
+        visitNotes !== undefined ? (visitNotes ? String(visitNotes).slice(0, 4000) : '') : null,
         !!termsAccepted,
         termsVersionId,
         id,
