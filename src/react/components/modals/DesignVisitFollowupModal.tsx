@@ -366,6 +366,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       return (
         <Stack spacing={2}>
           {emailError && <Alert severity="error">{emailError}</Alert>}
+          <ModalContactHeader
+            name={contactInfo?.contactName}
+            email={contactInfo?.contactEmail}
+            phone={contactInfo?.phone || ctx.contactPhone}
+            mobile={contactInfo?.mobile || ctx.contactMobile}
+          />
           <Typography variant="body2" color="text.secondary">
             Sending to: <strong>{contactInfo?.contactEmail || '—'}</strong>
           </Typography>
@@ -475,7 +481,11 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
 
         <ScheduleVisitModal
           handler={handler}
-          ctx={ctx}
+          ctx={{
+            ...ctx,
+            contactPhone:  contactInfo?.phone  || ctx.contactPhone,
+            contactMobile: contactInfo?.mobile || ctx.contactMobile,
+          }}
           visitType="design"
           contactAddress={contactInfo?.contactAddress}
           open={scheduleOpen}
