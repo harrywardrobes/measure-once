@@ -13,6 +13,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Module mocks (must come before any imports that pull these in) ────────────
 
+vi.mock('../context/ConnectionToastContext', () => ({
+  openConnectModal: vi.fn(),
+}));
+
 vi.mock('./offlineDb', () => ({
   outboxAdd: vi.fn(),
   outboxGetAll: vi.fn(),
@@ -55,6 +59,7 @@ import {
   LEAD_STATUS_WINDOW_EVENT,
   type LeadStatusMessage,
 } from '../utils/broadcastLeadStatus';
+import { openConnectModal } from '../context/ConnectionToastContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -100,6 +105,7 @@ const mockGetEntries = getEntries as ReturnType<typeof vi.fn>;
 const mockUpdateEntry = updateEntry as ReturnType<typeof vi.fn>;
 const mockRemoveEntry = removeEntry as ReturnType<typeof vi.fn>;
 const mockMarkSynced  = markSynced  as ReturnType<typeof vi.fn>;
+const mockOpenConnectModal = openConnectModal as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -305,6 +311,31 @@ describe('replayCalendarEvent — Reconnect toast behaviour', () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
+  it('onClick from the non-2xx Reconnect action calls openConnectModal with "google" as first argument', async () => {
+    mockGetEntries.mockResolvedValue([
+      makeEntry({ calendarMeta: BASE_CALENDAR_META }),
+    ]);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve({ error: 'unauthorized' }),
+      });
+
+    await flushQueue();
+
+    const [_msg, action] = showToastWithAction.mock.calls[0] as [string, { label: string; onClick: () => void }];
+    action.onClick();
+    expect(mockOpenConnectModal).toHaveBeenCalledOnce();
+    expect(mockOpenConnectModal.mock.calls[0][0]).toBe('google');
+  });
+
   it('calls showToastWithAction with Reconnect label and severity warning when fetch throws (network error)', async () => {
     mockGetEntries.mockResolvedValue([
       makeEntry({ calendarMeta: BASE_CALENDAR_META }),
@@ -325,5 +356,26 @@ describe('replayCalendarEvent — Reconnect toast behaviour', () => {
     expect(action.label).toBe('Reconnect');
     expect(options.severity).toBe('warning');
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('onClick from the network-error Reconnect action calls openConnectModal with "google" as first argument', async () => {
+    mockGetEntries.mockResolvedValue([
+      makeEntry({ calendarMeta: BASE_CALENDAR_META }),
+    ]);
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      })
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await flushQueue();
+
+    const [_msg, action] = showToastWithAction.mock.calls[0] as [string, { label: string; onClick: () => void }];
+    action.onClick();
+    expect(mockOpenConnectModal).toHaveBeenCalledOnce();
+    expect(mockOpenConnectModal.mock.calls[0][0]).toBe('google');
   });
 });
