@@ -257,18 +257,24 @@ async function loginViaDb(email) {
 //     injection instead.
 //   • Otherwise use the normal HTTP /api/login path (captcha is a no-op when
 //     the key is absent).
-async function login(email, password) {
+async function login(email, password, { retries = 3, retryDelayMs = 200 } = {}) {
   const captchaActive = process.env.PRIVTEST_USE_TURNSTILE_SECRET_KEY === '1'
     && !!process.env.TURNSTILE_SECRET_KEY;
   if (captchaActive) {
     return loginViaDb(email);
   }
-  const client = makeClient(null);
-  const r = await client.post('/api/login', { email, password });
-  if (r.status !== 200) {
-    throw new Error(`login failed for ${email}: ${r.status} ${r.text}`);
+  let lastErr;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const client = makeClient(null);
+    const r = await client.post('/api/login', { email, password });
+    if (r.status === 200) return client;
+    lastErr = new Error(`login failed for ${email}: ${r.status} ${r.text}`);
+    if (attempt < retries) {
+      console.warn(`  login attempt ${attempt}/${retries} failed (${r.status}) — retrying in ${retryDelayMs}ms`);
+      await new Promise(res => setTimeout(res, retryDelayMs));
+    }
   }
-  return client;
+  throw lastErr;
 }
 
 module.exports = {
