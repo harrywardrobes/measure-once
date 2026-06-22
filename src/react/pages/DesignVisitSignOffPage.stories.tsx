@@ -184,6 +184,33 @@ export const MainWithPhotos: Story = {
   },
 };
 
+export const MainWithVisitNotes: Story = {
+  name: 'Main — with visit notes',
+  render: () => (
+    <DesignVisitSignOffPage
+      embedded={{
+        state: 'main',
+        data: {
+          ...SAMPLE_DATA,
+          visitNotes:
+            'Customer prefers handleless units in the utility room to match the kitchen.\n' +
+            'Discussed adding a pull-out larder where the boiler cupboard currently sits — needs builder sign-off first.\n' +
+            'Follow up on worktop overhang preference before ordering.',
+        },
+      }}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'When the designer fills in visit notes during the wizard they appear in a dedicated ' +
+          '"Visit Notes" section card between Visit Details and the Room Breakdown.',
+      },
+    },
+  },
+};
+
 export const MainSuperseded: Story = {
   name: 'Superseded — changes in progress',
   render: () => (

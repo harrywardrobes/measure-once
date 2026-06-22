@@ -86,6 +86,7 @@ export interface DesignVisit {
   deposit_invoice_doc_num?: string | null;
   rooms?: DesignVisitRoom[];
   notes?: string | null;
+  visit_notes?: string | null;
   revision_note?: string | null;
   handle_name?: string | null;
   furniture_range_name?: string | null;

@@ -419,6 +419,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         visit.furniture_range_name ? `Furniture range: ${visit.furniture_range_name}` : null,
         visit.visit_date          ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : null,
         roomLines ? `Rooms:\n${roomLines}` : null,
+        visit.visit_notes ? `Visit notes:\n${visit.visit_notes}` : null,
       ].filter(Boolean).join('\n');
       await hubspotRequestWithRetry('post',
         `${hubspotApiBase()}/crm/v3/objects/notes`,
@@ -622,6 +623,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
           roomRowsText,
           '',
           `Estimate total: £${penceToGbp(grandTotal)}`,
+          visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
           '',
           'See Your Design & Sign Off:',
           signOffUrl,
@@ -653,6 +655,10 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
       </tr>
     </tfoot>
   </table>
+  ${visit.visit_notes ? `<div style="margin:20px 0;padding:14px 16px;background:#f9fafb;border-left:3px solid #e5e7eb;border-radius:4px;">
+    <p style="margin:0 0 6px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Visit Notes</p>
+    <p style="margin:0;white-space:pre-line;font-size:.9rem;">${_esc(visit.visit_notes)}</p>
+  </div>` : ''}
   <div style="text-align:center;margin:28px 0;">
     <a href="${signOffUrl}"
        style="display:inline-block;background:#8B2BFF;color:#fff;padding:14px 32px;
@@ -1979,7 +1985,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
   try {
     const vr = await pool.query(`
       SELECT dv.id, dv.contact_name, dv.contact_email, dv.status,
-             dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes,
+             dv.signoff_expires_at, dv.visit_date, dv.location, dv.notes, dv.visit_notes,
              dv.terms_accepted, dvh.name AS handle_name, dvfr.name AS furniture_range_name
       FROM design_visits dv
       LEFT JOIN catalog_handles               dvh  ON dvh.id  = dv.handle_id
@@ -2086,6 +2092,7 @@ router.get('/api/design-visits/sign-off/:token', async (req, res) => {
       visitDate:          visit.visit_date,
       location:           visit.location,
       notes:              visit.notes,
+      visitNotes:         visit.visit_notes || null,
       handleName:         visit.handle_name,
       furnitureRange:     visit.furniture_range_name,
       expiresAt:          visit.signoff_expires_at,

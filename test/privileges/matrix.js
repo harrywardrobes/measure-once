@@ -132,6 +132,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/card-actions/phone-call-summary', level: 'member', body: { contactId: '0', summary: 'noop' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit',                      level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/arrange-visit/outcome',              level: 'member', body: { contactId: '0', outcome: 'booked', visitType: 'design' }, needsHubspot: true },
+  { method: 'POST',   path: '/api/card-actions/start-design-visit',               level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/design-visit-followup',              level: 'member', body: { contactId: '0' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/design-visit-followup/outcome',      level: 'member', body: { contactId: '0', outcome: 'confirmed' }, needsHubspot: true },
   { method: 'POST',   path: '/api/card-actions/open-deal/deposit-invoice-email-preview', level: 'member', body: { firstName: 'Test', depositPercent: '10' } },

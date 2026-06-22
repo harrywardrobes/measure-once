@@ -783,6 +783,7 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
         <p style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>No rooms recorded.</p>
       )}
       {visit.notes         && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Notes:</strong> {visit.notes}</div>}
+      {visit.visit_notes   && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Visit notes:</strong> {visit.visit_notes}</div>}
       {visit.revision_note && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--error)' }}><strong>Revision note:</strong> {visit.revision_note}</div>}
     </>
   );

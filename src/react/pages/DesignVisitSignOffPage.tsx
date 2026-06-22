@@ -42,6 +42,7 @@ interface SignOffData {
   location?: string;
   handleName?: string;
   furnitureRange?: string;
+  visitNotes?: string | null;
   rooms?: Room[];
   terms?: string;
   termsVersionNumber?: number;
@@ -470,6 +471,18 @@ export function DesignVisitSignOffPage(
                 </Box>
               )}
             </SectionCard>
+
+            {/* Visit Notes */}
+            {data.visitNotes && (
+              <SectionCard title="Visit Notes">
+                <Typography
+                  variant="body2"
+                  sx={{ color: BRAND_COLORS.ink1, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}
+                >
+                  {data.visitNotes}
+                </Typography>
+              </SectionCard>
+            )}
 
             {/* Room Breakdown */}
             <SectionCard title="Room Breakdown">
