@@ -319,6 +319,8 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [termsVersionNumber, setTermsVersionNumber] = useState<number | null>(null);
   const [catalogueLoading, setCatalogueLoading] = useState(!demo);
 
+  const [visitNotesTimestamp, setVisitNotesTimestamp] = useState('');
+
   const [s1Error, setS1Error]       = useState('');
   const [showAnswerValidation, setShowAnswerValidation] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -370,6 +372,25 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   useEffect(() => {
     if (demo) { onCatalogueReady?.(); return; }
     let cancelled = false;
+    // Pre-fill visit notes from HubSpot on a fresh new-visit open only.
+    // Skip when editing an existing visit or when a draft was already restored
+    // (the draft preserves whatever the user typed previously).
+    if (!editMode && !hadDraftAtMount.current && contactId) {
+      fetch('/api/card-actions/start-design-visit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d || cancelled) return;
+          if (d.visitNotes) {
+            setStep1(prev => ({ ...prev, visitNotes: d.visitNotes }));
+            setVisitNotesTimestamp(d.visitNotesTimestamp || '');
+          }
+        })
+        .catch(() => { /* best-effort — notes stay empty on any error */ });
+    }
     async function load() {
       try {
         const [h, fr, ds, pr] = await Promise.all([
@@ -1087,6 +1108,8 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             addressIdPrefix="sv-step1-address"
             addressSurface="genericVisit"
             handleSuggestion={handleSuggestion}
+            visitNotesTimestamp={visitNotesTimestamp || undefined}
+            onVisitNotesEdited={() => setVisitNotesTimestamp('')}
           />
           {visitQuestions.length > 0 && (
             <Box sx={{ mt: '24px' }}>
