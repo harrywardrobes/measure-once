@@ -750,6 +750,27 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, onC
                                         }}
                                       />
                                     </Box>
+                                    {/* Send / Cancel inline below the iframe so staff don't need to scroll */}
+                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                      <Button
+                                        data-testid="email-preview-send-btn-inline"
+                                        size="small"
+                                        variant="contained"
+                                        disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
+                                        onClick={() => void handleSendEmail()}
+                                        startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
+                                      >
+                                        Send Email
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={closeEmailFlow}
+                                        disabled={emailFlow === 'sending'}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </Box>
                                   </Box>
                                 )}
 
