@@ -312,6 +312,7 @@ async function submitSurveyVisitAndSync(visitId, handlerConfig, submitterUser) {
         visit.furniture_range_name ? `Furniture range: ${visit.furniture_range_name}` : null,
         visit.visit_date          ? `Visit date: ${new Date(visit.visit_date).toLocaleString()}` : null,
         roomLines ? `Rooms:\n${roomLines}` : null,
+        visit.visit_notes ? `Visit notes:\n${visit.visit_notes}` : null,
       ].filter(Boolean).join('\n');
       await hubspotRequestWithRetry('post',
         `${hubspotApiBase()}/crm/v3/objects/notes`,
@@ -501,6 +502,7 @@ async function submitSurveyVisitAndSync(visitId, handlerConfig, submitterUser) {
           roomRowsText,
           '',
           `Estimate total: £${penceToGbp(grandTotal)}`,
+          visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
           '',
           'See Your Survey & Sign Off:',
           signOffUrl,
@@ -532,6 +534,10 @@ async function submitSurveyVisitAndSync(visitId, handlerConfig, submitterUser) {
       </tr>
     </tfoot>
   </table>
+  ${visit.visit_notes ? `<div style="margin:20px 0;padding:14px 16px;background:#f9fafb;border-left:3px solid #e5e7eb;border-radius:4px;">
+    <p style="margin:0 0 6px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Visit Notes</p>
+    <p style="margin:0;white-space:pre-line;font-size:.9rem;">${_esc(visit.visit_notes)}</p>
+  </div>` : ''}
   <div style="text-align:center;margin:28px 0;">
     <a href="${signOffUrl}"
        style="display:inline-block;background:#8B2BFF;color:#fff;padding:14px 32px;
@@ -842,7 +848,7 @@ router.post('/api/survey-visits', isAuthenticated, requirePrivilege('member'), a
   const {
     contactId, contactName, contactEmail,
     designVisitId, handleId, furnitureRangeId, visitDate, durationMin,
-    structuredAddress, location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, visitNotes, termsAccepted, rooms = [],
     handlerConfig, answers,
   } = req.body;
 
@@ -868,8 +874,8 @@ router.post('/api/survey-visits', isAuthenticated, requirePrivilege('member'), a
     const vr = await client.query(`
       INSERT INTO survey_visits
         (contact_id, contact_name, contact_email, created_by, design_visit_id, handle_id, furniture_range_id,
-         visit_date, duration_min, location, structured_address, notes, terms_accepted, terms_condition_version_id, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,'draft')
+         visit_date, duration_min, location, structured_address, notes, visit_notes, terms_accepted, terms_condition_version_id, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,'draft')
       RETURNING id`,
       [
         String(contactId),
@@ -883,7 +889,8 @@ router.post('/api/survey-visits', isAuthenticated, requirePrivilege('member'), a
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
         createAddr.location,
         createAddr.address ? JSON.stringify(createAddr.address) : null,
-        notes    ? String(notes).slice(0, 4000)   : null,
+        notes      ? String(notes).slice(0, 4000)      : null,
+        visitNotes ? String(visitNotes).slice(0, 4000) : null,
         !!termsAccepted,
         termsVersionId,
       ]
@@ -993,7 +1000,7 @@ router.post('/api/survey-visits', isAuthenticated, requirePrivilege('member'), a
 router.patch('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid id' });
-  const { structuredAddress, location, notes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
+  const { structuredAddress, location, notes, visitNotes: patchVisitNotes, visitDate, durationMin, handleId, furnitureRangeId } = req.body;
   try {
     let patchAddr = { address: undefined, location: undefined };
     if (structuredAddress !== undefined || location !== undefined) {
@@ -1003,10 +1010,11 @@ router.patch('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member
     const callerPrivilege = getRequestPrivilegeLevel(req);
     const isMemberOnly = callerPrivilege === 'member';
     const callerId = req.user?.claims?.sub;
-    const ownerClause = isMemberOnly ? `AND created_by = $9` : '';
+    const ownerClause = isMemberOnly ? `AND created_by = $10` : '';
     const params = [
       patchAddr.location === undefined ? null : patchAddr.location,
-      notes        ? String(notes).slice(0, 4000)   : null,
+      notes           ? String(notes).slice(0, 4000)           : null,
+      patchVisitNotes ? String(patchVisitNotes).slice(0, 4000) : null,
       visitDate    ? new Date(visitDate).toISOString() : null,
       durationMin  ? parseInt(durationMin, 10) || null : null,
       handleId     ? parseInt(handleId, 10) || null : null,
@@ -1019,13 +1027,14 @@ router.patch('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member
       UPDATE survey_visits SET
         location           = COALESCE($1, location),
         notes              = COALESCE($2, notes),
-        visit_date         = COALESCE($3, visit_date),
-        duration_min       = COALESCE($4, duration_min),
-        handle_id          = COALESCE($5, handle_id),
-        furniture_range_id = COALESCE($6, furniture_range_id),
-        structured_address = COALESCE($7::jsonb, structured_address),
+        visit_notes        = COALESCE($3, visit_notes),
+        visit_date         = COALESCE($4, visit_date),
+        duration_min       = COALESCE($5, duration_min),
+        handle_id          = COALESCE($6, handle_id),
+        furniture_range_id = COALESCE($7, furniture_range_id),
+        structured_address = COALESCE($8::jsonb, structured_address),
         updated_at         = NOW()
-      WHERE id = $8 AND status = 'draft' ${ownerClause}
+      WHERE id = $9 AND status = 'draft' ${ownerClause}
       RETURNING id`,
       params
     );
@@ -1050,7 +1059,7 @@ router.put('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member')
   const {
     contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
-    structuredAddress, location, notes, termsAccepted, rooms = [],
+    structuredAddress, location, notes, visitNotes: putVisitNotes, termsAccepted, rooms = [],
     handlerConfig, answers,
   } = req.body;
 
@@ -1101,8 +1110,9 @@ router.put('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member')
         location                   = $7,
         structured_address         = $8::jsonb,
         notes                      = $9,
-        terms_accepted             = $10,
-        terms_condition_version_id = $11,
+        visit_notes                = $10,
+        terms_accepted             = $11,
+        terms_condition_version_id = $12,
         status                     = 'draft',
         superseded_signoff_token_hashes = CASE WHEN signoff_token_hash IS NOT NULL
           THEN COALESCE(superseded_signoff_token_hashes, ARRAY[]::TEXT[]) || ARRAY[signoff_token_hash]
@@ -1110,7 +1120,7 @@ router.put('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member')
         signoff_token_hash         = NULL,
         signoff_expires_at         = NULL,
         updated_at                 = NOW()
-      WHERE id = $12`,
+      WHERE id = $13`,
       [
         contactName  ? String(contactName).slice(0, 300)  : null,
         contactEmail ? String(contactEmail).slice(0, 300) : null,
@@ -1120,7 +1130,8 @@ router.put('/api/survey-visits/:id', isAuthenticated, requirePrivilege('member')
         durationMin ? parseInt(durationMin, 10) || 90 : 90,
         putAddr.location,
         putAddr.address ? JSON.stringify(putAddr.address) : null,
-        notes    ? String(notes).slice(0, 4000)   : null,
+        notes         ? String(notes).slice(0, 4000)         : null,
+        putVisitNotes ? String(putVisitNotes).slice(0, 4000) : null,
         !!termsAccepted,
         termsVersionId,
         id,
@@ -1547,6 +1558,7 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
             roomRowsText,
             '',
             `Estimate total: £${penceToGbp(grandTotal)}`,
+            visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
             '',
             'See Your Survey & Sign Off:',
             signOffUrl,
@@ -1577,6 +1589,10 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
       </tr>
     </tfoot>
   </table>
+  ${visit.visit_notes ? `<div style="margin:20px 0;padding:14px 16px;background:#f9fafb;border-left:3px solid #e5e7eb;border-radius:4px;">
+    <p style="margin:0 0 6px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Visit Notes</p>
+    <p style="margin:0;white-space:pre-line;font-size:.9rem;">${_esc(visit.visit_notes)}</p>
+  </div>` : ''}
   <div style="text-align:center;margin:28px 0;">
     <a href="${signOffUrl}"
        style="display:inline-block;background:#8B2BFF;color:#fff;padding:14px 32px;
@@ -1619,7 +1635,7 @@ router.get('/api/survey-visits/sign-off/:token', async (req, res) => {
   try {
     const vr = await pool.query(`
       SELECT sv.id, sv.contact_name, sv.contact_email, sv.status,
-             sv.signoff_expires_at, sv.visit_date, sv.location, sv.notes,
+             sv.signoff_expires_at, sv.visit_date, sv.location, sv.notes, sv.visit_notes,
              sv.terms_accepted, svh.name AS handle_name, svfr.name AS furniture_range_name
       FROM survey_visits sv
       LEFT JOIN catalog_handles               svh  ON svh.id  = sv.handle_id
@@ -1707,6 +1723,7 @@ router.get('/api/survey-visits/sign-off/:token', async (req, res) => {
       visitDate:          visit.visit_date,
       location:           visit.location,
       notes:              visit.notes,
+      visitNotes:         visit.visit_notes || null,
       handleName:         visit.handle_name,
       furnitureRange:     visit.furniture_range_name,
       expiresAt:          visit.signoff_expires_at,

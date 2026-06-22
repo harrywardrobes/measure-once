@@ -43,6 +43,7 @@ export interface SurveyVisitServer {
   furniture_range_id: number | string | null;
   location: string | null;
   notes: string | null;
+  visit_notes?: string | null;
   terms_accepted: boolean;
   duration_min: number | null;
   revision_note?: string | null;
@@ -442,6 +443,11 @@ function ServerSurveyVisitCard({ visit, pendingEdit, pendingRefund, isAdmin, res
             <span style={sxMetaSep}>·</span>
             <span style={sxDate}>Estimate: £{totalGbp}</span>
           </div>
+          {visit.visit_notes && (
+            <div style={{ fontSize: '0.78rem', color: 'var(--ink-3)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+              <strong>Visit notes:</strong> {visit.visit_notes}
+            </div>
+          )}
           {visit.revision_note && (
             <div style={{ fontSize: '0.78rem', color: 'var(--error)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
               <strong>Revision note:</strong> {visit.revision_note}
