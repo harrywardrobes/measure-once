@@ -51,13 +51,6 @@ vi.mock('../utils/broadcastLeadStatus', () => ({
   broadcastLeadStatusChange: vi.fn(),
 }));
 
-// nowDateTime is called during step1 initialisation. Return an empty string so
-// that visitDate starts blank — otherwise the default date would independently
-// satisfy the hasUnsavedDraftData guard and obscure which field is responsible.
-vi.mock('../utils/dateDefaults', () => ({
-  nowDateTime: vi.fn(() => ''),
-}));
-
 // ── Component under test ─────────────────────────────────────────────────────
 
 import { SurveyVisitWizard } from './SurveyVisitWizard';

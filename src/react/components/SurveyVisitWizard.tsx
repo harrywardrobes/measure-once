@@ -573,7 +573,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   function hasUnsavedDraftData(): boolean {
     const step1Touched =
       step1.termsAccepted ||
-      step1.visitDate.trim() !== '' ||
+      step1.visitDate !== initialStep1Ref.current.visitDate ||
       step1.designerName.trim() !== '' ||
       !isAddressEmpty(step1.structuredAddress) ||
       step1.handleId !== '' ||
