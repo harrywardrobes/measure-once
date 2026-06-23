@@ -113,7 +113,7 @@ export const DemoEmailPreviewOpen: Story = {
 };
 
 const DEMO_EMAIL_PREVIEW = {
-  subject: 'Getting in touch',
+  subject: 'Fitted Wardrobes',
   text: "Hi Jane,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team",
   html: '<p>Hi Jane,</p><p>I hope you\'re doing well. I wanted to reach out and follow up on your enquiry with us.</p><p>Please don\'t hesitate to get in touch if you have any questions — we\'re happy to help.</p><p>Kind regards,<br>The team</p>',
 };
@@ -304,7 +304,7 @@ export const OneMethodLogged: Story = {
               method: 'email',
               attemptedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
               attemptedBy: 'Alex Carter',
-              note: 'Follow-up email sent: "Getting in touch"',
+              note: 'Follow-up email sent: "Fitted Wardrobes"',
             },
           ],
         })}

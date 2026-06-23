@@ -308,7 +308,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     }
 
     if (demo) {
-      setEmailSubject('Getting in touch');
+      setEmailSubject('Fitted Wardrobes');
       setEmailBody(
         "Hi there,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team",
       );

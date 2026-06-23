@@ -441,7 +441,7 @@ const TEMPLATE_DEFS = {
     variableDescriptions: {
       firstName: "Customer's first name. Empty if no first name is recorded.",
     },
-    subject: 'Getting in touch',
+    subject: 'Fitted Wardrobes',
     body_text: [
       'Hi {{firstName}},',
       '',

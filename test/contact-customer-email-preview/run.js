@@ -90,7 +90,7 @@ async function seedTemplate(pool) {
            footer_text = EXCLUDED.footer_text`,
     [
       'contact_customer_followup',
-      'Getting in touch',
+      'Fitted Wardrobes',
       'Hi {{firstName}},\n\nJust following up on your enquiry.',
       '',
       TEST_FOOTER,
