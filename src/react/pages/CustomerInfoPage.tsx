@@ -384,6 +384,7 @@ export function CustomerInfoPage() {
               key: k,
               previewUrl: '',
               name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+              isPdf: k.endsWith('.pdf'),
             })));
           }
           setIsGeneric(true);
@@ -449,6 +450,7 @@ export function CustomerInfoPage() {
               key: k,
               previewUrl: '',
               name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+              isPdf: k.endsWith('.pdf'),
             })));
           }
           setPageState('main');
@@ -469,6 +471,7 @@ export function CustomerInfoPage() {
             key: k,
             previewUrl: '',
             name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+            isPdf: k.endsWith('.pdf'),
           })));
         }
         setPageState('main');
