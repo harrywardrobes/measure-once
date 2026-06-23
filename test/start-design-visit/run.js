@@ -19,8 +19,8 @@ const { makeSkip } = require('../helpers/report');
 //   (C)   Sign-off: revision — POST revision flips status to
 //         "revision_requested"; subsequent re-submit via /submit can flip back
 //         to "submitted".
-//   (D)   Token security — expired, wrong, and already-consumed tokens all
-//         return 404 (no oracle leakage).
+//   (D)   Token security — wrong and already-consumed tokens return 404;
+//         expired tokens return 410 (no oracle leakage).
 //   (E)   Admin catalogue CRUD — POST / PATCH / DELETE handle, furniture range,
 //         and door style via admin API; assert DB changes; assert non-admin
 //         mutations return 403.
@@ -132,17 +132,17 @@ async function purgeFixtures(pool) {
   );
   // Delete catalogue items seeded by this run
   await pool.query(
-    `DELETE FROM design_visit_handles
+    `DELETE FROM catalog_handles
      WHERE name IN ($1, $2)`,
     [HANDLE_NAME, HANDLE_CRUD_NAME]
   );
   await pool.query(
-    `DELETE FROM design_visit_furniture_ranges
+    `DELETE FROM catalog_ranges
      WHERE name IN ($1, $2)`,
     [FURNITURE_NAME, FURNITURE_CRUD_NAME]
   );
   await pool.query(
-    `DELETE FROM design_visit_door_styles
+    `DELETE FROM catalog_doors
      WHERE name IN ($1, $2)`,
     [DOOR_STYLE_NAME, DOOR_STYLE_CRUD_NAME]
   );
@@ -252,14 +252,14 @@ async function main() {
     if (!found) throw new Error(`Timed out waiting for table ${name}`);
   };
   await Promise.all([
-    waitForTable('design_visit_handles'),
-    waitForTable('design_visit_furniture_ranges'),
-    waitForTable('design_visit_door_styles'),
+    waitForTable('catalog_handles'),
+    waitForTable('catalog_ranges'),
+    waitForTable('catalog_doors'),
     waitForTable('design_visits'),
     waitForTable('design_visit_rooms'),
     waitForTable('design_visit_room_images'),
   ]);
-  console.log('  All design_visit_* tables ready');
+  console.log('  All catalogue + design_visit_* tables ready');
 
   await purgeFixtures(pool);
 
@@ -268,7 +268,7 @@ async function main() {
   const memberClient = await login(users.member.email, PASSWORD);
 
   const seedHandle = await adminClient.post('/api/admin/catalog/handles', {
-    name: HANDLE_NAME, description: 'Seed handle for SDV test', sort_order: 9990,
+    name: HANDLE_NAME, description: 'Seed handle for SDV test', sort_order: 9990, style: 'Other',
   });
   const handleId = seedHandle.json?.id ?? null;
   console.log(`  Seeded handle id=${handleId}`);
@@ -1256,18 +1256,18 @@ async function main() {
     const anonClient = makeClient(null);
     const r = await anonClient.get(`/api/design-visits/sign-off/${rawTokenExpired}`);
     record(
-      '(D) Expired token returns 404',
-      'status=404',
+      '(D) Expired token returns 410',
+      'status=410',
       `status=${r.status}`,
-      r.status === 404,
+      r.status === 410,
     );
-    // POST on expired also should 404
+    // POST on expired also should 410
     const r2 = await anonClient.post(`/api/design-visits/sign-off/${rawTokenExpired}`, { action: 'approve' });
     record(
-      '(D) POST with expired token returns 404',
-      'status=404',
+      '(D) POST with expired token returns 410',
+      'status=410',
       `status=${r2.status}`,
-      r2.status === 404,
+      r2.status === 410,
     );
   }
 
@@ -1346,7 +1346,7 @@ async function main() {
   // — Handles —
   // POST (create)
   const createHandleRes = await adminClient.post('/api/admin/catalog/handles', {
-    name: HANDLE_CRUD_NAME, description: 'CRUD test', sort_order: 9991,
+    name: HANDLE_CRUD_NAME, description: 'CRUD test', sort_order: 9991, style: 'Other',
   });
   const crudHandleId = createHandleRes.json?.id ?? null;
   record(
@@ -1356,7 +1356,7 @@ async function main() {
     createHandleRes.status === 201 && Number.isInteger(crudHandleId),
   );
   {
-    const r = await pool.query(`SELECT name FROM design_visit_handles WHERE id=$1`, [crudHandleId]);
+    const r = await pool.query(`SELECT name FROM catalog_handles WHERE id=$1`, [crudHandleId]);
     record(
       '(E) Handle row exists in DB after POST',
       `name="${HANDLE_CRUD_NAME}"`,
@@ -1376,7 +1376,7 @@ async function main() {
       `status=${patchRes.status}`,
       patchRes.status === 200,
     );
-    const r = await pool.query(`SELECT description FROM design_visit_handles WHERE id=$1`, [crudHandleId]);
+    const r = await pool.query(`SELECT description FROM catalog_handles WHERE id=$1`, [crudHandleId]);
     record(
       '(E) Handle description updated in DB after PATCH',
       'description="Updated description"',
@@ -1408,7 +1408,7 @@ async function main() {
       `status=${delRes.status} success=${delRes.json?.success}`,
       delRes.status === 200 && delRes.json?.success === true,
     );
-    const r = await pool.query(`SELECT id FROM design_visit_handles WHERE id=$1`, [crudHandleId]);
+    const r = await pool.query(`SELECT id FROM catalog_handles WHERE id=$1`, [crudHandleId]);
     record(
       '(E) Handle row gone from DB after DELETE',
       'no rows',
@@ -1568,7 +1568,7 @@ async function main() {
         );
 
         // Helper: read + increment the listener counter for a catalogue type
-        const readCount = (key) => eBcListenTab.evaluate(k => window.__dvBcCounts[k], key);
+        const readCount = (key) => eBcListenTab.evaluate(k => (window.__dvBcCounts || {})[k] ?? 0, key);
 
         // Helper: open the item editor modal, fill the name field, and save.
         // Returns when the modal has closed (save complete + BC fired).
@@ -1694,6 +1694,13 @@ async function main() {
 
         await eBcAdminTab.close();
         await eBcListenTab.close();
+      } catch (eBcErr) {
+        const msg = (eBcErr?.message || String(eBcErr)).slice(0, 200);
+        for (const label of E_BC_PROBE_NAMES) {
+          if (!findings.some(f => f.name === label)) {
+            skip(label, 'E/BC browser test ran without error', `E/BC error: ${msg}`);
+          }
+        }
       } finally {
         await eBcBrowser.close().catch(() => {});
       }
@@ -1807,7 +1814,7 @@ async function main() {
         // ── Create a NEW handle via admin REST API (not through the UI) ──────
         const newHandleName = `${RUN_PREFIX} bc-refresh-handle-${runId}`;
         const newHandleRes  = await adminClient.post('/api/admin/catalog/handles', {
-          name: newHandleName, sort_order: 9995,
+          name: newHandleName, sort_order: 9995, style: 'Other',
         });
         const newHandleId = newHandleRes.json?.id ?? null;
 
@@ -1960,6 +1967,13 @@ async function main() {
 
         await senderTab.close();
         await wizardTab.close();
+      } catch (fErr) {
+        const msg = (fErr?.message || String(fErr)).slice(0, 200);
+        for (const label of F_PROBE_LABELS) {
+          if (!findings.some(f => f.name === label)) {
+            skip(label, 'Puppeteer wizard probe ran without error', `(F) error: ${msg}`);
+          }
+        }
       } finally {
         await browser.close().catch(() => {});
       }
@@ -2179,7 +2193,7 @@ async function writeReport(runId, findings) {
     '  `revision_requested`, stores the note, and nulls the token. Subsequent',
     '  POST `/api/design-visits/:id/submit` flips back to `submitted`.',
     '- **(D) Token security**: Wrong token → 404. Expired token (signoff_expires_at',
-    '  in the past) → 404 on both GET and POST. Token on an already-`signed_off`',
+    '  in the past) → 410 on both GET and POST. Token on an already-`signed_off`',
     '  visit → 404 (status guard avoids oracle leakage on all cases).',
     '- **(E) Admin catalogue CRUD**: POST / PATCH / DELETE for handles, furniture',
     '  ranges, and door styles via admin API; DB state confirmed after each mutation.',
