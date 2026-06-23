@@ -304,4 +304,18 @@ describe('DesignVisitFollowupModal — modal title', () => {
 
     expect(screen.getByRole('heading', { name: 'Design visit follow-up' })).toBeTruthy();
   });
+
+  it('shows "Resend design visit invite" when the resend step is active', async () => {
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const user = userEvent.setup();
+
+    renderModal();
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-resend'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+    });
+  });
 });
