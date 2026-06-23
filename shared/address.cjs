@@ -125,7 +125,7 @@ function countryNameToCode(name) {
 }
 
 function emptyAddress(countryCode = HOME_COUNTRY_CODE) {
-  return { addressLines: [''], countryCode };
+  return { addressLines: ['', ''], countryCode };
 }
 
 function isAddressEmpty(addr) {

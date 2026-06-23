@@ -1,21 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import FormHelperText from '@mui/material/FormHelperText';
-import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
+import Link from '@mui/material/Link';
 import TextField from '@mui/material/TextField';
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import {
   HOME_COUNTRY_CODE,
-  MAX_ADDRESS_LINES,
   adaptNewPlaceComponents,
   emptyAddress,
   googleComponentsToAddress,
+  isAddressEmpty,
   type NewPlaceAddressComponent,
   type StructuredAddress,
 } from '../../../shared/address';
@@ -88,19 +85,31 @@ export interface AddressInputProps {
    * shown above the fields. Omit to disable autocomplete entirely.
    */
   surface?: GoogleMapsSurface;
+  /**
+   * When true, the component starts in a postcode-first search mode: only a
+   * postcode / address search field is shown, and the full address fields
+   * appear after the user selects a suggestion or clicks "Enter address
+   * manually". Requires `surface` to be set; degrades silently to the normal
+   * manual-entry layout when autocomplete is unavailable.
+   */
+  postcodeFirst?: boolean;
 }
 
 /**
- * Structured address entry: 1–5 dynamic street lines, locality, administrative
- * area and postal code. Country is always GB (United Kingdom). Field labels
- * use UK terminology (Town / City, County, Postcode). Fully controlled — the
- * parent owns the value.
+ * Structured address entry with always-visible Address line 1 and Address
+ * line 2 fields, plus locality, administrative area and postal code.
+ * Country is always GB (United Kingdom). Field labels use UK terminology
+ * (Town / City, County, Postcode). Fully controlled — the parent owns the value.
  *
  * When a `surface` is supplied and Google Places autocomplete is enabled at
  * runtime, a search box is rendered above the manual fields. Selecting a
  * prediction fills every field. The component degrades silently to manual
  * entry when the feature is off, the API key is missing, or the Places library
  * fails to load.
+ *
+ * When `postcodeFirst` is also set, the component starts in a postcode-search
+ * mode: only the search input is shown. The full address fields appear after
+ * the customer selects a suggestion or clicks "Enter address manually".
  */
 export function AddressInput({
   value,
@@ -109,10 +118,14 @@ export function AddressInput({
   disabled = false,
   idPrefix = 'address',
   surface,
+  postcodeFirst = false,
 }: AddressInputProps) {
-  // Normalise the incoming value so there is always at least one line to edit.
+  // Normalise the incoming value so there are always exactly two address lines.
+  const rawLines = value?.addressLines ?? [];
+  const line0 = rawLines[0] ?? '';
+  const line1 = rawLines[1] ?? '';
   const addr: StructuredAddress = {
-    addressLines: value?.addressLines?.length ? value.addressLines : [''],
+    addressLines: [line0, line1],
     locality: value?.locality ?? '',
     administrativeArea: value?.administrativeArea ?? '',
     postalCode: value?.postalCode ?? '',
@@ -136,17 +149,11 @@ export function AddressInput({
     [addr.addressLines, emit],
   );
 
-  const addLine = useCallback(() => {
-    if (addr.addressLines.length >= MAX_ADDRESS_LINES) return;
-    emit({ addressLines: [...addr.addressLines, ''] });
-  }, [addr.addressLines, emit]);
-
-  const removeLine = useCallback(
-    (index: number) => {
-      const lines = addr.addressLines.filter((_, i) => i !== index);
-      emit({ addressLines: lines.length ? lines : [''] });
-    },
-    [addr.addressLines, emit],
+  // ── postcode-first mode: manual-entry toggle ───────────────────────────────
+  // Start in manual mode when the address already has content (e.g. restored
+  // from a draft), so the user immediately sees their saved values.
+  const [manualMode, setManualMode] = useState<boolean>(() =>
+    postcodeFirst ? !isAddressEmpty(value) : true,
   );
 
   // ── Google Places autocomplete (optional) ──────────────────────────────────
@@ -279,16 +286,22 @@ export function AddressInput({
           onChange(next);
           setInputText('');
           setOptions([]);
+          // In postcode-first mode, reveal the address fields after selection
+          // so the customer can review and edit what was filled in.
+          if (postcodeFirst) setManualMode(true);
         })
         .catch((err: unknown) => {
           const code = String((err as { message?: string })?.message ?? err ?? 'ERROR');
           if (surface) reportGoogleMapsUsage('details', surface, false, code);
         });
     },
-    [onChange, surface],
+    [onChange, surface, postcodeFirst],
   );
 
+  // showAutocomplete: the Places library loaded successfully for this surface.
   const showAutocomplete = !!surface && acReady && !acFailed;
+
+  // showNotice: the feature is enabled but the library failed — show a notice.
   const showNotice =
     !!surface &&
     !!cfg &&
@@ -296,9 +309,91 @@ export function AddressInput({
     acFailed &&
     cfg.fallback.mode === 'notice';
 
+  // In postcode-first mode: show the search field when autocomplete is
+  // available and the user has not yet entered manual mode.
+  const showPostcodeSearch = postcodeFirst && showAutocomplete && !manualMode;
+
+  // Show the full address fields when:
+  //   • not in postcode-first mode (staff surfaces always show fields), or
+  //   • postcode-first but user has clicked "Enter manually" / selected, or
+  //   • postcode-first but autocomplete is unavailable (graceful degradation).
+  const showFields = !postcodeFirst || manualMode || !showAutocomplete;
+
+  const minChars = cfg?.autocomplete.minChars ?? 3;
+
   return (
     <Box>
-      {showAutocomplete && (
+      {/* ── Postcode-first: search input ──────────────────────────────────── */}
+      {showPostcodeSearch && (
+        <Box>
+          <Autocomplete<PlacePrediction, false, false, true>
+            freeSolo
+            disabled={disabled}
+            filterOptions={(x) => x}
+            options={options}
+            loading={loadingPredictions}
+            inputValue={inputText}
+            getOptionLabel={(o) => (typeof o === 'string' ? o : o.description)}
+            onInputChange={(_e, v, reason) => {
+              if (reason === 'input') handleInputChange(v);
+              else if (reason === 'clear') {
+                setInputText('');
+                setOptions([]);
+              }
+            }}
+            onChange={(_e, v) => {
+              if (v && typeof v !== 'string') handleSelect(v);
+            }}
+            noOptionsText={
+              inputText.trim().length < minChars ? 'Keep typing…' : 'No matches'
+            }
+            renderInput={(params) => {
+              const inputProps =
+                (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
+              return (
+                <TextField
+                  {...params}
+                  label="Enter your postcode or address"
+                  placeholder="e.g. SW1A 1AA"
+                  size="small"
+                  fullWidth
+                  sx={{ mb: 1 }}
+                  slotProps={{
+                    input: {
+                      ...inputProps,
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" color="action" />
+                        </InputAdornment>
+                      ),
+                      endAdornment: (
+                        <>
+                          {loadingPredictions ? (
+                            <CircularProgress color="inherit" size={16} />
+                          ) : null}
+                          {inputProps.endAdornment as React.ReactNode}
+                        </>
+                      ),
+                    },
+                  }}
+                />
+              );
+            }}
+          />
+          <Link
+            component="button"
+            type="button"
+            variant="caption"
+            onClick={() => setManualMode(true)}
+            sx={{ display: 'block', mb: 1.5, cursor: 'pointer', textAlign: 'left' }}
+          >
+            Enter address manually
+          </Link>
+        </Box>
+      )}
+
+      {/* ── Standard search box (staff surfaces, non-postcodeFirst) ───────── */}
+      {showAutocomplete && !postcodeFirst && (
         <Autocomplete<PlacePrediction, false, false, true>
           freeSolo
           disabled={disabled}
@@ -318,9 +413,7 @@ export function AddressInput({
             if (v && typeof v !== 'string') handleSelect(v);
           }}
           noOptionsText={
-            inputText.trim().length < (cfg?.autocomplete.minChars ?? 3)
-              ? 'Keep typing…'
-              : 'No matches'
+            inputText.trim().length < minChars ? 'Keep typing…' : 'No matches'
           }
           renderInput={(params) => {
             const inputProps =
@@ -343,7 +436,9 @@ export function AddressInput({
                     ),
                     endAdornment: (
                       <>
-                        {loadingPredictions ? <CircularProgress color="inherit" size={16} /> : null}
+                        {loadingPredictions ? (
+                          <CircularProgress color="inherit" size={16} />
+                        ) : null}
                         {inputProps.endAdornment as React.ReactNode}
                       </>
                     ),
@@ -361,78 +456,73 @@ export function AddressInput({
         </FormHelperText>
       )}
 
-      {addr.addressLines.map((line, i) => (
-        <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: '6px', mb: 1 }}>
+      {/* ── Manual address fields ──────────────────────────────────────────── */}
+      {showFields && (
+        <>
           <TextField
-            label={i === 0 ? 'Address line 1' : `Address line ${i + 1}`}
+            id={`${idPrefix}-line0`}
+            label="Address line 1"
             size="small"
             fullWidth
-            required={required && i === 0}
+            required={required}
             disabled={disabled}
-            placeholder={i === 0 ? 'e.g. 12 Baker Street' : undefined}
+            placeholder="e.g. 12 Baker Street"
             slotProps={{ htmlInput: { maxLength: 200 } }}
-            value={line}
-            onChange={e => updateLine(i, e.target.value)}
+            value={addr.addressLines[0]}
+            onChange={(e) => updateLine(0, e.target.value)}
+            sx={{ mb: 1 }}
           />
-          {addr.addressLines.length > 1 && (
-            <IconButton
-              aria-label={`Remove address line ${i + 1}`}
-              size="small"
-              disabled={disabled}
-              onClick={() => removeLine(i)}
-              sx={{ mt: '4px' }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
-      ))}
 
-      {addr.addressLines.length < MAX_ADDRESS_LINES && (
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={addLine}
-          disabled={disabled}
-          sx={{ mb: 1.5, textTransform: 'none' }}
-        >
-          Add address line
-        </Button>
+          <TextField
+            id={`${idPrefix}-line1`}
+            label="Address line 2"
+            size="small"
+            fullWidth
+            disabled={disabled}
+            slotProps={{ htmlInput: { maxLength: 200 } }}
+            value={addr.addressLines[1]}
+            onChange={(e) => updateLine(1, e.target.value)}
+            sx={{ mb: 1 }}
+          />
+
+          <TextField
+            id={`${idPrefix}-locality`}
+            label={labels.locality}
+            size="small"
+            fullWidth
+            required={required}
+            disabled={disabled}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            value={addr.locality}
+            onChange={(e) => emit({ locality: e.target.value })}
+            sx={{ mb: 1 }}
+          />
+
+          <TextField
+            id={`${idPrefix}-admin`}
+            label={labels.administrativeArea}
+            size="small"
+            fullWidth
+            disabled={disabled}
+            slotProps={{ htmlInput: { maxLength: 120 } }}
+            value={addr.administrativeArea}
+            onChange={(e) => emit({ administrativeArea: e.target.value })}
+            sx={{ mb: 1 }}
+          />
+
+          <TextField
+            id={`${idPrefix}-postal`}
+            label={labels.postalCode}
+            size="small"
+            fullWidth
+            required={required}
+            disabled={disabled}
+            slotProps={{ htmlInput: { maxLength: 32 } }}
+            value={addr.postalCode}
+            onChange={(e) => emit({ postalCode: e.target.value })}
+          />
+        </>
       )}
-
-      <TextField
-        label={labels.locality}
-        size="small"
-        fullWidth
-        required={required}
-        disabled={disabled}
-        slotProps={{ htmlInput: { maxLength: 120 } }}
-        value={addr.locality}
-        onChange={e => emit({ locality: e.target.value })}
-        sx={{ mb: 1 }}
-      />
-
-      <TextField
-        label={labels.administrativeArea}
-        size="small"
-        fullWidth
-        disabled={disabled}
-        slotProps={{ htmlInput: { maxLength: 120 } }}
-        value={addr.administrativeArea}
-        onChange={e => emit({ administrativeArea: e.target.value })}
-        sx={{ mb: 1 }}
-      />
-
-      <TextField
-        label={labels.postalCode}
-        size="small"
-        fullWidth
-        required={required}
-        disabled={disabled}
-        slotProps={{ htmlInput: { maxLength: 32 } }}
-        value={addr.postalCode}
-        onChange={e => emit({ postalCode: e.target.value })}
-      />
     </Box>
   );
 }

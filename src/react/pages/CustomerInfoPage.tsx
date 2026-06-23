@@ -959,6 +959,7 @@ export function CustomerInfoPage() {
                   disabled={submitting}
                   idPrefix="ci-address"
                   surface="customerInfo"
+                  postcodeFirst
                 />
               </Stack>
             </SectionCard>

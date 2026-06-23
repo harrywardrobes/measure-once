@@ -12,17 +12,34 @@ const meta: Meta<typeof AddressInput> = {
   argTypes: {
     required: { control: 'boolean' },
     disabled: { control: 'boolean' },
+    postcodeFirst: { control: 'boolean' },
   },
 };
 export default meta;
 
 type Story = StoryObj<typeof AddressInput>;
 
-function Harness({ initial, required, disabled }: { initial: StructuredAddress; required?: boolean; disabled?: boolean }) {
+function Harness({
+  initial,
+  required,
+  disabled,
+  postcodeFirst,
+}: {
+  initial: StructuredAddress;
+  required?: boolean;
+  disabled?: boolean;
+  postcodeFirst?: boolean;
+}) {
   const [value, setValue] = useState<StructuredAddress>(initial);
   return (
     <Box sx={{ maxWidth: 520 }}>
-      <AddressInput value={value} onChange={setValue} required={required} disabled={disabled} />
+      <AddressInput
+        value={value}
+        onChange={setValue}
+        required={required}
+        disabled={disabled}
+        postcodeFirst={postcodeFirst}
+      />
       <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'var(--neutral-600)' }}>
         Formatted: {formatAddress(value) || '—'}
       </Typography>
@@ -59,7 +76,7 @@ export const UsPrefilled: Story = {
   render: () => (
     <Harness
       initial={{
-        addressLines: ['1600 Pennsylvania Avenue NW'],
+        addressLines: ['1600 Pennsylvania Avenue NW', ''],
         locality: 'Washington',
         administrativeArea: 'DC',
         postalCode: '20500',
@@ -73,13 +90,34 @@ export const Disabled: Story = {
   render: () => (
     <Harness
       initial={{
-        addressLines: ['12 Baker Street'],
+        addressLines: ['12 Baker Street', ''],
         locality: 'London',
         administrativeArea: '',
         postalCode: 'NW1 6XE',
         countryCode: 'GB',
       }}
       disabled
+    />
+  ),
+};
+
+/** Customer Info postcode-first flow (autocomplete disabled in Storybook — shows manual fallback). */
+export const PostcodeFirst: Story = {
+  render: () => <Harness initial={emptyAddress()} postcodeFirst />,
+};
+
+/** Postcode-first with a pre-filled address (starts in manual/edit mode). */
+export const PostcodeFirstPrefilled: Story = {
+  render: () => (
+    <Harness
+      initial={{
+        addressLines: ['12 Baker Street', ''],
+        locality: 'London',
+        administrativeArea: 'Greater London',
+        postalCode: 'NW1 6XE',
+        countryCode: 'GB',
+      }}
+      postcodeFirst
     />
   ),
 };

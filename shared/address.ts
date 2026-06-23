@@ -148,7 +148,7 @@ export function countryNameToCode(name?: string | null): string | undefined {
 
 /** Build a normalised, empty-safe StructuredAddress with sensible defaults. */
 export function emptyAddress(countryCode: string = HOME_COUNTRY_CODE): StructuredAddress {
-  return { addressLines: [''], countryCode };
+  return { addressLines: ['', ''], countryCode };
 }
 
 /** True when the address has no meaningful content (used to skip rendering). */
@@ -281,11 +281,17 @@ export function adaptNewPlaceComponents(
 
 /**
  * Convert Google Places `address_components` into a StructuredAddress.
- * Street number + route form the primary line; premise/subpremise become
- * preceding lines. Locality prefers `postal_town` (the GB town field) over
- * `locality`. Administrative area prefers county (level 2) for GB and the
- * top-level region (level 1) elsewhere. Falls back to GB when no country is
- * present so the UI always has a country selected.
+ *
+ * Always produces exactly 1 or 2 address lines:
+ *   - Line 1: unit/apartment/building identifier (subpremise or premise) if
+ *     present, otherwise the street (street_number + route).
+ *   - Line 2: the street (street_number + route) when line 1 carries a
+ *     unit/building identifier; empty otherwise.
+ *
+ * Locality prefers `postal_town` (the GB town field) over `locality`.
+ * Administrative area prefers county (level 2) for GB and the top-level
+ * region (level 1) elsewhere. Falls back to GB when no country is present
+ * so the UI always has a country selected.
  */
 export function googleComponentsToAddress(
   components?: GoogleAddressComponent[] | null,
@@ -297,12 +303,17 @@ export function googleComponentsToAddress(
   const route = get('route')?.long_name || '';
   const premise = get('premise')?.long_name || '';
   const subpremise = get('subpremise')?.long_name || '';
-  const line1 = [streetNumber, route].filter(Boolean).join(' ').trim();
+  const street = [streetNumber, route].filter(Boolean).join(' ').trim();
 
-  const lines: string[] = [];
-  if (subpremise) lines.push(subpremise);
-  if (premise && premise !== line1) lines.push(premise);
-  if (line1) lines.push(line1);
+  // Build unit/building identifier: prefer subpremise, fall back to premise
+  // (only when it differs from the street string, e.g. a named building).
+  const unitId = subpremise || (premise && premise !== street ? premise : '');
+
+  const addressLines: string[] = unitId
+    ? [unitId, street].filter(Boolean)
+    : street
+      ? [street]
+      : [];
 
   const locality =
     get('postal_town')?.long_name ||
@@ -318,7 +329,7 @@ export function googleComponentsToAddress(
     countryCode === 'GB' ? adminLevel2 || adminLevel1 : adminLevel1 || adminLevel2;
 
   return {
-    addressLines: lines.length ? lines : [''],
+    addressLines: addressLines.length ? addressLines : [''],
     locality: locality || undefined,
     administrativeArea: administrativeArea || undefined,
     postalCode: postalCode || undefined,
