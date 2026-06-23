@@ -55,6 +55,18 @@ require('dotenv').config();
 
 const { pollFn } = require('../helpers/poll');
 
+const PROBE_LABELS = [
+  '(API) pre-checks — catalogue endpoints respond for admin; public sign-off route reachable (404 not 401)',
+  '(G) privilege gates — unauthenticated POST → 401/403; non-admin DELETE → 403',
+  '(A) wizard submit — DB rows in survey_visits, survey_visit_rooms, survey_visit_room_images',
+  '(A2) continuation — source_design_visit_room_id persisted from linked design-visit room',
+  '(B) sign-off approve — GET summary without session; POST flips to signed_off; replay → 404',
+  '(C) sign-off revision + re-submit — POST flips to revision_requested; re-submit → submitted',
+  '(D) token security — wrong/expired/already-signed-off tokens → 404/410',
+  '(N) note pre-fill — POST /api/card-actions/start-design-visit returns visitNotes + visitNotesTimestamp',
+  '(R) refund — POST /api/survey-visits/refund records refund_requested row',
+];
+
 // ── Fixture name constants ────────────────────────────────────────────────────
 const RUN_PREFIX = 'privtest-ssv';
 

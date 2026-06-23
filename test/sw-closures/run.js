@@ -30,6 +30,17 @@ const { spawnSync } = require('child_process');
 const CHECKER = path.resolve(__dirname, '../../scripts/check-sw-urlpattern-closures.mjs');
 const OUT     = path.resolve(__dirname, '../../test-results/sw-closures-fixtures.md');
 
+const PROBE_LABELS = [
+  '(A) parenthesised arrow closing over an outer var → exit 1, flags var',
+  '(B) single-param unparenthesised arrow closure → exit 1, flags var',
+  '(C) function expression closing over an outer var → exit 1, flags var',
+  '(D) regex literal urlPattern → exit 0 (safe)',
+  '(E) new Function(…)() urlPattern → exit 0 (safe)',
+  '(F) suppression comment on a violating line → exit 0',
+  '(G) parenthesised arrow with only local bindings → exit 0, clean',
+  '(H) single-param arrow with only local bindings → exit 0, clean',
+];
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 let passed = 0;
