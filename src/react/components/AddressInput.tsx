@@ -460,18 +460,21 @@ export function AddressInput({
       {showFields && (
         <>
           {postcodeFirst && manualMode && showAutocomplete && (
-            <Link
-              component="button"
-              type="button"
-              variant="caption"
-              onClick={() => {
-                onChange(emptyAddress());
-                setManualMode(false);
-              }}
-              sx={{ display: 'block', mb: 1.5, cursor: 'pointer', textAlign: 'left' }}
-            >
-              Search again
-            </Link>
+            <FormHelperText sx={{ mb: 1.5 }}>
+              Wrong address? Edit the fields below or{' '}
+              <Link
+                component="button"
+                type="button"
+                onClick={() => {
+                  onChange(emptyAddress());
+                  setManualMode(false);
+                }}
+                sx={{ cursor: 'pointer', verticalAlign: 'baseline', fontSize: 'inherit' }}
+              >
+                search again
+              </Link>
+              .
+            </FormHelperText>
           )}
           <TextField
             id={`${idPrefix}-line0`}
