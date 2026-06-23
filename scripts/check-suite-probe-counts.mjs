@@ -88,6 +88,22 @@
  * See docs/TEST_SUITES.md § "Adding a new test suite" for the full checklist
  * and edge-case guidance (PROBE_LABELS_DOC_EXTRAS, NO_PROBE_LABELS_ALLOWLIST,
  * NO_PROBE_SUITES_ALLOWLIST).
+ *
+ * ---------------------------------------------------------------------------
+ * Known limitation — temporal gap before enrollment
+ * ---------------------------------------------------------------------------
+ * The forward check can only catch drift while this script is active in
+ * test:ci.  Probes added to PROBE_LABELS before test:suite-probe-counts was
+ * enrolled in CI can slip through without a failure.
+ *
+ * The test:connect-services-modal suite is the canonical example: CSM-F1/F2/F3
+ * probes were added to PROBE_LABELS (with matching test code in the run.js
+ * body) without updating the docs/TEST_SUITES.md row, and because this check
+ * was not yet enrolled in test:ci at that point, no CI failure was raised.
+ * The omission was discovered when CSM-G was developed and the docs were
+ * consulted; the fix was bundled into the CSM-G task.  No bug exists in this
+ * script — the forward check is correct and would have caught the drift
+ * immediately had it been active.
  * ---------------------------------------------------------------------------
  */
 

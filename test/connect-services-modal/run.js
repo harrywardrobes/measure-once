@@ -45,6 +45,12 @@ const PROBE_LABELS = [
 //           admin sees "Connect" button when QB status is error.
 //   [CSM-E] Clicking a navbar service-status icon opens the dialog with the
 //           corresponding row highlighted.
+//   [CSM-F] Auto-open once-per-session contract: modal auto-opens on a service
+//           error transition (F1), session flag suppresses a second auto-open
+//           (F2), and manual openConnectModal() still works after the flag (F3).
+//   [CSM-G] Google reconnect path: simulates a calendar-sync failure via
+//           notifyApiError, asserts the modal auto-opens (G1) and the Google
+//           Calendar action cell shows a "Connect" button (G2).
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated> npm run test:connect-services-modal

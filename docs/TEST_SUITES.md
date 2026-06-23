@@ -154,6 +154,21 @@ migrated can be added to the `NO_PROBE_LABELS_ALLOWLIST` in
 `scripts/check-suite-probe-counts.mjs` with a short reason comment.  New
 suites should not use the allowlist.
 
+**Known limitation — temporal gap before enrollment.**  The forward check
+can only catch drift while `test:suite-probe-counts` is active in `test:ci`.
+Probes that were added to `PROBE_LABELS` _before_ this check was enrolled in
+CI can slip through without triggering a failure.  The `test:connect-services-modal`
+suite is the canonical example: CSM-F1/F2/F3 probes were added to
+`PROBE_LABELS` (with matching test code in the `run.js` body) without updating
+the docs row, and because `test:suite-probe-counts` was not yet enrolled in
+`test:ci` at that point, no CI failure was raised.  The omission was only
+discovered when CSM-G was being developed and the docs were consulted; the
+fix was bundled into the CSM-G task.  No code gap exists in the check
+itself — the forward check is correct and would have caught the CSM-F drift
+immediately had it been active.  The lesson: always update `PROBE_LABELS`
+_and_ the docs row together, and do not treat a quiet CI pass as evidence
+that docs are up-to-date for probe groups that predate the check.
+
 ## Suite reference
 
 | Script | Covers |
