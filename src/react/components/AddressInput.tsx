@@ -400,27 +400,28 @@ export function AddressInput({
         </Button>
       )}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', mb: 1 }}>
-        <TextField
-          label={labels.locality}
-          size="small"
-          fullWidth
-          required={required}
-          disabled={disabled}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
-          value={addr.locality}
-          onChange={e => emit({ locality: e.target.value })}
-        />
-        <TextField
-          label={labels.administrativeArea}
-          size="small"
-          fullWidth
-          disabled={disabled}
-          slotProps={{ htmlInput: { maxLength: 120 } }}
-          value={addr.administrativeArea}
-          onChange={e => emit({ administrativeArea: e.target.value })}
-        />
-      </Box>
+      <TextField
+        label={labels.locality}
+        size="small"
+        fullWidth
+        required={required}
+        disabled={disabled}
+        slotProps={{ htmlInput: { maxLength: 120 } }}
+        value={addr.locality}
+        onChange={e => emit({ locality: e.target.value })}
+        sx={{ mb: 1 }}
+      />
+
+      <TextField
+        label={labels.administrativeArea}
+        size="small"
+        fullWidth
+        disabled={disabled}
+        slotProps={{ htmlInput: { maxLength: 120 } }}
+        value={addr.administrativeArea}
+        onChange={e => emit({ administrativeArea: e.target.value })}
+        sx={{ mb: 1 }}
+      />
 
       <TextField
         label={labels.postalCode}
