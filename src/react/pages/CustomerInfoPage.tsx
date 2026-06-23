@@ -671,7 +671,7 @@ export function CustomerInfoPage() {
         color: BRAND_COLORS.ink1,
       }}
     >
-      <Box sx={{ maxWidth: 640, mx: 'auto', px: 2.5, pt: 4, pb: 8 }}>
+      <Box sx={{ maxWidth: 640, mx: 'auto', px: 2.5 }}>
         <Logo />
 
         {/* Loading */}
