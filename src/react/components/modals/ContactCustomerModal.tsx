@@ -89,6 +89,15 @@ interface ContactData {
 /** Body text colour for the email preview iframe (kept out of React style props). */
 const IFRAME_BODY_COLOR = '#111';
 
+const CALL_PRESETS = [
+  'No answer, voicemail left',
+  'No answer, no voicemail',
+  'Spoke briefly, will call back',
+  'Line busy',
+  'No longer interested',
+  'Wrong number',
+];
+
 /**
  * Convert plain-text email body to HTML the way the server does:
  * each non-blank line becomes a <p> element, HTML-escaped.
@@ -966,6 +975,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                               borderColor: 'primary.main',
                             }}
                           >
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
+                              {CALL_PRESETS.map((preset) => (
+                                <Chip
+                                  key={preset}
+                                  label={preset}
+                                  size="small"
+                                  variant="outlined"
+                                  disabled={submitting}
+                                  onClick={() => setNoteText(preset)}
+                                />
+                              ))}
+                            </Box>
                             <TextField
                               data-testid="contact-attempt-note-field"
                               size="small"
