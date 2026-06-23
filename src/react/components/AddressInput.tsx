@@ -459,6 +459,20 @@ export function AddressInput({
       {/* ── Manual address fields ──────────────────────────────────────────── */}
       {showFields && (
         <>
+          {postcodeFirst && manualMode && showAutocomplete && (
+            <Link
+              component="button"
+              type="button"
+              variant="caption"
+              onClick={() => {
+                onChange(emptyAddress());
+                setManualMode(false);
+              }}
+              sx={{ display: 'block', mb: 1.5, cursor: 'pointer', textAlign: 'left' }}
+            >
+              Search again
+            </Link>
+          )}
           <TextField
             id={`${idPrefix}-line0`}
             label="Address line 1"
