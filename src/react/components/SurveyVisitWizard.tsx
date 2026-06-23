@@ -577,7 +577,8 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       step1.designerName.trim() !== '' ||
       !isAddressEmpty(step1.structuredAddress) ||
       step1.handleId !== '' ||
-      step1.furnitureRangeId !== '';
+      step1.furnitureRangeId !== '' ||
+      (step1.visitNotes?.trim() ?? '') !== '';
     const roomsTouched = rooms.some(
       r =>
         r.roomName.trim() !== '' ||
