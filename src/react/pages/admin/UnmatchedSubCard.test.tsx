@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
@@ -85,5 +85,36 @@ describe('UnmatchedSubCard — corrected badges', () => {
       />,
     );
     expect(screen.getAllByText('corrected')).toHaveLength(2);
+  });
+});
+
+describe('UnmatchedSubCard — room count in expanded panel', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const noop = () => {};
+
+  function expand() {
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+  }
+
+  it('renders the Rooms label and count when room_count is a non-zero string', () => {
+    render(<UnmatchedSubCard sub={{ ...BASE_SUB, room_count: '4' }} onLinked={noop} />);
+    expand();
+    expect(screen.getByText('Rooms')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+  });
+
+  it('does not render the Rooms section when room_count is null', () => {
+    render(<UnmatchedSubCard sub={{ ...BASE_SUB, room_count: null }} onLinked={noop} />);
+    expand();
+    expect(screen.queryByText('Rooms')).not.toBeInTheDocument();
+  });
+
+  it('does not render the Rooms section when room_count is the string "0"', () => {
+    render(<UnmatchedSubCard sub={{ ...BASE_SUB, room_count: '0' }} onLinked={noop} />);
+    expand();
+    expect(screen.queryByText('Rooms')).not.toBeInTheDocument();
   });
 });

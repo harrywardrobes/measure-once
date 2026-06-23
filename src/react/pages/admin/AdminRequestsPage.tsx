@@ -319,7 +319,7 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
                   <Typography variant="body2" color="text.secondary">{sub.room_notes}</Typography>
                 </Box>
               )}
-              {!!sub.room_count && (
+              {!!sub.room_count && sub.room_count !== '0' && (
                 <Box>
                   <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Rooms</Typography>
                   <Typography variant="body2" color="text.secondary">{sub.room_count}</Typography>
