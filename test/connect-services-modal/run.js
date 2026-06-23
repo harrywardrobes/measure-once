@@ -23,6 +23,9 @@ const PROBE_LABELS = [
   '[CSM-F1] modal auto-opens when a service transitions to error state',
   '[CSM-F2] session flag prevents auto-open a second time in same session',
   '[CSM-F3] manual openConnectModal() still works after session flag is set',
+  // [CSM-G] Google reconnect path — modal visible + Connect button present
+  '[CSM-G1] modal opens via notifyApiError calendar-sync simulation (google)',
+  '[CSM-G2] Google action cell shows Connect button when disconnected',
 ];
 
 // test/connect-services-modal/run.js
@@ -233,6 +236,7 @@ async function getModalState(page) {
       },
       actions: {
         quickbooks: actionText('quickbooks'),
+        google:     actionText('google'),
       },
       rowBorderColors: {
         google:     rowBorderColor('google'),
@@ -618,6 +622,90 @@ async function main() {
     );
 
     await pageF.__ctx.close().catch(() => {});
+
+    // ── [CSM-G] Google reconnect path via calendar-sync failure simulation ────
+    // Simulates what happens in the live app when a calendar-sync API call
+    // fails (503) and the ConnectionToastContext auto-opens the modal.
+    //
+    // Important: start with google=true (connected/ok) so the initial status
+    // check lands on 'ok' rather than 'error'.  The auto-open subscriber only
+    // fires on a genuine state *transition* to 'error'; pre-seeding the page
+    // as disconnected would keep the status at 'error' throughout and
+    // notifyApiError would be a no-op (_fire() returns early when prev === newStatus).
+    //
+    // Asserts: (G1) the modal becomes visible via the notifyApiError path after
+    //               a confirmed ok→error transition,
+    //          (G2) the Google Calendar row shows a "Connect" action button.
+    console.log('\n  [CSM-G] Google reconnect path — calendar-sync failure simulation');
+
+    const pageG = await openHomePage(browser, memberClient.cookie, {
+      google:     true,  // start connected (ok) so notifyApiError triggers a real transition
+      quickbooks: true,
+      hubspot:    true,
+      database:   true,
+    });
+
+    // Wait for GlobalHeader to mount and status checks to settle so the
+    // auto-open subscriber has registered its callback and prevSnapshot is 'ok'.
+    await pollPage(pageG, () =>
+      document.querySelector('[data-testid="global-header"]') ? 'ok' : null,
+    15000);
+    await pageG.waitForNetworkIdle({ timeout: 5000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 600));
+
+    // Clear the once-per-session flag (fresh browser context may or may not
+    // have it set from a prior probe in the same browser instance).
+    await pageG.evaluate(() => {
+      try { sessionStorage.removeItem('mo:connectModalShownThisSession'); } catch {}
+    });
+
+    // Confirm the modal is NOT already open before we trigger the failure.
+    const beforeG = await pageG.evaluate(() => {
+      const d = document.querySelector('[data-testid="connect-services-modal"]');
+      if (!d) return false;
+      const paper = d.querySelector('[role="dialog"]') || d;
+      return paper && !paper.closest('[aria-hidden="true"]');
+    });
+    if (beforeG) {
+      // Close it so the test starts from a known-closed state.
+      await pageG.evaluate(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      await waitForModalClosed(pageG).catch(() => {});
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    // Simulate a calendar-sync failure — same error code the sync engine emits.
+    // This fires _fire('google','disconnected'), transitioning ok→error, which
+    // the auto-open subscriber detects and calls openConnectModal('google').
+    await pageG.evaluate(() => {
+      window.__connectionToast &&
+        window.__connectionToast.notifyApiError('google', { status: 503 });
+    });
+
+    // (G1) Modal should auto-open within ~5 s via the error-transition subscriber.
+    const autoOpenG = await waitForModal(pageG, 5000);
+    record(
+      PROBE_LABELS[15],
+      'modal visible after calendar-sync failure simulation',
+      autoOpenG ? 'visible' : 'not visible',
+      !!autoOpenG,
+    );
+
+    // (G2) Google action cell must show a "Connect" button (not "Ask an admin"
+    //      or blank) because Google Calendar uses the 'oauth' connect type and
+    //      the current status is 'error'.
+    await new Promise(r => setTimeout(r, 400));
+    const stateG = await getModalState(pageG);
+    const googleAction = (stateG.actions.google || '').toLowerCase();
+    record(
+      PROBE_LABELS[16],
+      '"Connect" button in Google action cell',
+      `action="${stateG.actions.google}"`,
+      googleAction.includes('connect'),
+    );
+
+    await pageG.__ctx.close().catch(() => {});
 
   } catch (e) {
     console.error('Test error:', e);
