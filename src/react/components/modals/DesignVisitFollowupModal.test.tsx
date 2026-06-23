@@ -60,9 +60,11 @@ const HANDLER = { id: 1, type: 'design_visit_followup' };
 function mockFetch(opts: {
   eventsItems?: object[];
   deleteStatus?: number;
+  emailSendStatus?: number;
+  outcomeStatus?: number;
 }): () => void {
   const orig = window.fetch;
-  const { eventsItems = [], deleteStatus = 200 } = opts;
+  const { eventsItems = [], deleteStatus = 200, emailSendStatus = 200, outcomeStatus = 200 } = opts;
 
   window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
@@ -96,6 +98,20 @@ function mockFetch(opts: {
       }
       return new Response(JSON.stringify({ error: 'Server error' }), {
         status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/emails/send') && method === 'POST') {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: emailSendStatus,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/card-actions/design-visit-followup/outcome') && method === 'POST') {
+      return new Response(JSON.stringify({}), {
+        status: outcomeStatus,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -267,6 +283,7 @@ describe('DesignVisitFollowupModal — modal title', () => {
   afterEach(() => {
     restoreFetch?.();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('shows "Follow up with [Name]" immediately on open, before the API response arrives', () => {
@@ -316,6 +333,26 @@ describe('DesignVisitFollowupModal — modal title', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+    });
+  });
+
+  it('shows "Done" as the modal title after the resend flow completes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    renderModal();
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-resend'));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+    });
+
+    await user.click(screen.getByTestId('dvf-send-invite'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Done' })).toBeTruthy();
     });
   });
 });
