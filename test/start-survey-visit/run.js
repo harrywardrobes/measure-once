@@ -24,6 +24,9 @@ const { makeSkip } = require('../helpers/report');
 //         back to "submitted".
 //   (D)   Token security — wrong, expired, and already-signed-off tokens all
 //         return 404 (no oracle leakage).
+//   (N)   Note pre-fill — POST /api/card-actions/start-design-visit with a
+//         stubbed contact returns visitNotes + visitNotesTimestamp; a contact
+//         absent from the stub returns empty strings.
 //   (R)   Refund — POST /api/survey-visits/refund records a refund_requested row.
 //
 // Usage:
@@ -60,6 +63,20 @@ const FURNITURE_NAME  = `${RUN_PREFIX} test furniture range`;
 const DOOR_STYLE_NAME = `${RUN_PREFIX} test door style`;
 
 const FAKE_CONTACT_ID = `privtest-ssv-contact-001`;
+
+// ── Note pre-fill stub constants ──────────────────────────────────────────────
+// Numeric contact IDs required by the /api/card-actions/start-design-visit
+// endpoint (/^\d+$/ validation). These are outside any real HubSpot ID range
+// used by the dev/prod accounts, and are only meaningful within the stub.
+const NOTE_CONTACT_ID  = '99900001'; // present in HUBSPOT_NOTES_STUB → note returned
+const EMPTY_CONTACT_ID = '99900002'; // absent from stub → empty strings returned
+
+const STUB_NOTE_BODY      = 'Automated backend note pre-fill test — SSV suite';
+const STUB_NOTE_TIMESTAMP = '2026-01-15T10:00:00.000Z';
+
+const HUBSPOT_NOTES_STUB_JSON = JSON.stringify({
+  [NOTE_CONTACT_ID]: { body: STUB_NOTE_BODY, ts: STUB_NOTE_TIMESTAMP },
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function tokenHash(raw) {
@@ -116,7 +133,14 @@ async function main() {
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded users  admin=${users.admin.email}  member=${users.member.email}`);
 
-  const { child, logBuf } = spawnServer();
+  const { child, logBuf } = spawnServer({
+    extraEnv: {
+      // A fake access token satisfies requireHubspotToken without live calls.
+      HUBSPOT_ACCESS_TOKEN: 'stub-token-for-ssv-note-test',
+      // Stub canned note data for NOTE_CONTACT_ID; absent IDs return empty.
+      HUBSPOT_NOTES_STUB: HUBSPOT_NOTES_STUB_JSON,
+    },
+  });
   let exited = false;
   child.on('exit', () => { exited = true; });
 
@@ -589,6 +613,46 @@ async function main() {
     );
   }
 
+  // ── (N) Note pre-fill via /api/card-actions/start-design-visit ────────────
+  //
+  // The survey-visit wizard calls the same start-design-visit card-action
+  // endpoint to pre-fill the visit notes field.  We exercise it here with a
+  // dev-only HUBSPOT_NOTES_STUB (injected into the server via extraEnv when
+  // this server was spawned), which makes fetchLatestContactNote return canned
+  // data without touching HubSpot.  A fake HUBSPOT_ACCESS_TOKEN is also passed
+  // so requireHubspotToken() does not reject the request.
+  console.log('\n  [N] Note pre-fill (POST /api/card-actions/start-design-visit)');
+
+  {
+    // Contact whose ID is present in the stub → visitNotes + timestamp returned.
+    const r = await memberClient.post('/api/card-actions/start-design-visit', {
+      contactId: NOTE_CONTACT_ID,
+    });
+    record(
+      '(N) POST /api/card-actions/start-design-visit returns visitNotes + visitNotesTimestamp for a contact with a note',
+      `status=200, visitNotes="${STUB_NOTE_BODY}", visitNotesTimestamp="${STUB_NOTE_TIMESTAMP}"`,
+      `status=${r.status} visitNotes=${JSON.stringify(r.json?.visitNotes)} visitNotesTimestamp=${JSON.stringify(r.json?.visitNotesTimestamp)}`,
+      r.status === 200
+        && r.json?.visitNotes === STUB_NOTE_BODY
+        && r.json?.visitNotesTimestamp === STUB_NOTE_TIMESTAMP,
+    );
+  }
+
+  {
+    // Contact whose ID is absent from the stub → both fields are empty strings.
+    const r = await memberClient.post('/api/card-actions/start-design-visit', {
+      contactId: EMPTY_CONTACT_ID,
+    });
+    record(
+      '(N) POST /api/card-actions/start-design-visit returns empty visitNotes for a contact without notes',
+      'status=200, visitNotes="", visitNotesTimestamp=""',
+      `status=${r.status} visitNotes=${JSON.stringify(r.json?.visitNotes)} visitNotesTimestamp=${JSON.stringify(r.json?.visitNotesTimestamp)}`,
+      r.status === 200
+        && r.json?.visitNotes === ''
+        && r.json?.visitNotesTimestamp === '',
+    );
+  }
+
   // ── (R) Refund flow ────────────────────────────────────────────────────────
   console.log('\n  [R] Refund flow');
   {
@@ -690,6 +754,10 @@ async function writeReport(runId, findings) {
     '  back to `submitted`.',
     '- **(D) Token security**: Wrong token → 404; expired token → 410 (no oracle',
     '  leakage on either GET path).',
+    '- **(N) Note pre-fill**: POST `/api/card-actions/start-design-visit` with a',
+    '  stubbed contact (via `HUBSPOT_NOTES_STUB` + fake `HUBSPOT_ACCESS_TOKEN`)',
+    '  returns the canned `visitNotes` + `visitNotesTimestamp`. A contact absent',
+    '  from the stub returns both fields as empty strings. No live HubSpot calls.',
     '- **(R) Refund**: POST `/api/survey-visits/refund` records a `refund_requested`',
     '  row with reason + timestamp; missing `contactId` → 400.',
   ];

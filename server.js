@@ -6180,6 +6180,22 @@ app.post('/api/card-actions/phone-call-summary',
  * both empty strings on any error or when no notes exist.
  */
 async function fetchLatestContactNote(contactId) {
+  // Dev-only test stub: when HUBSPOT_NOTES_STUB is set (never in production),
+  // return canned data keyed by contactId without making any HubSpot network
+  // calls. Format: JSON object of { "<contactId>": { body, ts } }.
+  if (process.env.HUBSPOT_NOTES_STUB && process.env.NODE_ENV !== 'production') {
+    try {
+      const stub = JSON.parse(process.env.HUBSPOT_NOTES_STUB);
+      const entry = stub[String(contactId)];
+      if (entry) {
+        return {
+          visitNotes: String(entry.body || ''),
+          visitNotesTimestamp: String(entry.ts || ''),
+        };
+      }
+    } catch {}
+    return { visitNotes: '', visitNotesTimestamp: '' };
+  }
   let visitNotes = '';
   let visitNotesTimestamp = '';
   try {
