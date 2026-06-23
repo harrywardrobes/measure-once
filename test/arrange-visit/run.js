@@ -36,6 +36,8 @@
 //             in ArrangeVisitModal.tsx
 //   (G.5)     The "not proceeding" offline toast string sits inside a res.queued
 //             branch (same technique as G.3 — checks the ~300 chars before it)
+//   (G.6)     The plain offline booking toast string sits inside a res.queued
+//             branch (same technique as G.3 and G.5)
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:arrange-visit
@@ -728,6 +730,16 @@ async function main() {
       npInQueuedBranch ? 'res.queued found' : 'res.queued NOT found in context',
       npInQueuedBranch,
     );
+
+    const plainIdx         = modalSrc.indexOf(PLAIN_OFFLINE_TOAST);
+    const plainCtxBefore   = plainIdx >= 0 ? modalSrc.slice(Math.max(0, plainIdx - 300), plainIdx) : '';
+    const plainInQueuedBranch = plainCtxBefore.includes('res.queued');
+    record(
+      '(G.6) plain offline booking toast is inside a res.queued branch',
+      'res.queued in preceding context',
+      plainInQueuedBranch ? 'res.queued found' : 'res.queued NOT found in context',
+      plainInQueuedBranch,
+    );
   }
 
   // ── Summary + report ───────────────────────────────────────────────────────
@@ -822,6 +834,9 @@ async function writeReport(runId, findings) {
     '- **(G.5)** The "not proceeding" offline toast string sits inside a `res.queued` branch.',
     '  Guards against the string being moved outside the queued branch by a refactor',
     '  (same technique as G.3 — checks ~300 chars of preceding source context).',
+    '- **(G.6)** The plain offline booking toast string sits inside a `res.queued` branch.',
+    '  Guards against the string being moved outside the queued branch by a refactor',
+    '  (same technique as G.3 and G.5 — checks ~300 chars of preceding source context).',
   ];
   const outPath = path.join(dir, 'arrange-visit.md');
   fs.writeFileSync(outPath, lines.join('\n') + '\n');
