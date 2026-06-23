@@ -209,28 +209,36 @@ async function sendAdminNotificationEmail(submission) {
     const { Client } = require('@replit/object-storage');
     const client = new Client();
     const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-    for (const key of photoKeys) {
+    // Download all photos in parallel so 14 photos take ~1× network RTT instead of 14×.
+    const downloadResults = await Promise.all(photoKeys.map(async (key) => {
+      const storagePath = 'customer-info-photos/' + key.replace(/^obj:ci_/, '');
+      const ext = storagePath.split('.').pop()?.toLowerCase() || 'jpg';
+      const contentType = mimeMap[ext] || 'image/jpeg';
       try {
-        const storagePath = 'customer-info-photos/' + key.replace(/^obj:ci_/, '');
-        const ext = storagePath.split('.').pop()?.toLowerCase() || 'jpg';
-        const contentType = mimeMap[ext] || 'image/jpeg';
         const res = await client.downloadAsBytes(storagePath);
         if (res && res.ok === false) throw new Error(res.error?.message || 'download failed');
         const rawValue = Array.isArray(res.value) ? res.value[0] : res.value;
         const buffer = Buffer.from(rawValue);
         if (buffer.length > MAX_ATTACHMENT_BYTES) {
           logger.warn(`[customer-info] Skipping attachment for ${key}: ${buffer.length} bytes exceeds 8 MB limit`);
-          skippedCount++;
-          continue;
+          return { skipped: true };
         }
-        attachments.push({
-          filename: `photo-${attachments.length + 1}.${ext}`,
-          content: buffer,
-          contentType,
-        });
+        return { skipped: false, ext, contentType, buffer };
       } catch (err) {
         logger.warn({ err: err.message }, `[customer-info] Skipping attachment for key ${key}:`);
+        return { skipped: true };
+      }
+    }));
+    // Rebuild attachments in original order so filenames are sequential (photo-1, photo-2, …).
+    for (const result of downloadResults) {
+      if (result.skipped) {
         skippedCount++;
+      } else {
+        attachments.push({
+          filename: `photo-${attachments.length + 1}.${result.ext}`,
+          content: result.buffer,
+          contentType: result.contentType,
+        });
       }
     }
   }
@@ -1273,39 +1281,44 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     logger.info('[customer-info] HUBSPOT_ACCESS_TOKEN not set — skipping contact resolution for generic submission');
   }
 
-  if (!isGenericRow) {
-    // Update HubSpot lead status + structured address (non-fatal) for token-gated rows.
-    try {
-      if (process.env.HUBSPOT_ACCESS_TOKEN) {
-        const hsAddr = addressToHubspot(address);
-        await _patchContactProperties(lockedContactId, {
-          hs_lead_status: 'AWAITING_PHOTOS',
-          address: hsAddr.address,
-          city:    hsAddr.city,
-          state:   hsAddr.state,
-          zip:     hsAddr.zip,
-          country: hsAddr.country,
-        });
-      }
-    } catch (err) {
-      logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
-    }
-  }
-
   // Notify all connected dashboard tabs so the "Photos received" badge appears
   // on the projects board without a page refresh.
   pushSseEvent({ type: 'customer_info_submitted', contactId: lockedContactId });
 
-  // Send emails (non-fatal)
-  try { await sendAdminNotificationEmail(fresh); } catch (e) {
-    logger.error({ err: e.message }, '[customer-info] Admin notification failed:');
+  // Run post-submission side effects concurrently:
+  // — admin notification email (photo downloads + send)
+  // — customer thank-you email
+  // — HubSpot lead-status/address patch (non-generic path only; generic path
+  //   resolved HubSpot above where it also populates `fresh` with contact_id)
+  const emailTo = fresh.corrected_email || fresh.contact_email;
+  const postSubmitTasks = [
+    sendAdminNotificationEmail(fresh).catch(e => {
+      logger.error({ err: e.message }, '[customer-info] Admin notification failed:');
+    }),
+    emailTo
+      ? sendCustomerThankYouEmail(emailTo, fresh.contact_name).catch(e => {
+          logger.error({ err: e.message }, '[customer-info] Thank-you email failed:');
+        })
+      : null,
+  ];
+
+  if (!isGenericRow && process.env.HUBSPOT_ACCESS_TOKEN) {
+    const hsAddr = addressToHubspot(address);
+    postSubmitTasks.push(
+      _patchContactProperties(lockedContactId, {
+        hs_lead_status: 'AWAITING_PHOTOS',
+        address: hsAddr.address,
+        city:    hsAddr.city,
+        state:   hsAddr.state,
+        zip:     hsAddr.zip,
+        country: hsAddr.country,
+      }).catch(err => {
+        logger.error({ err: err.message }, '[customer-info] HubSpot update failed (non-fatal):');
+      })
+    );
   }
-  try {
-    const emailTo = fresh.corrected_email || fresh.contact_email;
-    if (emailTo) await sendCustomerThankYouEmail(emailTo, fresh.contact_name);
-  } catch (e) {
-    logger.error({ err: e.message }, '[customer-info] Thank-you email failed:');
-  }
+
+  await Promise.all(postSubmitTasks.filter(Boolean));
 
   res.json({ ok: true });
 });
