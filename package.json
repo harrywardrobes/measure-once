@@ -51,6 +51,7 @@
     "test:customer-info:ci": "node scripts/with-test-db.js test/customer-info/run.js",
     "test:customer-info-email-attachments": "node test/customer-info-email-attachments/run.js",
     "test:customer-info-email-attachments:ci": "node scripts/with-test-db.js test/customer-info-email-attachments/run.js",
+    "test:customer-info-parallel-downloads": "node test/customer-info-parallel-downloads/run.js",
     "test:customer-info-resend": "node test/customer-info-resend/run.js",
     "test:customer-info-resend:ci": "node scripts/with-test-db.js test/customer-info-resend/run.js",
     "test:masked-email-backfill": "node test/masked-email-backfill/run.js",
