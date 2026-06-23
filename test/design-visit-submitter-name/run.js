@@ -22,6 +22,11 @@
 //           `Design visit submitted by <submitter email>`.
 //   (TEAM-HTML) Team-notification email `html` contains
 //           `Submitted by <strong><submitter email></strong>`.
+//   (TEAM-NOTES-ABSENT) Team-notification email text/HTML for a visit with
+//           null visit_notes does NOT contain a "Visit notes" entry.
+//   (TEAM-NOTES-PRESENT) Team-notification email text/HTML for a visit with
+//           non-empty visit_notes contains "Visit notes: <value>" in text
+//           and the Visit notes table row in HTML.
 //   (CUST-GREET)  Customer email greets the contact's first name.
 //   (CUST-ROOM)   Customer email lists the seeded room name in text + html.
 //   (CUST-LINK)   Customer email contains the sign-off URL (text + html).
@@ -78,16 +83,17 @@ function startMockHubspot() {
   });
 }
 
-async function seedVisit(pool, runId, submitterEmail) {
+async function seedVisit(pool, runId, createdById, opts = {}) {
+  const { visitNotes = null } = opts;
   const r = await pool.query(
     `INSERT INTO design_visits
        (contact_id, contact_name, contact_email, created_by, visit_date,
-        duration_min, location, notes, terms_accepted, status)
+        duration_min, location, notes, visit_notes, terms_accepted, status)
      VALUES ($1, 'PrivTest DV Name Contact', 'privtest-dvname-cust@privtest.local',
-             $2, NOW(), 90, 'Test location', 'submitter-name test', TRUE,
+             $2, NOW(), 90, 'Test location', 'submitter-name test', $3, TRUE,
              'revision_requested')
      RETURNING id`,
-    [CONTACT_ID, submitterEmail]
+    [CONTACT_ID, String(createdById), visitNotes]
   );
   const visitId = r.rows[0].id;
   await pool.query(
@@ -183,7 +189,7 @@ async function main() {
     const member = users.member;
     const client = await login(member.email, member.password);
 
-    const visitId = await seedVisit(pool, runId, `privtest-dvname-${runId}@privtest.local`);
+    const visitId = await seedVisit(pool, runId, member.id);
 
     const r = await client.post(`/api/design-visits/${visitId}/submit`, {});
     if (r.status !== 200) {
@@ -221,6 +227,8 @@ async function main() {
         `no team email captured (mails=${mails.length}: ${mailSummary || 'none'})`);
       record('TEAM-HTML.submitter-line', false,
         `no team email captured`);
+      record('TEAM-NOTES-ABSENT.text', false, 'no team email captured');
+      record('TEAM-NOTES-ABSENT.html', false, 'no team email captured');
     } else {
       const expectedText = `Design visit submitted by ${member.email}`;
       const expectedHtml = `Submitted by <strong>${member.email}</strong>`;
@@ -234,6 +242,63 @@ async function main() {
         htmlOk
           ? `html contained "${expectedHtml}"`
           : `html did not contain "${expectedHtml}"; got: ${JSON.stringify(teamMail.html || '').slice(0, 300)}`);
+
+      // ── (TEAM-NOTES-ABSENT) visit_notes is null → no "Visit notes" row ──
+      const notesAbsentText = typeof teamMail.text === 'string' && !teamMail.text.includes('Visit notes:');
+      record('TEAM-NOTES-ABSENT.text', notesAbsentText,
+        notesAbsentText
+          ? 'team email text has no "Visit notes:" row when visit_notes is null'
+          : `team email text unexpectedly contained "Visit notes:"; snippet: ${JSON.stringify(teamMail.text || '').slice(0, 300)}`);
+
+      const notesAbsentHtml = typeof teamMail.html === 'string' && !teamMail.html.includes('>Visit notes<');
+      record('TEAM-NOTES-ABSENT.html', notesAbsentHtml,
+        notesAbsentHtml
+          ? 'team email HTML has no Visit notes row when visit_notes is null'
+          : `team email HTML unexpectedly contained Visit notes row; snippet: ${JSON.stringify(teamMail.html || '').slice(0, 400)}`);
+    }
+
+    // ── (TEAM-NOTES-PRESENT) visit_notes non-empty → appears in team email ─
+    const notesContent = `Unique visit note ${runId}`;
+    const notesVisitId = await seedVisit(pool, runId, member.id, { visitNotes: notesContent });
+    const beforeNotesMails = readMailJsonl(mailFile).length;
+    const notesSubmit = await client.post(`/api/design-visits/${notesVisitId}/submit`, {});
+    if (notesSubmit.status !== 200) {
+      record('TEAM-NOTES-PRESENT.text', false,
+        `submit failed status=${notesSubmit.status} body=${notesSubmit.text.slice(0, 200)}`);
+      record('TEAM-NOTES-PRESENT.html', false, 'submit failed');
+    } else {
+      let notesTeamMail = null;
+      await pollFn(async () => {
+        const mailsNow = readMailJsonl(mailFile);
+        notesTeamMail = mailsNow.slice(beforeNotesMails).find(m =>
+          typeof m.to === 'string' && m.to.includes('admin-recipient@privtest.local')
+        );
+        return notesTeamMail ? true : null;
+      }, 4000, 100);
+
+      if (!notesTeamMail) {
+        const mailSummaryNotes = readMailJsonl(mailFile).slice(beforeNotesMails)
+          .map(m => `to=${m.to} subj=${m.subject}`).join(' | ');
+        record('TEAM-NOTES-PRESENT.text', false,
+          `no team email captured after notes visit submit (new mails: ${mailSummaryNotes || 'none'})`);
+        record('TEAM-NOTES-PRESENT.html', false, 'no team email captured');
+      } else {
+        const expectedNotesText = `Visit notes: ${notesContent}`;
+        const notesPresentText = typeof notesTeamMail.text === 'string'
+          && notesTeamMail.text.includes(expectedNotesText);
+        record('TEAM-NOTES-PRESENT.text', notesPresentText,
+          notesPresentText
+            ? `team email text contained "${expectedNotesText}"`
+            : `team email text missing "${expectedNotesText}"; got: ${JSON.stringify(notesTeamMail.text || '').slice(0, 300)}`);
+
+        const notesPresentHtml = typeof notesTeamMail.html === 'string'
+          && notesTeamMail.html.includes('>Visit notes<')
+          && notesTeamMail.html.includes(notesContent);
+        record('TEAM-NOTES-PRESENT.html', notesPresentHtml,
+          notesPresentHtml
+            ? `team email HTML contained Visit notes row with "${notesContent}"`
+            : `team email HTML missing Visit notes row or content; got: ${JSON.stringify(notesTeamMail.html || '').slice(0, 400)}`);
+      }
     }
 
     // ── Customer email captures (section 5 of runSubmitSideEffects) ────────
@@ -369,7 +434,7 @@ async function main() {
     }
 
     // Revision: needs a fresh visit (the approve path nulls the token hash).
-    const revisionVisitId = await seedVisit(pool, runId, `privtest-dvname-${runId}@privtest.local`);
+    const revisionVisitId = await seedVisit(pool, runId, member.id);
     const submit2 = await client.post(`/api/design-visits/${revisionVisitId}/submit`, {});
     if (submit2.status !== 200) {
       record('SIGNOFF-REVISION.team-email', false,
