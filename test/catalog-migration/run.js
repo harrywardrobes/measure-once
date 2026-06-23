@@ -38,6 +38,17 @@ const PROBE_LABELS = [
 //   DATABASE_URL_TEST=<disposable> npm run test:catalog-migration
 //   PRIVTEST_ALLOW_SHARED_DB=1     npm run test:catalog-migration
 
+const PROBE_LABELS = [
+  '(TABLES) five shared catalog_* tables exist',
+  '(DROPPED) three legacy design_visit_* catalogue tables are dropped',
+  '(FK-H) design_visits.handle_id FK repoints to catalog_handles',
+  '(FK-R) design_visits.furniture_range_id FK repoints to catalog_ranges',
+  '(FK-D) design_visit_rooms.door_style_id FK repoints to catalog_doors',
+  '(REJECT) bogus handle_id is rejected by FK (23503)',
+  '(ACCEPT) valid catalogue refs are accepted (visit + room insert succeeds)',
+  '(SET-NULL) deleting a catalog_handles row nulls the referencing FK',
+];
+
 const fs   = require('fs');
 const path = require('path');
 const { Pool } = require('pg');

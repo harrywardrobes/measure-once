@@ -36,6 +36,19 @@ const PROBE_LABELS = [
 //   DATABASE_URL_TEST=<disposable> npm run test:questionnaire
 //   PRIVTEST_ALLOW_SHARED_DB=1     npm run test:questionnaire
 
+const PROBE_LABELS = [
+  '(ADMIN-AUTH) member POST /api/admin/visit-questions returns 403',
+  '(CREATE) admin creates visit-scope and room-scope questions',
+  '(LIST) admin GET returns all created question rows',
+  '(MEMBER-FILTER) member GET filters by applies_to and excludes other-scope questions',
+  '(REORDER) bulk PATCH reorder updates sort_order values',
+  '(UPDATE) PATCH edits a question label',
+  '(ANSWER-SAVE) member POST answers persists rows',
+  '(ANSWER-LOAD) GET answers round-trips saved values',
+  '(ANSWER-REPLACE) re-save replaces the prior answer set (delete-then-insert)',
+  '(DELETE) admin DELETE removes a question from the list',
+];
+
 const fs   = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
