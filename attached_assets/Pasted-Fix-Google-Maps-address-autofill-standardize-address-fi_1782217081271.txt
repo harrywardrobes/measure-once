@@ -1,0 +1,26 @@
+Fix Google Maps address autofill + standardize address fields
+
+There are two related issues with address inputs in the app that I need fixed.
+
+1. Google Maps autocomplete/autofill is broken on the Upload Info page
+
+On the Upload Info page, the Google Maps address autocomplete is not working — typing an address does not show suggestions and selecting one does not populate the address fields. Please investigate and fix it. Check for the most common causes:
+
+Verify the Google Maps JavaScript API script is actually loading (check the browser console for errors like Google Maps JavaScript API error, InvalidKeyMapError, ApiNotActivatedMapError, or RefererNotAllowedMapError).
+Confirm the Places API / Places API (New) is enabled in the Google Cloud project for the API key being used, and that libraries=places is included when loading the script.
+Confirm the API key is present (not undefined/empty) and that its referrer/HTTP restrictions allow the app's domain.
+Make sure the Autocomplete widget is being initialized after the input element is mounted in the DOM (a common bug is the script running before the input exists, or React re-rendering and detaching the listener).
+Verify the place_changed event handler is wired up and correctly maps the returned address components (street number, route, locality, postal code, country, etc.) into the form fields.
+Please identify the actual root cause from the console/network output rather than guessing, then fix it. Report back what was broken.
+
+2. Replace the "+ Add address line" with a permanent "Address line 2" field
+
+Currently there is a "+ address line" (add-another-line) control. Remove that toggle/button and replace it with a standard, always-visible "Address line 2" input field (optional). Update the field label, placeholder, form state, and any validation/submission logic accordingly.
+
+3. Apply this consistently everywhere
+
+This change must be applied to every place in the application that has an address input — not just the Upload Info page. Search the codebase for all address forms/components (checkout, account/profile, billing, shipping, settings, etc.) and ensure:
+
+The Google Maps autofill works on all of them.
+The "+ add address line" control is removed and replaced with a standard "Address line 2" field everywhere.
+If the address input is built as a shared/reusable component, update it there so the fix propagates. If addresses are implemented inconsistently across pages, refactor toward a single shared address component while you're at it.

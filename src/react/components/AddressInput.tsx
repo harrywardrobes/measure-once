@@ -3,19 +3,14 @@ import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import FormControl from '@mui/material/FormControl';
 import FormHelperText from '@mui/material/FormHelperText';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import {
-  COUNTRIES,
   HOME_COUNTRY_CODE,
   MAX_ADDRESS_LINES,
   adaptNewPlaceComponents,
@@ -97,8 +92,9 @@ export interface AddressInputProps {
 
 /**
  * Structured address entry: 1–5 dynamic street lines, locality, administrative
- * area, postal code and a country selector (defaults to GB). Field labels adapt
- * to the selected country. Fully controlled — the parent owns the value.
+ * area and postal code. Country is always GB (United Kingdom). Field labels
+ * use UK terminology (Town / City, County, Postcode). Fully controlled — the
+ * parent owns the value.
  *
  * When a `surface` is supplied and Google Places autocomplete is enabled at
  * runtime, a search box is rendered above the manual fields. Selecting a
@@ -426,31 +422,16 @@ export function AddressInput({
         />
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        <TextField
-          label={labels.postalCode}
-          size="small"
-          fullWidth
-          required={required}
-          disabled={disabled}
-          slotProps={{ htmlInput: { maxLength: 32 } }}
-          value={addr.postalCode}
-          onChange={e => emit({ postalCode: e.target.value })}
-        />
-        <FormControl fullWidth size="small" disabled={disabled}>
-          <InputLabel id={`${idPrefix}-country-label`}>Country</InputLabel>
-          <Select
-            labelId={`${idPrefix}-country-label`}
-            label="Country"
-            value={addr.countryCode}
-            onChange={e => emit({ countryCode: String(e.target.value) })}
-          >
-            {COUNTRIES.map(c => (
-              <MenuItem key={c.code} value={c.code}>{c.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+      <TextField
+        label={labels.postalCode}
+        size="small"
+        fullWidth
+        required={required}
+        disabled={disabled}
+        slotProps={{ htmlInput: { maxLength: 32 } }}
+        value={addr.postalCode}
+        onChange={e => emit({ postalCode: e.target.value })}
+      />
     </Box>
   );
 }
