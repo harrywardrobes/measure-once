@@ -128,6 +128,7 @@ const DB_SUITES = [
   'test:photo-reviews:ci',
   'test:start-design-visit:ci',
   'test:start-survey-visit:ci',
+  'test:survey-visit-email-notes:ci',
   'test:design-visit:ci',
   'test:design-visit-list:ci',
   'test:visit-edit-cancel:ci',
