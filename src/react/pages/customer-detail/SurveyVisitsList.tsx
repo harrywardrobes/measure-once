@@ -119,6 +119,7 @@ function queuedBodyToExistingSurveyVisit(
     handle_id: (body.handleId as string | number | null | undefined) ?? null,
     furniture_range_id: (body.furnitureRangeId as string | number | null | undefined) ?? null,
     notes: typeof body.notes === 'string' ? body.notes : undefined,
+    visit_notes: typeof body.visitNotes === 'string' ? body.visitNotes : undefined,
     terms_accepted: !!body.termsAccepted,
     rooms: rooms.map(r => ({
       roomName: typeof r.roomName === 'string' ? r.roomName : '',

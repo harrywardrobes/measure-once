@@ -76,6 +76,7 @@ export interface ExistingSurveyVisit {
   handle_id?: string | number | null;
   furniture_range_id?: string | number | null;
   notes?: string;
+  visit_notes?: string | null;
   terms_accepted?: boolean;
   rooms?: Array<{
     id?: number | string;
@@ -157,6 +158,7 @@ function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingSurve
     const m = String(ev.notes).match(/^Surveyor:\s*(.+)$/);
     if (m) s.designerName = m[1].trim();
   }
+  if (ev.visit_notes != null) s.visitNotes = String(ev.visit_notes);
   s.termsAccepted = !!ev.terms_accepted;
   return s;
 }
@@ -645,6 +647,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         durationMin:      parseInt(step1.duration, 10) || defaultDuration,
         structuredAddress: step1.structuredAddress,
         notes:            step1.designerName ? `Surveyor: ${step1.designerName}` : undefined,
+        visitNotes:       step1.visitNotes   || undefined,
         termsAccepted:    true,
         rooms: rooms.map(r => ({
           roomName:       r.roomName,
