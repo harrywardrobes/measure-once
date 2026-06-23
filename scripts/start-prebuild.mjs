@@ -28,11 +28,11 @@ if (existsSync(BUNDLE)) {
   console.log('[start-prebuild] Bundle already exists — skipping React build.');
   console.log('[start-prebuild] Run `npm run build:react:dev` to rebuild, or `npm run build:react` for a full build with type-checking.');
 } else {
-  console.log('[start-prebuild] No bundle found — running full React build (typecheck + vite + bundle-size check).');
+  // Fast build (no typecheck / bundle-size check) so workflow restarts complete
+  // within the platform timeout. Run `npm run build:react` for a full CI build.
+  console.log('[start-prebuild] No bundle found — running fast React build (vite only, no typecheck).');
   execSync('node scripts/generate-tokens-css.mjs', { stdio: 'inherit' });
-  execSync('npm run typecheck', { stdio: 'inherit' });
   execSync('npx vite build', { stdio: 'inherit' });
-  execSync('node scripts/check-bundle-sizes.mjs', { stdio: 'inherit' });
 }
 
 // Always (re)generate the service worker so public/sw.js matches the current

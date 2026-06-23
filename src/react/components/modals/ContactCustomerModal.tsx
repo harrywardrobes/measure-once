@@ -930,26 +930,28 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                     )}
                                   </Typography>
                                 )}
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                  <Button
-                                    data-testid="email-preview-send-btn"
-                                    size="small"
-                                    variant="contained"
-                                    disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
-                                    onClick={() => void handleSendEmail()}
-                                    startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
-                                  >
-                                    Send Email
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    variant="text"
-                                    onClick={closeEmailFlow}
-                                    disabled={emailFlow === 'sending'}
-                                  >
-                                    Cancel
-                                  </Button>
-                                </Box>
+                                {emailViewMode !== 'preview' && (
+                                  <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <Button
+                                      data-testid="email-preview-send-btn"
+                                      size="small"
+                                      variant="contained"
+                                      disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
+                                      onClick={() => void handleSendEmail()}
+                                      startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
+                                    >
+                                      Send Email
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      variant="text"
+                                      onClick={closeEmailFlow}
+                                      disabled={emailFlow === 'sending'}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </Box>
+                                )}
                               </>
                             )}
                           </Box>
