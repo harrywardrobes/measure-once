@@ -174,4 +174,4 @@ async function runMigrations(opts = {}) {
   return migrations;
 }
 
-module.exports = { runMigrations, MIGRATIONS_DIR, MIGRATIONS_TABLE };
+module.exports = { runMigrations, ensureRateLimitMigrations, MIGRATIONS_DIR, MIGRATIONS_TABLE };

@@ -23,7 +23,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const logger = require('./logger');
-const { runMigrations } = require('./db-migrate');
+const { runMigrations, ensureRateLimitMigrations } = require('./db-migrate');
 const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('./google-token-crypto.cjs');
 const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
 const {
@@ -7653,6 +7653,17 @@ async function cleanupStaleHubSpotCredentialRows() {
     }
   } else {
     logger.info('  Skipping boot-time migrations in production (schema managed by Replit publish-time diff)');
+    // Even in production, the rate-limit package's migration records must be
+    // present in the public.migrations table or it crashes on boot with
+    // "relation unique_session_key already exists".  This self-heal is safe
+    // to run in all environments — it only inserts missing rows.
+    try {
+      await ensureRateLimitMigrations(process.env.DATABASE_URL);
+      logger.info('  Rate-limit migration records verified');
+    } catch (e) {
+      logger.error({ err: e }, '  ensureRateLimitMigrations failed — aborting startup');
+      process.exit(1);
+    }
   }
 
   // Schedule the google_maps_usage pruner now that the schema is guaranteed to
