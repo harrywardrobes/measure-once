@@ -4,6 +4,7 @@ import { nowDate, nowDateTime } from '../../utils/dateDefaults';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import { DuplicateCancelErrorAlert } from './DuplicateCancelErrorAlert';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
@@ -1001,23 +1002,15 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           <Typography variant="body2">
             How would you like to proceed?
           </Typography>
+          {/* Canonical duplicate-visit cancel-existing error pattern.
+              See DuplicateCancelErrorAlert for the shared component and
+              instructions for new visit types that need the same guard. */}
           {cancelExistingError && (
-            <Alert
-              severity="error"
-              sx={{ mt: 1 }}
-              action={
-                <Button
-                  color="inherit"
-                  size="small"
-                  onClick={() => void handleCancelExisting()}
-                  data-testid="av-duplicate-cancel-existing-retry"
-                >
-                  Try again
-                </Button>
-              }
-            >
-              {cancelExistingError}
-            </Alert>
+            <DuplicateCancelErrorAlert
+              message={cancelExistingError}
+              onRetry={() => void handleCancelExisting()}
+              retryButtonTestId="av-duplicate-cancel-existing-retry"
+            />
           )}
         </Stack>
       </FullScreenModal>
