@@ -377,4 +377,50 @@ describe('DesignVisitFollowupModal — modal title', () => {
     expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Done' })).toBeNull();
   });
+
+  it('clears the error alert as soon as the user edits the subject field', async () => {
+    restoreFetch = mockFetch({ eventsItems: [], emailSendStatus: 500 });
+    const user = userEvent.setup();
+
+    renderModal();
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-resend'));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+    });
+
+    await user.click(screen.getByTestId('dvf-send-invite'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Subject' }), 'x');
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('clears the error alert as soon as the user edits the body field', async () => {
+    restoreFetch = mockFetch({ eventsItems: [], emailSendStatus: 500 });
+    const user = userEvent.setup();
+
+    renderModal();
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-resend'));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+    });
+
+    await user.click(screen.getByTestId('dvf-send-invite'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeTruthy();
+    });
+
+    await user.type(screen.getByRole('textbox', { name: 'Body' }), 'x');
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

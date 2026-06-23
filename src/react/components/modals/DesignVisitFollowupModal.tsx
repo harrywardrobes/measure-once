@@ -486,7 +486,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
               <TextField
                 label="Subject"
                 value={emailSubject}
-                onChange={e => setEmailSubject(e.target.value)}
+                onChange={e => { setEmailSubject(e.target.value); setEmailError(''); }}
                 size="small"
                 fullWidth
                 slotProps={{ htmlInput: { maxLength: 300 } }}
@@ -495,7 +495,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
               <TextField
                 label="Body"
                 value={emailBody}
-                onChange={e => setEmailBody(e.target.value)}
+                onChange={e => { setEmailBody(e.target.value); setEmailError(''); }}
                 multiline
                 minRows={6}
                 size="small"
