@@ -265,6 +265,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:stage-scoped-pills',           'narrative — stage-tab pill filter update regression guard'],
   ['test:bundle-sizes',                 'narrative — post-build gzip size snapshot (standalone only)'],
   ['test:suite-probe-counts',           'static-lint — self-referential check; no discrete probe IDs in the implementation'],
+  ['test:parallel-downloads',           'static-lint — binary structural check; no discrete named probes'],
 ]);
 
 // ---------------------------------------------------------------------------

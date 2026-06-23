@@ -311,7 +311,8 @@
     "test:offline-capability-sync": "node scripts/check-offline-capability-sync.mjs",
     "test:sw-closures": "node scripts/check-sw-urlpattern-closures.mjs",
     "test:sw-closures-fixtures": "node test/sw-closures/run.js",
-    "test:lead-status-keys": "node scripts/check-lead-status-keys.mjs"
+    "test:lead-status-keys": "node scripts/check-lead-status-keys.mjs",
+    "test:parallel-downloads": "node scripts/check-parallel-downloads.mjs"
   },
   "dependencies": {
     "@acpr/rate-limit-postgresql": "^1.4.1",

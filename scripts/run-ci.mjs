@@ -69,6 +69,7 @@ const STEPS = [
   'test:offline-capability-sync',
   'test:sw-closures',
   'test:sw-closures-fixtures',
+  'test:parallel-downloads',
   'test:migration-renames:ci',
   'test:privileges:ci',
   'test:lead-status-sync:ci',

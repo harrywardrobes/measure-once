@@ -93,6 +93,7 @@ const STATIC_SUITES = [
   'test:offline-capability-sync',
   'test:sw-closures',
   'test:sw-closures-fixtures',
+  'test:parallel-downloads',
 ];
 
 /**
