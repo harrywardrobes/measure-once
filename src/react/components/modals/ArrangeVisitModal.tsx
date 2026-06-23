@@ -1002,7 +1002,22 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             How would you like to proceed?
           </Typography>
           {cancelExistingError && (
-            <Alert severity="error" sx={{ mt: 1 }}>{cancelExistingError}</Alert>
+            <Alert
+              severity="error"
+              sx={{ mt: 1 }}
+              action={
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => void handleCancelExisting()}
+                  data-testid="av-duplicate-cancel-existing-retry"
+                >
+                  Try again
+                </Button>
+              }
+            >
+              {cancelExistingError}
+            </Alert>
           )}
         </Stack>
       </FullScreenModal>
