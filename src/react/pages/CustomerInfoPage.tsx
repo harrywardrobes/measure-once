@@ -380,12 +380,15 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            setPhotos(draft.savedPhotoKeys.map(k => ({
-              key: k,
-              previewUrl: '',
-              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-              isPdf: k.endsWith('.pdf'),
-            })));
+            setPhotos(draft.savedPhotoKeys.map(k => {
+              const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
+              return {
+                key: k,
+                previewUrl: '',
+                name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+                isPdf,
+              };
+            }));
           }
           setIsGeneric(true);
           setPageState('main');
@@ -446,12 +449,15 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            setPhotos(draft.savedPhotoKeys.map(k => ({
-              key: k,
-              previewUrl: '',
-              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-              isPdf: k.endsWith('.pdf'),
-            })));
+            setPhotos(draft.savedPhotoKeys.map(k => {
+              const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
+              return {
+                key: k,
+                previewUrl: '',
+                name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+                isPdf,
+              };
+            }));
           }
           setPageState('main');
           return;
@@ -467,12 +473,15 @@ export function CustomerInfoPage() {
           roomCount: draft.roomCount || '1',
         }));
         if (draft.savedPhotoKeys?.length) {
-          setPhotos(draft.savedPhotoKeys.map(k => ({
-            key: k,
-            previewUrl: '',
-            name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-            isPdf: k.endsWith('.pdf'),
-          })));
+          setPhotos(draft.savedPhotoKeys.map(k => {
+            const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
+            return {
+              key: k,
+              previewUrl: '',
+              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
+              isPdf,
+            };
+          }));
         }
         setPageState('main');
       })
