@@ -47,6 +47,8 @@
     "test:design-visit-submitter-name:ci": "node scripts/with-test-db.js test/design-visit-submitter-name/run.js",
     "test:survey-visit-email-notes": "node test/survey-visit-email-notes/run.js",
     "test:survey-visit-email-notes:ci": "node scripts/with-test-db.js test/survey-visit-email-notes/run.js",
+    "test:places-autocomplete-ui": "node test/places-autocomplete-ui/run.js",
+    "test:places-autocomplete-ui:ci": "node scripts/with-test-db.js test/places-autocomplete-ui/run.js",
     "test:customer-info": "node test/customer-info/run.js",
     "test:customer-info:ci": "node scripts/with-test-db.js test/customer-info/run.js",
     "test:customer-info-email-attachments": "node test/customer-info-email-attachments/run.js",
