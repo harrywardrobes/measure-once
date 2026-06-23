@@ -25,6 +25,7 @@ import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import { BRAND_COLORS, STATUS_COLORS } from '../theme';
 import { normalizePhone, formatPhone } from '../utils/phoneFormatters';
 
@@ -56,6 +57,7 @@ interface UploadedPhoto {
   key:        string;
   previewUrl: string;
   name:       string;
+  isPdf?:     boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -125,8 +127,26 @@ function setStoredGenericToken(token: string) {
 
 // ── Image compression ─────────────────────────────────────────────────────────
 
+const COMPRESS_TIMEOUT_MS = 8000;
+
 async function compressImage(file: File): Promise<File> {
   return new Promise(resolve => {
+    let settled = false;
+    const done = (result: File) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(result);
+    };
+
+    // Safety net: if onload never fires (e.g. iOS Chrome Files-app picker),
+    // resolve after the timeout with the original file so the upload proceeds.
+    const timeoutId = setTimeout(() => {
+      console.warn('[compressImage] decode timed out — sending original file');
+      URL.revokeObjectURL(objectUrl);
+      done(file);
+    }, COMPRESS_TIMEOUT_MS);
+
     const img = new Image();
     const objectUrl = URL.createObjectURL(file);
     img.onload = () => {
@@ -141,15 +161,15 @@ async function compressImage(file: File): Promise<File> {
       canvas.width  = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) { resolve(file); return; }
+      if (!ctx) { done(file); return; }
       ctx.drawImage(img, 0, 0, width, height);
       const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
       const outName  = `${baseName}.jpg`;
       const tryQuality = (q: number) => {
         canvas.toBlob(blob => {
-          if (!blob) { resolve(file); return; }
+          if (!blob) { done(file); return; }
           if (blob.size <= TARGET_COMPRESSED_BYTES || q <= 0.3) {
-            resolve(new File([blob], outName, { type: 'image/jpeg' }));
+            done(new File([blob], outName, { type: 'image/jpeg' }));
           } else {
             tryQuality(Math.max(+(q - 0.1).toFixed(1), 0.3));
           }
@@ -157,7 +177,7 @@ async function compressImage(file: File): Promise<File> {
       };
       tryQuality(0.85);
     };
-    img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); done(file); };
     img.src = objectUrl;
   });
 }
@@ -493,7 +513,7 @@ export function CustomerInfoPage() {
 
     const currentCount = photos.length;
     if (currentCount >= MAX_PHOTOS) {
-      setUploadErr(`You've reached the ${MAX_PHOTOS} photo limit — remove one to add another.`);
+      setUploadErr(`You've reached the ${MAX_PHOTOS} file limit — remove one to add another.`);
       return;
     }
 
@@ -503,9 +523,12 @@ export function CustomerInfoPage() {
 
     setUploading(true);
     try {
-      const compressed = await Promise.all(fileArray.map(f => compressImage(f)));
+      const prepared = await Promise.all(fileArray.map(f => {
+        if (f.type === 'application/pdf') return Promise.resolve(f);
+        return compressImage(f);
+      }));
       const fd = new FormData();
-      for (const f of compressed) {
+      for (const f of prepared) {
         fd.append('photos', f);
       }
       const r = await fetch(`/api/customer-info/${encodeURIComponent(activeToken)}/photos`, {
@@ -514,18 +537,23 @@ export function CustomerInfoPage() {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Upload failed');
-      const newPhotos: UploadedPhoto[] = (d.keys as string[]).map((key, i) => ({
-        key,
-        previewUrl: URL.createObjectURL(compressed[i]),
-        name: compressed[i].name,
-      }));
+      const newPhotos: UploadedPhoto[] = (d.keys as string[]).map((key, i) => {
+        const f = prepared[i];
+        const isPdf = f.type === 'application/pdf';
+        return {
+          key,
+          previewUrl: isPdf ? '' : URL.createObjectURL(f),
+          name: f.name,
+          isPdf,
+        };
+      });
       setPhotos(prev => {
         const updated = [...prev, ...newPhotos];
         if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key), isGeneric ? genericFields : undefined);
         return updated;
       });
       if (truncated) {
-        setUploadErr(`Only ${remaining} photo${remaining === 1 ? '' : 's'} added — you've reached the ${MAX_PHOTOS} photo limit.`);
+        setUploadErr(`Only ${remaining} file${remaining === 1 ? '' : 's'} added — you've reached the ${MAX_PHOTOS} file limit.`);
       }
     } catch (e) {
       setUploadErr((e as Error).message);
@@ -1036,7 +1064,7 @@ export function CustomerInfoPage() {
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept="image/jpeg,image/png,image/webp"
+                          accept="image/jpeg,image/png,image/webp,application/pdf,.pdf"
                           multiple
                           disabled={disabled}
                           style={{ display: 'none' }}
@@ -1061,10 +1089,10 @@ export function CustomerInfoPage() {
                           <>
                             <CloudUploadIcon sx={{ fontSize: 32, color: 'grey.400' }} />
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              Tap to upload photos
+                              Tap to upload photos or PDFs
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Up to {MAX_PHOTOS} photos · JPEG, PNG or WebP
+                              Up to {MAX_PHOTOS} files · JPEG, PNG, WebP or PDF
                             </Typography>
                           </>
                         )}
@@ -1088,6 +1116,64 @@ export function CustomerInfoPage() {
                       }}
                     >
                       {photos.map(p => (
+                        p.isPdf ? (
+                          /* PDF file — show a filename chip instead of an image thumbnail */
+                          <Box
+                            key={p.key}
+                            sx={{
+                              position: 'relative',
+                              borderRadius: 1.5,
+                              aspectRatio: '1',
+                              bgcolor: 'grey.100',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexDirection: 'column',
+                              gap: 0.5,
+                              p: 0.75,
+                              border: '1px solid',
+                              borderColor: 'grey.200',
+                            }}
+                          >
+                            <PictureAsPdfIcon sx={{ fontSize: 28, color: 'error.main' }} />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontSize: '0.55rem',
+                                color: 'text.secondary',
+                                lineHeight: 1.2,
+                                wordBreak: 'break-all',
+                                textAlign: 'center',
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}
+                            >
+                              {p.name}
+                            </Typography>
+                            <Button
+                              size="small"
+                              onClick={() => removePhoto(p.key)}
+                              sx={{
+                                position: 'absolute',
+                                top: 2, right: 2,
+                                minWidth: 0,
+                                width: 22, height: 22,
+                                borderRadius: '50%',
+                                bgcolor: 'rgba(0,0,0,0.6)',
+                                color: 'common.white',
+                                fontSize: '0.7rem',
+                                p: 0,
+                                lineHeight: 1,
+                                '&:hover': { bgcolor: 'rgba(0,0,0,0.85)' },
+                              }}
+                            >
+                              ×
+                            </Button>
+                          </Box>
+                        ) : (
                         <Box
                           key={p.key}
                           sx={{
@@ -1136,6 +1222,7 @@ export function CustomerInfoPage() {
                             ×
                           </Button>
                         </Box>
+                        )
                       ))}
                     </Box>
                   )}

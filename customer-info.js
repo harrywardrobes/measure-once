@@ -208,8 +208,8 @@ async function sendAdminNotificationEmail(submission) {
   if (photoKeys.length > 0) {
     const { Client } = require('@replit/object-storage');
     const client = new Client();
-    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
-    // Download all photos in parallel so 14 photos take ~1× network RTT instead of 14×.
+    const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' };
+    // Download all files in parallel so 14 files take ~1× network RTT instead of 14×.
     const downloadResults = await Promise.all(photoKeys.map(async (key) => {
       const storagePath = 'customer-info-photos/' + key.replace(/^obj:ci_/, '');
       const ext = storagePath.split('.').pop()?.toLowerCase() || 'jpg';
@@ -229,13 +229,16 @@ async function sendAdminNotificationEmail(submission) {
         return { skipped: true };
       }
     }));
-    // Rebuild attachments in original order so filenames are sequential (photo-1, photo-2, …).
+    // Rebuild attachments in original order so filenames are sequential (photo-1/document-1, …).
     for (const result of downloadResults) {
       if (result.skipped) {
         skippedCount++;
       } else {
+        const fileLabel = result.ext === 'pdf'
+          ? `document-${attachments.length + 1}.pdf`
+          : `photo-${attachments.length + 1}.${result.ext}`;
         attachments.push({
-          filename: `photo-${attachments.length + 1}.${result.ext}`,
+          filename: fileLabel,
           content: result.buffer,
           contentType: result.contentType,
         });
@@ -246,25 +249,25 @@ async function sendAdminNotificationEmail(submission) {
   let photoSummaryHtml;
   let photoSummaryText;
   if (photoKeys.length === 0) {
-    photoSummaryHtml = '<p>No photos uploaded.</p>';
-    photoSummaryText = 'Photos: none uploaded';
+    photoSummaryHtml = '<p>No files uploaded.</p>';
+    photoSummaryText = 'Files: none uploaded';
   } else if (skippedCount === 0) {
     const n = attachments.length;
-    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached.</strong></p>`;
-    photoSummaryText = `Photos: ${n} attached`;
+    photoSummaryHtml = `<p><strong>${n} file${n === 1 ? '' : 's'} attached.</strong></p>`;
+    photoSummaryText = `Files: ${n} attached`;
   } else {
     const n = attachments.length;
     const dashboardUrl = contact_id
       ? `${appBaseUrl()}/customers/${encodeURIComponent(contact_id)}`
       : null;
     const dashboardLinkHtml = dashboardUrl
-      ? ` <a href="${escapeHtml(dashboardUrl)}">View all photos on the dashboard</a>`
+      ? ` <a href="${escapeHtml(dashboardUrl)}">View all files on the dashboard</a>`
       : ' See dashboard to view them.';
     const dashboardLinkText = dashboardUrl
-      ? ` View all photos on the dashboard: ${dashboardUrl}`
+      ? ` View all files on the dashboard: ${dashboardUrl}`
       : ' See dashboard to view them.';
-    photoSummaryHtml = `<p><strong>${n} photo${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large after compression) —${dashboardLinkHtml}</strong></p>`;
-    photoSummaryText = `Photos: ${n} attached, ${skippedCount} skipped (too large).${dashboardLinkText}`;
+    photoSummaryHtml = `<p><strong>${n} file${n === 1 ? '' : 's'} attached, ${skippedCount} skipped (too large) —${dashboardLinkHtml}</strong></p>`;
+    photoSummaryText = `Files: ${n} attached, ${skippedCount} skipped (too large).${dashboardLinkText}`;
   }
 
   // Persist the skipped count so the dashboard can surface a warning notice.
@@ -428,7 +431,7 @@ async function isLeadStatusPastPhotos(currentStatus) {
 }
 
 // ── Photo upload (multer → object storage) ───────────────────────────────────
-const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']);
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file (client compresses to ≤1.5 MB before upload)
 const MAX_PHOTO_FILES = 15;
 // Maximum total files that may be uploaded across all batches for a single token.
@@ -447,7 +450,7 @@ const _photoUpload = multer({
   limits: { fileSize: MAX_PHOTO_BYTES, files: MAX_PHOTO_FILES },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME.has(file.mimetype.toLowerCase())) cb(null, true);
-    else cb(new Error('Only JPEG, PNG, and WebP images are allowed.'));
+    else cb(new Error('Only JPEG, PNG, WebP, and PDF files are allowed.'));
   },
 });
 
@@ -473,7 +476,7 @@ async function uploadPhotoFileToStorage(filePath, mimeType) {
   } catch (e) {
     throw _friendlyStorageError(e);
   }
-  const extMap = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+  const extMap = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
   const ext = extMap[mimeType.toLowerCase()] || 'jpg';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `customer-info-photos/${id}.${ext}`;
@@ -1546,9 +1549,12 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
     }
     const buf = Array.isArray(dl.value) ? dl.value[0] : dl.value;
     const ext = id.split('.').pop() || 'jpg';
-    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg';
     res.set('Content-Type', mime);
     res.set('Cache-Control', 'private, max-age=3600');
+    if (ext === 'pdf') {
+      res.set('Content-Disposition', 'inline');
+    }
     res.send(buf);
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] Failed to serve photo:');
