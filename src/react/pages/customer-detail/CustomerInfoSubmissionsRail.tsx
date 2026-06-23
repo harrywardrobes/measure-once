@@ -19,6 +19,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import HomeIcon from '@mui/icons-material/Home';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import SendIcon from '@mui/icons-material/Send';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -511,6 +512,11 @@ export function BulkReviewActions({ entries }: { entries: PendingPhotoReviewEntr
  * placeholder copy distinguishes between offline (photo was not cached) and
  * online (URL is genuinely broken / unavailable).
  */
+/** Returns true if the signed URL points to a PDF attachment. */
+function isPdfUrl(url: string): boolean {
+  return url.split('?')[0].toLowerCase().endsWith('.pdf');
+}
+
 function SubmissionPhoto({ url, index }: { url: string; index: number }) {
   const [errored, setErrored] = useState(false);
   const offline = typeof navigator !== 'undefined' && !navigator.onLine;
@@ -963,56 +969,85 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
                 </Box>
               )}
 
-              {/* Photos */}
-              {sub.photoUrls && sub.photoUrls.length > 0 && (
-                <Box>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.75 }}>
-                    Photos ({sub.photoUrls.length})
-                  </Typography>
-                  {sub.email_skipped_count > 0 && (
-                    <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }} data-testid="skipped-photo-alert">
-                      {sub.email_skipped_count} photo{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email —{' '}
-                      {sub.email_skipped_count === 1 ? 'it is' : 'they are'}{' '}
-                      <a
-                        href={sub.photoUrls[0]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        data-testid="skipped-photo-link"
-                      >
-                        still viewable here
-                      </a>.
-                    </Alert>
-                  )}
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
-                      gap: 1,
-                    }}
-                  >
-                    {sub.photoUrls.map((url, i) => (
+              {/* Photos & PDFs */}
+              {sub.photoUrls && sub.photoUrls.length > 0 && (() => {
+                const imageUrls = sub.photoUrls.filter(u => !isPdfUrl(u));
+                const pdfUrls   = sub.photoUrls.filter(u => isPdfUrl(u));
+                const hasPdfs   = pdfUrls.length > 0;
+                const label     = hasPdfs ? 'Uploads' : 'Photos';
+                return (
+                  <Box>
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.75 }}>
+                      {label} ({sub.photoUrls.length})
+                    </Typography>
+                    {sub.email_skipped_count > 0 && (
+                      <Alert severity="warning" sx={{ mb: 1, py: 0.5, fontSize: '0.75rem' }} data-testid="skipped-photo-alert">
+                        {sub.email_skipped_count} attachment{sub.email_skipped_count === 1 ? ' was' : 's were'} too large to attach to the admin email —{' '}
+                        {sub.email_skipped_count === 1 ? 'it is' : 'they are'}{' '}
+                        <a
+                          href={sub.photoUrls[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="skipped-photo-link"
+                        >
+                          still viewable here
+                        </a>.
+                      </Alert>
+                    )}
+                    {imageUrls.length > 0 && (
                       <Box
-                        key={i}
-                        component="a"
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         sx={{
-                          display: 'block',
-                          borderRadius: 1.5,
-                          overflow: 'hidden',
-                          aspectRatio: '1',
-                          bgcolor: 'grey.100',
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+                          gap: 1,
+                          mb: hasPdfs ? 1 : 0,
                         }}
                       >
-                        <SubmissionPhoto url={url} index={i} />
+                        {imageUrls.map((url, i) => (
+                          <Box
+                            key={url}
+                            component="a"
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{
+                              display: 'block',
+                              borderRadius: 1.5,
+                              overflow: 'hidden',
+                              aspectRatio: '1',
+                              bgcolor: 'grey.100',
+                              border: '1px solid',
+                              borderColor: 'divider',
+                            }}
+                          >
+                            <SubmissionPhoto url={url} index={i} />
+                          </Box>
+                        ))}
                       </Box>
-                    ))}
+                    )}
+                    {hasPdfs && (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                        {pdfUrls.map((url, i) => (
+                          <Chip
+                            key={url}
+                            component="a"
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            icon={<PictureAsPdfIcon />}
+                            label={pdfUrls.length === 1 ? 'Document.pdf' : `Document ${i + 1}.pdf`}
+                            size="small"
+                            variant="outlined"
+                            clickable
+                            data-testid="pdf-attachment-chip"
+                            sx={{ color: 'error.main', borderColor: 'error.light', '& .MuiChip-icon': { color: 'error.main' } }}
+                          />
+                        ))}
+                      </Box>
+                    )}
                   </Box>
-                </Box>
-              )}
+                );
+              })()}
               {(!sub.photoUrls || sub.photoUrls.length === 0) && (
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
                   No photos uploaded.
@@ -1067,7 +1102,10 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
         void cacheRecord('customerInfo', contactId, d);
         // Warm the SW image cache so the photo thumbnails (lazy, inside a
         // collapsed grid) are available offline even if no card is expanded.
-        void prefetchSubmissionPhotos(d.flatMap(s => Array.isArray(s.photoUrls) ? s.photoUrls : []));
+        // PDFs are not image resources — exclude them from the image cache.
+        void prefetchSubmissionPhotos(
+          d.flatMap(s => Array.isArray(s.photoUrls) ? s.photoUrls : []).filter(u => !isPdfUrl(u)),
+        );
       })
       .catch(async e => {
         // Offline fallback. Prefer the full submissions list cached on the last

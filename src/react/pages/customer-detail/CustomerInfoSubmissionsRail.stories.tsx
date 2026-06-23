@@ -164,6 +164,42 @@ export const ManagerBothCards: Story = {
   ),
 };
 
+const PDF_SUBMISSION = {
+  ...SUBMITTED_SUBMISSION,
+  id: 3,
+  room_count: '1',
+  room_notes: 'Living room — see attached PDF floor plan',
+  photo_keys: ['obj:ci_aaaabbbbccccdddd.jpg', 'obj:ci_eeeeffffgggghhhh.pdf'],
+  photoUrls: [
+    '/api/customer-info-photos/obj%3Aci_aaaabbbbccccdddd.jpg?exp=9999999999&sig=fakesig',
+    '/api/customer-info-photos/obj%3Aci_eeeeffffgggghhhh.pdf?exp=9999999999&sig=fakesig',
+  ],
+  email_skipped_count: 0,
+};
+
+const PDF_ONLY_SUBMISSION = {
+  ...SUBMITTED_SUBMISSION,
+  id: 4,
+  room_count: '2',
+  room_notes: 'Two rooms — PDF floor plan only, no photos',
+  photo_keys: ['obj:ci_iiiijjjjkkkkllll.pdf', 'obj:ci_mmmmnnnnooookppp.pdf'],
+  photoUrls: [
+    '/api/customer-info-photos/obj%3Aci_iiiijjjjkkkkllll.pdf?exp=9999999999&sig=fakesig',
+    '/api/customer-info-photos/obj%3Aci_mmmmnnnnooookppp.pdf?exp=9999999999&sig=fakesig',
+  ],
+  email_skipped_count: 0,
+};
+
+export const SubmittedWithPdf: Story = {
+  name: 'Submitted — mixed photo + PDF attachment',
+  render: () => <RailDemo privilege="manager" submissions={[PDF_SUBMISSION]} />,
+};
+
+export const SubmittedPdfOnly: Story = {
+  name: 'Submitted — PDF attachments only (no photos)',
+  render: () => <RailDemo privilege="manager" submissions={[PDF_ONLY_SUBMISSION]} />,
+};
+
 export const AllPrivilegeSideBySide: Story = {
   name: 'All privilege levels — active link side by side',
   render: () => (
