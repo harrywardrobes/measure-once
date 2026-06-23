@@ -86,6 +86,7 @@ ADMIN_EMAILS = "harry@harrywardrobes.co.uk,harrygautierdesign@gmail.com"
 
 [userenv.production]
 APP_URL = "https://handle.harrywardrobes.co.uk"
+NODE_ENV = "production"
 
 [postMerge]
 path = "scripts/post-merge.sh"
