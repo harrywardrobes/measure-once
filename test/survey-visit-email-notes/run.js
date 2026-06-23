@@ -22,6 +22,11 @@
 //   (TEAM-NOTES-PRESENT) Team notification email text + HTML contain the Visit
 //                        Notes section and the note value when visit_notes is
 //                        set.
+//   (RESEND-NOTES-ABSENT)  Resend sign-off email text + HTML contain no Visit
+//                           Notes section when visit_notes is null.
+//   (RESEND-NOTES-PRESENT) Resend sign-off email text + HTML contain the Visit
+//                           Notes section and the note value when visit_notes
+//                           is set.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:survey-visit-email-notes
@@ -49,6 +54,8 @@ const PROBE_LABELS = [
   '(CUST-NOTES-PRESENT) customer email text and HTML contain Visit Notes section when visit_notes is set',
   '(TEAM-NOTES-ABSENT) team notification email text and HTML have no Visit Notes section when visit_notes is null',
   '(TEAM-NOTES-PRESENT) team notification email text and HTML contain Visit Notes section when visit_notes is set',
+  '(RESEND-NOTES-ABSENT) resend sign-off email text and HTML have no Visit Notes section when visit_notes is null',
+  '(RESEND-NOTES-PRESENT) resend sign-off email text and HTML contain Visit Notes section when visit_notes is set',
 ];
 
 function record(id, ok, detail) {
@@ -130,6 +137,10 @@ function writeReport(runId) {
     '  Visit Notes section when `visit_notes` is null.',
     '- **(TEAM-NOTES-PRESENT)**: Team notification email (text + HTML) contains the',
     '  Visit Notes section and the note value when `visit_notes` is set.',
+    '- **(RESEND-NOTES-ABSENT)**: Resend sign-off email (text + HTML) contains no',
+    '  Visit Notes section when `visit_notes` is null.',
+    '- **(RESEND-NOTES-PRESENT)**: Resend sign-off email (text + HTML) contains the',
+    '  Visit Notes section and the note value when `visit_notes` is set.',
   ];
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n') + '\n');
@@ -202,7 +213,9 @@ async function main() {
 
     const users  = await seedUsers(pool, runId);
     const member = users.member;
+    const admin  = users.admin;
     const client = await login(member.email, PASSWORD);
+    const adminClient = await login(admin.email, PASSWORD);
 
     const CUSTOMER_EMAIL = 'sven-customer@privtest.local';
 
@@ -371,6 +384,102 @@ async function main() {
             : `Visit Notes missing from team email; text-ok=${textOk} html-ok=${htmlOk}; `
               + `text=${JSON.stringify((notesTeamMail.text || '').slice(0, 200))} `
               + `html=${JSON.stringify((notesTeamMail.html || '').slice(0, 200))}`);
+      }
+    }
+
+    // ── (RESEND-NOTES-ABSENT) ────────────────────────────────────────────────
+    // Resend the sign-off link for the no-notes visit; customer email must not
+    // contain a Visit Notes section.
+    console.log('\n  [RESEND-NOTES-ABSENT] resend sign-off for visit with no visit_notes');
+
+    const absentVisitId = absentRes.status === 201 ? absentRes.json?.surveyVisitId : null;
+    if (!absentVisitId) {
+      record('RESEND-NOTES-ABSENT', false,
+        'skipped — initial absent-notes submit did not return a surveyVisitId');
+    } else {
+      const resendAbsentBefore = readMailJsonl(mailFile).length;
+      const resendAbsentRes = await adminClient.post(
+        `/api/survey-visits/${absentVisitId}/resend-signoff`, {}
+      );
+      if (resendAbsentRes.status !== 200) {
+        record('RESEND-NOTES-ABSENT', false,
+          `resend returned status=${resendAbsentRes.status} body=${JSON.stringify(resendAbsentRes.json).slice(0, 200)}`);
+      } else {
+        let resendAbsentMail = null;
+        await pollFn(async () => {
+          const mails = readMailJsonl(mailFile).slice(resendAbsentBefore);
+          resendAbsentMail = resendAbsentMail || mails.find(
+            m => typeof m.to === 'string' && m.to.includes(CUSTOMER_EMAIL)
+          );
+          return resendAbsentMail ? true : null;
+        }, 6000, 100);
+
+        if (!resendAbsentMail) {
+          const snap = readMailJsonl(mailFile).slice(resendAbsentBefore);
+          record('RESEND-NOTES-ABSENT', false,
+            `no customer email captured after resend (${snap.length} mail(s): `
+            + `${snap.map(m => `to=${m.to}`).join(' | ')})`);
+        } else {
+          const textOk = typeof resendAbsentMail.text === 'string'
+            && !resendAbsentMail.text.includes('--- Visit Notes ---');
+          const htmlOk = typeof resendAbsentMail.html === 'string'
+            && !resendAbsentMail.html.includes('Visit Notes');
+          record('RESEND-NOTES-ABSENT', textOk && htmlOk,
+            textOk && htmlOk
+              ? 'resend email text + HTML have no Visit Notes section when visit_notes is null'
+              : `unexpected Visit Notes in resend email; text-ok=${textOk} html-ok=${htmlOk}; `
+                + `text=${JSON.stringify((resendAbsentMail.text || '').slice(0, 200))} `
+                + `html=${JSON.stringify((resendAbsentMail.html || '').slice(0, 200))}`);
+        }
+      }
+    }
+
+    // ── (RESEND-NOTES-PRESENT) ───────────────────────────────────────────────
+    // Resend the sign-off link for the visit with notes set; customer email
+    // must include the Visit Notes section with the note value.
+    console.log('\n  [RESEND-NOTES-PRESENT] resend sign-off for visit with visit_notes set');
+
+    const notesVisitId = notesRes.status === 201 ? notesRes.json?.surveyVisitId : null;
+    if (!notesVisitId) {
+      record('RESEND-NOTES-PRESENT', false,
+        'skipped — initial notes-present submit did not return a surveyVisitId');
+    } else {
+      const resendNotesBefore = readMailJsonl(mailFile).length;
+      const resendNotesRes = await adminClient.post(
+        `/api/survey-visits/${notesVisitId}/resend-signoff`, {}
+      );
+      if (resendNotesRes.status !== 200) {
+        record('RESEND-NOTES-PRESENT', false,
+          `resend returned status=${resendNotesRes.status} body=${JSON.stringify(resendNotesRes.json).slice(0, 200)}`);
+      } else {
+        let resendNotesMail = null;
+        await pollFn(async () => {
+          const mails = readMailJsonl(mailFile).slice(resendNotesBefore);
+          resendNotesMail = resendNotesMail || mails.find(
+            m => typeof m.to === 'string' && m.to.includes(CUSTOMER_EMAIL)
+          );
+          return resendNotesMail ? true : null;
+        }, 6000, 100);
+
+        if (!resendNotesMail) {
+          const snap = readMailJsonl(mailFile).slice(resendNotesBefore);
+          record('RESEND-NOTES-PRESENT', false,
+            `no customer email captured after resend (${snap.length} mail(s): `
+            + `${snap.map(m => `to=${m.to}`).join(' | ')})`);
+        } else {
+          const textOk = typeof resendNotesMail.text === 'string'
+            && resendNotesMail.text.includes('--- Visit Notes ---')
+            && resendNotesMail.text.includes(notesContent);
+          const htmlOk = typeof resendNotesMail.html === 'string'
+            && resendNotesMail.html.includes('Visit Notes')
+            && resendNotesMail.html.includes(notesContent);
+          record('RESEND-NOTES-PRESENT', textOk && htmlOk,
+            textOk && htmlOk
+              ? 'resend email text + HTML contain Visit Notes section with the note value'
+              : `Visit Notes section missing or content absent in resend email; text-ok=${textOk} html-ok=${htmlOk}; `
+                + `text=${JSON.stringify((resendNotesMail.text || '').slice(0, 200))} `
+                + `html=${JSON.stringify((resendNotesMail.html || '').slice(0, 200))}`);
+        }
       }
     }
 
