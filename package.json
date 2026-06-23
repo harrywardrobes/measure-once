@@ -4,7 +4,7 @@
   "description": "Project management dashboard",
   "main": "server.js",
   "scripts": {
-    "postinstall": "npx puppeteer browsers install chrome",
+    "postinstall": "node scripts/install-chrome.mjs",
     "db:migrate": "node scripts/run-db-migrate.js up",
     "db:migrate:down": "node scripts/run-db-migrate.js down 1",
     "db:migrate:redo": "node scripts/run-db-migrate.js down 1 && node scripts/run-db-migrate.js up",
