@@ -27,6 +27,9 @@
 //   (RESEND-NOTES-PRESENT) Resend sign-off email text + HTML contain the Visit
 //                           Notes section and the note value when visit_notes
 //                           is set.
+//   (RESEND-STATUS-GATE)   POST /api/survey-visits/:id/resend-signoff returns
+//                           409 when the visit status is not "submitted"
+//                           (e.g. signed_off).
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:survey-visit-email-notes
@@ -56,6 +59,7 @@ const PROBE_LABELS = [
   '(TEAM-NOTES-PRESENT) team notification email text and HTML contain Visit Notes section when visit_notes is set',
   '(RESEND-NOTES-ABSENT) resend sign-off email text and HTML have no Visit Notes section when visit_notes is null',
   '(RESEND-NOTES-PRESENT) resend sign-off email text and HTML contain Visit Notes section when visit_notes is set',
+  '(RESEND-STATUS-GATE) resend-signoff returns 409 for a visit whose status is not submitted',
 ];
 
 function record(id, ok, detail) {
@@ -141,6 +145,8 @@ function writeReport(runId) {
     '  Visit Notes section when `visit_notes` is null.',
     '- **(RESEND-NOTES-PRESENT)**: Resend sign-off email (text + HTML) contains the',
     '  Visit Notes section and the note value when `visit_notes` is set.',
+    '- **(RESEND-STATUS-GATE)**: POST `/api/survey-visits/:id/resend-signoff` returns',
+    '  409 when the visit status is not `submitted` (e.g. `signed_off`).',
   ];
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n') + '\n');
@@ -481,6 +487,39 @@ async function main() {
                 + `html=${JSON.stringify((resendNotesMail.html || '').slice(0, 200))}`);
         }
       }
+    }
+
+    // ── (RESEND-STATUS-GATE) ─────────────────────────────────────────────────
+    // Verify that resend-signoff returns 409 for a visit that is not submitted
+    // (e.g. signed_off). Creates a fresh visit, flips it to signed_off directly
+    // in the DB, then asserts the endpoint refuses with 409.
+    console.log('\n  [RESEND-STATUS-GATE] resend-signoff must return 409 for a signed_off visit');
+
+    const gateVisitRes = await client.post('/api/survey-visits', {
+      contactId:     CONTACT_ID,
+      contactName:   'SVEN Gate Test Customer',
+      contactEmail:  'sven-gate@privtest.local',
+      termsAccepted: true,
+      rooms: [{ roomName: 'Hall', unitCount: 1, unitPricePence: 0 }],
+      handlerConfig: {},
+    });
+
+    if (gateVisitRes.status !== 201) {
+      record('RESEND-STATUS-GATE', false,
+        `visit create returned status=${gateVisitRes.status} body=${JSON.stringify(gateVisitRes.json).slice(0, 200)}`);
+    } else {
+      const gateVisitId = gateVisitRes.json?.surveyVisitId;
+      await pool.query(
+        `UPDATE survey_visits SET status='signed_off', signed_off_at=NOW(), updated_at=NOW() WHERE id=$1`,
+        [gateVisitId]
+      );
+      const gateResendRes = await adminClient.post(
+        `/api/survey-visits/${gateVisitId}/resend-signoff`, {}
+      );
+      record('RESEND-STATUS-GATE', gateResendRes.status === 409,
+        gateResendRes.status === 409
+          ? 'resend-signoff correctly returned 409 for a signed_off visit'
+          : `expected 409 but got status=${gateResendRes.status} body=${JSON.stringify(gateResendRes.json).slice(0, 200)}`);
     }
 
     exitCode = findings.filter(f => !f.ok).length > 0 ? 1 : 0;
