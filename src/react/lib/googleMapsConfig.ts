@@ -139,16 +139,26 @@ export function isMapPreviewEnabled(cfg: GoogleMapsConfig, surface: GoogleMapsSu
 // ── Lazy Places JS loader ─────────────────────────────────────────────────────
 let _scriptPromise: Promise<void> | null = null;
 
+// Stable global callback name used by the Maps JS bootstrap.
+const MAPS_CALLBACK = '__googleMapsPlacesReady';
+
 /**
  * Inject the Google Maps JS API bootstrap (v=weekly, loading=async) once, then
  * call `google.maps.importLibrary('places')` to pull in the new Places API
  * (`AutocompleteSuggestion`, `Place`, etc.). Resolves when
  * `google.maps.places` is available; rejects on load error or timeout so
  * callers can degrade gracefully.
+ *
+ * IMPORTANT: with loading=async Google returns a lightweight 13 KB shim that
+ * injects the real SDK (main.js) via a second dynamically-added script tag.
+ * The outer script element's `onload` fires when the *shim* loads, before
+ * google.maps.importLibrary exists.  We therefore use the `callback` URL
+ * parameter so Google calls us only after the full SDK — including
+ * importLibrary — is initialised.
  */
 export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<void> {
   if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
-  const w = window as unknown as {
+  const w = window as unknown as Record<string, unknown> & {
     google?: { maps?: { places?: unknown; importLibrary?: (lib: string) => Promise<unknown> } };
   };
   if (w.google?.maps?.places) return Promise.resolve();
@@ -156,6 +166,8 @@ export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<vo
 
   _scriptPromise = new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
+      _scriptPromise = null;
+      delete w[MAPS_CALLBACK];
       reject(new Error('Places JS load timed out'));
     }, 12000);
 
@@ -179,22 +191,24 @@ export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<vo
         });
     };
 
-    // If the Maps bootstrap is already loaded by another script tag, jump
-    // straight to importing the library.
+    // Fast path: the full SDK is already loaded (e.g. another surface loaded
+    // it earlier in this session).
     if (w.google?.maps?.importLibrary) {
       importPlaces();
       return;
     }
 
-    const existing = document.getElementById('google-maps-places-js');
-    if (existing) {
-      existing.addEventListener('load', importPlaces);
-      existing.addEventListener('error', () => {
-        window.clearTimeout(timeout);
-        reject(new Error('Places JS failed to load'));
-      });
-      return;
-    }
+    // If there is a stale script element from a previous failed attempt,
+    // remove it so we can inject a fresh one with a fresh callback.
+    const stale = document.getElementById('google-maps-places-js');
+    if (stale) stale.remove();
+
+    // Register the global callback BEFORE injecting the script so it is
+    // available the instant the SDK calls it.
+    w[MAPS_CALLBACK] = () => {
+      delete w[MAPS_CALLBACK];
+      importPlaces();
+    };
 
     const script = document.createElement('script');
     script.id = 'google-maps-places-js';
@@ -204,12 +218,16 @@ export function loadPlacesScript(apiKey: string, language = 'en-GB'): Promise<vo
       v: 'weekly',
       loading: 'async',
       language,
+      // The callback param tells the Maps SDK to invoke this global function
+      // once it is fully initialised — after importLibrary is ready.
+      callback: MAPS_CALLBACK,
     });
     script.src = `https://maps.googleapis.com/maps/api/js?${params.toString()}`;
-    script.onload = importPlaces;
     script.onerror = () => {
       window.clearTimeout(timeout);
       _scriptPromise = null;
+      script.remove();
+      delete w[MAPS_CALLBACK];
       reject(new Error('Places JS failed to load'));
     };
     document.head.appendChild(script);
