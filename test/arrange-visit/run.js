@@ -34,6 +34,8 @@
 //   (G.4)     Static source assertion: the "not proceeding" offline toast string
 //             ("Saved offline — status will update when you reconnect") is present
 //             in ArrangeVisitModal.tsx
+//   (G.5)     The "not proceeding" offline toast string sits inside a res.queued
+//             branch (same technique as G.3 — checks the ~300 chars before it)
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:arrange-visit
@@ -716,6 +718,16 @@ async function main() {
       hasNotProceedingToast ? 'found' : 'NOT FOUND',
       hasNotProceedingToast,
     );
+
+    const notProceedingIdx     = modalSrc.indexOf(NOT_PROCEEDING_TOAST);
+    const npContextBefore      = notProceedingIdx >= 0 ? modalSrc.slice(Math.max(0, notProceedingIdx - 300), notProceedingIdx) : '';
+    const npInQueuedBranch     = npContextBefore.includes('res.queued');
+    record(
+      '(G.5) not-proceeding offline toast is inside a res.queued branch',
+      'res.queued in preceding context',
+      npInQueuedBranch ? 'res.queued found' : 'res.queued NOT found in context',
+      npInQueuedBranch,
+    );
   }
 
   // ── Summary + report ───────────────────────────────────────────────────────
@@ -807,6 +819,9 @@ async function writeReport(runId, findings) {
     '  (`"Saved offline — status will update when you reconnect"`) is present in',
     '  `ArrangeVisitModal.tsx`. Guards against accidental edits to the toast copy in the',
     '  queued path of the "not proceeding" outcome handler.',
+    '- **(G.5)** The "not proceeding" offline toast string sits inside a `res.queued` branch.',
+    '  Guards against the string being moved outside the queued branch by a refactor',
+    '  (same technique as G.3 — checks ~300 chars of preceding source context).',
   ];
   const outPath = path.join(dir, 'arrange-visit.md');
   fs.writeFileSync(outPath, lines.join('\n') + '\n');
