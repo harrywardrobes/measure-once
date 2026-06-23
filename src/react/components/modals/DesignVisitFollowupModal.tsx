@@ -327,7 +327,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       showToast(conf ? `Invite email sent — ${conf.toLowerCase()}` : 'Invite email sent', false);
       goToStep('done');
     } catch (e) {
-      setOutcomeError((e as { message?: string }).message || 'Failed to send email.');
+      setEmailError((e as { message?: string }).message || 'Failed to send email.');
       goToStep('resend');
     }
   }
