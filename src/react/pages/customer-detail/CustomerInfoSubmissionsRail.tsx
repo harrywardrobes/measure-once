@@ -513,7 +513,7 @@ export function BulkReviewActions({ entries }: { entries: PendingPhotoReviewEntr
  * online (URL is genuinely broken / unavailable).
  */
 /** Returns true if the signed URL points to a PDF attachment. */
-function isPdfUrl(url: string): boolean {
+export function isPdfUrl(url: string): boolean {
   return url.split('?')[0].toLowerCase().endsWith('.pdf');
 }
 

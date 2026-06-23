@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { isPdfUrl } from './CustomerInfoSubmissionsRail';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -249,5 +250,137 @@ describe('CustomerInfoSubmissionsRail — inline Re-send button', () => {
       expect(screen.getByText('Retry')).toBeTruthy();
     });
     expect(screen.queryByText('On cooldown')).toBeNull();
+  });
+});
+
+// ── isPdfUrl unit tests ────────────────────────────────────────────────────────
+
+describe('isPdfUrl', () => {
+  it('returns true for a plain .pdf URL', () => {
+    expect(isPdfUrl('/api/customer-info-photos/document.pdf')).toBe(true);
+  });
+
+  it('returns true for a .pdf URL with a query string', () => {
+    expect(isPdfUrl('/api/customer-info-photos/document.pdf?token=abc&exp=123')).toBe(true);
+  });
+
+  it('returns true for a .PDF URL (uppercase extension)', () => {
+    expect(isPdfUrl('/api/customer-info-photos/DOCUMENT.PDF')).toBe(true);
+  });
+
+  it('returns false for a .jpg URL', () => {
+    expect(isPdfUrl('/api/customer-info-photos/photo.jpg')).toBe(false);
+  });
+
+  it('returns false for a .jpeg URL', () => {
+    expect(isPdfUrl('/api/customer-info-photos/photo.jpeg?token=xyz')).toBe(false);
+  });
+
+  it('returns false for a .png URL', () => {
+    expect(isPdfUrl('/api/customer-info-photos/photo.png')).toBe(false);
+  });
+});
+
+// ── PDF chip rendering tests ───────────────────────────────────────────────────
+
+const PDF_SUBMISSION = {
+  id: 10,
+  created_at: new Date(Date.now() - 3 * 86400000).toISOString(),
+  submitted_at: new Date(Date.now() - 1 * 86400000).toISOString(),
+  expires_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+  contact_name: 'Bob Builder',
+  contact_email: 'bob@example.com',
+  contact_phone: null,
+  corrected_email: null,
+  corrected_mobile: null,
+  address_line1: null,
+  city: null,
+  postcode: null,
+  structuredAddress: null,
+  room_count: null,
+  room_notes: null,
+  photo_keys: [],
+  photoUrls: ['/api/customer-info-photos/document.pdf?token=abc'],
+  email_skipped_count: 0,
+  form_link: null,
+};
+
+const MIXED_SUBMISSION = {
+  ...PDF_SUBMISSION,
+  id: 11,
+  photoUrls: [
+    '/api/customer-info-photos/photo.jpg?token=img',
+    '/api/customer-info-photos/document.pdf?token=pdf',
+  ],
+};
+
+describe('CustomerInfoSubmissionsRail — PDF chip rendering', () => {
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch?.();
+    vi.restoreAllMocks();
+  });
+
+  it('renders a pdf-attachment-chip for a submission with a single PDF URL', async () => {
+    restoreFetch = mockFetch([PDF_SUBMISSION]);
+    stubPrivilege('member');
+
+    const user = userEvent.setup();
+    render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const reviewBtn = await screen.findByTestId('review-btn');
+    await user.click(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pdf-attachment-chip')).toBeTruthy();
+    });
+  });
+
+  it('does not render an <img> for the PDF URL in a PDF-only submission', async () => {
+    restoreFetch = mockFetch([PDF_SUBMISSION]);
+    stubPrivilege('member');
+
+    const user = userEvent.setup();
+    const { container } = render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const reviewBtn = await screen.findByTestId('review-btn');
+    await user.click(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pdf-attachment-chip')).toBeTruthy();
+    });
+
+    const images = container.querySelectorAll('img');
+    const pdfImages = Array.from(images).filter(img =>
+      img.getAttribute('src')?.includes('document.pdf'),
+    );
+    expect(pdfImages).toHaveLength(0);
+  });
+
+  it('renders the image thumbnail AND the pdf chip for a mixed submission', async () => {
+    restoreFetch = mockFetch([MIXED_SUBMISSION]);
+    stubPrivilege('member');
+
+    const user = userEvent.setup();
+    const { container } = render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const reviewBtn = await screen.findByTestId('review-btn');
+    await user.click(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pdf-attachment-chip')).toBeTruthy();
+    });
+
+    const images = container.querySelectorAll('img');
+    const photoImages = Array.from(images).filter(img =>
+      img.getAttribute('src')?.includes('photo.jpg'),
+    );
+    expect(photoImages).toHaveLength(1);
+
+    const pdfImages = Array.from(images).filter(img =>
+      img.getAttribute('src')?.includes('document.pdf'),
+    );
+    expect(pdfImages).toHaveLength(0);
   });
 });

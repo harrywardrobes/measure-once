@@ -62,6 +62,26 @@ author = 58014399
 task = "shell.exec"
 args = "git remote | grep '^subrepl-' | while IFS= read -r r; do git remote remove \"$r\"; done"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "test-submissions-rail"
+
+[[workflows.workflow]]
+name = "test-submissions-rail"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node_modules/.bin/vitest run src/react/pages/customer-detail/CustomerInfoSubmissionsRail.test.tsx --reporter=verbose"
+
+[workflows.workflow.metadata]
+isValidation = true
+
 [[ports]]
 localPort = 5000
 externalPort = 5000
