@@ -31,6 +31,9 @@
 //             sync when you reconnect") and the plain offline booking toast are
 //             both present in ArrangeVisitModal.tsx, and the cancellation toast
 //             is inside a res.queued branch in doBook()
+//   (G.4)     Static source assertion: the "not proceeding" offline toast string
+//             ("Saved offline — status will update when you reconnect") is present
+//             in ArrangeVisitModal.tsx
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:arrange-visit
@@ -704,6 +707,15 @@ async function main() {
       inQueuedBranch ? 'res.queued found' : 'res.queued NOT found in context',
       inQueuedBranch,
     );
+
+    const NOT_PROCEEDING_TOAST = 'Saved offline \u2014 status will update when you reconnect';
+    const hasNotProceedingToast = modalSrc.includes(NOT_PROCEEDING_TOAST);
+    record(
+      '(G.4) not-proceeding queued path → offline toast string present in source',
+      `"${NOT_PROCEEDING_TOAST}"`,
+      hasNotProceedingToast ? 'found' : 'NOT FOUND',
+      hasNotProceedingToast,
+    );
   }
 
   // ── Summary + report ───────────────────────────────────────────────────────
@@ -791,6 +803,10 @@ async function writeReport(runId, findings) {
     '  `ArrangeVisitModal.tsx`. Guards the sibling `!cancelledEvent` branch of the queued path.',
     '- **(G.3)** The offline cancellation toast string sits inside a `res.queued` branch in `doBook()`.',
     '  Guards against the string being moved to an unrelated branch by a refactor.',
+    '- **(G.4)** Static source assertion: the "not proceeding" offline toast string',
+    '  (`"Saved offline — status will update when you reconnect"`) is present in',
+    '  `ArrangeVisitModal.tsx`. Guards against accidental edits to the toast copy in the',
+    '  queued path of the "not proceeding" outcome handler.',
   ];
   const outPath = path.join(dir, 'arrange-visit.md');
   fs.writeFileSync(outPath, lines.join('\n') + '\n');
