@@ -74,13 +74,10 @@
   }
 
   /* ── Tabs ── */
-  var _adminUserId = '';
-  try {
-    _adminUserId = String(window.__moHeaderUser?.id || '');
-  } catch (_) {}
+  var _adminUserId = <%- JSON.stringify(String(userId || '')) %>;
 
   function _adminTabKey() {
-    return _adminUserId ? 'mo:admin:active-tab:' + _adminUserId : 'adminActiveTab';
+    return 'mo:admin:active-tab:' + _adminUserId;
   }
 
   function switchTab(id) {
@@ -264,6 +261,8 @@
     // so panels don't briefly flash empty while the deferred bundle is
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
+
+    try { localStorage.removeItem('adminActiveTab'); } catch (_) {}
 
     const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;

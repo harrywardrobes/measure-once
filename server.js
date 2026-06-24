@@ -3882,7 +3882,7 @@ app.get('/admin', async (req, res) => {
   <a href="/profile">Back to your profile</a>
 </div></body></html>`);
   }
-  res.render('admin', { title: 'Admin · Measure Once' });
+  res.render('admin', { title: 'Admin · Measure Once', userId: req.user.claims.sub });
 });
 
 app.get('/trades', isAuthenticated, (_req, res) => {
