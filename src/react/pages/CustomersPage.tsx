@@ -459,6 +459,46 @@ function DepositInvoiceBadge({
   );
 }
 
+function TasksBadge({
+  contactId,
+  openTaskCount,
+}: {
+  contactId: string;
+  openTaskCount: number;
+}) {
+  if (!openTaskCount) return null;
+  const label = openTaskCount === 1 ? '1 open task' : `${openTaskCount} open tasks`;
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    window.location.href = `/customers/${encodeURIComponent(contactId)}#tasks-section`;
+  };
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleClick}
+      title={label}
+      sx={{
+        appearance: 'none',
+        border: '1px solid #93c5fd',
+        bgcolor: STATUS_COLORS.info.bg,
+        color: STATUS_COLORS.info.text,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        lineHeight: 1.4,
+        '&:hover': { bgcolor: STATUS_COLORS.infoLight.bg },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 function QBBadge({
   invoices,
   onOpen,
@@ -560,6 +600,7 @@ function CustomerCard({
   syncStatus,
   syncFailedIds,
   lastAttempt,
+  openTaskCount,
 }: {
   contact: Contact;
   statusMap: Map<string, LeadStatus>;
@@ -609,6 +650,11 @@ function CustomerCard({
    * lightweight history row beneath the action strip.
    */
   lastAttempt?: { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
+  /**
+   * Number of open (non-completed) Google Calendar tasks linked to this
+   * contact.  `0` means no open tasks (badge hidden).
+   */
+  openTaskCount?: number;
 }) {
   const now = useNowTick();
   const name = contactName(contact);
@@ -818,6 +864,7 @@ function CustomerCard({
                 loading={depositInvoiceLoading}
               />
             )}
+            <TasksBadge contactId={contact.id} openTaskCount={openTaskCount ?? 0} />
           </Box>
 
         </Box>
@@ -977,6 +1024,7 @@ export function CustomersPage(): React.ReactElement {
   const urgencyMapRef = React.useRef(urgencyMap);
   React.useEffect(() => { urgencyMapRef.current = urgencyMap; }, [urgencyMap]);
   const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null>>({});
+  const [openTaskCountMap, setOpenTaskCountMap] = React.useState<Record<string, number>>({});
 
   // Invoice drawer state
   const [invDrawerOpen, setInvDrawerOpen]     = React.useState(false);
@@ -1471,6 +1519,36 @@ export function CustomersPage(): React.ReactElement {
     };
   }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Best-effort open-task-count fetch for the visible page.  Fires whenever
+  // the set of visible contact IDs changes.  Falls back silently when Google
+  // Calendar is not connected (badge simply stays hidden).
+  React.useEffect(() => {
+    if (!contactIdsKey) return;
+    let cancelled = false;
+    const ids = contactIdsKey.split(',').filter(Boolean);
+    if (!ids.length) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/contacts/open-task-counts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
+        const counts = data.openTaskCounts || {};
+        if (cancelled) return;
+        setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
+      } catch {
+        /* best-effort; badge simply won't appear */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // After the Contact Customer modal closes, re-fetch urgency + lastAttempt
   // for just that one contact so the card shows the updated "last contacted"
   // row without a full page reload.
@@ -1842,6 +1920,7 @@ export function CustomersPage(): React.ReactElement {
                   syncStatus={contactSyncMap.get(contact.id)?.status ?? null}
                   syncFailedIds={contactSyncMap.get(contact.id)?.failedIds ?? []}
                   lastAttempt={lastAttemptMap[contact.id] ?? null}
+                  openTaskCount={openTaskCountMap[contact.id] ?? 0}
                 />
               </Grid>
             ))}

@@ -3417,6 +3417,49 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
   }
 });
 
+// Open (non-completed) Google Calendar task counts per contact.
+// Returns { openTaskCounts: { [contactId]: number } } keyed by the requested
+// IDs.  Falls back gracefully to all-zero counts when Google tokens are absent,
+// the calendar is not configured, or the Calendar API call fails, so the client
+// always receives a valid map and the badge simply does not appear.
+app.post('/api/contacts/open-task-counts', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids = Array.from(new Set(rawIds.map(v => String(v)).filter(v => /^\d+$/.test(v)))).slice(0, 100);
+  const openTaskCounts = {};
+  for (const id of ids) { openTaskCounts[id] = 0; }
+  if (!ids.length) return res.json({ openTaskCounts });
+
+  const googleTokens = await getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.json({ openTaskCounts });
+
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (_e) { return res.json({ openTaskCounts }); }
+
+  try {
+    const auth = getGoogleClient(googleTokens);
+    const calendar = getCalendarClient(auth);
+    const events = await calendar.events.list({
+      calendarId,
+      maxResults: 2500,
+      singleEvents: true,
+      timeMin: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+      privateExtendedProperty: ['moTask=1'],
+    });
+    for (const ev of (events.data.items || [])) {
+      const ep = (ev.extendedProperties && ev.extendedProperties.private) || {};
+      if (ep.moTaskStatus === 'completed') continue;
+      const contactId = ep.moContactId || '';
+      if (!contactId || !(contactId in openTaskCounts)) continue;
+      openTaskCounts[contactId] = (openTaskCounts[contactId] || 0) + 1;
+    }
+  } catch (_e) {
+    // Best-effort; return whatever we accumulated (zeros for uncounted contacts)
+  }
+
+  res.json({ openTaskCounts });
+});
+
 // ── Team members ─────────────────────────────────────────────────────────────
 // Returns all active users — used by TaskModal to populate the assignee picker.
 app.get('/api/users', isAuthenticated, requirePrivilege('member'), async (req, res) => {

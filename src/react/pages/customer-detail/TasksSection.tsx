@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
@@ -39,6 +39,29 @@ function getTaskUrgency(tasks: CalendarTask[]): string | null {
 export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
   const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
+
+  // When the page is navigated to with the #tasks-section hash (e.g. from the
+  // open-tasks badge on the customer card), scroll this section into view once
+  // it mounts.  Uses a retry loop because tasks can load asynchronously and
+  // the element may not be present at the first attempt.
+  const scrolledRef = useRef(false);
+  useEffect(() => {
+    if (scrolledRef.current) return;
+    if (window.location.hash !== '#tasks-section') return;
+    scrolledRef.current = true;
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById('tasks-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else if (attempts < 10) {
+        attempts++;
+        setTimeout(tryScroll, 150);
+      }
+    };
+    // Small initial delay lets React flush the render tree before scrolling.
+    setTimeout(tryScroll, 100);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [showAddTask, setShowAddTask] = useState(false);
   const [subject,    setSubject]      = useState('');
