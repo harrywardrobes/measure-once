@@ -14,11 +14,24 @@
  *
  * 1. TARGETS-based mode (manual enrollment)
  *    Each entry in TARGETS names a specific (file, function) pair to check.
- *    Every `downloadCall` inside that function must have a `Promise.all(`
- *    opener within the preceding 20 lines.
+ *    By default (requireParallel: true), every `downloadCall` inside that
+ *    function must have a `Promise.all(` opener within the preceding 20 lines.
+ *
+ *    Set requireParallel: false for single-download utility functions that are
+ *    not batch callers.  The check then:
+ *      • Verifies the function still exists and still has the download call
+ *        (catches renames/removals).
+ *      • If exactly 1 call is found → passes (single-item download is fine).
+ *      • If ≥ 2 calls are found → enforces Promise.all on all of them, same
+ *        as the default behaviour.  This fires the moment a second download
+ *        is added without parallel wrapping.
+ *    This gives explicit, always-on rename detection without forcing a
+ *    semantically-wrong Promise.all wrapper onto a single-item helper.
  *
  *    To enrol a new surface add one entry to TARGETS:
  *      { file: 'path/to/file.js', fn: 'myBatchFunction', downloadCall: 'downloadAsBytes' }
+ *    For a single-download utility:
+ *      { file: '…', fn: 'myHelper', downloadCall: 'downloadAsBytes', requireParallel: false }
  *
  * 2. Auto-scan mode (zero enrollment)
  *    For every file listed in AUTO_SCAN_FILES the script finds all top-level
@@ -67,6 +80,21 @@ const TARGETS = [
     file:         'customer-info.js',
     fn:           'sendAdminNotificationEmail',
     downloadCall: 'downloadAsBytes',
+  },
+  // design-visit-uploads: downloadOpaqueKey is a single-item download helper
+  // for visit-related media (room photos, sign-off images, etc.).  It currently
+  // holds one downloadAsBytes call that is not batched (single key per call,
+  // no Promise.all needed).  requireParallel: false tracks the function
+  // explicitly so a rename or removal is caught immediately; if a second
+  // downloadAsBytes call is ever added, the check automatically upgrades to
+  // enforcing Promise.all on both calls rather than waiting for the auto-scan
+  // ≥ 2 heuristic to fire (design-visit-uploads.js is excluded from auto-scan
+  // for functions already covered by TARGETS).
+  {
+    file:            'design-visit-uploads.js',
+    fn:              'downloadOpaqueKey',
+    downloadCall:    'downloadAsBytes',
+    requireParallel: false,
   },
 ];
 
@@ -199,7 +227,7 @@ function checkFnLines({ fnLines, downloadCall, fnName, file, fnStartIdx, silent 
 
 let anyFailed = false;
 
-for (const { file, fn, downloadCall } of TARGETS) {
+for (const { file, fn, downloadCall, requireParallel = true } of TARGETS) {
   const filePath = join(ROOT, file);
   const lines    = readLines(filePath, file);
   if (!lines) { anyFailed = true; continue; }
@@ -217,8 +245,13 @@ for (const { file, fn, downloadCall } of TARGETS) {
   const fnEndIdx = findFnEnd(lines, fnStartIdx);
   const fnLines  = lines.slice(fnStartIdx, fnEndIdx);
 
+  // For requireParallel: false entries with exactly one download call we
+  // silence the per-line ❌ because one non-batched call is acceptable.
+  // If there are ≥ 2 calls the error IS actionable, so we let it print.
+  const preCount = fnLines.filter(l => l.includes(downloadCall)).length;
   const { failed, callsFound, callsWrapped } = checkFnLines({
     fnLines, downloadCall, fnName: fn, file, fnStartIdx,
+    silent: !requireParallel && preCount === 1,
   });
 
   if (callsFound === 0) {
@@ -228,6 +261,14 @@ for (const { file, fn, downloadCall } of TARGETS) {
       `   If the download logic was moved or renamed, update TARGETS in this script.\n`,
     );
     anyFailed = true;
+  } else if (!requireParallel && callsFound === 1) {
+    // Single-item download helper: no Promise.all required for one call.
+    // If a second call is ever added, the failed flag will fire (it is still
+    // computed by checkFnLines) and the branch below catches it normally.
+    console.log(
+      `✅  parallel-downloads [target]: 1 \`${downloadCall}\` call inside ` +
+      `\`${fn}\` in ${file} tracked (single-item download — no Promise.all required).`,
+    );
   } else if (failed) {
     anyFailed = true;
   } else {
