@@ -1304,10 +1304,6 @@ export function TradesPage() {
   });
 
   React.useEffect(() => {
-    try { localStorage.removeItem(TRADES_TYPE_FILTER_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
-  React.useEffect(() => {
     if (!userId) return;
     try {
       const stored = localStorage.getItem(`${TRADES_TYPE_FILTER_PREFIX}${userId}`); // ls-key-ok: user-scoped key built from imported prefix constant

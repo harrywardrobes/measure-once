@@ -196,3 +196,37 @@ export const HOME_TASK_CONTACT_SEARCH_LEGACY_KEY  = 'mo:home:task-contact-search
  * The user can still open the modal manually via the navbar icons at any time.
  */
 export const CONNECT_MODAL_SHOWN_KEY = 'mo:connectModalShownThisSession';
+
+// ── Legacy-key global sweep ────────────────────────────────────────────────────
+/**
+ * Written to localStorage once the one-time global sweep that removes all
+ * old unscoped (pre-user-scoping) keys has run.  Plain unversioned key — the
+ * flag carries no sensitive data so it does not need per-user scoping.
+ */
+export const LEGACY_SWEEP_DONE_KEY = 'mo:legacy-sweep-v1'; // ls-key-ok: one-time boot flag, no sensitive data
+
+/**
+ * All legacy (unscoped) keys that were superseded by per-user–scoped
+ * `_PREFIX` keys.  Used by the one-time global sweep in
+ * `src/react/lib/legacyKeysSweep.ts` to purge leftover browser storage
+ * without relying on individual components being visited.
+ *
+ * When a new legacy key is retired, add its value here AND add the
+ * corresponding `_LEGACY_KEY` named export above (for the fallback read).
+ */
+export const ALL_LEGACY_KEYS: readonly string[] = [
+  ADMIN_ACTIVE_GROUP_LEGACY_KEY,
+  ADMIN_ACTIVE_TAB_LEGACY_KEY,
+  ADMIN_VISITS_SUBTAB_LEGACY_KEY,
+  CP_RECENT_CUSTOMERS_LEGACY_KEY,
+  PROJECTS_STALENESS_LEGACY_KEY,
+  PROJECTS_SUBSTAGE_LEGACY_KEY,
+  INVOICE_PAGE_LEGACY_KEY,
+  INVOICE_DRAFT_LEGACY_KEY,
+  TRADES_TYPE_FILTER_LEGACY_KEY,
+  QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY,
+  CAH_ORPHANED_DISMISSED_LEGACY_KEY,
+  CAH_CONFLICT_DISMISSED_LEGACY_KEY,
+  HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY,
+  HOME_TASK_CONTACT_SEARCH_LEGACY_KEY,
+];

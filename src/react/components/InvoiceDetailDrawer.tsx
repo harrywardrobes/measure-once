@@ -161,11 +161,6 @@ export function InvoiceDetailDrawer({
 
   useBeforeUnloadGuard(edit.dirty);
 
-  // ── Migration shim — clear the old unscoped draft key once per browser session ──
-  useEffect(() => {
-    try { localStorage.removeItem(INVOICE_DRAFT_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
   useEffect(() => {
     if (!open || !invId) return;
     let cancelled = false;

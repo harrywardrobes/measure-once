@@ -99,10 +99,6 @@ export function DesignVisitPage() {
   });
 
   React.useEffect(() => {
-    try { localStorage.removeItem(ADMIN_VISITS_SUBTAB_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
-  React.useEffect(() => {
     if (!userId) return;
     try {
       const saved = localStorage.getItem(`${ADMIN_VISITS_SUBTAB_PREFIX}${userId}`) as VisitsSubtab | null; // ls-key-ok: user-scoped key built from imported prefix constant

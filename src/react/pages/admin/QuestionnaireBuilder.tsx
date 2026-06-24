@@ -299,10 +299,6 @@ export function QuestionnaireBuilder() {
   });
 
   useEffect(() => {
-    try { localStorage.removeItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
     if (!userId) return;
     try {
       const stored = localStorage.getItem(`${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${userId}`); // ls-key-ok: user-scoped key built from imported prefix constant

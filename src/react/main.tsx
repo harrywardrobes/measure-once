@@ -36,6 +36,7 @@ import { BottomActionBar } from './components/BottomActionBar';
 import { AppBootstrapProvider } from './contexts/AppBootstrapContext';
 import { PUBLIC_ISLAND_IDS } from './lib/publicIslands';
 import { registerServiceWorker, initOfflineSync } from './lib/registerServiceWorker';
+import { runLegacyKeysSweep } from './lib/legacyKeysSweep';
 const CommandPalette    = React.lazy(() => import('./components/CommandPalette').then(m => ({ default: m.CommandPalette })));
 const AccessRequestGate = React.lazy(() => import('./components/AccessRequestGate').then(m => ({ default: m.AccessRequestGate })));
 
@@ -301,6 +302,12 @@ function mount() {
 (window as unknown as { __reactIslandMount?: () => void }).__reactIslandMount = () => {
   mountKnown();
 };
+
+// One-time global sweep: remove all legacy unscoped localStorage keys left
+// over from before per-user key scoping was introduced.  Runs synchronously
+// at boot so the keys are gone before any component mounts — even on pages
+// whose per-component shims were never reached.
+runLegacyKeysSweep();
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', mount, { once: true });

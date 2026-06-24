@@ -177,10 +177,6 @@ export function StandaloneInvoicesPage() {
   }, [sorted, filter, q]);
 
   useEffect(() => {
-    try { localStorage.removeItem(INVOICE_PAGE_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
     if (!_invUserId) return;
     const stored = loadPage(_invUserId);
     setPage(stored);

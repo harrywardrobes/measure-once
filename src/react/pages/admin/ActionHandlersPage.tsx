@@ -1098,12 +1098,6 @@ export function ActionHandlersPage() {
 
   useEffect(() => { _toastRef.fn = toast; return () => { _toastRef.fn = null; }; }, [toast]);
 
-  // ── Migration shims — clear old unscoped keys once per browser session ──
-  useEffect(() => {
-    try { localStorage.removeItem(CAH_ORPHANED_DISMISSED_LEGACY_KEY); } catch { /* ignore */ }
-    try { localStorage.removeItem(CAH_CONFLICT_DISMISSED_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
-
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchAll = useCallback(async () => {

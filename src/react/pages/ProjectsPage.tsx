@@ -1050,13 +1050,6 @@ export function ProjectsPage() {
   const _projectsUserId = _projectsUser?.id;
 
   useEffect(() => {
-    try {
-      localStorage.removeItem(PROJECTS_STALENESS_LEGACY_KEY);
-      localStorage.removeItem(PROJECTS_SUBSTAGE_LEGACY_KEY);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
     setStalenessActive(loadStalenessActive(_projectsUserId));
   }, [_projectsUserId]);
 

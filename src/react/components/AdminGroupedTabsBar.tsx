@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_LEGACY_KEY } from '../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { TabBar } from './TabBar';
 import type { TabBarTab } from './TabBar';
@@ -229,12 +229,6 @@ export function AdminGroupedTabsBar() {
       attributeFilter: ['class', 'hidden'],
     });
     return () => mo.disconnect();
-  }, []);
-
-  // ── Migration shims — clear old unscoped keys once per browser session ──
-  useEffect(() => {
-    try { localStorage.removeItem(ADMIN_ACTIVE_GROUP_LEGACY_KEY); } catch { /* ignore */ }
-    try { localStorage.removeItem(ADMIN_ACTIVE_TAB_LEGACY_KEY); } catch { /* ignore */ }
   }, []);
 
   // Re-read the scoped key whenever the authenticated user identity changes

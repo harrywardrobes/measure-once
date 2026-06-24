@@ -197,10 +197,6 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [settings, setSettings] = useState<SearchSettings | null>(null);
 
-  // ── Migration shim — clear the old unscoped recent-customers key once per browser session ──
-  useEffect(() => {
-    try { localStorage.removeItem(CP_RECENT_CUSTOMERS_LEGACY_KEY); } catch { /* ignore */ }
-  }, []);
   // null = not yet fetched; true = dev environment; false = production
   const [isDevelopment, setIsDevelopment] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);

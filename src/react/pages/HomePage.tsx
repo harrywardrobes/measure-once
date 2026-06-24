@@ -37,8 +37,6 @@ import { useWorkflowData } from '../context/WorkflowDataContext';
 import {
   HOME_TASK_ASSIGNEE_FILTER_PREFIX,
   HOME_TASK_CONTACT_SEARCH_PREFIX,
-  HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY,
-  HOME_TASK_CONTACT_SEARCH_LEGACY_KEY,
 } from '../constants/localStorageKeys';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
@@ -247,13 +245,6 @@ function TaskSection({
       return '';
     }
   });
-
-  React.useEffect(() => {
-    try {
-      localStorage.removeItem(HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY);
-      localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_LEGACY_KEY);
-    } catch { /* ignore */ }
-  }, []);
 
   React.useEffect(() => {
     if (!filterKey || !searchKey) return;
