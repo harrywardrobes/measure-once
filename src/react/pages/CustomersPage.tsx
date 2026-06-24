@@ -953,6 +953,10 @@ export function CustomersPage(): React.ReactElement {
   const { loading: qbLoading, statusKnown: qbStatusKnown, invoices: qbInvoices, loaded: qbLoaded, triggerLoad: triggerQBLoad, refresh: refreshQBInvoices } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
   const [urgencyMap, setUrgencyMap] = React.useState<Record<string, Urgency>>({});
+  // Keep a ref so the urgency effect can filter already-seen IDs without
+  // listing urgencyMap as a dependency (which would re-run it after every fetch).
+  const urgencyMapRef = React.useRef(urgencyMap);
+  React.useEffect(() => { urgencyMapRef.current = urgencyMap; }, [urgencyMap]);
   const [lastAttemptMap, setLastAttemptMap] = React.useState<Record<string, { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null>>({});
 
   // Invoice drawer state
@@ -1329,14 +1333,23 @@ export function CustomersPage(): React.ReactElement {
     };
   }, []);
 
+  // Stable fingerprint of the visible contact IDs. Only changes when the
+  // actual set of IDs on the page changes — not when filter/sort state
+  // produces a new array reference containing the same IDs. This prevents
+  // the urgency effect from re-running on every filter change.
+  const contactIdsKey = React.useMemo(
+    () => contacts.map((c) => c.id).sort().join(','),
+    [contacts],
+  );
+
   // Best-effort urgency calculation for the visible page. Mirrors the
   // legacy `state.contactUrgencyCache` semantics (only populated for
   // contacts we've actually inspected — here, all contacts on the
   // current page).
   React.useEffect(() => {
-    if (!contacts.length) return;
+    if (!contactIdsKey) return;
     let cancelled = false;
-    const ids = contacts.map((c) => c.id).filter((id) => !(id in urgencyMap));
+    const ids = contactIdsKey.split(',').filter((id) => !(id in urgencyMapRef.current));
     if (!ids.length) return;
     (async () => {
       let urgencyById: Record<string, Urgency> = {};
@@ -1383,7 +1396,7 @@ export function CustomersPage(): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [contacts]);
+  }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // After the Contact Customer modal closes, re-fetch urgency + lastAttempt
   // for just that one contact so the card shows the updated "last contacted"
