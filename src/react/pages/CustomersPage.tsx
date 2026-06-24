@@ -1480,6 +1480,11 @@ export function CustomersPage(): React.ReactElement {
     () => contacts.map((c) => c.id).sort().join(','),
     [contacts],
   );
+  // Keep a stable ref so the periodic-refresh interval always reads the
+  // current page's contact IDs without re-registering the interval on every
+  // pagination or filter change.
+  const contactIdsKeyRef = React.useRef(contactIdsKey);
+  React.useEffect(() => { contactIdsKeyRef.current = contactIdsKey; }, [contactIdsKey]);
 
   // Best-effort urgency calculation for the visible page. Mirrors the
   // legacy `state.contactUrgencyCache` semantics (only populated for
@@ -1652,6 +1657,44 @@ export function CustomersPage(): React.ReactElement {
       unsubscribe();
     };
   }, []);
+
+  // Periodic background refresh of open-task counts for all currently-visible
+  // contacts (every 2 minutes).  Catches tasks added or completed by another
+  // user (e.g. via shared Google Calendar) that the event-driven
+  // subscribeTaskChanged handler above would miss.  Skipped entirely while the
+  // browser tab is hidden so background tabs generate no extra API traffic.
+  React.useEffect(() => {
+    const INTERVAL_MS = 2 * 60 * 1000;
+    const tick = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const key = contactIdsKeyRef.current;
+      if (!key) return;
+      const ids = key.split(',').filter(Boolean);
+      if (!ids.length) return;
+      try {
+        const res = await fetch('/api/contacts/open-task-counts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
+        const counts = data.openTaskCounts || {};
+        setOpenTaskCountMap((prev) => {
+          const next = { ...prev };
+          for (const id of ids) {
+            next[id] = counts[id] ?? 0;
+          }
+          return next;
+        });
+      } catch {
+        /* best-effort — stale count is acceptable on failure */
+      }
+    };
+    const timerId = setInterval(tick, INTERVAL_MS);
+    return () => clearInterval(timerId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-fill the customer name cache so that clicking any contact from the
   // list shows the correct name in the browser tab immediately, even on a
