@@ -183,6 +183,9 @@
 
       function startCycle() {
         if (cycleTimer) return;
+        /* 2600 ms: long enough that each label is legible before advancing,
+           short enough to convey that the page is actively monitoring.
+           One-off presentational value — not shared with the React surface. */
         cycleTimer = setInterval(function () {
           cycleIdx = (cycleIdx + 1) % cycleSteps.length;
           connLabel.textContent = cycleSteps[cycleIdx];
@@ -213,6 +216,9 @@
         monitor.classList.add('is-online');
         statusEl.textContent = 'Connection restored \u2014 reloading\u2026';
         retryBtn.disabled = true;
+        /* 400 ms: lets the network stack fully settle after the browser fires
+           the "online" event before attempting a reload. Avoids reloading into
+           a still-flaky connection. One-off value — not shared with React. */
         setTimeout(reload, 400);
       });
 
