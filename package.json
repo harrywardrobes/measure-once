@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Project management dashboard",
   "main": "server.js",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "db:migrate": "node scripts/run-db-migrate.js up",
     "db:migrate:down": "node scripts/run-db-migrate.js down 1",
@@ -363,6 +366,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "workbox-build": "^7.4.1",
+    "zod": "^3.25.76",
     "zxcvbn": "^4.4.2"
   },
   "devDependencies": {
