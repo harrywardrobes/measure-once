@@ -107,6 +107,7 @@ const STEPS = [
   'test:dv-catalogue-admin:ci',
   'test:dv-catalogue-image-upload:ci',
   'test:dv-catalogue-reorder:ci',
+  'test:audit-log-scrolling:ci',
   'test:window-ui-smoke:ci',
   'test:sign-off-stale-link:ci',
   'test:react-admin-tabs:ci',

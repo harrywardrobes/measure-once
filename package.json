@@ -135,6 +135,8 @@
     "test:dv-catalogue-image-upload:ci": "node scripts/with-test-db.js test/dv-catalogue-admin/image-upload.js",
     "test:dv-catalogue-reorder": "node test/dv-catalogue-admin/reorder.js",
     "test:dv-catalogue-reorder:ci": "node scripts/with-test-db.js test/dv-catalogue-admin/reorder.js",
+    "test:audit-log-scrolling": "node test/audit-log-scrolling/run.js",
+    "test:audit-log-scrolling:ci": "node scripts/with-test-db.js test/audit-log-scrolling/run.js",
     "test:window-ui-smoke": "node test/window-ui-smoke/run.js",
     "test:window-ui-smoke:ci": "node scripts/with-test-db.js test/window-ui-smoke/run.js",
     "test:sign-off-stale-link": "node test/sign-off-stale-link/run.js",

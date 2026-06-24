@@ -42,9 +42,6 @@ const STANDALONE_SUITES = new Set([
   // Static guard for picker-cluster function duplication; kept standalone
   // by design — see the "Standalone only" note in TEST_SUITES.md.
   'test:workflow-js-no-dups',
-  // Infinite-scroll E2E for the Audit Log tab; not enrolled in CI — run
-  // standalone when iterating on audit-log pagination behaviour.
-  'test:audit-log-scrolling',
   // Timing-sensitive perf guard for parallel photo-downloads; skipped
   // automatically on CI runners — standalone use only.
   'test:customer-info-parallel-downloads',

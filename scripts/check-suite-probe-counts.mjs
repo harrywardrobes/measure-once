@@ -135,7 +135,6 @@ const NO_PROBE_LABELS_ALLOWLIST = new Map([
 
 const FILE_NOT_FOUND_ALLOWLIST = new Map([
   ['test:substatus-hubspot-label-format', 'pending implementation — test file not yet written'],
-  ['test:audit-log-scrolling',            'pending implementation — no package.json script yet; suite not enrolled in test:ci'],
 ]);
 
 // ---------------------------------------------------------------------------
