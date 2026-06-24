@@ -9,27 +9,38 @@ import {
   CardActionArea,
   Chip,
   IconButton,
+  InputAdornment,
   Skeleton,
   Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
 import { useToastContext } from '../contexts/ToastContext';
 import type { InvoiceSummary } from '../components/InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
+import { useAuth } from '../contexts/AuthContext';
 import { useDevMode } from '../hooks/useDevMode';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { readRecords } from '../lib/offlineDb';
 import { WorkflowDef } from '../lib/workflowConfig';
 import { useWorkflowData } from '../context/WorkflowDataContext';
+import {
+  HOME_TASK_ASSIGNEE_FILTER_KEY,
+  HOME_TASK_CONTACT_SEARCH_KEY,
+} from '../constants/localStorageKeys';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
-type _Icons = typeof RefreshIcon | typeof WarningAmberIcon | typeof ChevronLeftIcon | typeof ChevronRightIcon;
+type _Icons = typeof RefreshIcon | typeof WarningAmberIcon | typeof ChevronLeftIcon | typeof ChevronRightIcon | typeof SearchIcon | typeof ClearIcon;
 
 type ContactTask = {
   id: string;
@@ -200,27 +211,82 @@ function DateHeader() {
 
 const TASKS_PER_PAGE = 5;
 
+type AssigneeFilter = 'all' | 'mine';
+
 function TaskSection({
   tasks,
   loading,
   todayMs,
+  currentUserId,
 }: {
   tasks: ContactTask[];
   loading: boolean;
   todayMs: number;
+  currentUserId?: string;
 }) {
   const [page, setPage] = React.useState(1);
 
+  const [assigneeFilter, setAssigneeFilter] = React.useState<AssigneeFilter>(() => {
+    try {
+      const saved = localStorage.getItem(HOME_TASK_ASSIGNEE_FILTER_KEY);
+      return saved === 'mine' ? 'mine' : 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const [contactSearch, setContactSearch] = React.useState<string>(() => {
+    try {
+      return localStorage.getItem(HOME_TASK_CONTACT_SEARCH_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
+
+  const handleAssigneeFilter = (_: React.MouseEvent<HTMLElement>, val: AssigneeFilter | null) => {
+    if (!val) return;
+    setAssigneeFilter(val);
+    setPage(1);
+    try { localStorage.setItem(HOME_TASK_ASSIGNEE_FILTER_KEY, val); } catch { /* ignore */ }
+  };
+
+  const handleContactSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setContactSearch(v);
+    setPage(1);
+    try { localStorage.setItem(HOME_TASK_CONTACT_SEARCH_KEY, v); } catch { /* ignore */ }
+  };
+
+  const clearContactSearch = () => {
+    setContactSearch('');
+    setPage(1);
+    try { localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_KEY); } catch { /* ignore */ }
+  };
+
   const open = tasks.filter((t) => t.task_status !== 'completed');
+
+  const filtered = open.filter((t) => {
+    if (assigneeFilter === 'mine' && currentUserId) {
+      if (t.task_assigned_user?.userId !== currentUserId) return false;
+    }
+    if (contactSearch.trim()) {
+      const q = contactSearch.trim().toLowerCase();
+      const name = (t.task_customer?.contactName ?? '').toLowerCase();
+      if (!name.includes(q)) return false;
+    }
+    return true;
+  });
 
   const overdue = open.filter(
     (t) => t.task_deadline && new Date(t.task_deadline).getTime() < todayMs,
   );
 
-  const totalPages = Math.max(1, Math.ceil(open.length / TASKS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TASKS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * TASKS_PER_PAGE;
-  const visible = open.slice(pageStart, pageStart + TASKS_PER_PAGE);
+  const visible = filtered.slice(pageStart, pageStart + TASKS_PER_PAGE);
+
+  const filtersActive = assigneeFilter !== 'all' || contactSearch.trim() !== '';
 
   if (loading) {
     return (
@@ -248,9 +314,53 @@ function TaskSection({
           ) : null
         }
       />
-      {open.length === 0 ? (
+
+      <Stack direction="row" spacing={1} sx={{ mb: 1.5, alignItems: 'center' }}>
+        <ToggleButtonGroup
+          value={assigneeFilter}
+          exclusive
+          onChange={handleAssigneeFilter}
+          size="small"
+          aria-label="Assignee filter"
+        >
+          <ToggleButton value="all" sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem', textTransform: 'none' }}>
+            All
+          </ToggleButton>
+          <ToggleButton value="mine" sx={{ px: 1.5, py: 0.5, fontSize: '0.75rem', textTransform: 'none' }}>
+            My tasks
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <TextField
+          size="small"
+          placeholder="Filter by contact…"
+          value={contactSearch}
+          onChange={handleContactSearch}
+          sx={{ flex: 1, '& .MuiInputBase-input': { fontSize: '0.8125rem', py: '4px' } }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                </InputAdornment>
+              ),
+              endAdornment: contactSearch ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={clearContactSearch} edge="end" aria-label="Clear contact filter" sx={{ p: 0.25 }}>
+                    <ClearIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : undefined,
+            },
+          }}
+        />
+      </Stack>
+
+      {filtered.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-          No open tasks — you're all clear.
+          {filtersActive
+            ? 'No tasks match the current filter.'
+            : 'No open tasks — you\'re all clear.'}
         </Typography>
       ) : (
         <>
@@ -265,10 +375,10 @@ function TaskSection({
                 onClick={
                   contactId
                     ? () => {
-                        const open = (
+                        const openProject = (
                           window as unknown as { openProject?: (id: string, idx: number) => void }
                         ).openProject;
-                        if (typeof open === 'function') open(contactId, 0);
+                        if (typeof openProject === 'function') openProject(contactId, 0);
                         else location.href = `/customers/${encodeURIComponent(contactId)}`;
                       }
                     : undefined
@@ -527,6 +637,7 @@ export function HomePage(): React.ReactElement {
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const { isAdmin } = usePrivilege();
+  const { user } = useAuth();
   const { devMode } = useDevMode({ enabled: isAdmin });
 
   const [tasks, setTasks] = React.useState<ContactTask[]>([]);
@@ -672,7 +783,7 @@ export function HomePage(): React.ReactElement {
           Dev mode is ON — only test contacts are shown
         </Alert>
       )}
-      <TaskSection tasks={tasks} loading={tasksLoading} todayMs={todayMs} />
+      <TaskSection tasks={tasks} loading={tasksLoading} todayMs={todayMs} currentUserId={user?.id} />
       <InvoicesSection
         loading={qbLoading}
         error={qbError}
