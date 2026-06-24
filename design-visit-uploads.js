@@ -159,6 +159,49 @@ async function downloadOpaqueKey(key) {
   return buf || null;
 }
 
+// ── Batch download helper ────────────────────────────────────────────────────
+// Download multiple opaque storage keys in parallel.  Each entry resolves to
+// { key, buf } where buf is a Buffer (or null when the object is not found or
+// the key is not a valid opaque key).  Errors from individual downloads are
+// caught per-key and returned as { key, buf: null, error }.
+//
+// WARNING: do NOT convert this to a serial for…of / await loop.  Each
+// downloadAsBytes call incurs one full RTT to object storage.  A serial loop
+// would multiply that by N (number of photos), making it O(N × RTT) instead of
+// O(1 × RTT) for the whole batch.  The scripts/check-parallel-downloads.mjs
+// test enforces Promise.all wrapping here.
+async function downloadOpaqueKeys(keys) {
+  if (!Array.isArray(keys) || keys.length === 0) return [];
+  return Promise.all(
+    keys.map(async (key) => {
+      const name = _objectNameFromKey(key);
+      if (!name) return { key, buf: null };
+      let client;
+      try {
+        client = getClient();
+      } catch (e) {
+        return { key, buf: null, error: e };
+      }
+      let res;
+      try {
+        res = await client.downloadAsBytes(name);
+      } catch (e) {
+        return { key, buf: null, error: _friendlyStorageError(e) };
+      }
+      if (res && res.ok === false) {
+        const code = res.error?.statusCode || res.error?.code;
+        if (code === 404 || /not\s*found/i.test(String(res.error?.message || ''))) {
+          return { key, buf: null };
+        }
+        return { key, buf: null, error: _friendlyStorageError(new Error('Object storage download failed: ' + (res.error?.message || 'unknown'))) };
+      }
+      const value = res?.value;
+      const buf = Array.isArray(value) ? value[0] : value;
+      return { key, buf: buf || null };
+    }),
+  );
+}
+
 // ── HMAC-signed URL helpers ──────────────────────────────────────────────────
 function _signingSecret() {
   const s = process.env.SESSION_SECRET;
@@ -196,6 +239,7 @@ module.exports = {
   uploadFromDataUrl,
   deleteOpaqueKey,
   downloadOpaqueKey,
+  downloadOpaqueKeys,
   signImageUrl,
   verifySignedUrl,
   MAX_UPLOAD_BYTES,

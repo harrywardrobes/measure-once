@@ -96,6 +96,18 @@ const TARGETS = [
     downloadCall:    'downloadAsBytes',
     requireParallel: false,
   },
+  // design-visit-uploads: downloadOpaqueKeys is the batch download helper for
+  // bulk-downloading visit images (e.g. for bulk re-signing or thumbnail
+  // generation).  It uses Promise.all(keys.map(…)) to issue all downloadAsBytes
+  // calls in parallel, keeping total latency ~1 × RTT regardless of batch size.
+  // requireParallel: true enforces that the Promise.all wrapper is never removed
+  // or refactored into a serial loop without the test catching it immediately.
+  {
+    file:            'design-visit-uploads.js',
+    fn:              'downloadOpaqueKeys',
+    downloadCall:    'downloadAsBytes',
+    requireParallel: true,
+  },
 ];
 
 // ── AUTO_SCAN_FILES: zero-enrollment auto-scan ────────────────────────────────
@@ -104,8 +116,11 @@ const TARGETS = [
 // to avoid duplicate output.
 const AUTO_SCAN_FILES = [
   'customer-info.js',
-  // design-visit-uploads.js already calls downloadAsBytes once; add here so
-  // any future second (serial) call is caught automatically.
+  // design-visit-uploads.js has both a single-item helper (downloadOpaqueKey,
+  // covered by TARGETS) and a batch helper (downloadOpaqueKeys, also covered by
+  // TARGETS with requireParallel: true).  Keeping it in AUTO_SCAN_FILES catches
+  // any future third function that gains ≥ 2 downloadAsBytes calls without
+  // manual enrollment.
   'design-visit-uploads.js',
   // design-visits.js and photo-reviews.js have no downloadAsBytes calls today
   // but are the most likely modules to gain batch downloads in future; enrol
