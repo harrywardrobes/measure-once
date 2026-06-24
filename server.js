@@ -3190,6 +3190,25 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
       updates.start = { dateTime: dd.toISOString() };
       updates.end   = { dateTime: new Date(dd.getTime() + 30 * 60 * 1000).toISOString() };
     }
+
+    // Detect assignment changes so we can notify the new assignee
+    let previousAssignedUserId = null;
+    let newAssignedUserId = null;
+    if (req.body.task_assigned_user !== undefined) {
+      const task_assigned_user = req.body.task_assigned_user;
+      if (task_assigned_user?.userId) {
+        epUpdates.moAssignedUserId   = String(task_assigned_user.userId);
+        epUpdates.moAssignedUserName = task_assigned_user.name ? String(task_assigned_user.name) : '';
+        newAssignedUserId = String(task_assigned_user.userId);
+      } else {
+        epUpdates.moAssignedUserId   = '';
+        epUpdates.moAssignedUserName = '';
+      }
+      // Fetch the existing event to find out who was previously assigned
+      const existing = await calendar.events.get({ calendarId, eventId });
+      previousAssignedUserId = existing.data?.extendedProperties?.private?.moAssignedUserId || null;
+    }
+
     if (Object.keys(epUpdates).length > 0) {
       updates.extendedProperties = { private: epUpdates };
     }
@@ -3199,6 +3218,29 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
 
     const event = await calendar.events.patch({ calendarId, eventId, requestBody: updates });
     res.json(calendarEventToTask(event.data));
+
+    // Fire-and-forget notification email when the task is reassigned to a different user
+    const creatorId = req.user?.id ? String(req.user.id) : null;
+    if (
+      newAssignedUserId &&
+      newAssignedUserId !== (previousAssignedUserId || null) &&
+      creatorId && newAssignedUserId !== creatorId
+    ) {
+      const creatorName = req.user?.first_name
+        ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
+        : (req.user?.email || 'A team member');
+      const ep = event.data?.extendedProperties?.private || {};
+      const deadlineRaw = event.data?.start?.dateTime || event.data?.start?.date;
+      const deadlineDate = deadlineRaw ? new Date(deadlineRaw) : new Date();
+      _sendTaskAssignmentNotification({
+        assignedUserId: newAssignedUserId,
+        creatorName,
+        taskName: event.data?.summary || '',
+        taskDescription: event.data?.description || '',
+        contactName: ep.moContactName || '',
+        deadline: deadlineDate,
+      }).catch(err => logger.warn({ err }, 'Task reassignment notification failed (non-fatal)'));
+    }
   } catch (e) {
     const code = classifyGoogleError(e);
     res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
