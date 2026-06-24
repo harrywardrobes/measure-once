@@ -27,6 +27,9 @@ export const CUSTOMER_ROOM_IDX_PREFIX = 'customerRoomIdx_';
 /** sessionStorage – scroll restoration for the customers list. */
 export const CUSTOMERS_SCROLL_KEY = 'customers_scroll';
 
+/** sessionStorage – search query draft for the customers list. */
+export const CUSTOMERS_SEARCH_KEY = 'customers_search';
+
 /** sessionStorage – viewer-privilege banner dismissed for this session. */
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 

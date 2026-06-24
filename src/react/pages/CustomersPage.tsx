@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -145,11 +145,15 @@ function readUrlState() {
   const p = new URLSearchParams(location.search);
   const rawSort = p.get('sort') || 'priority';
   const sort = SORT_OPTIONS.some((o) => o.value === rawSort) ? rawSort : 'priority';
+  let q = p.get('q') || '';
+  if (!q) {
+    try { q = sessionStorage.getItem(CUSTOMERS_SEARCH_KEY) || ''; } catch { /* ignore */ }
+  }
   return {
     page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
     leadStatus: p.get('leadStatus') || '',
     sort,
-    q: p.get('q') || '',
+    q,
     stage: p.get('stage') || '',
     archived: p.get('archived') === '1',
     showExcluded: p.get('showExcluded') === '1',
@@ -1247,6 +1251,19 @@ export function CustomersPage(): React.ReactElement {
     }, 250);
     return () => clearTimeout(h);
   }, [searchInput]);
+
+  // Persist the committed search query to sessionStorage so it survives
+  // navigation away and back (consistent with the scroll-restoration pattern).
+  // Cleared when the user explicitly empties the field.
+  React.useEffect(() => {
+    try {
+      if (search) {
+        sessionStorage.setItem(CUSTOMERS_SEARCH_KEY, search);
+      } else {
+        sessionStorage.removeItem(CUSTOMERS_SEARCH_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [search]);
 
   // Reflect filter changes in the URL.
   React.useEffect(() => {
