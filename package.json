@@ -169,6 +169,7 @@
     "gc:design-visit-photos:dry-run": "node scripts/gc-design-visit-photos.mjs --dry-run",
     "migrate:objects": "node scripts/migrate-objects.mjs",
     "migrate:objects:dry-run": "node scripts/migrate-objects.mjs --dry-run",
+    "verify:migration": "node scripts/verify-migration.mjs",
     "test:hubspot-credential-audit": "node test/hubspot-credential-audit/run.js",
     "test:hubspot-credential-audit:ci": "node scripts/with-test-db.js test/hubspot-credential-audit/run.js",
     "test:lead-status-guard": "node test/lead-status-guard/run.js",
