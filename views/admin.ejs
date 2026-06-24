@@ -263,6 +263,7 @@
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
     try { localStorage.removeItem('adminActiveTab'); } catch (_) {}
+    try { localStorage.removeItem('adminVisitsSubtab'); } catch (_) {}
 
     const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;

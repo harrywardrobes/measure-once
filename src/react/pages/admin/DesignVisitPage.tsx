@@ -90,11 +90,11 @@ export function DesignVisitPage() {
 
   const [subtab, setSubtab] = useState<VisitsSubtab>(() => {
     try {
-      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      if (!uid) return 'catalogues';
-      const k = `${ADMIN_VISITS_SUBTAB_PREFIX}${uid}`;
-      const saved = localStorage.getItem(k) as VisitsSubtab | null;
-      if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) return saved;
+      const uid = (window as unknown as { _adminUserId?: string })._adminUserId || '';
+      if (uid) {
+        const saved = localStorage.getItem(`${ADMIN_VISITS_SUBTAB_PREFIX}${uid}`) as VisitsSubtab | null; // ls-key-ok: user-scoped key built from imported prefix constant
+        if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) return saved;
+      }
     } catch { /* ignore */ }
     return 'catalogues';
   });
