@@ -3,6 +3,8 @@ import { PROJECTS_STALENESS_PREFIX, PROJECTS_STALENESS_LEGACY_KEY, PROJECTS_SUBS
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeUrgencyChanged } from '../utils/broadcastUrgencyChanged';
+import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
+import { TASK_CHANGED_COOLDOWN_MS } from '../constants/timings';
 import {
   Alert,
   Avatar,
@@ -436,6 +438,48 @@ function InvoiceBadge({
   );
 }
 
+// ── TasksBadge ─────────────────────────────────────────────────────────────────
+
+function TasksBadge({
+  contactId,
+  openTaskCount,
+}: {
+  contactId: string;
+  openTaskCount: number;
+}) {
+  if (!openTaskCount) return null;
+  const label = openTaskCount === 1 ? '1 open task' : `${openTaskCount} open tasks`;
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    window.location.href = `/customers/${encodeURIComponent(contactId)}#tasks-section`;
+  };
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleClick}
+      title={label}
+      sx={{
+        appearance: 'none',
+        border: '1px solid #93c5fd',
+        bgcolor: STATUS_COLORS.info.bg,
+        color: STATUS_COLORS.info.text,
+        px: 1,
+        py: 0.25,
+        borderRadius: 1,
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
+        lineHeight: 1.4,
+        '&:hover': { bgcolor: STATUS_COLORS.infoLight.bg },
+      }}
+    >
+      {label}
+    </Box>
+  );
+}
+
 // ── ProjectCard ────────────────────────────────────────────────────────────────
 
 function ProjectCard({
@@ -448,6 +492,7 @@ function ProjectCard({
   qb,
   urgency,
   lastAttempt,
+  openTaskCount,
   cardActionHandlerFor,
   resolveActionLabel,
   draftVisitId,
@@ -466,6 +511,7 @@ function ProjectCard({
   qb?: QBState;
   urgency: Urgency;
   lastAttempt?: { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
+  openTaskCount?: number;
   cardActionHandlerFor: (
     stageKey: string,
     leadStatusKey: string | undefined,
@@ -839,6 +885,13 @@ function ProjectCard({
         </Tooltip>
       )}
 
+      {/* Task badge */}
+      {!!openTaskCount && (
+        <Box sx={{ px: '14px', py: '8px', borderTop: `1px solid ${BRAND_COLORS.stone}`, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <TasksBadge contactId={contact.id} openTaskCount={openTaskCount} />
+        </Box>
+      )}
+
       {/* Invoice badge */}
       <InvoiceBadge contact={contact} qb={qb} onOpen={onOpenInvoice} />
     </Box>
@@ -1161,6 +1214,126 @@ export function ProjectsPage() {
     () => contacts.map((c) => c.id).sort().join(','),
     [contacts],
   );
+
+  // ── Open-task-count map ───────────────────────────────────────────────────
+  const [openTaskCountMap, setOpenTaskCountMap] = React.useState<Record<string, number>>({});
+
+  // Keep a stable ref so the periodic-refresh interval always reads the
+  // current page's contact IDs without re-registering the interval on every
+  // filter change.
+  const contactIdsKeyRef = React.useRef(contactIdsKey);
+  React.useEffect(() => { contactIdsKeyRef.current = contactIdsKey; }, [contactIdsKey]);
+
+  // Initial fetch: re-run whenever the set of visible contacts changes.
+  // All current IDs are always fetched so stale counts from a prior visit
+  // are replaced. Falls back silently when Calendar is not connected.
+  React.useEffect(() => {
+    if (!contactIdsKey) return;
+    let cancelled = false;
+    const ids = contactIdsKey.split(',').filter(Boolean);
+    if (!ids.length) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/contacts/open-task-counts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
+        const counts = data.openTaskCounts || {};
+        if (cancelled) return;
+        setOpenTaskCountMap((prev) => {
+          const next = { ...prev };
+          for (const id of ids) {
+            next[id] = counts[id] ?? 0;
+          }
+          return next;
+        });
+      } catch {
+        /* best-effort; badge simply won't appear */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch open-task count for a single contact when a task is added or
+  // completed in any tab. Debounced to collapse rapid-fire broadcasts.
+  React.useEffect(() => {
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const unsubscribe = subscribeTaskChanged(({ contactId }) => {
+      const existing = timers.get(contactId);
+      if (existing !== undefined) clearTimeout(existing);
+      timers.set(
+        contactId,
+        setTimeout(() => {
+          timers.delete(contactId);
+          fetch('/api/contacts/open-task-counts', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [contactId] }),
+          })
+            .then((res) => {
+              if (!res.ok) return;
+              return res.json() as Promise<{ openTaskCounts?: Record<string, number> }>;
+            })
+            .then((data) => {
+              if (!data) return;
+              const counts = data.openTaskCounts || {};
+              setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
+            })
+            .catch(() => {
+              /* best-effort — stale count is acceptable on failure */
+            });
+        }, TASK_CHANGED_COOLDOWN_MS),
+      );
+    });
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      unsubscribe();
+    };
+  }, []);
+
+  // Periodic background refresh of open-task counts for all currently-visible
+  // contacts (every 2 minutes). Catches tasks added or completed by another
+  // user (e.g. via shared Google Calendar) that the event-driven
+  // subscribeTaskChanged handler above would miss. Skipped entirely while the
+  // browser tab is hidden so background tabs generate no extra API traffic.
+  React.useEffect(() => {
+    const INTERVAL_MS = 2 * 60 * 1000;
+    const tick = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const key = contactIdsKeyRef.current;
+      if (!key) return;
+      const ids = key.split(',').filter(Boolean);
+      if (!ids.length) return;
+      try {
+        const res = await fetch('/api/contacts/open-task-counts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
+        const counts = data.openTaskCounts || {};
+        setOpenTaskCountMap((prev) => {
+          const next = { ...prev };
+          for (const id of ids) {
+            next[id] = counts[id] ?? 0;
+          }
+          return next;
+        });
+      } catch {
+        /* best-effort — stale count is acceptable on failure */
+      }
+    };
+    const timerId = setInterval(tick, INTERVAL_MS);
+    return () => clearInterval(timerId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!contactIdsKey) return;
@@ -1528,6 +1701,7 @@ export function ProjectsPage() {
                     qb={qb}
                     urgency={urgencyMap[contact.id] ?? null}
                     lastAttempt={lastAttemptMap[contact.id] ?? null}
+                    openTaskCount={openTaskCountMap[contact.id] ?? 0}
                     cardActionHandlerFor={cardActionHandlerFor}
                     resolveActionLabel={resolveActionLabel}
                     draftVisitId={draftVisitIds[contact.id] ?? null}
@@ -1559,6 +1733,7 @@ export function ProjectsPage() {
             qb={qb}
             urgency={urgencyMap[contact.id] ?? null}
             lastAttempt={lastAttemptMap[contact.id] ?? null}
+            openTaskCount={openTaskCountMap[contact.id] ?? 0}
             cardActionHandlerFor={cardActionHandlerFor}
             resolveActionLabel={resolveActionLabel}
             draftVisitId={draftVisitIds[contact.id] ?? null}
