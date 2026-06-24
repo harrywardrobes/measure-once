@@ -16,10 +16,15 @@ A project management web app that uses HubSpot as the backend and connects Gmail
 
 ## Setup
 
+> **Developing locally against the cloud services?** See
+> [docs/local-dev.md](docs/local-dev.md) for the full local dev loop (dev DB,
+> GCS storage, OAuth redirect registration, the local-login cookie behaviour).
+
 ### 1. Install dependencies
 ```bash
-cd harry-wardrobes-crm
-npm install
+cd measure-once
+# Skip the Puppeteer Chromium download (only needed for PDF/browser test flows):
+PUPPETEER_SKIP_DOWNLOAD=true npm install
 ```
 
 ### 2. Configure environment
@@ -36,14 +41,14 @@ Then fill in your keys (see below).
    - `crm.objects.contacts.read`
    - `crm.objects.notes.read` / `write`
    - `crm.pipelines.orders.read`
-4. Copy the token into `.env` as `HUBSPOT_TOKEN`
+4. Copy the token into `.env` as `HUBSPOT_ACCESS_TOKEN`
 
 ### 4. Google OAuth (Gmail + Calendar)
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Create a project → Enable **Gmail API** and **Google Calendar API**
 3. Go to **APIs & Services → Credentials → Create OAuth 2.0 Client ID**
 4. Application type: **Web application**
-5. Add authorised redirect URI: `http://localhost:3456/auth/google/callback`
+5. Add authorised redirect URI: `http://localhost:5000/auth/google/callback`
 6. Copy Client ID and Client Secret into `.env`
 
 ### 5. HubSpot Pipeline stages
@@ -69,7 +74,7 @@ npm run dev    # with auto-reload
 npm start      # production
 ```
 
-Open [http://localhost:3456](http://localhost:3456)
+Open [http://localhost:5000](http://localhost:5000)
 
 ---
 

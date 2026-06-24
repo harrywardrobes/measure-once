@@ -5,6 +5,7 @@ hubspot.config.yml
 
 # Secrets — never commit
 .env
+.env.example
 
 # Customer data (GDPR)
 data/

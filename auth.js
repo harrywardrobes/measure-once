@@ -695,13 +695,23 @@ function getSession() {
     ttl,
     tableName: 'sessions',
   });
+  const isProd = process.env.NODE_ENV === 'production';
   return session({
     secret: process.env.SESSION_SECRET,
     store,
     resave: false,
     saveUninitialized: false,
     proxy: true,
-    cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: ttl },
+    cookie: {
+      httpOnly: true,
+      // Production runs behind HTTPS with cross-site OAuth, so the cookie must
+      // be Secure + SameSite=None. Over plain http://localhost a Secure cookie
+      // is silently dropped by the browser, breaking local login — so dev uses
+      // secure:false + SameSite=Lax. Gated on NODE_ENV (server-side signal).
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: ttl,
+    },
   });
 }
 
