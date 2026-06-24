@@ -30,6 +30,12 @@ export const CUSTOMERS_SCROLL_KEY = 'customers_scroll';
 /** sessionStorage – search query draft for the customers list. */
 export const CUSTOMERS_SEARCH_KEY = 'customers_search';
 
+/** sessionStorage – active lead-status filter on the customers list. */
+export const CUSTOMERS_LEAD_STATUS_KEY = 'customers_lead_status';
+
+/** sessionStorage – active stage tab on the customers list. */
+export const CUSTOMERS_STAGE_KEY = 'customers_stage';
+
 /** sessionStorage – viewer-privilege banner dismissed for this session. */
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 

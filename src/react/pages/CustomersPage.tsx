@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -149,12 +149,20 @@ function readUrlState() {
   if (!q) {
     try { q = sessionStorage.getItem(CUSTOMERS_SEARCH_KEY) || ''; } catch { /* ignore */ }
   }
+  let leadStatus = p.get('leadStatus') || '';
+  if (!leadStatus) {
+    try { leadStatus = sessionStorage.getItem(CUSTOMERS_LEAD_STATUS_KEY) || ''; } catch { /* ignore */ }
+  }
+  let stage = p.get('stage') || '';
+  if (!stage) {
+    try { stage = sessionStorage.getItem(CUSTOMERS_STAGE_KEY) || ''; } catch { /* ignore */ }
+  }
   return {
     page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
-    leadStatus: p.get('leadStatus') || '',
+    leadStatus,
     sort,
     q,
-    stage: p.get('stage') || '',
+    stage,
     archived: p.get('archived') === '1',
     showExcluded: p.get('showExcluded') === '1',
   };
@@ -1264,6 +1272,30 @@ export function CustomersPage(): React.ReactElement {
       }
     } catch { /* ignore */ }
   }, [search]);
+
+  // Persist the active lead-status filter to sessionStorage so it survives
+  // navigation away and back. Cleared when the user selects "All statuses".
+  React.useEffect(() => {
+    try {
+      if (leadStatus) {
+        sessionStorage.setItem(CUSTOMERS_LEAD_STATUS_KEY, leadStatus);
+      } else {
+        sessionStorage.removeItem(CUSTOMERS_LEAD_STATUS_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [leadStatus]);
+
+  // Persist the active stage tab to sessionStorage so it survives navigation
+  // away and back. Cleared when the user selects "All" (the default tab).
+  React.useEffect(() => {
+    try {
+      if (stageFilter) {
+        sessionStorage.setItem(CUSTOMERS_STAGE_KEY, stageFilter);
+      } else {
+        sessionStorage.removeItem(CUSTOMERS_STAGE_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [stageFilter]);
 
   // Reflect filter changes in the URL.
   React.useEffect(() => {
