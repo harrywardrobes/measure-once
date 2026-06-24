@@ -263,6 +263,16 @@ function TaskSection({
     try { localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_KEY); } catch { /* ignore */ }
   };
 
+  const clearFilters = () => {
+    setAssigneeFilter('all');
+    setContactSearch('');
+    setPage(1);
+    try {
+      localStorage.removeItem(HOME_TASK_ASSIGNEE_FILTER_KEY);
+      localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_KEY);
+    } catch { /* ignore */ }
+  };
+
   const open = tasks.filter((t) => t.task_status !== 'completed');
 
   const filtered = open.filter((t) => {
@@ -365,6 +375,17 @@ function TaskSection({
             },
           }}
         />
+
+        {filtersActive ? (
+          <Button
+            size="small"
+            variant="text"
+            onClick={clearFilters}
+            sx={{ whiteSpace: 'nowrap', fontSize: '0.75rem', px: 1, py: 0.5, minWidth: 0, color: 'text.secondary' }}
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </Stack>
 
       {filtered.length === 0 ? (
