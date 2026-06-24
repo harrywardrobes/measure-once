@@ -225,6 +225,93 @@ describe('resignSavedPhotosAfterRestore — fast-path: no fetch when all photos 
 
     expect(onResigned).not.toHaveBeenCalled();
   });
+
+  it('marks a photo as unavailable when the server returns null for its URL', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/stale.jpg', url: null }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const photos: UploadedPhoto[] = [
+      makePhoto({ key: 'photos/stale.jpg', previewUrl: '', name: 'stale.jpg' }),
+    ];
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(photos));
+
+    await resignSavedPhotosAfterRestore('tok', photos, setPhotos);
+
+    expect(setPhotos).toHaveBeenCalledOnce();
+    const updater = setPhotos.mock.calls[0][0] as (prev: UploadedPhoto[]) => UploadedPhoto[];
+    const result = updater(photos);
+    expect(result[0].unavailable).toBe(true);
+    expect(result[0].previewUrl).toBe('');
+  });
+
+  it('marks only the failed photo unavailable when the server returns null for one photo in a mixed result', async () => {
+    const goodUrl = '/api/customer-info-preview/abc/a.jpg?exp=9999&sig=new';
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { key: 'photos/a.jpg', url: goodUrl },
+            { key: 'photos/b.jpg', url: null },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const photos: UploadedPhoto[] = [
+      makePhoto({ key: 'photos/a.jpg', previewUrl: '', name: 'a.jpg' }),
+      makePhoto({ key: 'photos/b.jpg', previewUrl: '', name: 'b.jpg' }),
+    ];
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(photos));
+
+    await resignSavedPhotosAfterRestore('tok', photos, setPhotos);
+
+    const updater = setPhotos.mock.calls[0][0] as (prev: UploadedPhoto[]) => UploadedPhoto[];
+    const result = updater(photos);
+    expect(result[0].previewUrl).toBe(goodUrl);
+    expect(result[0].unavailable).toBeFalsy();
+    expect(result[1].previewUrl).toBe('');
+    expect(result[1].unavailable).toBe(true);
+  });
+
+  it('calls onResigned with the unavailable photo included so good photos are still persisted', async () => {
+    const goodUrl = '/api/customer-info-preview/abc/a.jpg?exp=9999&sig=new';
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { key: 'photos/a.jpg', url: goodUrl },
+            { key: 'photos/b.jpg', url: null },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const photos: UploadedPhoto[] = [
+      makePhoto({ key: 'photos/a.jpg', previewUrl: '', name: 'a.jpg' }),
+      makePhoto({ key: 'photos/b.jpg', previewUrl: '', name: 'b.jpg' }),
+    ];
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(photos));
+    const onResigned = vi.fn();
+
+    await resignSavedPhotosAfterRestore('tok', photos, setPhotos, onResigned);
+
+    expect(onResigned).toHaveBeenCalledOnce();
+    const [resigned] = onResigned.mock.calls[0] as [UploadedPhoto[]];
+    expect(resigned).toHaveLength(2);
+    expect(resigned[0].previewUrl).toBe(goodUrl);
+    expect(resigned[0].unavailable).toBeFalsy();
+    expect(resigned[1].previewUrl).toBe('');
+    expect(resigned[1].unavailable).toBe(true);
+  });
 });
 
 // ── Boundary: buildRestoredPhotos feeds resignSavedPhotosAfterRestore ─────────
