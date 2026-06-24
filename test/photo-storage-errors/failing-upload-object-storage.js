@@ -11,6 +11,9 @@ class Client {
   async uploadFromBytes(_name, _buf, _opts) {
     return { ok: false, error: { message: 'bucket error: no such bucket configured' } };
   }
+  async uploadFromFilename(_name, _filePath) {
+    return { ok: false, error: { message: 'bucket error: no such bucket configured' } };
+  }
   async delete(_name, _opts) {
     return { ok: false, error: { message: 'bucket error: no such bucket configured' } };
   }

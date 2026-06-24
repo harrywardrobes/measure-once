@@ -12,6 +12,7 @@
 // handling those legacy shapes unchanged.
 
 const crypto = require('crypto');
+const storage = require('./storage');
 
 const ALLOWED_MIME = new Set([
   'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp',
@@ -26,29 +27,6 @@ const EXT_BY_MIME = {
 };
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 const SIGNED_URL_TTL_SEC = 60 * 60;        // 1 hour
-
-let _client = null;
-let _clientInitTried = false;
-let _clientInitError = null;
-function getClient() {
-  if (_clientInitTried) {
-    if (_clientInitError) throw _clientInitError;
-    return _client;
-  }
-  _clientInitTried = true;
-  try {
-    const { Client } = require('@replit/object-storage');
-    _client = new Client();
-    return _client;
-  } catch (e) {
-    _clientInitError = new Error(
-      'Object Storage is not configured. Provision a bucket in the Replit ' +
-      'Object Storage pane (it will be wired in via .replit automatically), ' +
-      'then restart the server. Original error: ' + e.message
-    );
-    throw _clientInitError;
-  }
-}
 
 function isOpaqueKey(s) {
   return typeof s === 'string' && /^obj:[A-Za-z0-9_-]{16,}(\.[a-z0-9]{1,8})?$/.test(s);
@@ -89,20 +67,10 @@ async function uploadFromDataUrl(dataUrl) {
   const ext = EXT_BY_MIME[parsed.mime] || 'bin';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `design-visit-images/${id}.${ext}`;
-  let client;
   try {
-    client = getClient();
+    await storage.uploadBytes(name, parsed.buf, { compress: false });
   } catch (e) {
     throw _friendlyStorageError(e);
-  }
-  let res;
-  try {
-    res = await client.uploadFromBytes(name, parsed.buf, { compress: false });
-  } catch (e) {
-    throw _friendlyStorageError(e);
-  }
-  if (res && res.ok === false) {
-    throw _friendlyStorageError(new Error('Object storage upload failed: ' + (res.error?.message || 'unknown')));
   }
   return { storageKey: `obj:${id}.${ext}`, mimeType: parsed.mime, byteLength: parsed.buf.length };
 }
@@ -115,20 +83,10 @@ function _objectNameFromKey(key) {
 async function deleteOpaqueKey(key) {
   const name = _objectNameFromKey(key);
   if (!name) return false;
-  let client;
   try {
-    client = getClient();
+    await storage.deleteObject(name, { ignoreNotFound: true });
   } catch (e) {
     throw _friendlyStorageError(e);
-  }
-  let res;
-  try {
-    res = await client.delete(name, { ignoreNotFound: true });
-  } catch (e) {
-    throw _friendlyStorageError(e);
-  }
-  if (res && res.ok === false) {
-    throw _friendlyStorageError(new Error('Object storage delete failed: ' + (res.error?.message || 'unknown')));
   }
   return true;
 }
@@ -136,27 +94,11 @@ async function deleteOpaqueKey(key) {
 async function downloadOpaqueKey(key) {
   const name = _objectNameFromKey(key);
   if (!name) return null;
-  let client;
   try {
-    client = getClient();
+    return await storage.downloadBytes(name);
   } catch (e) {
     throw _friendlyStorageError(e);
   }
-  let res;
-  try {
-    res = await client.downloadAsBytes(name);
-  } catch (e) {
-    throw _friendlyStorageError(e);
-  }
-  if (res && res.ok === false) {
-    const code = res.error?.statusCode || res.error?.code;
-    if (code === 404 || /not\s*found/i.test(String(res.error?.message || ''))) return null;
-    throw _friendlyStorageError(new Error('Object storage download failed: ' + (res.error?.message || 'unknown')));
-  }
-  // SDK returns { ok: true, value: [Buffer] }
-  const value = res?.value;
-  const buf = Array.isArray(value) ? value[0] : value;
-  return buf || null;
 }
 
 // ── Batch download helper ────────────────────────────────────────────────────
@@ -166,38 +108,22 @@ async function downloadOpaqueKey(key) {
 // caught per-key and returned as { key, buf: null, error }.
 //
 // WARNING: do NOT convert this to a serial for…of / await loop.  Each
-// downloadAsBytes call incurs one full RTT to object storage.  A serial loop
-// would multiply that by N (number of photos), making it O(N × RTT) instead of
-// O(1 × RTT) for the whole batch.  The scripts/check-parallel-downloads.mjs
-// test enforces Promise.all wrapping here.
+// storage.downloadBytes call incurs one full RTT to object storage.  A serial
+// loop would multiply that by N (number of photos), making it O(N × RTT)
+// instead of O(1 × RTT) for the whole batch.  The
+// scripts/check-parallel-downloads.mjs test enforces Promise.all wrapping here.
 async function downloadOpaqueKeys(keys) {
   if (!Array.isArray(keys) || keys.length === 0) return [];
   return Promise.all(
     keys.map(async (key) => {
       const name = _objectNameFromKey(key);
       if (!name) return { key, buf: null };
-      let client;
       try {
-        client = getClient();
-      } catch (e) {
-        return { key, buf: null, error: e };
-      }
-      let res;
-      try {
-        res = await client.downloadAsBytes(name);
+        const buf = await storage.downloadBytes(name);
+        return { key, buf: buf || null };
       } catch (e) {
         return { key, buf: null, error: _friendlyStorageError(e) };
       }
-      if (res && res.ok === false) {
-        const code = res.error?.statusCode || res.error?.code;
-        if (code === 404 || /not\s*found/i.test(String(res.error?.message || ''))) {
-          return { key, buf: null };
-        }
-        return { key, buf: null, error: _friendlyStorageError(new Error('Object storage download failed: ' + (res.error?.message || 'unknown'))) };
-      }
-      const value = res?.value;
-      const buf = Array.isArray(value) ? value[0] : value;
-      return { key, buf: buf || null };
     }),
   );
 }

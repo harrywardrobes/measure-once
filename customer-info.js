@@ -12,6 +12,7 @@ const axios      = require('axios').create({ timeout: 12000 });
 const path       = require('path');
 const fs         = require('fs');
 const os         = require('os');
+const storage    = require('./storage');
 const { isAuthenticated, requirePrivilege, requireAdmin } = require('./auth');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
@@ -206,8 +207,6 @@ async function sendAdminNotificationEmail(submission) {
   let skippedCount = 0;
 
   if (photoKeys.length > 0) {
-    const { Client } = require('@replit/object-storage');
-    const client = new Client();
     const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' };
     // Download all files in parallel so 14 files take ~1× network RTT instead of 14×.
     const downloadResults = await Promise.all(photoKeys.map(async (key) => {
@@ -215,10 +214,8 @@ async function sendAdminNotificationEmail(submission) {
       const ext = storagePath.split('.').pop()?.toLowerCase() || 'jpg';
       const contentType = mimeMap[ext] || 'image/jpeg';
       try {
-        const res = await client.downloadAsBytes(storagePath);
-        if (res && res.ok === false) throw new Error(res.error?.message || 'download failed');
-        const rawValue = Array.isArray(res.value) ? res.value[0] : res.value;
-        const buffer = Buffer.from(rawValue);
+        const buffer = await storage.downloadBytes(storagePath);
+        if (!buffer) throw new Error('download failed');
         if (buffer.length > MAX_ATTACHMENT_BYTES) {
           logger.warn(`[customer-info] Skipping attachment for ${key}: ${buffer.length} bytes exceeds 8 MB limit`);
           return { skipped: true };
@@ -461,19 +458,12 @@ function _friendlyStorageError(err) {
 // the client streams from disk. The temp file is the caller's responsibility
 // to delete after this function returns (whether it succeeds or throws).
 async function uploadPhotoFileToStorage(filePath, mimeType) {
-  const { Client } = require('@replit/object-storage');
-  let client;
-  try {
-    client = new Client();
-  } catch (e) {
-    throw _friendlyStorageError(e);
-  }
   const extMap = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' };
   const ext = extMap[mimeType.toLowerCase()] || 'jpg';
   const id  = crypto.randomBytes(18).toString('base64url');
   const name = `customer-info-photos/${id}.${ext}`;
   try {
-    await client.uploadFromFilename(name, filePath);
+    await storage.uploadFile(name, filePath);
   } catch (e) {
     throw _friendlyStorageError(e);
   }
@@ -1006,35 +996,21 @@ router.post('/api/customer-info/:token/sign', express.json({ limit: '4kb' }), as
 
   // Verify object existence for each key before signing so the caller can
   // immediately render "file no longer available" instead of getting a 404
-  // only after clicking. Use client.list (header-only, no content download)
-  // rather than downloadAsBytes (up to 15 MB per file) to keep this cheap.
-  let client = null;
-  try {
-    const { Client } = require('@replit/object-storage');
-    client = new Client();
-  } catch {
-    // If storage is misconfigured, sign all valid keys optimistically so the
-    // tile doesn't incorrectly show "unavailable" due to a config issue.
-    const results = keys.map(key => {
-      if (typeof key !== 'string' || !key.startsWith('obj:ci_')) return { key, url: null };
-      return { key, url: signPublicCustomerPhotoUrl(key) };
-    });
-    return res.json({ results });
-  }
-
+  // only after clicking. Use storage.objectExists (header-only, no content
+  // download) rather than downloadBytes (up to 15 MB per file) to keep this
+  // cheap.
   const results = await Promise.all(keys.map(async key => {
     if (typeof key !== 'string' || !key.startsWith('obj:ci_')) {
       return { key, url: null };
     }
     const storagePath = `customer-info-photos/${key.slice('obj:ci_'.length)}`;
     try {
-      const listRes = await client.list({ prefix: storagePath });
-      const objects = listRes?.value ?? listRes?.objects ?? [];
-      const exists = objects.some(obj => (obj.name ?? obj.key ?? obj) === storagePath);
+      const exists = await storage.objectExists(storagePath);
       if (!exists) return { key, url: null };
     } catch {
-      // If the list call itself fails, sign optimistically — better to give a
-      // potentially-broken link than a false "unavailable" notice.
+      // If the existence check itself fails (e.g. storage misconfigured), sign
+      // optimistically — better to give a potentially-broken link than a false
+      // "unavailable" notice.
       return { key, url: signPublicCustomerPhotoUrl(key) };
     }
     return { key, url: signPublicCustomerPhotoUrl(key) };
@@ -1574,25 +1550,17 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
     return res.status(403).json({ error: 'Invalid or expired image URL.' });
   }
   try {
-    const { Client } = require('@replit/object-storage');
-    let client;
-    try {
-      client = new Client();
-    } catch (e) {
-      throw _friendlyStorageError(e);
-    }
     const id   = key.slice('obj:ci_'.length);
     const name = `customer-info-photos/${id}`;
-    let dl;
+    let buf;
     try {
-      dl = await client.downloadAsBytes(name);
+      buf = await storage.downloadBytes(name);
     } catch (e) {
       throw _friendlyStorageError(e);
     }
-    if (!dl || dl.ok === false) {
+    if (!buf) {
       return res.status(404).json({ error: 'Image not found.' });
     }
-    const buf = Array.isArray(dl.value) ? dl.value[0] : dl.value;
     const ext = id.split('.').pop() || 'jpg';
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg';
     res.set('Content-Type', mime);
@@ -1619,25 +1587,17 @@ router.get('/api/customer-info-preview/:key', async (req, res) => {
     return res.status(403).json({ error: 'Invalid or expired preview URL.' });
   }
   try {
-    const { Client } = require('@replit/object-storage');
-    let client;
-    try {
-      client = new Client();
-    } catch (e) {
-      throw _friendlyStorageError(e);
-    }
     const id   = key.slice('obj:ci_'.length);
     const name = `customer-info-photos/${id}`;
-    let dl;
+    let buf;
     try {
-      dl = await client.downloadAsBytes(name);
+      buf = await storage.downloadBytes(name);
     } catch (e) {
       throw _friendlyStorageError(e);
     }
-    if (!dl || dl.ok === false) {
+    if (!buf) {
       return res.status(404).json({ error: 'File not found.' });
     }
-    const buf = Array.isArray(dl.value) ? dl.value[0] : dl.value;
     const ext  = id.split('.').pop() || 'jpg';
     const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg';
     res.set('Content-Type', mime);

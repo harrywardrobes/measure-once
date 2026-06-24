@@ -1,7 +1,9 @@
 'use strict';
 // In-memory @replit/object-storage stub for customer-info photo probes.
-// Mirrors the bits of the real SDK called by customer-info.js:
-//   uploadFromBytes, downloadAsBytes — returns { ok, value? }.
+// Mirrors the bits of the real SDK called by customer-info.js (via storage.js):
+//   uploadFromBytes, uploadFromFilename, downloadAsBytes, delete.
+
+const fs = require('fs');
 
 const _bytes = new Map();
 
@@ -10,6 +12,14 @@ class Client {
 
   async uploadFromBytes(name, buf) {
     _bytes.set(String(name), Buffer.from(buf));
+    return { ok: true };
+  }
+
+  async uploadFromFilename(name, filePath) {
+    // customer-info photo uploads stream from a temp file on disk via the
+    // SDK's uploadFromFilename. Mirror that here by reading the file into the
+    // in-memory store so a later downloadAsBytes returns the same bytes.
+    _bytes.set(String(name), fs.readFileSync(filePath));
     return { ok: true };
   }
 

@@ -8,6 +8,8 @@
 
 const DELAY_MS = Number(process.env.SLOW_STORAGE_DELAY_MS) || 50;
 
+const fs = require('fs');
+
 const _bytes = new Map();
 
 class Client {
@@ -15,6 +17,14 @@ class Client {
 
   async uploadFromBytes(name, buf) {
     _bytes.set(String(name), Buffer.from(buf));
+    return { ok: true };
+  }
+
+  async uploadFromFilename(name, filePath) {
+    // customer-info photo uploads stream from a temp file via the SDK's
+    // uploadFromFilename; mirror that by reading the file into the in-memory
+    // store so the later (slow) downloadAsBytes returns the same bytes.
+    _bytes.set(String(name), fs.readFileSync(filePath));
     return { ok: true };
   }
 

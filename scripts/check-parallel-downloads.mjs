@@ -79,33 +79,33 @@ const TARGETS = [
   {
     file:         'customer-info.js',
     fn:           'sendAdminNotificationEmail',
-    downloadCall: 'downloadAsBytes',
+    downloadCall: 'downloadBytes',
   },
   // design-visit-uploads: downloadOpaqueKey is a single-item download helper
   // for visit-related media (room photos, sign-off images, etc.).  It currently
-  // holds one downloadAsBytes call that is not batched (single key per call,
-  // no Promise.all needed).  requireParallel: false tracks the function
+  // holds one storage.downloadBytes call that is not batched (single key per
+  // call, no Promise.all needed).  requireParallel: false tracks the function
   // explicitly so a rename or removal is caught immediately; if a second
-  // downloadAsBytes call is ever added, the check automatically upgrades to
+  // downloadBytes call is ever added, the check automatically upgrades to
   // enforcing Promise.all on both calls rather than waiting for the auto-scan
   // ≥ 2 heuristic to fire (design-visit-uploads.js is excluded from auto-scan
   // for functions already covered by TARGETS).
   {
     file:            'design-visit-uploads.js',
     fn:              'downloadOpaqueKey',
-    downloadCall:    'downloadAsBytes',
+    downloadCall:    'downloadBytes',
     requireParallel: false,
   },
   // design-visit-uploads: downloadOpaqueKeys is the batch download helper for
   // bulk-downloading visit images (e.g. for bulk re-signing or thumbnail
-  // generation).  It uses Promise.all(keys.map(…)) to issue all downloadAsBytes
-  // calls in parallel, keeping total latency ~1 × RTT regardless of batch size.
-  // requireParallel: true enforces that the Promise.all wrapper is never removed
-  // or refactored into a serial loop without the test catching it immediately.
+  // generation).  It uses Promise.all(keys.map(…)) to issue all storage.download
+  // Bytes calls in parallel, keeping total latency ~1 × RTT regardless of batch
+  // size.  requireParallel: true enforces that the Promise.all wrapper is never
+  // removed or refactored into a serial loop without the test catching it.
   {
     file:            'design-visit-uploads.js',
     fn:              'downloadOpaqueKeys',
-    downloadCall:    'downloadAsBytes',
+    downloadCall:    'downloadBytes',
     requireParallel: true,
   },
   // design-visits: resignVisitPhotos is the visit-level bulk re-sign helper.
