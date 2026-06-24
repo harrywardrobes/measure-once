@@ -784,6 +784,22 @@ let _allContactsCache    = null;  // { contacts: [...], fetchedAt } — used whi
 let _allContactsLastGood = null;  // { contacts: [...], fetchedAt } — survives invalidation
 let _allContactsInflight = null;  // Promise while a scan is running
 
+// Short-lived in-process cache for DB config rows fetched by /api/contacts-all.
+// These values change only when an admin edits lead_status_config or app_settings,
+// so a 60-second TTL eliminates serial DB round-trips on every API request while
+// keeping the data fresh enough for practical use.
+const CONTACTS_CONFIG_CACHE_TTL_MS = 60_000; // 60 s
+let _devModeCache     = null; // { value: boolean, fetchedAt: number } | null
+let _excludedKeysCache = null; // { keys: Set<string>, fetchedAt: number } | null
+let _stageConfigCache  = null; // { map: Map<string,string>, fetchedAt: number } | null
+
+function _invalidateContactsConfigCache() {
+  _excludedKeysCache = null;
+  _stageConfigCache  = null;
+  // _devModeCache intentionally not busted here — dev_mode is in app_settings,
+  // not lead_status_config, and changes via a separate admin action.
+}
+
 const ALL_CONTACTS_PROPERTIES = [
   'firstname', 'lastname', 'email', 'phone', 'mobilephone', 'hs_lead_status',
   'address', 'city', 'zip', 'customer_number', 'createdate', 'closedate', 'lastmodifieddate',
@@ -1666,14 +1682,28 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
     }
 
+    const _t0 = process.env.DEBUG_CONTACTS ? Date.now() : 0;
+    const _timings = process.env.DEBUG_CONTACTS ? [] : null;
+
     let contacts = rawContacts;
 
     // Dev-mode filter — when dev_mode_enabled is true, only show hw_test_user contacts.
+    // Result is cached for CONTACTS_CONFIG_CACHE_TTL_MS to avoid a DB round-trip
+    // on every request.
     try {
-      const { rows: dmRows } = await pool.query(
-        `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
-      );
-      if (dmRows.length > 0 && dmRows[0].value === 'true') {
+      let devModeEnabled = false;
+      if (_devModeCache && Date.now() - _devModeCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+        devModeEnabled = _devModeCache.value;
+        if (_timings) _timings.push('dev_mode=hit');
+      } else {
+        const { rows: dmRows } = await pool.query(
+          `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+        );
+        devModeEnabled = dmRows.length > 0 && dmRows[0].value === 'true';
+        _devModeCache = { value: devModeEnabled, fetchedAt: Date.now() };
+        if (_timings) _timings.push('dev_mode=miss');
+      }
+      if (devModeEnabled) {
         contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
       }
     } catch (dbErr) {
@@ -1684,14 +1714,22 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     // is absent or falsy (covers both the Sales board and the Customers list by
     // default).  Skipped when the caller is already filtering by a specific
     // excluded status so that explicitly-requested excluded-status views still
-    // return results.
+    // return results.  Result is cached to avoid a DB round-trip on every request.
     const includeExcluded = req.query.includeExcluded === '1';
     if (!includeExcluded) {
       try {
-        const { rows: excludedRows } = await pool.query(
-          'SELECT key FROM lead_status_config WHERE excluded_from_sales = TRUE'
-        );
-        const excludedKeys = new Set(excludedRows.map(r => r.key));
+        let excludedKeys;
+        if (_excludedKeysCache && Date.now() - _excludedKeysCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+          excludedKeys = _excludedKeysCache.keys;
+          if (_timings) _timings.push('excluded_keys=hit');
+        } else {
+          const { rows: excludedRows } = await pool.query(
+            'SELECT key FROM lead_status_config WHERE excluded_from_sales = TRUE'
+          );
+          excludedKeys = new Set(excludedRows.map(r => r.key));
+          _excludedKeysCache = { keys: excludedKeys, fetchedAt: Date.now() };
+          if (_timings) _timings.push('excluded_keys=miss');
+        }
         const callerFilteringByExcluded = leadStatus && excludedKeys.has(leadStatus.toUpperCase());
         if (excludedKeys.size > 0 && !callerFilteringByExcluded) {
           contacts = contacts.filter(c => {
@@ -1730,10 +1768,18 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     const stageParam = (req.query.stage || '').trim().toLowerCase().replace(/_/g, '');
     if (stageParam) {
       try {
-        const { rows: stageRows } = await pool.query(
-          'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
-        );
-        const statusStageMap = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
+        let statusStageMap;
+        if (_stageConfigCache && Date.now() - _stageConfigCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+          statusStageMap = _stageConfigCache.map;
+          if (_timings) _timings.push('stage_map=hit');
+        } else {
+          const { rows: stageRows } = await pool.query(
+            'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
+          );
+          statusStageMap = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
+          _stageConfigCache = { map: statusStageMap, fetchedAt: Date.now() };
+          if (_timings) _timings.push('stage_map=miss');
+        }
         contacts = contacts.filter(c => {
           const ls = c.properties?.hs_lead_status || '';
           const contactStage = statusStageMap.get(ls) || '';
@@ -1742,6 +1788,10 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       } catch (dbErr) {
         logger.warn({ err: dbErr.message }, '[contacts-all] could not load stage config:');
       }
+    }
+
+    if (_timings) {
+      logger.info('[contacts-all] q=%s timings=%s elapsed=%dms', q || '(none)', _timings.join(',') || 'none', Date.now() - _t0);
     }
 
     if (q) {
@@ -1804,6 +1854,9 @@ function _invalidateLeadStatusCountsCache() {
   // `_leadStatusCountsLastGood` so a failed refetch can still serve stale
   // counts instead of erroring out to the UI.
   _leadStatusCountsCache = null;
+  // Also bust the short-lived contacts-config cache so the next
+  // /api/contacts-all request picks up the updated lead_status_config rows.
+  _invalidateContactsConfigCache();
 }
 
 // Helper: filter a contacts array to those that have at least one room in

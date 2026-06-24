@@ -292,7 +292,7 @@ export function usePaginatedContacts(
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
+    const ctrl = new AbortController();
 
     setLoading(true);
     setError(null);
@@ -317,7 +317,7 @@ export function usePaginatedContacts(
 
     (async () => {
       try {
-        const r = await fetch(`/api/contacts-all?${qs}`, { headers: { Accept: 'application/json' } });
+        const r = await fetch(`/api/contacts-all?${qs}`, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
         if (r.status === 401) { location.href = '/login'; return; }
         const data = await r.json().catch(() => ({})) as ContactsResponse;
         if (!r.ok) {
@@ -325,7 +325,7 @@ export function usePaginatedContacts(
           (err as { code?: string }).code = (data as { code?: string }).code;
           throw err;
         }
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         const isStale = r.headers.get('X-Cache-Status') === 'stale';
         if (document.hidden) {
           pendingContactsStaleRef.current = isStale;
@@ -347,15 +347,16 @@ export function usePaginatedContacts(
         setLoading(false);
         onFetchSuccessRef.current?.();
       } catch (e) {
-        if (cancelled) return;
+        // Abort means a newer request superseded this one — discard silently.
+        if ((e as { name?: string }).name === 'AbortError' || ctrl.signal.aborted) return;
         // Offline fallback: instead of showing an error, render saved customers
         // from the IndexedDB cache when the network fetch fails. The cache holds
         // every customer viewed/listed recently regardless of the current filter
         // or page, so we surface it as a single best-effort "saved data" view.
         const cached = await readRecords<PaginatedContact>('customers');
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         const persistedSyncAt = await getMeta<number>(CONTACTS_LAST_SYNC_META_KEY);
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         if (typeof persistedSyncAt === 'number') setLastSyncAt(persistedSyncAt);
         if (cached.length > 0) {
           // Apply the active search box, lead-status / stage filters, sort
@@ -405,7 +406,7 @@ export function usePaginatedContacts(
     })();
 
     return () => {
-      cancelled = true;
+      ctrl.abort();
     };
   }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst]);
 
