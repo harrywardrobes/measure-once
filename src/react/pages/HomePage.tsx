@@ -303,14 +303,25 @@ function TaskSection({
       <SectionHeader
         title="Tasks"
         badge={
-          overdue.length ? (
-            <Chip
-              label={`${overdue.length} overdue`}
-              size="small"
-              color="error"
-              variant="filled"
-              sx={{ height: 20 }}
-            />
+          open.length ? (
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+              <Chip
+                label={`${open.length} open`}
+                size="small"
+                color="default"
+                variant="outlined"
+                sx={{ height: 20 }}
+              />
+              {overdue.length ? (
+                <Chip
+                  label={`${overdue.length} overdue`}
+                  size="small"
+                  color="error"
+                  variant="filled"
+                  sx={{ height: 20 }}
+                />
+              ) : null}
+            </Stack>
           ) : null
         }
       />
