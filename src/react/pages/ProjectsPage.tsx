@@ -39,6 +39,7 @@ import { useCardActionHandlers, CardActionHandlerData } from '../hooks/useCardAc
 import { PhotosReceivedBadge } from '../components/PhotosReceivedBadge';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
+import { HANDLER_TYPE_LABELS } from '../utils/handlerMeta';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { BRAND_COLORS, RADIUS, STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { stageColour } from '../utils/stageColour';
@@ -572,9 +573,12 @@ function ProjectCard({
   // "Continue designing" as the label (unless the admin configured a custom name).
   const isDesignHandler = handler?.type === 'start_design_visit';
   const hasDraft = !!draftVisitId && isDesignHandler;
-  const actionLabel = cahName
-    || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
+  const actionLabel = handler
+    ? (cahName
+        || (hasDraft ? 'Continue designing' : '')
+        || (HANDLER_TYPE_LABELS as Record<string, string>)[handler.type]
+        || '')
+    : resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const hasNoLeadStatus = !leadStatusKey;
   const { actionTint, actionTextColor } = getActionStripColors({

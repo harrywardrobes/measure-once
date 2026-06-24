@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { resolveActionLabel as resolveActionLabelPure } from '../utils/resolveActionLabel.mjs';
-import { GLOBAL_NULL_SLOT_KEY } from '../pages/admin/adminConstants';
+import { GLOBAL_NULL_STAGE_KEY } from '../pages/admin/adminConstants';
+
+const NORMALIZED_GLOBAL_SLOT_KEY = `${GLOBAL_NULL_STAGE_KEY.toLowerCase().replace(/_/g, '')}|`;
 
 export interface CardActionHandlerBinding {
   stage_key?: string;
@@ -26,7 +28,7 @@ interface StageActionLabel {
 
 type HandlerIndex = Record<string, CardActionHandlerData>;
 
-function buildIndexes(rows: CardActionHandlerData[]): {
+export function buildIndexes(rows: CardActionHandlerData[]): {
   byLabel: HandlerIndex;
   byId: Record<number, CardActionHandlerData>;
 } {
@@ -36,13 +38,28 @@ function buildIndexes(rows: CardActionHandlerData[]): {
     byId[h.id] = h;
     for (const b of h.bindings || []) {
       if (b.stage_key) {
-        const sk = String(b.stage_key || '').toLowerCase();
+        const sk = String(b.stage_key || '').toLowerCase().replace(/_/g, '');
         const lk = String(b.status_key || '').toLowerCase();
         byLabel[`${sk}|${lk}`] = h;
       }
     }
   }
   return { byLabel, byId };
+}
+
+export function lookupHandlerInIndex(
+  byLabel: HandlerIndex,
+  stageKey: string,
+  leadStatusKey: string | undefined,
+): CardActionHandlerData | null {
+  const sKey = String(stageKey || '').toLowerCase();
+  const lsKey = String(leadStatusKey || '').toLowerCase();
+  return (
+    byLabel[`${sKey}|${lsKey}`] ||
+    byLabel[`${sKey}|`] ||
+    byLabel[NORMALIZED_GLOBAL_SLOT_KEY] ||
+    null
+  );
 }
 
 export interface UseCardActionHandlersResult {
@@ -155,15 +172,7 @@ export function useCardActionHandlers(): UseCardActionHandlersResult {
       stageKey: string,
       leadStatusKey: string | undefined,
     ): CardActionHandlerData | null => {
-      const sKey = String(stageKey || '').toLowerCase();
-      const lsKey = String(leadStatusKey || '').toLowerCase();
-      const idx = byLabelRef.current;
-      return (
-        idx[`${sKey}|${lsKey}`] ||
-        idx[`${sKey}|`] ||
-        idx[GLOBAL_NULL_SLOT_KEY] ||
-        null
-      );
+      return lookupHandlerInIndex(byLabelRef.current, stageKey, leadStatusKey);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [byLabelRef],

@@ -62,6 +62,7 @@ import { ContactSyncRecovery } from '../components/ContactSyncRecovery';
 import { BulkContactActions } from '../components/BulkContactActions';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
+import { HANDLER_TYPE_LABELS } from '../utils/handlerMeta';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { getActionStripColors } from '../utils/actionStripColors';
@@ -739,9 +740,12 @@ function CustomerCard({
     : '';
   const isDesignHandler = handler?.type === 'start_design_visit';
   const hasDraft = !!draftVisitId && isDesignHandler;
-  const actionLabel = cahName
-    || (hasDraft ? 'Continue designing' : '')
-    || resolveActionLabel(actionStageKey, leadStatusKey, undefined);
+  const actionLabel = handler
+    ? (cahName
+        || (hasDraft ? 'Continue designing' : '')
+        || (HANDLER_TYPE_LABELS as Record<string, string>)[handler.type]
+        || '')
+    : resolveActionLabel(actionStageKey, leadStatusKey, undefined);
 
   const hasNoLeadStatus = !leadStatusKey;
   const { actionTint, actionTextColor } = getActionStripColors({
