@@ -1136,10 +1136,22 @@ export function ProjectsPage() {
   type LastAttemptEntry = { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
   const [lastAttemptMap, setLastAttemptMap] = useState<Record<string, LastAttemptEntry>>({});
 
+  const urgencyMapRef = useRef(urgencyMap);
+  useEffect(() => { urgencyMapRef.current = urgencyMap; }, [urgencyMap]);
+
+  // Stable fingerprint of the visible contact IDs. Only changes when the
+  // actual set of IDs on the page changes — not when filter/sort state
+  // produces a new array reference containing the same IDs. This prevents
+  // the urgency effect from re-running on every filter change.
+  const contactIdsKey = useMemo(
+    () => contacts.map((c) => c.id).sort().join(','),
+    [contacts],
+  );
+
   useEffect(() => {
-    if (!contacts.length) return;
+    if (!contactIdsKey) return;
     let cancelled = false;
-    const ids = contacts.map((c) => c.id).filter((id) => !(id in urgencyMap));
+    const ids = contactIdsKey.split(',').filter((id) => !(id in urgencyMapRef.current));
     if (!ids.length) return;
     (async () => {
       let urgencyById: Record<string, Urgency> = {};
@@ -1176,7 +1188,7 @@ export function ProjectsPage() {
       });
     })();
     return () => { cancelled = true; };
-  }, [contacts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Shared helper: re-fetch urgency + lastAttempt for a given list of contact
   // IDs and merge into the maps.  Pass null to re-fetch all currently tracked.
