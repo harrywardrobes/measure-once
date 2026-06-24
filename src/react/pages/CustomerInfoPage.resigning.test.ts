@@ -516,6 +516,55 @@ describe('restore → re-sign → draft-persist integration', () => {
     expect(saved.savedPhotoNames[0]).toBe('p.jpg');
   });
 
+  it('writes photo A expiry correctly and photo B expiry as 0 when the sign endpoint returns null for photo B', async () => {
+    const staleExpA = NOW_S + BUF - 60;
+    const staleExpB = NOW_S + BUF - 30;
+    const staleUrlA = `/api/customer-info-preview/abc/a.jpg?exp=${staleExpA}&sig=old`;
+    const staleUrlB = `/api/customer-info-preview/abc/b.jpg?exp=${staleExpB}&sig=old`;
+    const newExpA   = NOW_S + 3600;
+    const freshUrlA = `/api/customer-info-preview/abc/a.jpg?exp=${newExpA}&sig=new`;
+
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:     ['photos/a.jpg', 'photos/b.jpg'],
+      savedPhotoNames:    ['a.jpg', 'b.jpg'],
+      savedPhotoUrls:     [staleUrlA, staleUrlB],
+      savedPhotoExpiries: [staleExpA, staleExpB],
+    }));
+
+    // Sign endpoint: succeeds for photo A, returns null for photo B
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { key: 'photos/a.jpg', url: freshUrlA },
+            { key: 'photos/b.jpg', url: null },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/a.jpg', 'photos/b.jpg'],
+      ['a.jpg', 'b.jpg'],
+      [staleUrlA, staleUrlB],
+      [staleExpA, staleExpB],
+    );
+    expect(restored[0].previewUrl).toBe(''); // both stale → cleared
+    expect(restored[1].previewUrl).toBe('');
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    // Photo A: sign succeeded — URL and expiry must be written correctly
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrlA);
+    expect(saved.savedPhotoExpiries[0]).toBe(newExpA);
+    // Photo B: sign returned null — URL empty, expiry must be 0 (not an exception)
+    expect(saved.savedPhotoUrls[1]).toBe('');
+    expect(saved.savedPhotoExpiries[1]).toBe(0);
+  });
+
   it('preserves non-photo draft fields (e.g. genericFields) when persisting re-signed photos', async () => {
     const staleExp  = NOW_S + BUF - 60;
     const staleUrl  = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
