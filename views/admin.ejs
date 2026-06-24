@@ -262,8 +262,7 @@
     // waiting on its MutationObserver fallback. See src/react/main.tsx.
     try { window.__reactIslandMount && window.__reactIslandMount(); } catch (_) {}
 
-    try { localStorage.removeItem('adminActiveTab'); } catch (_) {}
-    // 'adminVisitsSubtab' legacy key is swept globally by runLegacyKeysSweep() on first boot.
+    // 'adminActiveTab' and 'adminVisitsSubtab' legacy keys are swept globally by runLegacyKeysSweep() on first boot.
 
     const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;
