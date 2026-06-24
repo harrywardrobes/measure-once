@@ -29,8 +29,19 @@
 ─────────────────────────────────────────────────────────────────────────── */
 
 /* ── Mono font custom property (fallback; canonical value comes from tokens.css) */
+/* ── Animation timing tokens ─────────────────────────────────────────────────
+   Centralised duration tokens — change here to update every transition and
+   animation in this file.  The JS counterparts live in src/react/timings.ts.
+   The prefers-reduced-motion block below overrides these via the blanket *
+   selector so no per-rule duplicate is needed. */
 :root {
   --font-mono: 'Source Code Pro', ui-monospace, Consolas, monospace;
+
+  --mo-transition-snap:           0.1s;   /* near-instant: quick bg flashes   */
+  --mo-transition-fast:           0.15s;  /* standard hover / interactive      */
+  --mo-transition-medium:         0.2s;   /* slightly longer state changes     */
+  --mo-transition-slow:           0.25s;  /* panel slide / large-area motion   */
+  --mo-skeleton-shimmer-duration: 1.4s;   /* skeleton-shimmer loop             */
 }
 
 /* ── Global monospace elements ───────────────────────────────────────────────── */
@@ -89,7 +100,7 @@ body.has-viewer-banner { padding-top: calc(var(--header-h) + var(--banner-h)); }
   color: var(--status-warning-text);
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity var(--mo-transition-fast), background var(--mo-transition-fast);
 }
 .viewer-banner-close:hover { opacity: 1; background: rgba(0,0,0,0.06); }
 
@@ -113,7 +124,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
-  transition: transform 0.25s ease, opacity 0.2s ease;
+  transition: transform var(--mo-transition-slow) ease, opacity var(--mo-transition-medium) ease;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -178,7 +189,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
    data-stage is set by JS on render and oninput so CSS always reflects current
    value without a full re-render.
 ─────────────────────────────────────────────────────────────────────────────── */
-.ls-stage-select { border-left: 3px solid transparent; transition: border-color 0.15s; }
+.ls-stage-select { border-left: 3px solid transparent; transition: border-color var(--mo-transition-fast); }
 .ls-stage-select[data-stage="SALES"]            { border-left-color: var(--stage-sales-bg); }
 .ls-stage-select[data-stage="DESIGN_VISIT"]     { border-left-color: var(--stage-designvisit-bg); }
 .ls-stage-select[data-stage="SURVEY"]           { border-left-color: var(--stage-survey-bg); }
@@ -208,7 +219,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, var(--stone-light) 25%, var(--paper) 50%, var(--stone-light) 75%);
   background-size: 800px 100%;
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: skeleton-shimmer var(--mo-skeleton-shimmer-duration) ease-in-out infinite;
 }
 .skeleton-pill {
   height: 11px;
@@ -330,7 +341,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
   font-weight: 600;
   z-index: var(--z-tooltip);
   box-shadow: var(--shadow-lg);
-  animation: slideUp 0.2s ease;
+  animation: slideUp var(--mo-transition-medium) ease;
   white-space: nowrap;
 }
 .toast-error   { background: var(--status-error-bg); color: var(--status-error-text); border: 1px solid #fca5a5; } /* hex-color-ok: red-300 border; no exact token */
@@ -449,7 +460,7 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .inv-skeleton-pulse {
   background: linear-gradient(90deg, var(--stone-light) 25%, var(--paper) 50%, var(--stone-light) 75%);
   background-size: 800px 100%;
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: skeleton-shimmer var(--mo-skeleton-shimmer-duration) ease-in-out infinite;
 }
 
 /* ── Task section button hover/active states ───────────────────────────────── */
@@ -501,7 +512,7 @@ input.token-overlay {
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: background .15s, opacity .15s;
+  transition: background var(--mo-transition-fast), opacity var(--mo-transition-fast);
   white-space: nowrap;
 }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
@@ -517,7 +528,7 @@ input.token-overlay {
   font-family: inherit;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--mo-transition-fast);
 }
 .btn-primary:hover { background: var(--orchid-deep); }
 
@@ -571,7 +582,7 @@ input.token-overlay {
   background: none; border: none; cursor: pointer;
   color: #94a3b8; /* hex-color-ok: slate-400; no exact design-system token */ padding: 2px 4px; border-radius: 4px;
   display: inline-flex; align-items: center; flex-shrink: 0;
-  transition: color 0.15s;
+  transition: color var(--mo-transition-fast);
 }
 .contact-edit-btn:hover { color: var(--orchid); }
 
@@ -678,7 +689,7 @@ input.token-overlay {
   opacity: 0.7;
   font-size: 1rem;
   line-height: 1;
-  transition: opacity 0.15s, background 0.15s;
+  transition: opacity var(--mo-transition-fast), background var(--mo-transition-fast);
 }
 .room-stale-banner-dismiss:hover { opacity: 1; background: rgba(0,0,0,0.06); }
 
@@ -812,7 +823,7 @@ input.token-overlay {
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background 0.1s;
+  transition: background var(--mo-transition-snap);
   -webkit-tap-highlight-color: transparent;
   text-decoration: none;
 }
@@ -972,7 +983,7 @@ input.token-overlay {
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  transition: color .15s, background .15s;
+  transition: color var(--mo-transition-fast), background var(--mo-transition-fast);
   white-space: nowrap; flex-shrink: 0;
 }
 .tab-btn:hover  { color: var(--ink-1); background: var(--paper); }
@@ -1039,7 +1050,7 @@ input.token-overlay {
   font-size: .82rem; font-family: inherit;
   color: var(--ink-1); background: #fff; /* hex-color-ok: plain white form field */
   outline: none;
-  transition: border-color .15s;
+  transition: border-color var(--mo-transition-fast);
 }
 .field:focus { border-color: var(--orchid); }
 
@@ -1140,7 +1151,7 @@ input.token-overlay {
   border-radius: var(--radius-md);
   font-size: .875rem; font-weight: 500;
   opacity: 0; pointer-events: none;
-  transition: opacity .2s;
+  transition: opacity var(--mo-transition-medium);
   z-index: var(--z-toast);
   white-space: nowrap;
 }
@@ -1163,7 +1174,7 @@ input.token-overlay {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   user-select: none;
-  transition: opacity 0.15s, background 0.1s;
+  transition: opacity var(--mo-transition-fast), background var(--mo-transition-snap);
 }
 .ss-action-row + .ss-action-row { margin-top: 4px; }
 .ss-action-row.ss-action-disabled { opacity: 0.45; }
@@ -1178,12 +1189,12 @@ input.token-overlay {
 .ss-toggle-track {
   width: 32px; height: 18px;
   background: #9ca3af; /* hex-color-ok: gray-400 unchecked toggle; no exact token */ border-radius: 9px;
-  transition: background 0.2s; position: relative;
+  transition: background var(--mo-transition-medium); position: relative;
 }
 .ss-toggle-track::after {
   content: ''; position: absolute; top: 2px; left: 2px;
   width: 14px; height: 14px; background: #fff; /* hex-color-ok: plain white toggle thumb */ border-radius: 50%;
-  transition: transform 0.2s;
+  transition: transform var(--mo-transition-medium);
 }
 .ss-toggle input:checked + .ss-toggle-track { background: var(--plum); }
 .ss-toggle input:checked + .ss-toggle-track::after { transform: translateX(14px); }
