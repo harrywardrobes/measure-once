@@ -27,9 +27,13 @@
 //   (RESEND-NOTES-PRESENT) Resend sign-off email text + HTML contain the Visit
 //                           Notes section and the note value when visit_notes
 //                           is set.
-//   (RESEND-STATUS-GATE)   POST /api/survey-visits/:id/resend-signoff returns
-//                           409 when the visit status is not "submitted"
-//                           (e.g. signed_off).
+//   (RESEND-STATUS-GATE)          POST /api/survey-visits/:id/resend-signoff
+//                                 returns 409 when the visit status is not
+//                                 "submitted" (e.g. signed_off).
+//   (RESEND-STATUS-GATE-REVISION) Same gate, but the visit is flipped to
+//                                 "revision_requested" before the call.
+//   (RESEND-STATUS-GATE-DRAFT)    Same gate, but the visit is flipped to
+//                                 "draft" before the call.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db> npm run test:survey-visit-email-notes
@@ -60,6 +64,8 @@ const PROBE_LABELS = [
   '(RESEND-NOTES-ABSENT) resend sign-off email text and HTML have no Visit Notes section when visit_notes is null',
   '(RESEND-NOTES-PRESENT) resend sign-off email text and HTML contain Visit Notes section when visit_notes is set',
   '(RESEND-STATUS-GATE) resend-signoff returns 409 for a visit whose status is not submitted',
+  '(RESEND-STATUS-GATE-REVISION) resend-signoff returns 409 for a revision_requested visit',
+  '(RESEND-STATUS-GATE-DRAFT) resend-signoff returns 409 for a draft visit',
 ];
 
 function record(id, ok, detail) {
@@ -147,6 +153,10 @@ function writeReport(runId) {
     '  Visit Notes section and the note value when `visit_notes` is set.',
     '- **(RESEND-STATUS-GATE)**: POST `/api/survey-visits/:id/resend-signoff` returns',
     '  409 when the visit status is not `submitted` (e.g. `signed_off`).',
+    '- **(RESEND-STATUS-GATE-REVISION)**: Same 409 gate, but the visit is flipped to',
+    '  `revision_requested` before the call.',
+    '- **(RESEND-STATUS-GATE-DRAFT)**: Same 409 gate, but the visit is flipped to',
+    '  `draft` before the call.',
   ];
 
   fs.writeFileSync(REPORT_PATH, lines.join('\n') + '\n');
@@ -520,6 +530,72 @@ async function main() {
         gateResendRes.status === 409
           ? 'resend-signoff correctly returned 409 for a signed_off visit'
           : `expected 409 but got status=${gateResendRes.status} body=${JSON.stringify(gateResendRes.json).slice(0, 200)}`);
+    }
+
+    // ── (RESEND-STATUS-GATE-REVISION) ────────────────────────────────────────
+    // Verify that resend-signoff returns 409 for a revision_requested visit.
+    // Creates a fresh submitted visit, flips it to revision_requested in the DB,
+    // then asserts the endpoint refuses with 409.
+    console.log('\n  [RESEND-STATUS-GATE-REVISION] resend-signoff must return 409 for a revision_requested visit');
+
+    const revisionGateVisitRes = await client.post('/api/survey-visits', {
+      contactId:     CONTACT_ID,
+      contactName:   'SVEN Revision Gate Customer',
+      contactEmail:  'sven-revision-gate@privtest.local',
+      termsAccepted: true,
+      rooms: [{ roomName: 'Bedroom', unitCount: 1, unitPricePence: 0 }],
+      handlerConfig: {},
+    });
+
+    if (revisionGateVisitRes.status !== 201) {
+      record('RESEND-STATUS-GATE-REVISION', false,
+        `visit create returned status=${revisionGateVisitRes.status} body=${JSON.stringify(revisionGateVisitRes.json).slice(0, 200)}`);
+    } else {
+      const revisionGateVisitId = revisionGateVisitRes.json?.surveyVisitId;
+      await pool.query(
+        `UPDATE survey_visits SET status='revision_requested', updated_at=NOW() WHERE id=$1`,
+        [revisionGateVisitId]
+      );
+      const revisionGateResendRes = await adminClient.post(
+        `/api/survey-visits/${revisionGateVisitId}/resend-signoff`, {}
+      );
+      record('RESEND-STATUS-GATE-REVISION', revisionGateResendRes.status === 409,
+        revisionGateResendRes.status === 409
+          ? 'resend-signoff correctly returned 409 for a revision_requested visit'
+          : `expected 409 but got status=${revisionGateResendRes.status} body=${JSON.stringify(revisionGateResendRes.json).slice(0, 200)}`);
+    }
+
+    // ── (RESEND-STATUS-GATE-DRAFT) ───────────────────────────────────────────
+    // Verify that resend-signoff returns 409 for a draft visit.
+    // Creates a fresh submitted visit, flips it back to draft in the DB,
+    // then asserts the endpoint refuses with 409.
+    console.log('\n  [RESEND-STATUS-GATE-DRAFT] resend-signoff must return 409 for a draft visit');
+
+    const draftGateVisitRes = await client.post('/api/survey-visits', {
+      contactId:     CONTACT_ID,
+      contactName:   'SVEN Draft Gate Customer',
+      contactEmail:  'sven-draft-gate@privtest.local',
+      termsAccepted: true,
+      rooms: [{ roomName: 'Bathroom', unitCount: 1, unitPricePence: 0 }],
+      handlerConfig: {},
+    });
+
+    if (draftGateVisitRes.status !== 201) {
+      record('RESEND-STATUS-GATE-DRAFT', false,
+        `visit create returned status=${draftGateVisitRes.status} body=${JSON.stringify(draftGateVisitRes.json).slice(0, 200)}`);
+    } else {
+      const draftGateVisitId = draftGateVisitRes.json?.surveyVisitId;
+      await pool.query(
+        `UPDATE survey_visits SET status='draft', updated_at=NOW() WHERE id=$1`,
+        [draftGateVisitId]
+      );
+      const draftGateResendRes = await adminClient.post(
+        `/api/survey-visits/${draftGateVisitId}/resend-signoff`, {}
+      );
+      record('RESEND-STATUS-GATE-DRAFT', draftGateResendRes.status === 409,
+        draftGateResendRes.status === 409
+          ? 'resend-signoff correctly returned 409 for a draft visit'
+          : `expected 409 but got status=${draftGateResendRes.status} body=${JSON.stringify(draftGateResendRes.json).slice(0, 200)}`);
     }
 
     exitCode = findings.filter(f => !f.ok).length > 0 ? 1 : 0;
