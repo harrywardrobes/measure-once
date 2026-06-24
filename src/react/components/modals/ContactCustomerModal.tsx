@@ -314,6 +314,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     setEmailPreviewHtml('');
     setEmailFetchedBody('');
     setEmailFetchedSubject('');
+    setEmailTemplateSubject('');
+    setEmailTemplateBody('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
     setEmailPreviewLoading(false);

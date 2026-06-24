@@ -200,6 +200,55 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('does NOT show the discard dialog when email panel opens but user has not typed anything', async () => {
+    restoreFetch = makeFetch();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderModal(onClose);
+    await waitForContactStep();
+
+    // Open the email panel
+    await user.click(screen.getByTestId('contact-method-email-btn'));
+
+    // Wait for template values to populate (confirms fetch is complete)
+    const subjectInput = await screen.findByRole('textbox', { name: /subject/i });
+    await waitFor(() => {
+      expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
+    });
+
+    // Click X immediately — template content is NOT a user edit
+    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
+    await user.click(within(mainDialog).getByRole('button', { name: /close/i }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+
+  it('shows the discard dialog when the user has typed in the email subject', async () => {
+    restoreFetch = makeFetch();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderModal(onClose);
+    await waitForContactStep();
+
+    // Open the email panel and wait for template to load
+    await user.click(screen.getByTestId('contact-method-email-btn'));
+    const subjectInput = await screen.findByRole('textbox', { name: /subject/i });
+    await waitFor(() => {
+      expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
+    });
+
+    // Type in the subject — this is a genuine user edit
+    await user.clear(subjectInput);
+    await user.type(subjectInput, 'My custom subject');
+
+    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
+    await user.click(within(mainDialog).getByRole('button', { name: /close/i }));
+
+    expect(await screen.findByRole('dialog', { name: /discard changes/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('skips the discard dialog while an email send is in flight (isLocked=true)', async () => {
     // emailFlow === 'sending' → isLocked=true → hasUnsavedChanges=false → no dialog
     restoreFetch = makeFetch({ sendEmailHangs: true });
