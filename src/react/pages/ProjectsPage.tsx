@@ -3,8 +3,7 @@ import { PROJECTS_STALENESS_PREFIX, PROJECTS_STALENESS_LEGACY_KEY, PROJECTS_SUBS
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeUrgencyChanged } from '../utils/broadcastUrgencyChanged';
-import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
-import { TASK_CHANGED_COOLDOWN_MS } from '../constants/timings';
+import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
 import {
   Alert,
   Avatar,
@@ -1287,7 +1286,7 @@ export function ProjectsPage() {
             .catch(() => {
               /* best-effort — stale count is acceptable on failure */
             });
-        }, TASK_CHANGED_COOLDOWN_MS),
+        }, TASK_CHANGED_DEBOUNCE_MS),
       );
     });
     return () => {
