@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { INVOICE_DRAFT_PREFIX, INVOICE_DRAFT_LEGACY_KEY } from '../constants/localStorageKeys';
+import { INVOICE_DRAFT_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { useBeforeUnloadGuard } from '../hooks/useBeforeUnloadGuard';
 import { useConnectionToast } from '../context/ConnectionToastContext';
@@ -67,13 +67,11 @@ interface InvoiceDraft {
   memo: string;
 }
 
-function _draftKey(userId?: string | number): string {
-  return userId ? `${INVOICE_DRAFT_PREFIX}${userId}` : INVOICE_DRAFT_LEGACY_KEY;
-}
-
 export function loadDraft(invId: string, userId?: string | number): InvoiceDraft | null {
+  if (!userId) return null;
   try {
-    const raw = localStorage.getItem(_draftKey(userId));
+    const k = `${INVOICE_DRAFT_PREFIX}${userId}`;
+    const raw = localStorage.getItem(k);
     if (!raw) return null;
     const map = JSON.parse(raw) as Record<string, InvoiceDraft>;
     return map[invId] ?? null;
@@ -83,8 +81,9 @@ export function loadDraft(invId: string, userId?: string | number): InvoiceDraft
 }
 
 export function saveDraft(invId: string, draft: InvoiceDraft, userId?: string | number) {
+  if (!userId) return;
   try {
-    const k = _draftKey(userId);
+    const k = `${INVOICE_DRAFT_PREFIX}${userId}`;
     const raw = localStorage.getItem(k);
     const map: Record<string, InvoiceDraft> = raw ? JSON.parse(raw) : {};
     map[invId] = draft;
@@ -93,8 +92,9 @@ export function saveDraft(invId: string, draft: InvoiceDraft, userId?: string | 
 }
 
 export function clearDraft(invId: string, userId?: string | number) {
+  if (!userId) return;
   try {
-    const k = _draftKey(userId);
+    const k = `${INVOICE_DRAFT_PREFIX}${userId}`;
     const raw = localStorage.getItem(k);
     if (!raw) return;
     const map: Record<string, InvoiceDraft> = JSON.parse(raw);

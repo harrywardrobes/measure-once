@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
 import { COPY_DONE_RESET_MS } from '../../constants/timings';
 import { GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY, GLOBAL_NULL_SLOT_KEY } from './adminConstants';
 import {
@@ -177,10 +177,12 @@ function navigateToTab(tabId: string, itemKey?: string | number) {
   } else {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const groupKey = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-      const tabKey   = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
-      localStorage.setItem(groupKey, 'configuration');
-      localStorage.setItem(tabKey, tabId);
+      if (uid) {
+        const groupKey = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+        const tabKey   = `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`;
+        localStorage.setItem(groupKey, 'configuration');
+        localStorage.setItem(tabKey, tabId);
+      }
     } catch { /* ignore */ }
     location.href = '/admin';
   }

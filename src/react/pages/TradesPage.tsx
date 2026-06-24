@@ -1,5 +1,5 @@
 import React from 'react';
-import { TRADES_TYPE_FILTER_PREFIX, TRADES_TYPE_FILTER_LEGACY_KEY } from '../constants/localStorageKeys';
+import { TRADES_TYPE_FILTER_PREFIX } from '../constants/localStorageKeys';
 import { CONFLICT_CHECK_DEBOUNCE_MS, DOM_FLUSH_DELAY_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -1298,7 +1298,8 @@ export function TradesPage() {
   const [typeFilter, setTypeFilter] = React.useState<string>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${TRADES_TYPE_FILTER_PREFIX}${uid}` : TRADES_TYPE_FILTER_LEGACY_KEY;
+      if (!uid) return '';
+      const k = `${TRADES_TYPE_FILTER_PREFIX}${uid}`;
       return localStorage.getItem(k) || '';
     } catch { return ''; }
   });

@@ -28,7 +28,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX, QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY } from '../../constants/localStorageKeys';
+import { QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX } from '../../constants/localStorageKeys';
 import { useAuth } from '../../contexts/AuthContext';
 import type {
   VisitQuestionScope,
@@ -292,7 +292,8 @@ export function QuestionnaireBuilder() {
   const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${uid}` : QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY;
+      if (!uid) return 'all';
+      const k = `${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${uid}`;
       const stored = localStorage.getItem(k);
       return (stored === 'design' || stored === 'survey') ? stored : 'all';
     } catch { return 'all'; }

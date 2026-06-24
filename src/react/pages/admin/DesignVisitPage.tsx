@@ -7,7 +7,7 @@ import { GET, POST } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { TabBar } from '../../components/TabBar';
 import { QuestionnaireBuilder } from './QuestionnaireBuilder';
-import { ADMIN_VISITS_SUBTAB_PREFIX, ADMIN_VISITS_SUBTAB_LEGACY_KEY } from '../../constants/localStorageKeys';
+import { ADMIN_VISITS_SUBTAB_PREFIX } from '../../constants/localStorageKeys';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   DvHandle, DvFurniture, DvDoorStyle, DvTerms, AnyItem,
@@ -91,7 +91,8 @@ export function DesignVisitPage() {
   const [subtab, setSubtab] = useState<VisitsSubtab>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${ADMIN_VISITS_SUBTAB_PREFIX}${uid}` : ADMIN_VISITS_SUBTAB_LEGACY_KEY;
+      if (!uid) return 'catalogues';
+      const k = `${ADMIN_VISITS_SUBTAB_PREFIX}${uid}`;
       const saved = localStorage.getItem(k) as VisitsSubtab | null;
       if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) return saved;
     } catch { /* ignore */ }

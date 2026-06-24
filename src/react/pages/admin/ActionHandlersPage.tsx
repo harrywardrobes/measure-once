@@ -48,7 +48,7 @@ import type {
   VisitType,
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { CAH_ORPHANED_DISMISSED_PREFIX, CAH_ORPHANED_DISMISSED_LEGACY_KEY, CAH_CONFLICT_DISMISSED_PREFIX, CAH_CONFLICT_DISMISSED_LEGACY_KEY, ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { CAH_ORPHANED_DISMISSED_PREFIX, CAH_CONFLICT_DISMISSED_PREFIX, ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
 import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_WORKFLOW, WorkflowStage } from '../../lib/workflowConfig';
 import { useWorkflow } from '../../hooks/useWorkflow';
@@ -219,10 +219,12 @@ function navigateToTab(tabId: string, itemKey?: string | number) {
   } else {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const groupKey = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-      const tabKey   = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
-      localStorage.setItem(groupKey, 'configuration');
-      localStorage.setItem(tabKey, tabId);
+      if (uid) {
+        const groupKey = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+        const tabKey   = `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`;
+        localStorage.setItem(groupKey, 'configuration');
+        localStorage.setItem(tabKey, tabId);
+      }
     } catch { /* ignore */ }
     location.href = '/admin';
   }
@@ -1066,7 +1068,8 @@ export function ActionHandlersPage() {
   const [orphanedDismissed,     setOrphanedDismissed]     = useState<number | null>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${CAH_ORPHANED_DISMISSED_PREFIX}${uid}` : CAH_ORPHANED_DISMISSED_LEGACY_KEY;
+      if (!uid) return null;
+      const k = `${CAH_ORPHANED_DISMISSED_PREFIX}${uid}`;
       const v = localStorage.getItem(k);
       if (v === null) return null;
       const n = Number(v);
@@ -1078,7 +1081,8 @@ export function ActionHandlersPage() {
   const [dismissed,             setDismissed]             = useState<string>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${CAH_CONFLICT_DISMISSED_PREFIX}${uid}` : CAH_CONFLICT_DISMISSED_LEGACY_KEY;
+      if (!uid) return '';
+      const k = `${CAH_CONFLICT_DISMISSED_PREFIX}${uid}`;
       return localStorage.getItem(k) ?? '';
     } catch { return ''; }
   });
@@ -1367,10 +1371,12 @@ export function ActionHandlersPage() {
                                           } else {
                                             try {
                                               const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-                                              const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-                                              const tk = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
-                                              localStorage.setItem(gk, 'configuration');
-                                              localStorage.setItem(tk, 'cardactions');
+                                              if (uid) {
+                                                const gk = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+                                                const tk = `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`;
+                                                localStorage.setItem(gk, 'configuration');
+                                                localStorage.setItem(tk, 'cardactions');
+                                              }
                                             } catch { /* restricted context */ }
                                             location.href = '/admin';
                                           }

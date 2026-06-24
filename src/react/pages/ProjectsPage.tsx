@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PROJECTS_STALENESS_PREFIX, PROJECTS_STALENESS_LEGACY_KEY, PROJECTS_SUBSTAGE_PREFIX, PROJECTS_SUBSTAGE_LEGACY_KEY } from '../constants/localStorageKeys';
+import { PROJECTS_STALENESS_PREFIX, PROJECTS_SUBSTAGE_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeUrgencyChanged } from '../utils/broadcastUrgencyChanged';
@@ -76,8 +76,9 @@ const PROJECTS_STALENESS_DAYS = 30;
 const STALENESS_STAGES = new Set(['sales', 'designvisit']);
 
 function loadStalenessActive(userId?: string | number): boolean {
+  if (!userId) return false;
   try {
-    const k = userId ? `${PROJECTS_STALENESS_PREFIX}${userId}` : PROJECTS_STALENESS_LEGACY_KEY;
+    const k = `${PROJECTS_STALENESS_PREFIX}${userId}`;
     return localStorage.getItem(k) === 'true';
   } catch {
     return false;
@@ -85,15 +86,17 @@ function loadStalenessActive(userId?: string | number): boolean {
 }
 
 function saveStalenessActive(active: boolean, userId?: string | number): void {
+  if (!userId) return;
   try {
-    const k = userId ? `${PROJECTS_STALENESS_PREFIX}${userId}` : PROJECTS_STALENESS_LEGACY_KEY;
+    const k = `${PROJECTS_STALENESS_PREFIX}${userId}`;
     localStorage.setItem(k, String(active));
   } catch { /* ignore */ }
 }
 
 function loadHiddenSubstagesForStage(stageKey: string, userId?: string | number): Set<string> {
+  if (!userId) return new Set<string>();
   try {
-    const k = userId ? `${PROJECTS_SUBSTAGE_PREFIX}${userId}` : PROJECTS_SUBSTAGE_LEGACY_KEY;
+    const k = `${PROJECTS_SUBSTAGE_PREFIX}${userId}`;
     const raw = localStorage.getItem(k);
     const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
     return new Set<string>(parsed[stageKey] || []);
@@ -103,8 +106,9 @@ function loadHiddenSubstagesForStage(stageKey: string, userId?: string | number)
 }
 
 function saveHiddenSubstagesForStage(stageKey: string, hidden: Set<string>, userId?: string | number): void {
+  if (!userId) return;
   try {
-    const k = userId ? `${PROJECTS_SUBSTAGE_PREFIX}${userId}` : PROJECTS_SUBSTAGE_LEGACY_KEY;
+    const k = `${PROJECTS_SUBSTAGE_PREFIX}${userId}`;
     const raw = localStorage.getItem(k);
     const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
     parsed[stageKey] = [...hidden];

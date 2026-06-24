@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY, CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY } from '../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_TAB_PREFIX, CP_RECENT_CUSTOMERS_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
@@ -254,8 +254,10 @@ export function CommandPalette() {
       } else {
         try {
           const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-          const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-          localStorage.setItem(gk, groupId);
+          if (uid) {
+            const gk = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+            localStorage.setItem(gk, groupId);
+          }
         } catch (_) {}
         location.href = '/admin';
       }
@@ -268,10 +270,12 @@ export function CommandPalette() {
       } else {
         try {
           const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-          const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-          const tk = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
-          localStorage.setItem(gk, groupId);
-          localStorage.setItem(tk, tabId);
+          if (uid) {
+            const gk = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+            const tk = `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`;
+            localStorage.setItem(gk, groupId);
+            localStorage.setItem(tk, tabId);
+          }
         } catch (_) {}
         location.href = '/admin';
       }
@@ -424,8 +428,10 @@ export function CommandPalette() {
   if (!q) {
     try {
       const uid = _cpUserId ?? (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const cpKey = uid ? `${CP_RECENT_CUSTOMERS_PREFIX}${uid}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
-      recentCustomers = JSON.parse(localStorage.getItem(cpKey) || '[]');
+      if (uid) {
+        const cpKey = `${CP_RECENT_CUSTOMERS_PREFIX}${uid}`;
+        recentCustomers = JSON.parse(localStorage.getItem(cpKey) || '[]');
+      }
     } catch (_) {}
   }
 

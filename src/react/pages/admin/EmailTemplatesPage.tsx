@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY, ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY } from '../../constants/localStorageKeys';
+import { EMAIL_TEMPLATE_DRAFT_PREFIX as DRAFT_PREFIX, ADMIN_DEEP_LINK_KEY, ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_TAB_PREFIX } from '../../constants/localStorageKeys';
 
 import {
   Accordion,
@@ -67,10 +67,12 @@ function navigateToWorkflow(handlerType: string) {
   } else {
     try {
       const uid = (W as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const groupKey = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
-      const tabKey   = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
-      localStorage.setItem(groupKey, 'configuration');
-      localStorage.setItem(tabKey, 'workflow');
+      if (uid) {
+        const groupKey = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
+        const tabKey   = `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`;
+        localStorage.setItem(groupKey, 'configuration');
+        localStorage.setItem(tabKey, 'workflow');
+      }
     } catch { /* ignore */ }
     location.href = '/admin';
   }

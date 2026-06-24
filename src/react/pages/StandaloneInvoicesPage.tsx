@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { INVOICE_PAGE_PREFIX, INVOICE_PAGE_LEGACY_KEY } from '../constants/localStorageKeys';
+import { INVOICE_PAGE_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Alert,
@@ -37,20 +37,22 @@ type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 
 const PAGE_LIMIT = 25;
 
-function _pageKey(userId?: string | number): string {
-  return userId ? `${INVOICE_PAGE_PREFIX}${userId}` : INVOICE_PAGE_LEGACY_KEY;
-}
-
 function loadPage(userId?: string | number): number {
+  if (!userId) return 1;
   try {
-    const raw = localStorage.getItem(_pageKey(userId));
+    const k = `${INVOICE_PAGE_PREFIX}${userId}`;
+    const raw = localStorage.getItem(k);
     const n = raw ? parseInt(raw, 10) : 1;
     return Number.isFinite(n) && n >= 1 ? n : 1;
   } catch { return 1; }
 }
 
 function savePage(page: number, userId?: string | number) {
-  try { localStorage.setItem(_pageKey(userId), String(page)); } catch { /* ignore */ }
+  if (!userId) return;
+  try {
+    const k = `${INVOICE_PAGE_PREFIX}${userId}`;
+    localStorage.setItem(k, String(page));
+  } catch { /* ignore */ }
 }
 
 // ── Status chip ───────────────────────────────────────────────────────────────

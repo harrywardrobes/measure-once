@@ -200,7 +200,8 @@ export function AdminGroupedTabsBar() {
   const [activeGroupId, setActiveGroupId] = useState<GroupId | null>(() => {
     try {
       const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-      const k = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+      if (!uid) return null;
+      const k = `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}`;
       const saved = localStorage.getItem(k) as GroupId | null;
       if (saved && TAB_GROUPS.some((g) => g.id === saved)) return saved;
     } catch (_) {}

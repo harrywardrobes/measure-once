@@ -1,4 +1,4 @@
-import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_PREFIX } from '../constants/localStorageKeys';
 
 /**
  * Date, name, currency, and string formatters shared across React components.
@@ -118,7 +118,8 @@ export function updateRecentCustomer(contact: {
 }): void {
   try {
     const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
-    const KEY = uid ? `${CP_RECENT_CUSTOMERS_PREFIX}${uid}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
+    if (!uid) return;
+    const KEY = `${CP_RECENT_CUSTOMERS_PREFIX}${uid}`; // ls-key-ok: key built from imported prefix constant
     const p = contact.properties || {};
     const parts = [p.firstname, p.lastname].filter(Boolean);
     const name = parts.length ? parts.join(' ') : (p.email || p.company || 'Unnamed');

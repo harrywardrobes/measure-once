@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_PREFIX, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
 import { COPY_DONE_RESET_MS, SEARCH_INPUT_DEBOUNCE_MS, EMAIL_DUPE_CHECK_DEBOUNCE_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, relativeTime } from '../utils/formatters';
@@ -1723,7 +1723,8 @@ export function CustomersPage(): React.ReactElement {
   React.useEffect(() => {
     if (!contacts.length) return;
     try {
-      const KEY = _authUserId ? `${CP_RECENT_CUSTOMERS_PREFIX}${_authUserId}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
+      if (!_authUserId) return;
+      const KEY = `${CP_RECENT_CUSTOMERS_PREFIX}${_authUserId}`; // ls-key-ok: key built from imported prefix constant
       type CacheEntry = { id: string; name: string; company: string; ts: number };
       const existing: CacheEntry[] = JSON.parse(localStorage.getItem(KEY) || '[]');
       const byId = new Map<string, CacheEntry>(existing.map((e) => [e.id, e]));
