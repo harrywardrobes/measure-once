@@ -464,7 +464,7 @@ function applyFreshUrlsToDetail(visit: DesignVisit, urls: Record<string, string>
  * a stale or absent view URL. Returns the fresh URL map on success or null when
  * the request is skipped, offline, or encounters an error.
  */
-async function fetchFreshUrlsForDetail(visitId: number, visit: DesignVisit): Promise<Record<string, string> | null> {
+export async function fetchFreshUrlsForDetail(visitId: number, visit: DesignVisit): Promise<Record<string, string> | null> {
   if (!detailNeedsResign(visit)) return null;
   try {
     const r = await fetch(`/api/design-visits/${visitId}/photos/resign`, { method: 'POST' });
@@ -482,7 +482,7 @@ async function fetchFreshUrlsForDetail(visitId: number, visit: DesignVisit): Pro
 }
 
 /** Parse a `#design-visit-<id>` deep-link fragment into a numeric visit id. */
-function visitIdFromHash(hash: string): number | null {
+export function visitIdFromHash(hash: string): number | null {
   const m = hash.match(/^#design-visit-(\d+)$/);
   if (!m) return null;
   const id = Number(m[1]);

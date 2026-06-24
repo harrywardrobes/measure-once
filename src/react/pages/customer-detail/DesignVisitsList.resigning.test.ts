@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   isViewUrlStale,
   resignResumedImages,
+  visitIdFromHash,
+  fetchFreshUrlsForDetail,
 } from './DesignVisitsList';
 import type { ExistingVisit } from '../../components/DesignVisitWizard';
+import type { DesignVisit } from './types';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -356,5 +359,189 @@ describe('resignResumedImages — server error path', () => {
     const result = await resignResumedImages(visit);
 
     expect(result).toBe(visit);
+  });
+});
+
+// ── visitIdFromHash ────────────────────────────────────────────────────────────
+
+describe('visitIdFromHash', () => {
+  it('returns the numeric id for a well-formed fragment', () => {
+    expect(visitIdFromHash('#design-visit-42')).toBe(42);
+  });
+
+  it('returns the numeric id for a large id', () => {
+    expect(visitIdFromHash('#design-visit-99999')).toBe(99999);
+  });
+
+  it('returns null for an empty string', () => {
+    expect(visitIdFromHash('')).toBeNull();
+  });
+
+  it('returns null for an unrelated fragment', () => {
+    expect(visitIdFromHash('#some-other-anchor')).toBeNull();
+  });
+
+  it('returns null when there is no leading hash', () => {
+    expect(visitIdFromHash('design-visit-42')).toBeNull();
+  });
+
+  it('returns null when the fragment has a trailing suffix', () => {
+    expect(visitIdFromHash('#design-visit-42-extra')).toBeNull();
+  });
+});
+
+// ── fetchFreshUrlsForDetail — deep-link auto-resign path ──────────────────────
+
+describe('fetchFreshUrlsForDetail — deep-link path: cached detail with stale photo URLs', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeDetail(overrides: Partial<DesignVisit> = {}): DesignVisit {
+    return { id: VISIT_ID, contact_id: 'c1', status: 'submitted', rooms: [], ...overrides };
+  }
+
+  it('returns null and issues no fetch when the detail has no rooms', async () => {
+    const detail = makeDetail({ rooms: [] });
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns null and issues no fetch when all obj: images have fresh URLs', async () => {
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg', viewUrl: signedUrl(BUFFER_SEC + 600) }],
+      }],
+    });
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+    expect(result).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('calls the resign endpoint when a cached detail has a stale obj: image (deep-link resign path)', async () => {
+    const freshUrl = signedUrl(3600);
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ urls: { 'obj:bucket/photo.jpg': freshUrl } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg', viewUrl: signedUrl(BUFFER_SEC - 1) }],
+      }],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      `/api/design-visits/${VISIT_ID}/photos/resign`,
+      { method: 'POST' },
+    );
+    expect(result).toEqual({ 'obj:bucket/photo.jpg': freshUrl });
+  });
+
+  it('calls the resign endpoint when the obj: image has no viewUrl at all', async () => {
+    const freshUrl = signedUrl(3600);
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ urls: { 'obj:bucket/photo.jpg': freshUrl } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg' }],
+      }],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(result).toEqual({ 'obj:bucket/photo.jpg': freshUrl });
+  });
+
+  it('returns a URL map covering all stale keys across multiple rooms', async () => {
+    const url1 = signedUrl(3600);
+    const url2 = signedUrl(3601);
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ urls: { 'obj:bucket/a.jpg': url1, 'obj:bucket/b.jpg': url2 } }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const detail = makeDetail({
+      rooms: [
+        { room_name: 'Room A', images: [{ storageKey: 'obj:bucket/a.jpg' }] },
+        { room_name: 'Room B', images: [{ storageKey: 'obj:bucket/b.jpg' }] },
+      ],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(result).toEqual({ 'obj:bucket/a.jpg': url1, 'obj:bucket/b.jpg': url2 });
+  });
+
+  it('returns null when the server response has an empty urls map', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ urls: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg', viewUrl: signedUrl(BUFFER_SEC - 1) }],
+      }],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when the server responds with a non-ok status', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('Internal Server Error', { status: 500 }));
+
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg', viewUrl: undefined }],
+      }],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when fetch throws (network error / offline)', async () => {
+    fetchSpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const detail = makeDetail({
+      rooms: [{
+        room_name: 'Kitchen',
+        images: [{ storageKey: 'obj:bucket/photo.jpg', viewUrl: undefined }],
+      }],
+    });
+
+    const result = await fetchFreshUrlsForDetail(VISIT_ID, detail);
+    expect(result).toBeNull();
   });
 });
