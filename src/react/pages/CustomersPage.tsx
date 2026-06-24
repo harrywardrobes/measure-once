@@ -1846,6 +1846,17 @@ export function CustomersPage(): React.ReactElement {
             label="Sort by"
           />
 
+          {sortBy === 'priority' && !fromCache && !contactsStale ? (
+            <Tooltip title={`Only contacts updated in the last ${priorityActiveDays} days are ranked by priority`} placement="top">
+              <Typography
+                variant="caption"
+                sx={{ color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0, cursor: 'default', lineHeight: 1 }}
+              >
+                Last {priorityActiveDays} days
+              </Typography>
+            </Tooltip>
+          ) : null}
+
           <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
             <Typography variant="body2">Show all</Typography>
             <Toggle
