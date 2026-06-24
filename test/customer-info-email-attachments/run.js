@@ -15,21 +15,30 @@
 //              • admin email has 2 entries in `attachments`
 //              • each entry has correct `contentType` (image/jpeg) and
 //                non-empty `content`
-//              • HTML body contains "2 photos attached" (no count mismatch)
+//              • HTML body contains "2 files attached" (no count mismatch)
 //              • HTML body does NOT contain an `<a href` signed-URL link
 //                (photos travel as attachments, not inline links)
 //              • text body contains "2 attached"
-//              • no "Mobile:" row in text body (correctedMobile is empty)
-//              • no "Mobile (corrected)" row in HTML body
+//              • no "Phone:" row in text body (staff-issued submit carries no
+//                customer-supplied phone)
+//              • no "Phone" row in HTML body
 //
 //   (ATT-2)  Skip path — 1 real key + 1 key absent from storage:
 //              • admin email has 1 entry in `attachments`
 //              • HTML body contains "1 skipped"
 //
-//   (ATT-3)  correctedMobile path — submitted with a UK mobile number:
-//              • admin email text body contains "Mobile: +44 7902 819990"
-//              • admin email HTML body contains "Mobile (corrected)" row
-//                with "+44 7902 819990"
+//   (ATT-3)  Generic flow — anonymous draft submitted with a UK mobile number:
+//              the server normalises it to E.164 and stores contact_phone, which
+//              the admin email renders via formatPhone.
+//              • admin email text body contains "Phone: +44 7902 819990"
+//              • admin email HTML body contains a "Phone" row with
+//                "+44 7902 819990"
+//
+// Note: the corrected-email/mobile feature was removed by migration
+// drop-corrected-email-mobile; the phone now flows through the generic flow.
+//
+// Each probe uses a distinct numeric HubSpot contactId so the per-contact
+// initial-send cooldown (checkStaffSendCooldown) never fires between probes.
 //
 // Overrides used:
 //   HUBSPOT_API_BASE_OVERRIDE        — local mock for contact GET + PATCH
@@ -61,18 +70,25 @@ function record(id, ok, detail) {
 }
 
 // ── Mock HubSpot server ───────────────────────────────────────────────────────
-function startMockHubSpot(contactId, contactProps) {
+// Serves the same contact props for ANY numeric contact id so each probe can use
+// a distinct contactId. The initial-send endpoint enforces a 10-second per-contact
+// cooldown (checkStaffSendCooldown in customer-info.js), so reusing one contactId
+// across probes would 429; distinct ids sidestep that exactly as real staff would
+// when issuing links for different customers.
+function startMockHubSpot(contactProps) {
+  const CONTACT_RE = /^\/crm\/v3\/objects\/contacts\/(\d+)/;
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', c => { raw += c; });
     req.on('end', () => {
-      if (req.method === 'GET' && req.url.startsWith(`/crm/v3/objects/contacts/${contactId}`)) {
+      const m = req.url.match(CONTACT_RE);
+      if (req.method === 'GET' && m) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ id: contactId, properties: contactProps }));
+        return res.end(JSON.stringify({ id: m[1], properties: contactProps }));
       }
-      if (req.method === 'PATCH' && req.url.startsWith(`/crm/v3/objects/contacts/${contactId}`)) {
+      if (req.method === 'PATCH' && m) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ id: contactId, properties: {} }));
+        return res.end(JSON.stringify({ id: m[1], properties: {} }));
       }
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not_found', path: req.url }));
@@ -118,11 +134,32 @@ async function waitForTable(pool, tableName, timeoutMs = 15000) {
   if (!found) throw new Error(`Table ${tableName} did not appear within ${timeoutMs}ms`);
 }
 
-async function cleanup(pool, contactId) {
+// The submit route pre-flights assertLeadStatusKey('AWAITING_PHOTOS'). That key
+// is normally seeded from the real HubSpot account at boot (ensureLeadStatusTable
+// in server.js) — it is NOT in the hardcoded default seed, so on an isolated
+// migrations-only test DB it is absent and submit would 422 LEAD_STATUS_REMOVED.
+// Seed it here before any submit so the guard's first DB read picks it up.
+async function ensureAwaitingPhotosStatus(pool) {
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+     VALUES ('AWAITING_PHOTOS', 'Awaiting Photos', 50, FALSE)
+     ON CONFLICT (key) DO NOTHING`
+  );
+}
+
+async function cleanup(pool, contactIds, emailLike) {
+  const ids = Array.isArray(contactIds) ? contactIds : [contactIds].filter(Boolean);
   try {
-    await pool.query(
-      `DELETE FROM customer_info_submissions WHERE contact_id = $1`, [contactId]
-    );
+    if (ids.length) {
+      await pool.query(
+        `DELETE FROM customer_info_submissions WHERE contact_id = ANY($1::text[])`, [ids]
+      );
+    }
+    if (emailLike) {
+      await pool.query(
+        `DELETE FROM customer_info_submissions WHERE contact_email LIKE $1`, [emailLike]
+      );
+    }
   } catch {}
 }
 
@@ -153,26 +190,36 @@ async function uploadPhoto(base, rawToken, buf, mime = 'image/jpeg', filename = 
 }
 
 // ── Submit the customer-info form ─────────────────────────────────────────────
+// The submit route validates a `structuredAddress` object (not flat
+// addressLine1/city/postcode fields). For the generic (anonymous draft) flow it
+// also requires name/email/phone, which the server stores as contact_phone.
 async function submitForm(base, rawToken, photoKeys, opts = {}) {
+  const body = {
+    structuredAddress: {
+      addressLines: ['10 Attachment Lane'],
+      locality:     'Bristol',
+      postalCode:   'BS1 1AA',
+      countryCode:  'GB',
+    },
+    roomCount:       '2',
+    roomNotes:       'attachment test',
+    photoKeys,
+  };
+  if (opts.generic) {
+    body.name  = opts.name;
+    body.email = opts.email;
+    body.phone = opts.phone;
+  }
   const res = await fetch(`${base}/api/customer-info/${rawToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      correctedEmail:  '',
-      correctedMobile: opts.correctedMobile || '',
-      addressLine1:    '10 Attachment Lane',
-      city:            'Bristol',
-      postcode:        'BS1 1AA',
-      roomCount:       '2',
-      roomNotes:       'attachment test',
-      photoKeys,
-    }),
+    body: JSON.stringify(body),
   });
   return res;
 }
 
 // ── Get a fresh customer-info raw token from the invite email ─────────────────
-async function getToken(base, mailFile, adminEmail, contactId, contactProps, member) {
+async function getToken(base, mailFile, contactId, contactProps, member) {
   const before = readMailJsonl(mailFile).length;
   const createRes = await member.post('/api/card-actions/upload-photos-and-info', { contactId });
   if (createRes.status !== 201) {
@@ -195,6 +242,20 @@ async function getToken(base, mailFile, adminEmail, contactId, contactProps, mem
   return m[1];
 }
 
+// ── Create an anonymous generic draft link and return its raw token ───────────
+async function createGenericToken(base) {
+  const res = await fetch(`${base}/api/customer-info/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const body = await res.json().catch(() => null);
+  if (res.status !== 200 || !body?.token) {
+    throw new Error(`draft create failed: ${res.status} ${JSON.stringify(body)}`);
+  }
+  return body.token;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
   const hasTestDb   = !!process.env.DATABASE_URL_TEST;
@@ -214,8 +275,14 @@ async function main() {
   }
 
   const runId     = Math.random().toString(36).slice(2, 8);
-  // contactId must be all-digit (the route validates /^\d+$/)
-  const contactId = String(800000000 + Math.floor(Math.random() * 99999999));
+  // contactId must be all-digit (the route validates /^\d+$/). Each probe uses a
+  // distinct id so the per-contact initial-send cooldown never fires between them.
+  const usedContactIds = [];
+  function freshContactId() {
+    const id = String(800000000 + Math.floor(Math.random() * 99999999));
+    usedContactIds.push(id);
+    return id;
+  }
 
   console.log(`\n  customer-info-email-attachments  run=${runId}`);
   console.log(`  Using ${hasTestDb ? 'DATABASE_URL_TEST (isolated)' : 'shared DATABASE_URL (PRIVTEST_ALLOW_SHARED_DB=1)'}`);
@@ -231,7 +298,7 @@ async function main() {
   };
   const adminRecipient = `att-admin-${runId}@privtest.local`;
 
-  const mockHs = await startMockHubSpot(contactId, contactProps);
+  const mockHs = await startMockHubSpot(contactProps);
   console.log(`  mock HubSpot on http://127.0.0.1:${mockHs.port}`);
 
   const mailFile = path.join(os.tmpdir(), `ci-attach-${runId}.jsonl`);
@@ -256,7 +323,6 @@ async function main() {
 
   await cleanupTestData(pool);
   await resetRateLimitStore(pool);
-  await cleanup(pool, contactId);
 
   const { child } = spawnServer({ nodeOptions: `--require ${stubPath}` });
   let exitCode = 1;
@@ -265,6 +331,7 @@ async function main() {
     await waitForServer();
     console.log('  test server up');
     await waitForTable(pool, 'customer_info_submissions');
+    await ensureAwaitingPhotosStatus(pool);
 
     const users  = await seedUsers(pool, runId);
     const member = users.member;
@@ -272,7 +339,7 @@ async function main() {
 
     // ── (ATT-1) Happy path: 2 photos, both attachments land in admin email ────
     console.log('\n  --- ATT-1: 2-photo happy path ---');
-    const token1 = await getToken(BASE, mailFile, adminRecipient, contactId, contactProps, memberClient);
+    const token1 = await getToken(BASE, mailFile, freshContactId(), contactProps, memberClient);
 
     const key1 = await uploadPhoto(BASE, token1, JPEG_BUF, 'image/jpeg', 'room1.jpg');
     const key2 = await uploadPhoto(BASE, token1, JPEG_BUF, 'image/jpeg', 'room2.jpg');
@@ -329,12 +396,12 @@ async function main() {
           ? `all attachments have non-empty content`
           : `byte lengths: ${atts.map(a => attachmentByteLength(a)).join(', ')}`);
 
-      // HTML body: "2 photos attached" (exact wording from sendAdminNotificationEmail)
+      // HTML body: "2 files attached" (exact wording from sendAdminNotificationEmail)
       const html = adminMail1.html || '';
-      const htmlSummaryOk = html.includes('2 photos attached');
+      const htmlSummaryOk = html.includes('2 files attached');
       record('ATT-1.html-photo-summary', htmlSummaryOk,
         htmlSummaryOk
-          ? 'HTML contains "2 photos attached"'
+          ? 'HTML contains "2 files attached"'
           : `HTML photo summary missing; html snippet: ${html.slice(0, 400)}`);
 
       // HTML body: must NOT contain a signed-URL <a href (photos are attachments, not links)
@@ -352,26 +419,28 @@ async function main() {
           ? 'text contains "2 attached"'
           : `text photo summary missing; text snippet: ${text.slice(0, 400)}`);
 
-      // ATT-1 submits with empty correctedMobile — no mobile row must appear.
-      const noMobileText = !text.includes('Mobile:');
-      record('ATT-1.no-mobile-in-email-text', noMobileText,
-        noMobileText
-          ? 'mobile row correctly absent from admin email text body'
-          : `unexpected "Mobile:" found in admin email text (correctedMobile was empty)`);
+      // Staff-issued (non-generic) submissions carry no customer-supplied phone,
+      // so the admin email must NOT render a "Phone" row. (The corrected-mobile
+      // feature was removed by migration drop-corrected-email-mobile.)
+      const noPhoneText = !text.includes('Phone:');
+      record('ATT-1.no-phone-in-email-text', noPhoneText,
+        noPhoneText
+          ? 'phone row correctly absent from admin email text body'
+          : `unexpected "Phone:" found in admin email text (non-generic submit has no contact_phone)`);
 
-      const noMobileHtml = !html.includes('Mobile (corrected)');
-      record('ATT-1.no-mobile-in-email-html', noMobileHtml,
-        noMobileHtml
-          ? 'mobile row correctly absent from admin email HTML body'
-          : `unexpected "Mobile (corrected)" found in admin email HTML (correctedMobile was empty)`);
+      const noPhoneHtml = !html.includes('>Phone<');
+      record('ATT-1.no-phone-in-email-html', noPhoneHtml,
+        noPhoneHtml
+          ? 'phone row correctly absent from admin email HTML body'
+          : `unexpected "Phone" row found in admin email HTML (non-generic submit has no contact_phone)`);
     }
 
     // ── (ATT-2) Skip path: 1 real key + 1 absent key → 1 attachment, 1 skipped
     console.log('\n  --- ATT-2: skip path (1 real + 1 absent key) ---');
 
     // Need a fresh token because the first submission consumed the original one.
-    // Create a second DB row for the same contactId.
-    const token2 = await getToken(BASE, mailFile, adminRecipient, contactId, contactProps, memberClient);
+    // Use a distinct contactId so the per-contact initial-send cooldown stays clear.
+    const token2 = await getToken(BASE, mailFile, freshContactId(), contactProps, memberClient);
 
     const key3 = await uploadPhoto(BASE, token2, JPEG_BUF, 'image/jpeg', 'room3.jpg');
     // A key that looks valid (passes server-side validation) but is NOT in
@@ -419,18 +488,24 @@ async function main() {
           : `HTML skipped summary missing; html snippet: ${html2.slice(0, 400)}`);
     }
 
-    // ── (ATT-3) correctedMobile path: formatted mobile appears in admin email ──
-    // Submits with correctedMobile = '07902 819 990' (a messy UK mobile).
-    // The server normalises it to E.164 (+447902819990) and the email template
-    // renders it via formatPhone as '+44 7902 819990'.
-    // Text body:  "Mobile:       +44 7902 819990"
-    // HTML body:  <tr><td><strong>Mobile (corrected)</strong></td><td>+44 7902 819990</td></tr>
-    console.log('\n  --- ATT-3: correctedMobile present in admin email ---');
+    // ── (ATT-3) Generic flow: customer-supplied phone appears in admin email ──
+    // The corrected-email/mobile feature was removed (migration
+    // drop-corrected-email-mobile). The current way a phone reaches the admin
+    // email is the generic (anonymous draft) flow: the customer submits their
+    // own name/email/phone, the server normalises the phone to E.164
+    // (+447902819990) and stores it as contact_phone, and the email template
+    // renders it via formatPhone as '+44 7902 819990' under a "Phone" row.
+    console.log('\n  --- ATT-3: customer phone present in admin email (generic flow) ---');
 
-    const token3 = await getToken(BASE, mailFile, adminRecipient, contactId, contactProps, memberClient);
+    const token3 = await createGenericToken(BASE);
 
     const mailsBefore3 = readMailJsonl(mailFile).length;
-    const submit3 = await submitForm(BASE, token3, [], { correctedMobile: '07902 819 990' });
+    const submit3 = await submitForm(BASE, token3, [], {
+      generic: true,
+      name:    'Phone Tester',
+      email:   `att-phone-${runId}@privtest.local`,
+      phone:   '07902 819 990',
+    });
     const submit3Ok = submit3.status === 200;
     record('ATT-3.submit', submit3Ok,
       submit3Ok ? 'POST 200' : `status=${submit3.status}`);
@@ -447,25 +522,25 @@ async function main() {
     }
 
     if (!adminMail3) {
-      record('ATT-3.admin-email-captured', false, 'admin email not found after correctedMobile submit');
-      record('ATT-3.mobile-in-email-text', false, 'no email to inspect');
-      record('ATT-3.mobile-in-email-html', false, 'no email to inspect');
+      record('ATT-3.admin-email-captured', false, 'admin email not found after generic-flow submit');
+      record('ATT-3.phone-in-email-text', false, 'no email to inspect');
+      record('ATT-3.phone-in-email-html', false, 'no email to inspect');
     } else {
       record('ATT-3.admin-email-captured', true, `subject="${adminMail3.subject}"`);
 
       const text3 = adminMail3.text || '';
-      const mobileInText = text3.includes('Mobile:') && text3.includes('+44 7902 819990');
-      record('ATT-3.mobile-in-email-text', mobileInText,
-        mobileInText
-          ? '"Mobile: +44 7902 819990" found in admin email text body'
-          : `formatted mobile NOT found in admin email text body; snippet: ${text3.slice(0, 400)}`);
+      const phoneInText = text3.includes('Phone:') && text3.includes('+44 7902 819990');
+      record('ATT-3.phone-in-email-text', phoneInText,
+        phoneInText
+          ? '"Phone: +44 7902 819990" found in admin email text body'
+          : `formatted phone NOT found in admin email text body; snippet: ${text3.slice(0, 400)}`);
 
       const html3 = adminMail3.html || '';
-      const mobileInHtml = html3.includes('Mobile (corrected)') && html3.includes('+44 7902 819990');
-      record('ATT-3.mobile-in-email-html', mobileInHtml,
-        mobileInHtml
-          ? '"Mobile (corrected)" row with "+44 7902 819990" found in admin email HTML body'
-          : `formatted mobile NOT found in admin email HTML body; snippet: ${html3.slice(0, 400)}`);
+      const phoneInHtml = html3.includes('Phone') && html3.includes('+44 7902 819990');
+      record('ATT-3.phone-in-email-html', phoneInHtml,
+        phoneInHtml
+          ? '"Phone" row with "+44 7902 819990" found in admin email HTML body'
+          : `formatted phone NOT found in admin email HTML body; snippet: ${html3.slice(0, 400)}`);
     }
 
     exitCode = findings.every(f => f.ok) ? 0 : 1;
@@ -474,7 +549,7 @@ async function main() {
     record('harness', false, `fatal: ${e.message}`);
     exitCode = 1;
   } finally {
-    try { await cleanup(pool, contactId); } catch {}
+    try { await cleanup(pool, usedContactIds, `att-phone-${runId}@privtest.local`); } catch {}
     try { await cleanupTestData(pool); } catch {}
     try { child.kill('SIGTERM'); } catch {}
     try { mockHs.server.close(); } catch {}

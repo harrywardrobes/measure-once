@@ -123,6 +123,19 @@ async function cleanup(pool, contactId) {
   } catch {}
 }
 
+// The submit route pre-flights assertLeadStatusKey('AWAITING_PHOTOS'). That key
+// is normally seeded from the real HubSpot account at boot (ensureLeadStatusTable
+// in server.js) — it is NOT in the hardcoded default seed, so on an isolated
+// migrations-only test DB it is absent and submit would 422 LEAD_STATUS_REMOVED.
+// Seed it here before any submit so the guard's first DB read picks it up.
+async function ensureAwaitingPhotosStatus(pool) {
+  await pool.query(
+    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
+     VALUES ('AWAITING_PHOTOS', 'Awaiting Photos', 50, FALSE)
+     ON CONFLICT (key) DO NOTHING`
+  );
+}
+
 // ── Minimal JPEG stub ─────────────────────────────────────────────────────────
 const JPEG_BUF = Buffer.from(
   'ffd8ffe000104a46494600010100000100010000' +
@@ -133,10 +146,18 @@ const JPEG_BUF = Buffer.from(
   'hex'
 );
 
-// ── Upload a photo via the public API ─────────────────────────────────────────
-async function uploadPhoto(base, rawToken, buf, filename) {
+// ── Upload several photos via the public API in a SINGLE request ──────────────
+// The per-token upload limiter (checkTokenUploadRateLimit in customer-info.js)
+// caps uploads at 5 *requests* per token per 10 minutes. Uploading each photo
+// in its own request would 429 after the 5th, so we send all files in one
+// multipart request instead (MAX_PHOTO_FILES = 15 allows up to 15 per request).
+// This still exercises the parallel-download path because the admin email
+// downloads every stored key concurrently regardless of how they were uploaded.
+async function uploadPhotos(base, rawToken, files) {
   const fd = new FormData();
-  fd.append('photos', new Blob([buf], { type: 'image/jpeg' }), filename);
+  for (const f of files) {
+    fd.append('photos', new Blob([f.buf], { type: 'image/jpeg' }), f.filename);
+  }
   const res = await fetch(`${base}/api/customer-info/${rawToken}/photos`, {
     method: 'POST',
     body: fd,
@@ -145,7 +166,7 @@ async function uploadPhoto(base, rawToken, buf, filename) {
   if (res.status !== 200 || !body?.ok || !Array.isArray(body.keys)) {
     throw new Error(`Photo upload failed: ${res.status} ${JSON.stringify(body)}`);
   }
-  return body.keys[0];
+  return body.keys;
 }
 
 // ── Submit the customer-info form ─────────────────────────────────────────────
@@ -154,12 +175,13 @@ async function submitForm(base, rawToken, photoKeys) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      correctedEmail:  '',
-      correctedMobile: '',
-      addressLine1:    '1 Parallel Street',
-      city:            'Manchester',
-      postcode:        'M1 1AA',
-      roomCount:       '3',
+      structuredAddress: {
+        addressLines: ['1 Parallel Street'],
+        locality:     'Manchester',
+        postalCode:   'M1 1AA',
+        countryCode:  'GB',
+      },
+      roomCount:       '3+',
       roomNotes:       'parallel download perf test',
       photoKeys,
     }),
@@ -260,6 +282,7 @@ async function main() {
     await waitForServer();
     console.log('  test server up');
     await waitForTable(pool, 'customer_info_submissions');
+    await ensureAwaitingPhotosStatus(pool);
 
     const users       = await seedUsers(pool, runId);
     const member      = users.member;
@@ -270,11 +293,11 @@ async function main() {
 
     const token = await getToken(BASE, mailFile, contactId, contactProps, memberClient);
 
-    // Upload 10 photos concurrently (uploads are fast; storage is in-memory)
-    const photoKeys = await Promise.all(
-      Array.from({ length: 10 }, (_, i) =>
-        uploadPhoto(BASE, token, JPEG_BUF, `room${i + 1}.jpg`)
-      )
+    // Upload all 10 photos in ONE request (storage is in-memory; one request
+    // stays within the per-token upload-rate limit of 5 requests/10 min).
+    const photoKeys = await uploadPhotos(
+      BASE, token,
+      Array.from({ length: 10 }, (_, i) => ({ buf: JPEG_BUF, filename: `room${i + 1}.jpg` }))
     );
     record('PAR-1.uploads', true, `uploaded ${photoKeys.length} photos`);
 
