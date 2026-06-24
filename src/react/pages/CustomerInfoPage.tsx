@@ -1199,6 +1199,19 @@ export function CustomerInfoPage() {
                     </Typography>
                   )}
 
+                  {(() => {
+                    const pendingResign = photos.filter(p => !p.previewUrl && !p.unavailable).length;
+                    return pendingResign > 0 ? (
+                      <Alert
+                        severity="info"
+                        icon={<CircularProgress size={16} color="inherit" />}
+                        sx={{ mt: 1.5, py: 0.5 }}
+                      >
+                        Refreshing {pendingResign} photo {pendingResign === 1 ? 'preview' : 'previews'}…
+                      </Alert>
+                    ) : null;
+                  })()}
+
                   {photos.length > 0 && (
                     <Box
                       sx={{
