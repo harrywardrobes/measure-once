@@ -37,6 +37,13 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 //   fn           — name of the top-level function to scan
 //   downloadCall — the download helper call to look for (e.g. 'downloadAsBytes')
 const TARGETS = [
+  // customer-info email-attachments send path:
+  // sendAdminNotificationEmail downloads all submitted customer photos in
+  // parallel before attaching them to the admin notification email.
+  // A regression to a serial for…of / await loop would multiply RTT by the
+  // number of attachments (up to 14×).  The timing-sensitive companion is
+  // test:customer-info-parallel-downloads; this structural check is the
+  // CI-safe alternative enrolled in test:ci.
   {
     file:         'customer-info.js',
     fn:           'sendAdminNotificationEmail',
