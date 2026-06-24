@@ -1755,6 +1755,25 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       }
     }
 
+    // Priority-active filter — when sorting "Priority first" with no search
+    // query, hide contacts that have not been modified in the last 60 days.
+    // Missing or unparseable dates pass through (same "keep" behaviour as the
+    // staleAfterDays filter above).  A non-empty search bypasses this filter
+    // so users can still surface older contacts when they know who to look for.
+    // Keep in sync with the offline mirror in usePaginatedContacts.ts
+    // (PRIORITY_ACTIVE_DAYS constant).
+    const PRIORITY_ACTIVE_DAYS = 60;
+    const priorityFirst = req.query.priorityFirst === '1';
+    if (priorityFirst && !q) {
+      const cutoff = Date.now() - PRIORITY_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+      contacts = contacts.filter(c => {
+        const raw = c.properties?.lastmodifieddate;
+        if (!raw) return true;
+        const ms = new Date(raw).getTime();
+        return !isNaN(ms) && ms >= cutoff;
+      });
+    }
+
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
         contacts = contacts.filter(c => !c.properties?.hs_lead_status);
@@ -1802,7 +1821,6 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       });
     }
 
-    const priorityFirst = req.query.priorityFirst === '1';
     const effectiveComparator =
       priorityFirst && !leadStatus
         ? (a, b) => {

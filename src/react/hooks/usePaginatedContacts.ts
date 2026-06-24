@@ -14,6 +14,8 @@ export type PaginatedContact = {
     hs_lead_status?: string;
     customer_number?: string;
     createdate?: string;
+    /** HubSpot ISO timestamp of the last time this record was modified; used by the priority-active filter. */
+    lastmodifieddate?: string;
     /** JSON-encoded workflow rooms; used for offline stage filtering. */
     measure_once_rooms?: string;
     /** HubSpot timestamp (ISO string) of the last time this contact was contacted. */
@@ -128,6 +130,13 @@ function matchesOfflineStage(c: PaginatedContact, stage: string, statusStageMap:
 }
 
 /**
+ * When sorting "Priority first" with no search query, only contacts modified
+ * within this many days are shown.  Must be kept in sync with the server-side
+ * constant of the same name in the `/api/contacts-all` handler in server.js.
+ */
+export const PRIORITY_ACTIVE_DAYS = 60;
+
+/**
  * Apply the active search box, lead-status / stage filters, sort order, and
  * pagination to a set of cached customer records client-side. Mirrors the
  * server-side logic in `/api/contacts-all` so the offline experience matches
@@ -180,6 +189,22 @@ export function filterSortPaginateCachedContacts(
         email.includes(q) ||
         phone.includes(q)
       );
+    });
+  }
+
+  // Priority-active filter — mirrors the server-side block in /api/contacts-all.
+  // When "Priority first" is active and there is no search query, drop contacts
+  // whose lastmodifieddate is older than PRIORITY_ACTIVE_DAYS days.
+  // Missing or unparseable dates pass through (same "keep" behaviour as the
+  // server).  Search bypasses this filter (applied above) so older contacts
+  // remain reachable when the user knows who to look for.
+  if (priorityFirst && !q) {
+    const cutoff = Date.now() - PRIORITY_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+    list = list.filter((c) => {
+      const raw = c.properties?.lastmodifieddate;
+      if (!raw) return true;
+      const ms = new Date(raw).getTime();
+      return !isNaN(ms) && ms >= cutoff;
     });
   }
 

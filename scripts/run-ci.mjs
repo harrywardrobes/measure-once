@@ -127,6 +127,8 @@ const STEPS = [
   'test:phone-directory-customers:ci',
   'test:contacts-all-stale-fallback:ci',
   'test:contacts-stale-visibility:ci',
+  'test:contacts-priority-active:ci',
+  'test:priority-active-filter',
   'test:room-assignments-outage:ci',
   'test:change-password:ci',
   'test:set-password:ci',
