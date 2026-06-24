@@ -47,6 +47,7 @@ vi.mock('../../lib/offlineQueue', () => ({
 
 import { ArrangeVisitModal } from './ArrangeVisitModal';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useToastContext } from '../../contexts/ToastContext';
 import { sendOrQueue } from '../../lib/offlineQueue';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 
@@ -642,5 +643,128 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     // No discard dialog should appear while locked
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('ArrangeVisitModal — email step: full send flow after template failure', () => {
+  let restoreFetch: () => void;
+
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('calls /api/emails/send with non-empty body and /api/card-actions/arrange-visit/outcome, then closes and toasts', async () => {
+    const orig = window.fetch;
+
+    const sendEmailCalls: { to: string; subject: string; body: string }[] = [];
+    const outcomeCalls: { contactId: string; outcome: string }[] = [];
+
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/card-actions/arrange-visit') && !url.includes('outcome') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_INFO), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/email-templates/render') && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Template service unavailable' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/emails/send') && method === 'POST') {
+        const body = JSON.parse((init?.body as string) || '{}');
+        sendEmailCalls.push(body);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/card-actions/arrange-visit/outcome') && method === 'POST') {
+        const body = JSON.parse((init?.body as string) || '{}');
+        outcomeCalls.push(body);
+        return new Response(JSON.stringify({ hs_lead_status: 'ATTEMPTED_TO_CONTACT', setsLeadStatus: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const showToast = vi.fn();
+    vi.mocked(useToastContext).mockReturnValue({ showToast, showToastWithAction: vi.fn() });
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    // Wait for the call step
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "No answer" — template fetch returns 500, fallback body is populated
+    await user.click(screen.getByTestId('av-outcome-no-answer'));
+
+    // Wait for the email body to appear with non-empty fallback content
+    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    await waitFor(() => {
+      expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
+    });
+
+    // Wait for the "Send email" button to become enabled (emailLoading=false)
+    await waitFor(() => {
+      expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
+    });
+
+    // Click "Send email" — should call /api/emails/send then /api/card-actions/arrange-visit/outcome
+    await user.click(screen.getByTestId('av-email-send'));
+
+    // /api/emails/send must have been called with a non-empty body
+    await waitFor(() => {
+      expect(sendEmailCalls.length).toBe(1);
+      expect(sendEmailCalls[0].body.trim()).not.toBe('');
+      expect(sendEmailCalls[0].to).toBe(CONTACT_INFO.contactEmail);
+    });
+
+    // /api/card-actions/arrange-visit/outcome must have been called
+    await waitFor(() => {
+      expect(outcomeCalls.length).toBe(1);
+      expect(outcomeCalls[0].contactId).toBe(CTX.contactId);
+    });
+
+    // Modal closes and a success toast fires
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(showToast).toHaveBeenCalledOnce();
+      expect(showToast.mock.calls[0][0]).toMatch(/email sent/i);
+    });
   });
 });
