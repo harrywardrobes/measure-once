@@ -655,6 +655,12 @@ export function CustomerInfoPage() {
     if (!(addr.postalCode || '').trim())      { setSubmitErr('Please enter your postcode.'); return; }
     if (!formData.roomCount)                  { setSubmitErr('Please select how many rooms.'); return; }
 
+    const hasUnavailable = photos.some(p => p.unavailable);
+    if (hasUnavailable) {
+      setSubmitErr('One or more previously uploaded files are no longer available — please remove them and re-upload before submitting.');
+      return;
+    }
+
     if (!activeToken) { setSubmitErr('Form not ready — please refresh the page.'); return; }
 
     setSubmitting(true);
@@ -1287,7 +1293,7 @@ export function CustomerInfoPage() {
               size="large"
               fullWidth
               onClick={handleSubmit}
-              disabled={submitting || uploading}
+              disabled={submitting || uploading || photos.some(p => p.unavailable)}
               sx={{
                 bgcolor: BRAND_COLORS.orchid,
                 '&:hover': { bgcolor: BRAND_COLORS.orchidDeep },
