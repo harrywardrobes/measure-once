@@ -116,6 +116,186 @@ function makeFetch(opts: { hangResign?: boolean } = {}) {
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
+// ── Deep-link expand + loadDetail wiring ───────────────────────────────────────
+
+describe('DesignVisitsList — deep-link expand and loadDetail wiring', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+    window.location.hash = '';
+  });
+
+  afterEach(() => {
+    window.location.hash = '';
+    vi.restoreAllMocks();
+  });
+
+  it('expands the target row (shows Hide button) when hash is set before mount', async () => {
+    window.location.hash = `#design-visit-${VISIT_ID}`;
+    const orig = window.fetch;
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.endsWith(`/api/design-visits/${VISIT_ID}`) && method === 'GET') {
+        return new Response(JSON.stringify(STALE_VISIT), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return orig(input, init);
+    }) as unknown as typeof fetch;
+
+    try {
+      render(
+        <DesignVisitsList
+          contactId="c1"
+          visits={[STALE_VISIT]}
+          loading={false}
+          error={null}
+          onRefresh={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+      });
+    } finally {
+      window.fetch = orig;
+    }
+  });
+
+  it('calls loadDetail (issues a GET for the visit) when hash is set before mount', async () => {
+    window.location.hash = `#design-visit-${VISIT_ID}`;
+    const orig = window.fetch;
+    const spy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.endsWith(`/api/design-visits/${VISIT_ID}`) && method === 'GET') {
+        return new Response(JSON.stringify(STALE_VISIT), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return orig(input, init);
+    });
+    window.fetch = spy as unknown as typeof fetch;
+
+    try {
+      render(
+        <DesignVisitsList
+          contactId="c1"
+          visits={[STALE_VISIT]}
+          loading={false}
+          error={null}
+          onRefresh={vi.fn()}
+        />,
+      );
+
+      await waitFor(() => {
+        const detailCalls = spy.mock.calls.filter(([url]) =>
+          typeof url === 'string' &&
+          url.endsWith(`/api/design-visits/${VISIT_ID}`) &&
+          (spy.mock.calls.find(c => c[0] === url)?.[1]?.method ?? 'GET').toUpperCase() === 'GET',
+        );
+        expect(detailCalls.length).toBeGreaterThanOrEqual(1);
+      });
+    } finally {
+      window.fetch = orig;
+    }
+  });
+
+  it('does NOT expand or fetch when the hash does not match any visit in the list', async () => {
+    window.location.hash = '#design-visit-9999';
+    const orig = window.fetch;
+    const spy = vi.fn(orig);
+    window.fetch = spy as unknown as typeof fetch;
+
+    try {
+      render(
+        <DesignVisitsList
+          contactId="c1"
+          visits={[STALE_VISIT]}
+          loading={false}
+          error={null}
+          onRefresh={vi.fn()}
+        />,
+      );
+
+      // Wait a tick for effects to flush
+      await new Promise(r => setTimeout(r, 50));
+
+      // Row should remain collapsed — "Review" visible, "Hide" absent
+      expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Hide' })).not.toBeInTheDocument();
+
+      // No GET for the visit detail
+      const detailCalls = spy.mock.calls.filter(([url]) =>
+        typeof url === 'string' && url.includes('/api/design-visits/'),
+      );
+      expect(detailCalls.length).toBe(0);
+    } finally {
+      window.fetch = orig;
+    }
+  });
+
+  it('does NOT re-expand the row on a subsequent visits re-render once already deep-linked', async () => {
+    window.location.hash = `#design-visit-${VISIT_ID}`;
+    const orig = window.fetch;
+    const spy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (url.endsWith(`/api/design-visits/${VISIT_ID}`) && method === 'GET') {
+        return new Response(JSON.stringify(STALE_VISIT), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return orig(input, init);
+    });
+    window.fetch = spy as unknown as typeof fetch;
+
+    try {
+      const { rerender } = render(
+        <DesignVisitsList
+          contactId="c1"
+          visits={[STALE_VISIT]}
+          loading={false}
+          error={null}
+          onRefresh={vi.fn()}
+        />,
+      );
+
+      // Wait for initial deep-link expand
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument());
+
+      const callsAfterFirst = spy.mock.calls.length;
+
+      // Re-render with a new visits array reference (simulates a parent refresh)
+      rerender(
+        <DesignVisitsList
+          contactId="c1"
+          visits={[{ ...STALE_VISIT }]}
+          loading={false}
+          error={null}
+          onRefresh={vi.fn()}
+        />,
+      );
+
+      await new Promise(r => setTimeout(r, 50));
+
+      // deepLinkedRef prevents a second loadDetail call
+      const additionalDetailCalls = spy.mock.calls.slice(callsAfterFirst).filter(([url]) =>
+        typeof url === 'string' &&
+        url.endsWith(`/api/design-visits/${VISIT_ID}`),
+      );
+      expect(additionalDetailCalls.length).toBe(0);
+    } finally {
+      window.fetch = orig;
+    }
+  });
+});
+
+// ── Deep-link auto-resign path ─────────────────────────────────────────────────
+
 describe('DesignVisitsList — deep-link auto-resign path', () => {
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
