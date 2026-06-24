@@ -266,6 +266,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:bundle-sizes',                 'narrative — post-build gzip size snapshot (standalone only)'],
   ['test:suite-probe-counts',           'static-lint — self-referential check; no discrete probe IDs in the implementation'],
   ['test:parallel-downloads',           'static-lint — binary structural check; no discrete named probes'],
+  ['test:customer-info-parallel-downloads', 'narrative — standalone perf guard; skipped in CI; binary timing assertion, no discrete named probes'],
 ]);
 
 // ---------------------------------------------------------------------------
