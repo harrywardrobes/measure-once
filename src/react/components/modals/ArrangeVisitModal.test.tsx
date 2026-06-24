@@ -503,6 +503,69 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('populates the email body from the local fallback when the pre-fetch fails and No answer is clicked', async () => {
+    const orig = window.fetch;
+    // The pre-fetch at mount and the per-click fetch both hit /api/email-templates/render.
+    // Both should fail here so noAnswerTemplate stays null and buildNoAnswerEmail is used.
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/card-actions/arrange-visit') && !url.includes('outcome') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_INFO), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/email-templates/render') && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Template service unavailable' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Wait for the call step to load
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "No answer" — noAnswerTemplate is null (pre-fetch failed), so
+    // fetchEmailTemplate is called and falls back to buildNoAnswerEmail on 500
+    await user.click(screen.getByTestId('av-outcome-no-answer'));
+
+    // Wait for the email body field to appear (emailLoading=false after fallback resolves)
+    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+
+    // The fallback builds a non-empty body addressed to the contact's first name
+    expect((emailBodyField as HTMLTextAreaElement).value).toMatch(/Hi John/);
+    expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
+
+    // The subject is also populated by the fallback
+    const subjectField = screen.getByRole('textbox', { name: /subject/i });
+    expect((subjectField as HTMLInputElement).value).toMatch(/design visit/i);
+  });
+
   it('disables the close button and shows no dialog while a No-answer email send is in flight', async () => {
     const orig = window.fetch;
     // Custom fetch: resolve contact-info and email-template quickly;
