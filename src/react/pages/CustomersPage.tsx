@@ -137,17 +137,18 @@ type Room = {
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'priority', label: 'Priority first' },
-  { value: 'newest', label: 'Newest first' },
   { value: 'name-asc', label: 'Name A–Z' },
   { value: 'name-desc', label: 'Name Z–A' },
 ];
 
 function readUrlState() {
   const p = new URLSearchParams(location.search);
+  const rawSort = p.get('sort') || 'priority';
+  const sort = SORT_OPTIONS.some((o) => o.value === rawSort) ? rawSort : 'priority';
   return {
     page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
     leadStatus: p.get('leadStatus') || '',
-    sort: p.get('sort') || 'priority',
+    sort,
     q: p.get('q') || '',
     stage: p.get('stage') || '',
     archived: p.get('archived') === '1',
