@@ -108,6 +108,17 @@ const TARGETS = [
     downloadCall:    'downloadAsBytes',
     requireParallel: true,
   },
+  // design-visits: resignVisitPhotos is the visit-level bulk re-sign helper.
+  // It calls downloadOpaqueKeys exactly once (the batch helper already handles
+  // parallelism internally), so requireParallel: false is correct here — we
+  // track it only to catch renames/removals and to catch the moment a second
+  // downloadOpaqueKeys call is added without wrapping.
+  {
+    file:            'design-visits.js',
+    fn:              'resignVisitPhotos',
+    downloadCall:    'downloadOpaqueKeys',
+    requireParallel: false,
+  },
 ];
 
 // ── AUTO_SCAN_FILES: zero-enrollment auto-scan ────────────────────────────────
@@ -125,6 +136,8 @@ const AUTO_SCAN_FILES = [
   // design-visits.js and photo-reviews.js have no downloadAsBytes calls today
   // but are the most likely modules to gain batch downloads in future; enrol
   // them now so the guard fires the moment a serial pattern is introduced.
+  // (resignVisitPhotos is excluded from auto-scan because it is already
+  // tracked in TARGETS above with downloadCall: 'downloadOpaqueKeys'.)
   'design-visits.js',
   'photo-reviews.js',
 ];

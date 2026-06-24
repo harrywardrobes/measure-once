@@ -2297,6 +2297,75 @@ router.post('/api/design-visits/sign-image-urls', isAuthenticated, requirePrivil
   return res.json({ urls });
 });
 
+// ── Bulk photo re-sign helper ─────────────────────────────────────────────────
+// Fetches all opaque storage keys for every room on a design visit, downloads
+// them in parallel with downloadOpaqueKeys (O(1 × RTT)) to confirm each object
+// is still present in object storage, and returns a map of key → fresh signed
+// URL for keys whose objects were found.  Keys absent from storage are omitted.
+//
+// WARNING: do NOT replace downloadOpaqueKeys with a serial for…of / await loop
+// over downloadOpaqueKey.  Every call incurs a full RTT; N serial calls would
+// be O(N × RTT).  The scripts/check-parallel-downloads.mjs test enforces
+// Promise.all wrapping in the batch helper; do not work around it.
+async function resignVisitPhotos(visitId, pool) {
+  const keysRes = await pool.query(
+    `SELECT dvri.storage_key
+     FROM design_visit_room_images dvri
+     JOIN design_visit_rooms dvr ON dvr.id = dvri.room_id
+     WHERE dvr.design_visit_id = $1
+     ORDER BY dvri.id ASC`,
+    [visitId],
+  );
+  const opaqueKeys = keysRes.rows
+    .map(r => r.storage_key)
+    .filter(k => k && dvUploads.isOpaqueKey(k));
+  if (opaqueKeys.length === 0) return {};
+  const results = await dvUploads.downloadOpaqueKeys(opaqueKeys);
+  const urls = {};
+  for (const { key, buf } of results) {
+    if (buf) urls[key] = dvUploads.signImageUrl(key);
+  }
+  return urls;
+}
+
+// POST /api/design-visits/:id/photos/resign — authenticated (member+).
+// Re-signs all opaque photo URLs for a single design visit in one request.
+// Internally calls resignVisitPhotos which uses downloadOpaqueKeys to download
+// every photo in parallel before issuing fresh signed view URLs, so callers
+// get a verified URL map rather than signing keys that might no longer exist.
+//
+// Members may only resign photos on visits they created; managers and admins
+// may resign photos on any visit.
+router.post('/api/design-visits/:id/photos/resign', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const visitId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(visitId)) return res.status(400).json({ error: 'Invalid visit id' });
+
+  if (getRequestPrivilegeLevel(req) === 'member') {
+    const userId = String(req.user?.claims?.sub ?? '');
+    // Check visit exists and belongs to this member (two queries avoids a
+    // fingerprinting side-channel: if visit 0 returned 403 the member could
+    // tell a visit exists but is foreign vs not existing at all).
+    const existsRes = await pool.query(
+      `SELECT created_by FROM design_visits WHERE id = $1`,
+      [visitId],
+    );
+    if (!existsRes.rows.length) {
+      return res.status(404).json({ error: 'Visit not found' });
+    }
+    if (String(existsRes.rows[0].created_by) !== userId) {
+      return res.status(403).json({ error: 'Forbidden: visit is not accessible to this user' });
+    }
+  }
+
+  try {
+    const urls = await resignVisitPhotos(visitId, pool);
+    return res.json({ urls });
+  } catch (e) {
+    logger.error({ err: e.message }, '[design-visits] POST resign-photos error:');
+    return res.status(500).json({ error: 'Could not re-sign photos' });
+  }
+});
+
 // DELETE /api/design-visits/uploads/:storageKey — authenticated (member+).
 // Removes an opaque cloud-storage key that was minted by the POST endpoint
 // above. Called fire-and-forget from the wizard when a user removes a photo

@@ -207,7 +207,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:keyboard-shortcuts',           'unit-flat — pure function smoke across platform paths'],
   ['test:formatters',                   'unit-flat — flat Vitest assertions on compactRelativeTime / latestTimestamp pure functions'],
   // -- capability matrix ----------------------------------------------------
-  ['test:privileges',                   'capability-matrix — 5-actor × 123-route matrix; not decomposed into named probes'],
+  ['test:privileges',                   'capability-matrix — 5-actor × 124-route matrix; not decomposed into named probes'],
   // -- smoke tests ----------------------------------------------------------
   ['test:window-ui-smoke',              'smoke — static chrome mount-point presence check'],
   ['test:storybook-smoke',              'smoke — story render error check across all stories'],
