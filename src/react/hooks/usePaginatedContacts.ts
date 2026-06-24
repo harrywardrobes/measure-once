@@ -28,6 +28,8 @@ type ContactsResponse = {
   page?: number;
   totalPages?: number;
   total?: number;
+  /** Admin-configured priority-sort active window in days (default 60). */
+  priorityActiveDays?: number;
 };
 
 export type UsePaginatedContactsParams = {
@@ -107,6 +109,8 @@ type OfflineFilterParams = {
   limit: number;
   priorityFirst?: boolean;
   prioritySortMode?: 'last_contacted' | 'newest';
+  /** Admin-configured priority-sort active window in days (default 60). */
+  priorityActiveDays?: number;
 };
 
 function offlineComparator(sort: string): (a: PaginatedContact, b: PaginatedContact) => number {
@@ -199,12 +203,13 @@ export function filterSortPaginateCachedContacts(
 
   // Priority-active filter — mirrors the server-side block in /api/contacts-all.
   // When "Priority first" is active and there is no search query, drop contacts
-  // whose lastmodifieddate is older than PRIORITY_ACTIVE_DAYS days.
+  // whose lastmodifieddate is older than priorityActiveDays days (default 60).
   // Missing or unparseable dates pass through (same "keep" behaviour as the
   // server).  Search bypasses this filter (applied above) so older contacts
   // remain reachable when the user knows who to look for.
   if (priorityFirst && !q) {
-    const cutoff = Date.now() - PRIORITY_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+    const activeDays = params.priorityActiveDays != null ? params.priorityActiveDays : PRIORITY_ACTIVE_DAYS;
+    const cutoff = Date.now() - activeDays * 24 * 60 * 60 * 1000;
     list = list.filter((c) => {
       const raw = c.properties?.lastmodifieddate;
       if (!raw) return true;
@@ -228,7 +233,7 @@ export function filterSortPaginateCachedContacts(
         if (!aLast && !bLast) {
           return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
         }
-        const cmp = aLast.localeCompare(bLast);
+        const cmp = aLast!.localeCompare(bLast!);
         if (cmp !== 0) return cmp;
         return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
       };
@@ -311,6 +316,7 @@ export function usePaginatedContacts(
 
   const [contacts, setContacts] = React.useState<PaginatedContact[]>([]);
   const [total, setTotal] = React.useState<number>(0);
+  const [priorityActiveDays, setPriorityActiveDays] = React.useState<number>(PRIORITY_ACTIVE_DAYS);
   const [totalPages, setTotalPages] = React.useState<number>(1);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -387,6 +393,11 @@ export function usePaginatedContacts(
         }
         const list = data.results || [];
         setContacts(list);
+        // Capture the admin-configured active window so the offline mirror uses
+        // the same value as the server on the next offline render.
+        if (data.priorityActiveDays != null && data.priorityActiveDays > 0) {
+          setPriorityActiveDays(data.priorityActiveDays);
+        }
         // Write-through to the offline store (best-effort, never blocks the UI)
         // and stamp the freshness time so the offline view can show "Last
         // synced at …".
@@ -428,6 +439,7 @@ export function usePaginatedContacts(
               limit,
               priorityFirst,
               prioritySortMode,
+              priorityActiveDays,
             });
           setContacts(results);
           setTotal(filteredTotal);

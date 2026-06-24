@@ -7,7 +7,9 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  InputAdornment,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import HubIcon from '@mui/icons-material/Hub';
@@ -145,6 +147,103 @@ function PipelineStagesCard() {
   );
 }
 
+// ── Priority sort: active window card ────────────────────────────────────────
+
+const DEFAULT_PRIORITY_ACTIVE_DAYS = 60;
+
+function PriorityActiveDaysCard() {
+  const [current, setCurrent] = React.useState<number | null>(null);
+  const [draft, setDraft] = React.useState<string>('');
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await GET<{ value: number }>('/api/admin/hubspot/priority-active-days');
+        if (cancelled) return;
+        setCurrent(data.value);
+        setDraft(String(data.value));
+      } catch {
+        if (!cancelled) setError('Could not load setting.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const parsed = parseInt(draft, 10);
+  const isValid = !isNaN(parsed) && parsed >= 1 && parsed <= 3650 && String(parsed) === draft.trim();
+  const isDirty = isValid && parsed !== current;
+
+  async function handleSave() {
+    if (!isValid) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const data = await POST<{ value: number }>('/api/admin/hubspot/priority-active-days', { value: parsed });
+      setCurrent(data.value);
+      setDraft(String(data.value));
+      showToast(`Active window updated to ${data.value} days.`);
+    } catch (e) {
+      setError((e as Error).message || 'Could not save setting.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Priority sort: active window</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          When "Priority first" is active and there is no search query, contacts not modified within
+          this many days are hidden from the list. Default is {DEFAULT_PRIORITY_ACTIVE_DAYS} days.
+        </Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {loading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="text.secondary">Loading…</Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap' }}>
+            <TextField
+              label="Active window"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              type="number"
+              size="small"
+              slotProps={{
+                input: {
+                  endAdornment: <InputAdornment position="end">days</InputAdornment>,
+                  inputProps: { min: 1, max: 3650, step: 1 },
+                },
+              }}
+              error={draft !== '' && !isValid}
+              helperText={draft !== '' && !isValid ? 'Enter a whole number between 1 and 3650.' : ' '}
+              sx={{ width: 180 }}
+            />
+            <Button
+              variant="contained"
+              onClick={handleSave}
+              disabled={!isDirty || saving}
+              startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
+              sx={{ mt: 0.25 }}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function HubSpotPage() {
   usePageTitle('HubSpot · Measure Once');
 
@@ -241,6 +340,8 @@ export function HubSpotPage() {
 
   return (
     <Stack spacing={2}>
+      <PriorityActiveDaysCard />
+
       <Card variant="outlined">
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }}>HubSpot CRM</Typography>

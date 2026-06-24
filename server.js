@@ -789,14 +789,16 @@ let _allContactsInflight = null;  // Promise while a scan is running
 // so a 60-second TTL eliminates serial DB round-trips on every API request while
 // keeping the data fresh enough for practical use.
 const CONTACTS_CONFIG_CACHE_TTL_MS = 60_000; // 60 s
-let _devModeCache     = null; // { value: boolean, fetchedAt: number } | null
-let _excludedKeysCache = null; // { keys: Set<string>, fetchedAt: number } | null
-let _stageConfigCache  = null; // { map: Map<string,string>, fetchedAt: number } | null
+let _devModeCache          = null; // { value: boolean, fetchedAt: number } | null
+let _excludedKeysCache     = null; // { keys: Set<string>, fetchedAt: number } | null
+let _stageConfigCache      = null; // { map: Map<string,string>, fetchedAt: number } | null
+let _priorityActiveDaysCache = null; // { value: number, fetchedAt: number } | null
 
 function _invalidateContactsConfigCache() {
-  _excludedKeysCache = null;
-  _stageConfigCache  = null;
-  _devModeCache      = null;
+  _excludedKeysCache       = null;
+  _stageConfigCache        = null;
+  _devModeCache            = null;
+  _priorityActiveDaysCache = null;
 }
 
 const ALL_CONTACTS_PROPERTIES = [
@@ -1757,16 +1759,31 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     }
 
     // Priority-active filter — when sorting "Priority first" with no search
-    // query, hide contacts that have not been modified in the last 60 days.
-    // Missing or unparseable dates pass through (same "keep" behaviour as the
-    // staleAfterDays filter above).  A non-empty search bypasses this filter
-    // so users can still surface older contacts when they know who to look for.
-    // Keep in sync with the offline mirror in usePaginatedContacts.ts
-    // (PRIORITY_ACTIVE_DAYS constant).
-    const PRIORITY_ACTIVE_DAYS = 60;
+    // query, hide contacts that have not been modified in the last N days.
+    // N defaults to 60 but is admin-configurable via app_settings (key:
+    // priority_active_days).  Missing or unparseable dates pass through (same
+    // "keep" behaviour as the staleAfterDays filter above).  A non-empty
+    // search bypasses this filter so users can still surface older contacts
+    // when they know who to look for.
+    // Keep in sync with the offline mirror in usePaginatedContacts.ts.
+    let priorityActiveDays = 60;
+    try {
+      if (_priorityActiveDaysCache && Date.now() - _priorityActiveDaysCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+        priorityActiveDays = _priorityActiveDaysCache.value;
+      } else {
+        const { rows: padRows } = await pool.query(
+          `SELECT value FROM app_settings WHERE key = 'priority_active_days'`
+        );
+        if (padRows.length > 0) {
+          const parsed = parseInt(padRows[0].value, 10);
+          if (!isNaN(parsed) && parsed > 0) priorityActiveDays = parsed;
+        }
+        _priorityActiveDaysCache = { value: priorityActiveDays, fetchedAt: Date.now() };
+      }
+    } catch (_) { /* use default 60 on DB error */ }
     const priorityFirst = req.query.priorityFirst === '1';
     if (priorityFirst && !q) {
-      const cutoff = Date.now() - PRIORITY_ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+      const cutoff = Date.now() - priorityActiveDays * 24 * 60 * 60 * 1000;
       contacts = contacts.filter(c => {
         const raw = c.properties?.lastmodifieddate;
         if (!raw) return true;
@@ -1900,7 +1917,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     const offset     = (page - 1) * limit;
     const results    = contacts.slice(offset, offset + limit);
 
-    res.json({ results, total, page, totalPages });
+    res.json({ results, total, page, totalPages, priorityActiveDays });
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {
@@ -5704,6 +5721,46 @@ app.post('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (re
   } catch (e) {
     logger.error({ err: e.message }, 'POST /api/admin/hubspot/dev-mode error:');
     res.status(500).json({ error: 'Could not save dev-mode setting.' });
+  }
+});
+
+// ── Admin: priority-active-days setting ──────────────────────────────────────
+// Reads / writes the admin-controlled priority-sort active window stored in
+// app_settings.  When "Priority first" is active and there is no search query,
+// contacts not modified within this many days are hidden from the list.
+
+app.get('/api/admin/hubspot/priority-active-days', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'priority_active_days'`
+    );
+    const value = rows.length > 0 ? parseInt(rows[0].value, 10) : 60;
+    res.json({ value: isNaN(value) ? 60 : value });
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/hubspot/priority-active-days error:');
+    res.status(500).json({ error: 'Could not read priority-active-days setting.' });
+  }
+});
+
+app.post('/api/admin/hubspot/priority-active-days', isAuthenticated, requireAdmin, async (req, res) => {
+  const { value } = req.body || {};
+  const parsed = typeof value === 'number' ? value : parseInt(value, 10);
+  if (isNaN(parsed) || parsed < 1 || parsed > 3650) {
+    return res.status(400).json({ error: '`value` must be a whole number between 1 and 3650.' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (key, value) VALUES ('priority_active_days', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [String(parsed)]
+    );
+    _invalidateContactsConfigCache();
+    const adminEmail = req.user?.email || 'unknown';
+    await logAdminAction(adminEmail, 'set_priority_active_days', null, `value=${parsed}`);
+    res.json({ ok: true, value: parsed });
+  } catch (e) {
+    logger.error({ err: e.message }, 'POST /api/admin/hubspot/priority-active-days error:');
+    res.status(500).json({ error: 'Could not save priority-active-days setting.' });
   }
 });
 

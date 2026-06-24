@@ -343,7 +343,7 @@ export function SettingsPage() {
                     sx={{ width: 200 }}
                   />
                   <Box>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
                       Priority first mode
                     </Typography>
                     <Select
@@ -355,7 +355,7 @@ export function SettingsPage() {
                       <MenuItem value="last_contacted">Last contacted first (never-contacted on top)</MenuItem>
                       <MenuItem value="newest">Newest created first (legacy)</MenuItem>
                     </Select>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                       Controls how &quot;Priority first&quot; orders the Customers list.
                     </Typography>
                   </Box>
