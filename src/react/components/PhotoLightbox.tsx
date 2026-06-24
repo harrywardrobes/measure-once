@@ -95,40 +95,47 @@ export function PhotoLightbox({ open, photos, initialIndex = 0, onClose }: Photo
       </IconButton>
 
       {/* Photo counter / room label */}
-      {(photos.length > 1 || current?.roomLabel) && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            color: '#fff',
-            fontSize: '0.8rem',
-            fontWeight: 500,
-            bgcolor: 'rgba(0,0,0,0.4)',
-            borderRadius: 2,
-            px: 1.5,
-            py: 0.5,
-            userSelect: 'none',
-            zIndex: 10,
-            textAlign: 'center',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {current?.roomLabel ? (
+      {(photos.length > 1 || current?.roomLabel) && (() => {
+        const roomLabel = current?.roomLabel;
+        let counter: React.ReactNode = null;
+        if (roomLabel) {
+          const roomTotal = photos.filter(p => p.roomLabel === roomLabel).length;
+          const roomPos = photos.slice(0, index + 1).filter(p => p.roomLabel === roomLabel).length;
+          counter = (
             <>
-              {current.roomLabel}
-              {photos.length > 1 && (
-                <Box component="span" sx={{ ml: 1, opacity: 0.7 }}>
-                  {index + 1} / {photos.length}
-                </Box>
-              )}
+              {roomLabel}
+              <Box component="span" sx={{ ml: 0.75, opacity: 0.7 }}>
+                — {roomPos} / {roomTotal}
+              </Box>
             </>
-          ) : (
-            `${index + 1} / ${photos.length}`
-          )}
-        </Box>
-      )}
+          );
+        } else {
+          counter = `${index + 1} / ${photos.length}`;
+        }
+        return (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              color: '#fff',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              bgcolor: 'rgba(0,0,0,0.4)',
+              borderRadius: 2,
+              px: 1.5,
+              py: 0.5,
+              userSelect: 'none',
+              zIndex: 10,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {counter}
+          </Box>
+        );
+      })()}
 
       {/* Prev button */}
       {hasPrev && (
