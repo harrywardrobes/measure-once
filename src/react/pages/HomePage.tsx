@@ -435,7 +435,7 @@ function TaskSection({
                     </Typography>
                   ) : null}
                 </Stack>
-                {t.task_assigned_user?.name ? (
+                {t.task_assigned_user?.name && assigneeFilter !== 'mine' ? (
                   <Typography variant="caption" color="text.secondary">
                     Assigned to {t.task_assigned_user.name}
                   </Typography>
