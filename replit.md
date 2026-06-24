@@ -55,8 +55,21 @@ Project management dashboard (HubSpot CRM integration).
 - PostgreSQL accessed with raw `pg`. Schema is owned by ordered, versioned
   `node-pg-migrate` files in `migrations/` (no `ensureXTable()`/`CREATE TABLE`
   in app code). `runMigrations()` in `db-migrate.js` runs pending migrations on
-  boot before auth/session setup — **development only** (`NODE_ENV !== 'production'`).
-  In production the schema is managed by Replit's publish-time dev→prod diff.
+  boot before auth/session setup. By default this happens in **development only**
+  (`NODE_ENV !== 'production'`); in production boot-time migrations are skipped
+  unless `RUN_MIGRATIONS_ON_BOOT=true` is set.
+  - **Schema source of truth is transitioning to migrations** (in preparation
+    for moving off Replit). Two ways to apply the schema in production:
+    1. **Boot flag:** set `RUN_MIGRATIONS_ON_BOOT=true` so the server runs
+       pending migrations at boot exactly as in development (fail-closed:
+       a migration error logs and exits the process). The flag is **not**
+       enabled in any committed config — set it manually at cutover.
+    2. **Pre-deploy command:** run `npm run db:migrate` against the production
+       `DATABASE_URL` before deploying (no code changes needed — the script
+       has no dev-only guards).
+  - Today, with the flag unset, the production schema is still managed by
+    Replit's publish-time dev→prod diff. `ensureRateLimitMigrations()` runs on
+    every boot path regardless of the flag.
 
 ## Database migrations
 - Apply: `npm run db:migrate` (also auto-runs on boot). Roll back one:

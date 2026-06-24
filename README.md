@@ -121,6 +121,27 @@ When deploying:
 3. Add that URI to your Google OAuth client's authorised redirect URIs
 4. Set `PORT` if your host requires a specific port
 
+### Production schema
+
+The production schema is owned by the migration files in `migrations/` (we are
+transitioning to migrations as the single schema source of truth). Apply them in
+one of two ways:
+
+- **Boot-time flag:** set `RUN_MIGRATIONS_ON_BOOT=true` in the production
+  environment. The server then runs all pending migrations at boot, before
+  serving requests, exactly as it does in development. A migration failure is
+  fatal — it is logged and the process exits (fail-closed) so the app never
+  serves against a partial schema. This flag is intentionally **not** committed
+  to any config or `.env` file; set it manually at cutover.
+- **Pre-deploy command:** run `npm run db:migrate` against the production
+  `DATABASE_URL` as a release/deploy step before the new app version starts.
+  The script has no dev-only guards, so it works unchanged against production.
+
+When `RUN_MIGRATIONS_ON_BOOT` is unset and you are still on Replit, the
+production schema is applied by Replit's publish-time dev→prod schema diff
+instead. The rate-limit package's migration records are reconciled on every boot
+path regardless of the flag.
+
 ---
 
 ## Editing your workflow checklists

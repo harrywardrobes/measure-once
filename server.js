@@ -8107,7 +8107,13 @@ async function cleanupStaleHubSpotCredentialRows() {
   // Skipping boot-time migrations in production eliminates that conflict; the
   // schema is guaranteed to be up-to-date by the time the app starts because
   // Replit applies the diff BEFORE the new app version is deployed.
-  if (process.env.NODE_ENV !== 'production') {
+  //
+  // We are transitioning to migrations as the schema source of truth (in
+  // preparation for moving off Replit).  Setting RUN_MIGRATIONS_ON_BOOT=true
+  // opts production into running migrations at boot exactly as development does.
+  // When the flag is unset, production behaviour is unchanged (skip migrations,
+  // only self-heal the rate-limit records).
+  if (process.env.NODE_ENV !== 'production' || process.env.RUN_MIGRATIONS_ON_BOOT === 'true') {
     try {
       await runMigrations();
       logger.info('  Database migrations applied');
@@ -8116,18 +8122,21 @@ async function cleanupStaleHubSpotCredentialRows() {
       process.exit(1);
     }
   } else {
-    logger.info('  Skipping boot-time migrations in production (schema managed by Replit publish-time diff)');
-    // Even in production, the rate-limit package's migration records must be
-    // present in the public.migrations table or it crashes on boot with
-    // "relation unique_session_key already exists".  This self-heal is safe
-    // to run in all environments — it only inserts missing rows.
-    try {
-      await ensureRateLimitMigrations(process.env.DATABASE_URL);
-      logger.info('  Rate-limit migration records verified');
-    } catch (e) {
-      logger.error({ err: e }, '  ensureRateLimitMigrations failed — aborting startup');
-      process.exit(1);
-    }
+    logger.info('  Skipping boot-time migrations (set RUN_MIGRATIONS_ON_BOOT=true to enable)');
+  }
+
+  // The rate-limit package's migration records must be present in the
+  // public.migrations table or it crashes on boot with
+  // "relation unique_session_key already exists".  This self-heal is safe to run
+  // in all environments — it only inserts missing rows — and must fire on every
+  // path (runMigrations() also calls it, but the skip path above does not, so we
+  // run it here unconditionally to guarantee it always happens).
+  try {
+    await ensureRateLimitMigrations(process.env.DATABASE_URL);
+    logger.info('  Rate-limit migration records verified');
+  } catch (e) {
+    logger.error({ err: e }, '  ensureRateLimitMigrations failed — aborting startup');
+    process.exit(1);
   }
 
   // Schedule the google_maps_usage pruner now that the schema is guaranteed to
