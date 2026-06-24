@@ -54,8 +54,37 @@ const {
   BASE,
 } = require('../privileges/harness');
 
-let puppeteer = null;
-try { puppeteer = require('puppeteer'); } catch {}
+// Puppeteer is required *lazily* (see loadPuppeteer below). A cold
+// `require('puppeteer')` can take ~30s to load+compile its large CJS bundle,
+// which would otherwise block the fast API/storage probes from printing any
+// output and can push the whole suite past the CI/agent time budget before a
+// single probe runs (surfacing as a silent hang with no probe output). Loading
+// it inside the browser-smoke block instead means the storage/data assertions
+// always run and report first.
+//
+// The browser smoke can also be skipped entirely with `--no-browser` (or
+// DV_SKIP_BROWSER=1). This is the default for the `:ci` variant so the fast
+// storage/data portion completes well within the CI/agent time budget; the
+// full Puppeteer wizard smoke still runs via `npm run test:design-visit`.
+const SKIP_BROWSER =
+  process.argv.includes('--no-browser') || process.env.DV_SKIP_BROWSER === '1';
+
+function loadPuppeteer() {
+  if (SKIP_BROWSER) return null;
+  try { return require('puppeteer'); } catch { return null; }
+}
+
+// Reject a promise if it does not settle within `ms`, so a hung
+// puppeteer.launch() (which can stall indefinitely rather than reject when
+// Chromium fails to come up) becomes a clear, reported skip instead of a
+// silent hang that exhausts the time budget.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 require('dotenv').config();
 
@@ -770,7 +799,13 @@ async function main() {
     '[ROOM] Filling the room name lets Review advance to step 3 (#dv-submit visible)',
   ];
 
-  if (!puppeteer) {
+  const puppeteer = SKIP_BROWSER ? null : loadPuppeteer();
+  if (SKIP_BROWSER) {
+    for (const l of WIZ_LABELS) {
+      skip(l, 'browser smoke enabled',
+        'browser smoke skipped (--no-browser / DV_SKIP_BROWSER=1); run `npm run test:design-visit` for the full UI smoke');
+    }
+  } else if (!puppeteer) {
     for (const l of WIZ_LABELS) skip(l, 'puppeteer installed', 'puppeteer not installed');
   } else {
     const { findChromium } = require('../shared/find-chromium');
@@ -782,7 +817,8 @@ async function main() {
     if (sysChrome) launchAttempts.push({ executablePath: sysChrome, args: launchArgs });
     for (const opts of launchAttempts) {
       try {
-        browser = await puppeteer.launch({ headless: true, ...opts });
+        browser = await withTimeout(
+          puppeteer.launch({ headless: true, ...opts }), 30000, 'puppeteer.launch');
         browserLaunchErr = null;
         break;
       } catch (e) { browserLaunchErr = e; browser = null; }

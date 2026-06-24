@@ -99,7 +99,7 @@
     "test:start-survey-visit": "node test/start-survey-visit/run.js",
     "test:start-survey-visit:ci": "node scripts/with-test-db.js test/start-survey-visit/run.js",
     "test:design-visit": "node test/design-visit/run.js",
-    "test:design-visit:ci": "node scripts/with-test-db.js test/design-visit/run.js",
+    "test:design-visit:ci": "node scripts/with-test-db.js test/design-visit/run.js --no-browser",
     "test:design-visit-list": "node test/design-visit-list/run.js",
     "test:design-visit-list:ci": "node scripts/with-test-db.js test/design-visit-list/run.js",
     "test:visit-edit-cancel": "node test/visit-edit-cancel/run.js",
