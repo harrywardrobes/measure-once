@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkflowDef, fetchWorkflowCached } from '../lib/workflowConfig';
+import { SSE_INITIAL_CONNECT_DELAY_MS, SSE_INITIAL_RECONNECT_DELAY_MS } from '../constants/timings';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -230,7 +231,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
     if (typeof EventSource === 'undefined') return;
     let sseSource: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectDelay = 2000;
+    let reconnectDelay = SSE_INITIAL_RECONNECT_DELAY_MS;
 
     function connect() {
       if (sseSource) { sseSource.close(); sseSource = null; }
@@ -254,7 +255,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
             } catch { /* ignore */ }
           }
         });
-        sseSource.addEventListener('open', () => { reconnectDelay = 2000; });
+        sseSource.addEventListener('open', () => { reconnectDelay = SSE_INITIAL_RECONNECT_DELAY_MS; });
         sseSource.addEventListener('error', () => {
           sseSource?.close();
           sseSource = null;
@@ -267,7 +268,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
       } catch { /* SSE not supported */ }
     }
 
-    const initialTimer = setTimeout(connect, 500);
+    const initialTimer = setTimeout(connect, SSE_INITIAL_CONNECT_DELAY_MS);
     return () => {
       clearTimeout(initialTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);

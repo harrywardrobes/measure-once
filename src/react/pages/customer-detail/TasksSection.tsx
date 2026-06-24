@@ -15,6 +15,7 @@ import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
+import { DOM_FLUSH_DELAY_MS } from '../../constants/timings';
 
 interface Props {
   contactId: string;
@@ -82,11 +83,14 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else if (attempts < 10) {
         attempts++;
+        // 150 ms retry interval is specific to this hash-scroll retry loop —
+        // long enough to cover an async task-list render without hammering
+        // the DOM on every frame.
         setTimeout(tryScroll, 150);
       }
     };
     // Small initial delay lets React flush the render tree before scrolling.
-    setTimeout(tryScroll, 100);
+    setTimeout(tryScroll, DOM_FLUSH_DELAY_MS);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [showAddTask, setShowAddTask] = useState(false);

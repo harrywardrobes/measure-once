@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { cacheRecord, cacheRecords, getMeta, readRecord, readRecords, setMeta } from '../lib/offlineDb';
+import { SSE_INITIAL_CONNECT_DELAY_MS, SSE_INITIAL_RECONNECT_DELAY_MS } from '../constants/timings';
 
 export interface ProjectContact {
   id: string;
@@ -315,7 +316,7 @@ export function useProjectsData(): ProjectsData {
     if (typeof EventSource === 'undefined') return;
     let source: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectDelay = 2000;
+    let reconnectDelay = SSE_INITIAL_RECONNECT_DELAY_MS;
     let destroyed = false;
 
     function connect() {
@@ -336,7 +337,7 @@ export function useProjectsData(): ProjectsData {
             }
           } catch { /* malformed frame — ignore */ }
         });
-        source.addEventListener('open', () => { reconnectDelay = 2000; });
+        source.addEventListener('open', () => { reconnectDelay = SSE_INITIAL_RECONNECT_DELAY_MS; });
         source.addEventListener('error', () => {
           source?.close();
           source = null;
@@ -350,7 +351,7 @@ export function useProjectsData(): ProjectsData {
       } catch { /* SSE not supported in this environment */ }
     }
 
-    const initialTimer = setTimeout(connect, 500);
+    const initialTimer = setTimeout(connect, SSE_INITIAL_CONNECT_DELAY_MS);
     return () => {
       destroyed = true;
       clearTimeout(initialTimer);

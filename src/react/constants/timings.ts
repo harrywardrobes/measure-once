@@ -74,3 +74,33 @@ export const CONTACT_SEARCH_DEBOUNCE_MS = 200;
  * running the check before the user moves to the next field.
  */
 export const EMAIL_DUPE_CHECK_DEBOUNCE_MS = 400;
+
+/**
+ * Delay (ms) before establishing the first SSE connection after the component
+ * mounts. Defers the network request slightly so it doesn't compete with the
+ * initial render and data-fetch waterfall.
+ *
+ * Used identically in WorkflowDataContext and useProjectsData — keep them in
+ * sync by importing this constant rather than repeating the literal.
+ */
+export const SSE_INITIAL_CONNECT_DELAY_MS = 500;
+
+/**
+ * Starting backoff delay (ms) for SSE reconnection after an error. The retry
+ * loop doubles this on each failure up to a 60 s ceiling.
+ *
+ * Used identically in WorkflowDataContext and useProjectsData — keep them in
+ * sync by importing this constant rather than repeating the literal.
+ */
+export const SSE_INITIAL_RECONNECT_DELAY_MS = 2000;
+
+/**
+ * Short pause (ms) after a DOM/React state change before performing the next
+ * UI action (e.g. scrolling to a newly rendered element, or reopening a dialog
+ * after closing it). Gives React one additional flush + the browser one layout
+ * pass so the target element is present and stable.
+ *
+ * Tradeoff: 100 ms is imperceptible to users while reliably covering a single
+ * React render cycle plus one rAF in most browsers.
+ */
+export const DOM_FLUSH_DELAY_MS = 100;

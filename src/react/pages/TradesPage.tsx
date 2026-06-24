@@ -1,6 +1,6 @@
 import React from 'react';
 import { TRADES_TYPE_FILTER_PREFIX, TRADES_TYPE_FILTER_LEGACY_KEY } from '../constants/localStorageKeys';
-import { CONFLICT_CHECK_DEBOUNCE_MS } from '../constants/timings';
+import { CONFLICT_CHECK_DEBOUNCE_MS, DOM_FLUSH_DELAY_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Accordion,
@@ -1440,7 +1440,7 @@ export function TradesPage() {
     const trade = trades.find(t => t.id === id);
     if (trade) {
       handleFormClose();
-      setTimeout(() => handleEdit(trade), 100);
+      setTimeout(() => handleEdit(trade), DOM_FLUSH_DELAY_MS);
     }
   };
 

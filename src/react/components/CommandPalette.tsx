@@ -231,6 +231,10 @@ export function CommandPalette() {
       ? new URLSearchParams(location.search).get('q') || '' : '';
     setQuery(seed);
     setOpen(true);
+    // 30 ms is specific to this input: MUI's FullScreenModal uses a CSS
+    // transition on entry; focusing synchronously lands before the element
+    // is interactive. 30 ms is the shortest reliable delay across browsers
+    // without importing a full animation-end callback.
     setTimeout(() => inputRef.current?.focus(), 30);
   }, []);
 
