@@ -348,46 +348,60 @@ function queuedBodyToExistingVisit(
 }
 
 /**
- * Re-derive short-lived signed view URLs for a resumed visit's room photos.
- *
- * A queued (unsynced) edit preserves each photo's `storageKey` but not the
- * expired signed `viewUrl`. Offline-captured photos keep a `data:` URI in
- * `storageKey` and render directly, so they need no signing. Online uploads keep
- * an opaque `obj:…` key whose thumbnail must be re-signed via the server.
- *
- * Best-effort: if the request fails (e.g. resuming while offline) the visit is
- * returned unchanged — the underlying image data still re-submits correctly,
- * only the preview thumbnail is missing.
+ * Returns true when a signed design-visit image URL is absent or will expire
+ * within the next 5 minutes, meaning it should be refreshed before the wizard
+ * opens.  Non-signed strings (data: URIs, legacy /uploads/ paths) are left
+ * alone — they are either self-contained or already non-expiring.
  */
-async function resignResumedImages(visit: ExistingVisit): Promise<ExistingVisit> {
+function isViewUrlStale(viewUrl: string | undefined): boolean {
+  if (!viewUrl) return true;
+  const m = viewUrl.match(/[?&]exp=(\d+)/);
+  if (!m) return false; // not a signed URL — nothing to refresh
+  const exp = parseInt(m[1], 10);
+  const BUFFER_SEC = 5 * 60;
+  return !Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000) + BUFFER_SEC;
+}
+
+/**
+ * Re-derive short-lived signed view URLs for a visit's room photos before the
+ * edit wizard opens.
+ *
+ * Signed thumbnails have a ~1 h TTL. A visit loaded from cache (page open for
+ * >1 h) or resumed from the offline queue will have absent or expired `viewUrl`
+ * values. This function detects either case and calls the bulk resign endpoint
+ * for the visit in a single round-trip, refreshing all opaque `obj:…` keys at
+ * once.
+ *
+ * Offline-captured photos keep a `data:` URI in `storageKey` and render
+ * directly — they are never re-signed.
+ *
+ * Best-effort: if the request fails (e.g. the user is offline) the visit is
+ * returned unchanged — the underlying image data still re-submits correctly,
+ * only the preview thumbnail is temporarily missing.
+ */
+async function resignResumedImages(visitId: number, visit: ExistingVisit): Promise<ExistingVisit> {
   const rooms = visit.rooms || [];
-  const opaqueKeys = new Set<string>();
-  for (const r of rooms) {
-    for (const img of r.images || []) {
-      const key = img.storageKey || '';
-      if (key.startsWith('obj:') && !img.viewUrl) opaqueKeys.add(key);
-    }
-  }
-  if (opaqueKeys.size === 0) return visit;
+  const needsResign = rooms.some(r =>
+    (r.images || []).some(img => img.storageKey?.startsWith('obj:') && isViewUrlStale(img.viewUrl))
+  );
+  if (!needsResign) return visit;
 
   let urls: Record<string, string> = {};
   try {
-    const r = await fetch('/api/design-visits/sign-image-urls', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storageKeys: Array.from(opaqueKeys) }),
-    });
+    const r = await fetch(`/api/design-visits/${visitId}/photos/resign`, { method: 'POST' });
     if (r.ok) {
       const data = await r.json();
-      if (data && typeof data.urls === 'object' && data.urls) {
+      if (data?.urls && typeof data.urls === 'object') {
         for (const [k, val] of Object.entries(data.urls as Record<string, unknown>)) {
           if (typeof val === 'string') urls[k] = val;
         }
       }
     }
   } catch {
-    return visit; // offline or server error — keep storageKey-only previews
+    return visit; // offline or server error — keep existing viewUrls
   }
+
+  if (Object.keys(urls).length === 0) return visit;
 
   return {
     ...visit,
@@ -545,8 +559,13 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
       const resumed = queuedBodyToExistingVisit(
         pending.queuedBody, id, pending.baseVersion, pending.baseUpdatedAt,
       );
-      if (resumed) existingVisit = await resignResumedImages(resumed);
+      if (resumed) existingVisit = resumed;
     }
+
+    // Re-sign any expired or absent photo thumbnails in a single bulk request
+    // before the wizard opens. Signed URLs have a ~1 h TTL; a visit loaded from
+    // cache (page open >1 h) or from the offline queue will have stale viewUrls.
+    existingVisit = await resignResumedImages(id, existingVisit);
 
     setEditingId(id);
     setWizardState({ handler: { config: {} }, ctx, existingVisit });
