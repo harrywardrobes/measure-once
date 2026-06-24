@@ -700,7 +700,8 @@ function getSession() {
     store,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: ttl },
+    proxy: true,
+    cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: ttl },
   });
 }
 

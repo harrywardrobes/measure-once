@@ -1,0 +1,60 @@
+TASK: Make node-pg-migrate the single, explicit owner of the PRODUCTION database
+schema, instead of relying on Replit's publish-time dev→prod schema diff. Do this
+behind an env flag so it can be enabled safely at cutover without racing Replit's
+diff in the meantime.
+
+BACKGROUND (read before changing anything):
+- Migrations live in ./migrations and are run by runMigrations() in db-migrate.js.
+- Today, server.js (~line 8110) runs runMigrations() ONLY when
+  NODE_ENV !== 'production'. In production it logs "Skipping boot-time migrations"
+  and only calls ensureRateLimitMigrations(). The comment there explains why:
+  Replit's publish-time schema diff currently owns the prod schema, and running
+  node-pg-migrate at the same time would race it.
+- We are moving toward owning the schema ourselves (and eventually moving off
+  Replit). This change builds that capability now WITHOUT breaking current
+  Replit publishes.
+
+WHAT TO IMPLEMENT:
+1. Introduce a new env flag, RUN_MIGRATIONS_ON_BOOT (default OFF / unset).
+2. In the server boot block (server.js around line 8110), change the gate so
+   migrations run on boot when EITHER of these is true:
+     - NODE_ENV !== 'production'  (unchanged dev behaviour), OR
+     - RUN_MIGRATIONS_ON_BOOT === 'true'  (new: lets us enable prod migrations)
+   When migrations run, keep the existing behaviour exactly: on success log
+   "Database migrations applied"; on failure log the error and process.exit(1)
+   (fail closed — never serve against an unknown schema).
+3. When migrations do NOT run on boot (production with the flag unset), keep the
+   current behaviour: still call ensureRateLimitMigrations() and fail closed if
+   that throws. Update the "Skipping boot-time migrations" log line to mention
+   the flag, e.g. "set RUN_MIGRATIONS_ON_BOOT=true to enable".
+4. Confirm `npm run db:migrate` (scripts/run-db-migrate.js → runMigrations) works
+   when pointed at a production DATABASE_URL, so migrations can ALSO be run as an
+   explicit pre-deploy step rather than on boot. If anything blocks that, fix it.
+   Do NOT change the migration files themselves.
+5. Update docs to reflect the new model:
+   - replit.md: the "production schema managed by Replit's publish-time diff" note
+     is no longer the whole story — document RUN_MIGRATIONS_ON_BOOT and the
+     `npm run db:migrate` pre-deploy option, and that we are transitioning to
+     migrations as the source of truth.
+   - README.md "Deploying to a server" section: add that production schema is
+     applied via migrations (boot flag or pre-deploy command).
+
+CONSTRAINTS:
+- Do not edit, rename, or reorder any existing files in ./migrations (they are
+  immutable once applied). This task is only about WHEN/HOW runMigrations() runs.
+- Keep runMigrations()'s existing safety: singleTransaction: true and checkOrder:
+  true must stay on.
+- Do not remove ensureRateLimitMigrations() — it must still run in every path.
+- Do not enable RUN_MIGRATIONS_ON_BOOT in any committed config; leave it unset so
+  current Replit publishes are unaffected. I will set it manually at cutover.
+
+ACCEPTANCE CRITERIA:
+- With NODE_ENV=production and RUN_MIGRATIONS_ON_BOOT unset: boot behaviour is
+  unchanged from today (skips migrations, runs rate-limit records).
+- With NODE_ENV=production and RUN_MIGRATIONS_ON_BOOT=true: pending migrations are
+  applied on boot, success/failure logged, and a migration failure aborts startup.
+- In development (NODE_ENV unset/development): unchanged — migrations still run.
+- `npm run db:migrate` applies pending migrations against the DATABASE_URL it's
+  given.
+- Run the existing test suite (npm run test:ci, or at least the migration-related
+  suites) and confirm nothing regressed.
