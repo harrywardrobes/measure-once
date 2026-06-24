@@ -134,18 +134,17 @@ function buildRestoredPhotos(keys: string[], names?: string[]): UploadedPhoto[] 
   });
 }
 
-async function resignPdfsAfterRestore(
+async function resignSavedPhotosAfterRestore(
   token: string,
   initialPhotos: UploadedPhoto[],
   setPhotosFn: (updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => void,
 ): Promise<void> {
-  const pdfPhotos = initialPhotos.filter(p => p.isPdf);
-  if (!pdfPhotos.length) return;
+  if (!initialPhotos.length) return;
   try {
     const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/sign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: pdfPhotos.map(p => p.key) }),
+      body: JSON.stringify({ keys: initialPhotos.map(p => p.key) }),
     });
     const d = await r.json();
     if (!r.ok) return;
@@ -154,7 +153,7 @@ async function resignPdfsAfterRestore(
       byKey[result.key] = result.url;
     }
     setPhotosFn(prev => prev.map(p => {
-      if (!p.isPdf || !(p.key in byKey)) return p;
+      if (!(p.key in byKey)) return p;
       const url = byKey[p.key];
       if (!url) return { ...p, unavailable: true };
       return { ...p, previewUrl: url };
@@ -426,7 +425,7 @@ export function CustomerInfoPage() {
           if (draft.savedPhotoKeys?.length) {
             const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
             setPhotos(restored);
-            void resignPdfsAfterRestore(stored, restored, setPhotos);
+            void resignSavedPhotosAfterRestore(stored, restored, setPhotos);
           }
           setIsGeneric(true);
           setPageState('main');
@@ -489,7 +488,7 @@ export function CustomerInfoPage() {
           if (draft.savedPhotoKeys?.length) {
             const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
             setPhotos(restored);
-            void resignPdfsAfterRestore(urlToken, restored, setPhotos);
+            void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
           }
           setPageState('main');
           return;
@@ -507,7 +506,7 @@ export function CustomerInfoPage() {
         if (draft.savedPhotoKeys?.length) {
           const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
           setPhotos(restored);
-          void resignPdfsAfterRestore(urlToken, restored, setPhotos);
+          void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
         }
         setPageState('main');
       })
