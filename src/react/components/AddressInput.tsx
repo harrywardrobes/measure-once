@@ -289,6 +289,9 @@ export function AddressInput({
           // In postcode-first mode, reveal the address fields after selection
           // so the customer can review and edit what was filled in.
           if (postcodeFirst) setManualMode(true);
+          // On staff surfaces, show the correction hint so the user knows they
+          // can edit the filled fields directly.
+          if (!postcodeFirst) setStaffHintVisible(true);
         })
         .catch((err: unknown) => {
           const code = String((err as { message?: string })?.message ?? err ?? 'ERROR');
@@ -297,6 +300,10 @@ export function AddressInput({
     },
     [onChange, surface, postcodeFirst],
   );
+
+  // Tracks whether the user has just picked a suggestion on a staff (non-postcodeFirst) surface.
+  // Cleared as soon as they edit any address field.
+  const [staffHintVisible, setStaffHintVisible] = useState(false);
 
   // showAutocomplete: the Places library loaded successfully for this surface.
   const showAutocomplete = !!surface && acReady && !acFailed;
@@ -450,6 +457,13 @@ export function AddressInput({
         />
       )}
 
+      {/* ── Staff correction hint (appears after picking a suggestion) ───────── */}
+      {staffHintVisible && showAutocomplete && !postcodeFirst && (
+        <FormHelperText sx={{ mb: 1 }}>
+          Need to correct a field? Edit directly below.
+        </FormHelperText>
+      )}
+
       {showNotice && (
         <FormHelperText sx={{ mb: 1 }}>
           Address search is unavailable right now — please enter the address manually.
@@ -486,7 +500,7 @@ export function AddressInput({
             placeholder="e.g. 12 Baker Street"
             slotProps={{ htmlInput: { maxLength: 200 } }}
             value={addr.addressLines[0]}
-            onChange={(e) => updateLine(0, e.target.value)}
+            onChange={(e) => { setStaffHintVisible(false); updateLine(0, e.target.value); }}
             sx={{ mb: 1 }}
           />
 
@@ -498,7 +512,7 @@ export function AddressInput({
             disabled={disabled}
             slotProps={{ htmlInput: { maxLength: 200 } }}
             value={addr.addressLines[1]}
-            onChange={(e) => updateLine(1, e.target.value)}
+            onChange={(e) => { setStaffHintVisible(false); updateLine(1, e.target.value); }}
             sx={{ mb: 1 }}
           />
 
@@ -511,7 +525,7 @@ export function AddressInput({
             disabled={disabled}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             value={addr.locality}
-            onChange={(e) => emit({ locality: e.target.value })}
+            onChange={(e) => { setStaffHintVisible(false); emit({ locality: e.target.value }); }}
             sx={{ mb: 1 }}
           />
 
@@ -523,7 +537,7 @@ export function AddressInput({
             disabled={disabled}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             value={addr.administrativeArea}
-            onChange={(e) => emit({ administrativeArea: e.target.value })}
+            onChange={(e) => { setStaffHintVisible(false); emit({ administrativeArea: e.target.value }); }}
             sx={{ mb: 1 }}
           />
 
@@ -536,7 +550,7 @@ export function AddressInput({
             disabled={disabled}
             slotProps={{ htmlInput: { maxLength: 32 } }}
             value={addr.postalCode}
-            onChange={(e) => emit({ postalCode: e.target.value })}
+            onChange={(e) => { setStaffHintVisible(false); emit({ postalCode: e.target.value }); }}
           />
         </>
       )}
