@@ -26,8 +26,9 @@ const VISITS_SUBTABS: { key: VisitsSubtab; label: string }[] = [
 // ── Module-level refs ──────────────────────────────────────────────────────────
 
 const W = window as unknown as Record<string, unknown>;
-const _reloadRef:     { fn: (() => Promise<void>) | null }                        = { fn: null };
-const _openEditorRef: { fn: ((type: string, existingId?: number) => void) | null } = { fn: null };
+const _reloadRef:      { fn: (() => Promise<void>) | null }                          = { fn: null };
+const _openEditorRef:  { fn: ((type: string, existingId?: number) => void) | null }  = { fn: null };
+const _deleteItemRef:  { fn: ((type: string, id: number) => Promise<void>) | null }  = { fn: null };
 
 // ── TermsDisplay component ─────────────────────────────────────────────────────
 
@@ -120,20 +121,23 @@ export function DesignVisitPage() {
   useEffect(() => {
     _reloadRef.fn     = fetchAll;
     _openEditorRef.fn = openEditor;
+    _deleteItemRef.fn = deleteItem;
     fetchAll();
 
     W.loadDvCatalogue       = fetchAll;
     W.openDvHandleEditor    = (id?: number) => _openEditorRef.fn?.('handle', id);
     W.openDvFurnitureEditor = (id?: number) => _openEditorRef.fn?.('furniture', id);
     W.openDvDoorStyleEditor = (id?: number) => _openEditorRef.fn?.('door-style', id);
+    W.deleteDvItem          = (type: string, id: number) => _deleteItemRef.fn?.(type, id);
 
     return () => {
       _reloadRef.fn     = null;
       _openEditorRef.fn = null;
-      ['loadDvCatalogue', 'openDvHandleEditor', 'openDvFurnitureEditor', 'openDvDoorStyleEditor']
+      _deleteItemRef.fn = null;
+      ['loadDvCatalogue', 'openDvHandleEditor', 'openDvFurnitureEditor', 'openDvDoorStyleEditor', 'deleteDvItem']
         .forEach(k => delete W[k]);
     };
-  }, [fetchAll, openEditor]);
+  }, [fetchAll, openEditor, deleteItem]);
 
   const publishTerms = useCallback(async () => {
     const text = termsNewText.trim();
