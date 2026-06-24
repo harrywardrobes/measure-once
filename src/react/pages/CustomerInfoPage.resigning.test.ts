@@ -691,6 +691,120 @@ describe('restore → re-sign → draft-persist integration', () => {
   });
 });
 
+// ── Restore path: unavailable warning shows immediately ───────────────────────
+//
+// These tests verify the banner condition (photos.some(p => p.unavailable)) is
+// satisfied synchronously by buildRestoredPhotos — no resign loop required.
+
+describe('restore path — unavailable warning shows immediately without resign', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('satisfies photos.some(p => p.unavailable) right after buildRestoredPhotos — no async work needed', () => {
+    const photos = buildRestoredPhotos(
+      ['photos/gone.jpg'],
+      ['gone.jpg'],
+      [''],
+      [0],
+      [true],
+    );
+    expect(photos.some(p => p.unavailable)).toBe(true);
+    expect(photos[0].previewUrl).toBe('');
+  });
+
+  it('banner condition is true before resign runs in the mixed case: unavailable + stale from draft', async () => {
+    const staleExp = NOW_SEC + BUFFER_SEC - 60;
+    const staleUrl = `${PREVIEW_BASE}?exp=${staleExp}&sig=old`;
+
+    const photos = buildRestoredPhotos(
+      ['photos/gone.jpg', 'photos/stale.jpg'],
+      ['gone.jpg', 'stale.jpg'],
+      ['', staleUrl],
+      [0, staleExp],
+      [true, false],
+    );
+
+    expect(photos.some(p => p.unavailable)).toBe(true);
+    expect(photos[0].unavailable).toBe(true);
+    expect(photos[1].unavailable).toBeFalsy();
+  });
+
+  it('restored unavailable photo has the same shape as a post-resign-failure photo', () => {
+    const [fromRestore] = buildRestoredPhotos(
+      ['photos/gone.jpg'],
+      ['gone.jpg'],
+      [''],
+      [0],
+      [true],
+    );
+
+    const fromResignFailure: UploadedPhoto = {
+      key:         'photos/gone.jpg',
+      previewUrl:  '',
+      name:        'gone.jpg',
+      unavailable: true,
+    };
+
+    expect(fromRestore.unavailable).toBe(fromResignFailure.unavailable);
+    expect(fromRestore.previewUrl).toBe(fromResignFailure.previewUrl);
+  });
+
+  it('resign loop is a no-op when all photos are already unavailable from restore', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const photos = buildRestoredPhotos(
+      ['photos/a.jpg', 'photos/b.jpg'],
+      ['a.jpg', 'b.jpg'],
+      ['', ''],
+      [0, 0],
+      [true, true],
+    );
+
+    expect(photos.every(p => p.unavailable)).toBe(true);
+
+    await resignSavedPhotosAfterRestore('tok', photos, vi.fn());
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('banner condition stays true after resign completes in the mixed case', async () => {
+    const staleExp = NOW_SEC + BUFFER_SEC - 60;
+    const staleUrl = `${PREVIEW_BASE}?exp=${staleExp}&sig=old`;
+    const freshUrl = `${PREVIEW_BASE}?exp=${NOW_SEC + 3600}&sig=new`;
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/stale.jpg', url: freshUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/gone.jpg', 'photos/stale.jpg'],
+      ['gone.jpg', 'stale.jpg'],
+      ['', staleUrl],
+      [0, staleExp],
+      [true, false],
+    );
+
+    let finalPhotos: UploadedPhoto[] = restored;
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => {
+      finalPhotos = updater(restored);
+    });
+
+    await resignSavedPhotosAfterRestore('tok', restored, setPhotos);
+
+    expect(finalPhotos.some(p => p.unavailable)).toBe(true);
+    expect(finalPhotos[0].unavailable).toBe(true);
+    expect(finalPhotos[1].unavailable).toBeFalsy();
+    expect(finalPhotos[1].previewUrl).toBe(freshUrl);
+  });
+});
+
 // ── savedPhotoUnavailable: buildRestoredPhotos ─────────────────────────────────
 
 describe('buildRestoredPhotos — savedPhotoUnavailable flag', () => {
