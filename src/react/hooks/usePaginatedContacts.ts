@@ -1,6 +1,6 @@
 import React from 'react';
 import { cacheRecord, cacheRecords, readRecord, readRecords, getMeta, setMeta } from '../lib/offlineDb';
-import { CONTACTS_LAST_SYNC_META_KEY } from '../constants/localStorageKeys';
+import { CONTACTS_LAST_SYNC_META_KEY, PRIORITY_ACTIVE_DAYS_META_KEY } from '../constants/localStorageKeys';
 
 export { CONTACTS_LAST_SYNC_META_KEY };
 
@@ -318,6 +318,16 @@ export function usePaginatedContacts(
   const [total, setTotal] = React.useState<number>(0);
   const [priorityActiveDays, setPriorityActiveDays] = React.useState<number>(PRIORITY_ACTIVE_DAYS);
   const [totalPages, setTotalPages] = React.useState<number>(1);
+
+  // Hydrate priorityActiveDays from IndexedDB on mount so the offline filter
+  // uses the admin-configured value even before a successful network fetch.
+  React.useEffect(() => {
+    getMeta<number>(PRIORITY_ACTIVE_DAYS_META_KEY).then((stored) => {
+      if (typeof stored === 'number' && stored > 0) {
+        setPriorityActiveDays(stored);
+      }
+    }).catch(() => { /* IndexedDB unavailable — keep default */ });
+  }, []);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
   const [contactsStale, setContactsStale] = React.useState<boolean>(false);
@@ -397,6 +407,9 @@ export function usePaginatedContacts(
         // the same value as the server on the next offline render.
         if (data.priorityActiveDays != null && data.priorityActiveDays > 0) {
           setPriorityActiveDays(data.priorityActiveDays);
+          // Persist so the offline filter uses the admin-configured value even
+          // if no network fetch succeeds in a future session.
+          void setMeta(PRIORITY_ACTIVE_DAYS_META_KEY, data.priorityActiveDays);
         }
         // Write-through to the offline store (best-effort, never blocks the UI)
         // and stamp the freshness time so the offline view can show "Last
@@ -421,6 +434,18 @@ export function usePaginatedContacts(
         const persistedSyncAt = await getMeta<number>(CONTACTS_LAST_SYNC_META_KEY);
         if (ctrl.signal.aborted) return;
         if (typeof persistedSyncAt === 'number') setLastSyncAt(persistedSyncAt);
+        // Read the persisted active-window directly here (not from React state)
+        // so the offline filter always uses the admin-configured value regardless
+        // of whether the mount-hydration effect has resolved yet.
+        const persistedActiveDays = await getMeta<number>(PRIORITY_ACTIVE_DAYS_META_KEY);
+        if (ctrl.signal.aborted) return;
+        const resolvedPriorityActiveDays =
+          typeof persistedActiveDays === 'number' && persistedActiveDays > 0
+            ? persistedActiveDays
+            : priorityActiveDays;
+        if (resolvedPriorityActiveDays !== priorityActiveDays) {
+          setPriorityActiveDays(resolvedPriorityActiveDays);
+        }
         if (cached.length > 0) {
           // Apply the active search box, lead-status / stage filters, sort
           // order, and pagination client-side so the offline experience feels
@@ -439,7 +464,7 @@ export function usePaginatedContacts(
               limit,
               priorityFirst,
               prioritySortMode,
-              priorityActiveDays,
+              priorityActiveDays: resolvedPriorityActiveDays,
             });
           setContacts(results);
           setTotal(filteredTotal);

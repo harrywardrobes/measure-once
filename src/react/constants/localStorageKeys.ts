@@ -57,6 +57,9 @@ export const ONBOARDING_DRAFT_KEY = 'mo:onboarding:draft';
 export const LAST_SYNC_META_KEY          = 'lastSuccessfulSyncAt';
 export const CONTACTS_LAST_SYNC_META_KEY = 'customersLastSyncAt';
 
+/** IndexedDB meta — last-known admin-configured priority-active-window (days). */
+export const PRIORITY_ACTIVE_DAYS_META_KEY = 'priorityActiveDays';
+
 // ── Trades page ───────────────────────────────────────────────────────────────
 export const TRADES_TYPE_FILTER_KEY = 'tradesTypeFilter';
 
