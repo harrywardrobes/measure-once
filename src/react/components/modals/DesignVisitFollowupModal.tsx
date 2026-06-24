@@ -583,7 +583,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
         <FullScreenModal
           open={hubDialogOpen}
           onClose={handleRequestClose}
-          disableClose={step !== 'hub'}
+          disableClose={step === 'loading' || step === 'done' || isLocked}
           title={dialogTitle}
           headerActions={
             demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined

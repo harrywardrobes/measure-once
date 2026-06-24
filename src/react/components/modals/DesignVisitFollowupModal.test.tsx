@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
@@ -422,5 +422,156 @@ describe('DesignVisitFollowupModal — modal title', () => {
     await user.type(screen.getByRole('textbox', { name: 'Body' }), 'x');
 
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+// ── Discard guard ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns a fetch mock that also handles the email-template render endpoint,
+ * returning non-empty subject + body so the Send button is enabled.
+ *
+ * `outcomeHangs` keeps the outcome POST pending so the component stays at
+ * `outcome_in_progress` for the duration of the test.
+ */
+function mockFetchWithTemplate(opts: { outcomeHangs?: boolean } = {}): () => void {
+  const orig = window.fetch;
+  window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.href
+          : (input as Request).url;
+    const method = (init?.method || 'GET').toUpperCase();
+
+    if (url.includes('/api/card-actions/design-visit-followup') && !url.includes('outcome') && method === 'POST') {
+      return new Response(JSON.stringify(CONTACT_INFO), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/email-templates/render') && method === 'POST') {
+      return new Response(JSON.stringify({ subject: 'Visit invite', body_text: 'Original body text' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/emails/send') && method === 'POST') {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/card-actions/design-visit-followup/outcome') && method === 'POST') {
+      if (opts.outcomeHangs) return new Promise(() => { /* never resolves */ });
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.includes('/api/events') && method === 'GET') {
+      return new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return orig(input, init);
+  }) as typeof window.fetch;
+
+  return () => { window.fetch = orig; };
+}
+
+describe('DesignVisitFollowupModal — discard guard', () => {
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('shows the discard dialog when the resend step has unsaved content', async () => {
+    restoreFetch = mockFetchWithTemplate();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <DesignVisitFollowupModal handler={HANDLER} ctx={CTX} open onClose={onClose} />,
+    );
+    await waitForHub();
+
+    await user.click(screen.getByTestId('dvf-resend'));
+
+    // Wait for email template to load (body textarea becomes non-empty)
+    await waitFor(() => {
+      expect((screen.getByRole('textbox', { name: 'Body' }) as HTMLTextAreaElement).value).not.toBe('');
+    });
+
+    // Edit the body so emailBody diverges from emailFetchedBody
+    const bodyField = screen.getByRole('textbox', { name: 'Body' });
+    await user.clear(bodyField);
+    await user.type(bodyField, 'Custom edited body');
+
+    // X button is now enabled on resend step — clicking it should open the discard dialog
+    const dialog = screen.getByRole('dialog', { name: 'Resend design visit invite' });
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('hub step X closes immediately without showing the discard dialog', async () => {
+    restoreFetch = mockFetchWithTemplate();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <DesignVisitFollowupModal handler={HANDLER} ctx={CTX} open onClose={onClose} />,
+    );
+    await waitForHub();
+
+    // On the hub step hasUnsavedChanges=false, so the X should call onClose directly.
+    // getAllByRole returns [X button, footer Close] — X is first (header before footer).
+    const dialog = screen.getByRole('dialog', { name: 'Follow up with Jane Smith' });
+    const closeBtns = within(dialog).getAllByRole('button', { name: 'Close' });
+    await user.click(closeBtns[0]);
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).toBeNull();
+  });
+
+  it('does not show the discard dialog when outcome_in_progress (isLocked suppresses prompt)', async () => {
+    restoreFetch = mockFetchWithTemplate({ outcomeHangs: true });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <DesignVisitFollowupModal handler={HANDLER} ctx={CTX} open onClose={onClose} />,
+    );
+    await waitForHub();
+
+    // Navigate to resend and wait for the template so Send is enabled
+    await user.click(screen.getByTestId('dvf-resend'));
+    await waitFor(() => {
+      expect((screen.getByRole('textbox', { name: 'Body' }) as HTMLTextAreaElement).value).not.toBe('');
+    });
+
+    // Send the invite — emails/send resolves, outcome POST hangs → outcome_in_progress
+    await user.click(screen.getByTestId('dvf-send-invite'));
+
+    // Component should now be at outcome_in_progress (spinner visible, hub dialog gone)
+    await waitFor(() => {
+      expect(screen.queryByTestId('dvf-send-invite')).toBeNull();
+    });
+
+    // No discard dialog should have appeared during the transition
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
