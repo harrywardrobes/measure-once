@@ -54,7 +54,7 @@ interface DraftPayload extends FormData {
   genericFields?:       GenericFields;
 }
 
-interface UploadedPhoto {
+export interface UploadedPhoto {
   key:          string;
   previewUrl:   string;
   name:         string;
@@ -143,8 +143,9 @@ function clearDraft(token: string) {
  * Build the initial UploadedPhoto array from a restored draft.
  * For any photo whose stored signed URL still has > 5 minutes of life left,
  * the URL is used directly so the sign endpoint can be skipped on restore.
+ * @visibleForTesting
  */
-function buildRestoredPhotos(
+export function buildRestoredPhotos(
   keys: string[],
   names?: string[],
   urls?: string[],
@@ -168,7 +169,8 @@ function buildRestoredPhotos(
   });
 }
 
-async function resignSavedPhotosAfterRestore(
+/** @visibleForTesting */
+export async function resignSavedPhotosAfterRestore(
   token: string,
   initialPhotos: UploadedPhoto[],
   setPhotosFn: (updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => void,
