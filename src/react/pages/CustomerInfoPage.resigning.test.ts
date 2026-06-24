@@ -105,6 +105,14 @@ describe('buildRestoredPhotos', () => {
     expect(pdf.isPdf).toBe(true);
     expect(img.isPdf).toBe(false);
   });
+
+  it('backward-compat: uses URL exp param when savedPhotoExpiries is absent', () => {
+    const freshExp = NOW_SEC + BUFFER_SEC + 60;
+    const url = `${PREVIEW_BASE}?exp=${freshExp}&sig=legacy`;
+    // No expiries array — simulates a draft written before savedPhotoExpiries was introduced
+    const [photo] = buildRestoredPhotos(['photos/a.jpg'], ['a.jpg'], [url]);
+    expect(photo.previewUrl).toBe(url);
+  });
 });
 
 // ── resignSavedPhotosAfterRestore ─────────────────────────────────────────────

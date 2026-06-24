@@ -156,7 +156,7 @@ export function buildRestoredPhotos(
     const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
     const fallback = isPdf ? 'document.pdf' : 'photo';
     const storedUrl = urls?.[i] ?? '';
-    const storedExp = expiries?.[i] ?? 0;
+    const storedExp = expiries?.[i] ?? getSignedUrlExpiry(storedUrl) ?? 0;
     const isFresh =
       storedUrl.startsWith('/api/customer-info-preview/') &&
       storedExp > nowSec + 300;
