@@ -900,11 +900,13 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  // Collect all renderable thumbnails: signed URLs and data: URIs only.
-  // Opaque `obj:` storage keys without a viewUrl are skipped — they have no
-  // displayable src until the background resign produces a fresh signed URL.
+  // Collect all renderable thumbnails across all rooms (flat list for the
+  // lightbox) and precompute each room's starting offset into that list so
+  // per-room strip buttons can open the lightbox at the correct index.
   const thumbnails: LightboxPhoto[] = [];
+  const roomThumbOffsets: number[] = [];
   for (const r of rooms) {
+    roomThumbOffsets.push(thumbnails.length);
     for (const img of r.images || []) {
       const src = img.viewUrl || (img.storageKey?.startsWith('data:') ? img.storageKey : '');
       if (src) thumbnails.push({ src, alt: r.room_name ? `${r.room_name} photo` : 'Room photo' });
@@ -915,6 +917,7 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
     setLightboxIndex(index);
     setLightboxOpen(true);
   }, []);
+
 
   return (
     <>
@@ -944,14 +947,68 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
             {rooms.map((r: DesignVisitRoom, i: number) => {
               const total = (Number(r.unit_price_pence) || 0) * (Number(r.unit_count) || 0);
               const dims  = [r.width_mm, r.height_mm, r.depth_mm].filter(Boolean).join(' × ');
+              // Renderable thumbnails for this room: signed URLs and data: URIs only.
+              // Opaque `obj:` keys without a viewUrl are skipped until the
+              // background resign produces a fresh signed URL.
+              const roomThumbs = (r.images || []).reduce<Array<{ src: string; alt: string }>>((acc, img) => {
+                const src = img.viewUrl || (img.storageKey?.startsWith('data:') ? img.storageKey : '');
+                if (src) acc.push({ src, alt: r.room_name ? `${r.room_name} photo` : 'Room photo' });
+                return acc;
+              }, []);
+              const startIdx = roomThumbOffsets[i] ?? 0;
               return (
-                <tr key={i}>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.room_name || ''}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.door_style_name || '—'}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{dims ? `${dims} mm` : '—'}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>{r.unit_count}</td>
-                  <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>£{fmtGbp(total)}</td>
-                </tr>
+                <React.Fragment key={i}>
+                  <tr>
+                    <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.room_name || ''}</td>
+                    <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{r.door_style_name || '—'}</td>
+                    <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)' }}>{dims ? `${dims} mm` : '—'}</td>
+                    <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>{r.unit_count}</td>
+                    <td style={{ padding: '4px 8px', borderTop: '1px solid var(--border-soft)', textAlign: 'right' }}>£{fmtGbp(total)}</td>
+                  </tr>
+                  {roomThumbs.length > 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        style={{ padding: '4px 8px 8px', borderTop: 'none' }}
+                      >
+                        <div
+                          data-testid="dv-room-photo-strip"
+                          style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}
+                        >
+                          {roomThumbs.map((t, j) => (
+                            <button
+                              key={j}
+                              type="button"
+                              aria-label={`View ${t.alt} full screen`}
+                              onClick={() => openLightbox(startIdx + j)}
+                              style={{
+                                padding: 0,
+                                border: '1px solid var(--stone)',
+                                borderRadius: 6,
+                                cursor: 'zoom-in',
+                                background: 'none',
+                                flexShrink: 0,
+                                lineHeight: 0,
+                              }}
+                            >
+                              <img
+                                src={t.src}
+                                alt={t.alt}
+                                style={{
+                                  width: 56,
+                                  height: 56,
+                                  objectFit: 'cover',
+                                  borderRadius: 5,
+                                  display: 'block',
+                                }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -964,42 +1021,6 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
         </table>
       ) : (
         <p style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>No rooms recorded.</p>
-      )}
-      {thumbnails.length > 0 && (
-        <div
-          data-testid="dv-photo-strip"
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}
-        >
-          {thumbnails.map((t, i) => (
-            <button
-              key={i}
-              type="button"
-              aria-label={`View ${t.alt} full screen`}
-              onClick={() => openLightbox(i)}
-              style={{
-                padding: 0,
-                border: '1px solid var(--stone)',
-                borderRadius: 6,
-                cursor: 'zoom-in',
-                background: 'none',
-                flexShrink: 0,
-                lineHeight: 0,
-              }}
-            >
-              <img
-                src={t.src}
-                alt={t.alt}
-                style={{
-                  width: 56,
-                  height: 56,
-                  objectFit: 'cover',
-                  borderRadius: 5,
-                  display: 'block',
-                }}
-              />
-            </button>
-          ))}
-        </div>
       )}
       {visit.notes         && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Notes:</strong> {visit.notes}</div>}
       {visit.visit_notes   && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Visit notes:</strong> {visit.visit_notes}</div>}
