@@ -1,6 +1,12 @@
 'use strict';
 // test/customer-info-parallel-downloads/run.js
 //
+
+const PROBE_LABELS = [
+  '(PAR-1) 10 photos × 50 ms/download — admin email arrives within parallel budget',
+];
+
+//
 // Perf regression guard for the parallel photo-download path in
 // sendAdminNotificationEmail (customer-info.js).
 //
@@ -32,7 +38,7 @@
 //   PRIVTEST_ALLOW_SHARED_DB=1       npm run test:customer-info-parallel-downloads
 
 if (process.env.CI) {
-  console.log('  [SKIP] customer-info-parallel-downloads: CI=true — timing test skipped on CI runners.');
+  console.log('  [skip] customer-info-parallel-downloads: CI=true — timing test skipped on CI runners.');
   process.exit(0);
 }
 
