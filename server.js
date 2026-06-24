@@ -3238,7 +3238,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
       if (newAssignedUserId && newAssignedUserId !== (previousAssignedUserId || null) &&
           creatorId && newAssignedUserId !== creatorId) {
         getPageFilterConfig().then(cfg => {
-          if (cfg.task_assignment_emails_enabled === 'false') return;
+          if (cfg.task_reassignment_emails_enabled === 'false') return;
           return _sendTaskAssignmentNotification({
             assignedUserId: newAssignedUserId,
             creatorName,
@@ -5230,6 +5230,7 @@ const PAGE_FILTER_CONFIG_DEFAULTS = {
   surveys_hidden_substages_default:  { value: '[]',            label: 'Surveys board — hidden substages (JSON)',     type: 'json'                      },
   customers_priority_sort_mode:      { value: 'last_contacted', label: 'Customers list — "Priority first" sort mode', type: 'string', allowedValues: ['last_contacted', 'newest'] },
   task_assignment_emails_enabled:    { value: 'true',          label: 'Task assignment — send email notifications',  type: 'string', allowedValues: ['true', 'false'] },
+  task_reassignment_emails_enabled:  { value: 'true',          label: 'Task reassignment — send email notifications', type: 'string', allowedValues: ['true', 'false'] },
 };
 
 async function ensurePageFilterConfigTable() {

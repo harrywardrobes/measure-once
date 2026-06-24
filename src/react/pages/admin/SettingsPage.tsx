@@ -275,6 +275,25 @@ export function SettingsPage() {
                   assigned to someone other than the creator. Requires SMTP to be configured.
                 </Typography>
               </Box>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={pageFilterDraft['task_reassignment_emails_enabled'] !== 'false'}
+                      onChange={e => {
+                        const val = e.target.checked ? 'true' : 'false';
+                        setPageFilterDraft(d => ({ ...d, task_reassignment_emails_enabled: val }));
+                      }}
+                    />
+                  }
+                  label="Send email when a task is reassigned to a different team member"
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 6 }}>
+                  When enabled, an email is sent to the new assignee whenever a task is moved from
+                  one person to another. Disable this to reduce noise during planning sessions.
+                  Requires SMTP to be configured.
+                </Typography>
+              </Box>
               <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                   variant="contained"
