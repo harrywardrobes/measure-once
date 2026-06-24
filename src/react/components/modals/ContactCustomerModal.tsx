@@ -674,6 +674,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     <FullScreenModal
       open
       onClose={handleRequestClose}
+      // emailPreviewLoading covers both the initial template fetch and any
+      // subsequent preview refetch (e.g. after the user edits subject/body
+      // and toggles to Preview mode). Both paths set the same flag, so a
+      // single expression keeps the close button disabled whenever a
+      // preview fetch is in-flight.
       disableClose={phase === 'advancing' || (emailFlow !== 'idle' && emailPreviewLoading)}
       title={titleStr}
       headerActions={

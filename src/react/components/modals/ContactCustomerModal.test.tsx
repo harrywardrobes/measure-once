@@ -47,9 +47,11 @@ function makeFetch(opts: {
   submitHangs?: boolean;
   sendEmailHangs?: boolean;
   emailPreviewHangs?: boolean;
+  emailPreviewHangsAfterFirst?: boolean;
 } = {}) {
-  const { submitStatus = 200, submitHangs = false, sendEmailHangs = false, emailPreviewHangs = false } = opts;
+  const { submitStatus = 200, submitHangs = false, sendEmailHangs = false, emailPreviewHangs = false, emailPreviewHangsAfterFirst = false } = opts;
   const orig = window.fetch;
+  let emailPreviewCallCount = 0;
   window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
       typeof input === 'string'
@@ -69,6 +71,10 @@ function makeFetch(opts: {
     // Email template fetch (initial) and preview refetch
     if (url.includes('/email-preview') && method === 'POST') {
       if (emailPreviewHangs) return new Promise(() => {});
+      if (emailPreviewHangsAfterFirst) {
+        emailPreviewCallCount += 1;
+        if (emailPreviewCallCount > 1) return new Promise(() => {});
+      }
       return new Response(JSON.stringify(EMAIL_TEMPLATE), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -312,6 +318,42 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     });
 
     // onClose must not have been called and no discard dialog should appear
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+
+  it('disables the close button during a preview refetch (not just initial load)', async () => {
+    // Initial email-preview fetch resolves; the refetch triggered by toggling
+    // to Preview mode after an edit hangs. emailPreviewLoading stays true
+    // during that refetch window, so disableClose must hold.
+    restoreFetch = makeFetch({ emailPreviewHangsAfterFirst: true });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderModal(onClose);
+    await waitForContactStep();
+
+    // Open email flow — initial template fetch resolves normally
+    await user.click(screen.getByTestId('contact-method-email-btn'));
+
+    const subjectInput = await screen.findByRole('textbox', { name: /subject/i });
+    await waitFor(() => {
+      expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
+    });
+
+    // Edit the subject so the component considers the preview stale
+    await user.clear(subjectInput);
+    await user.type(subjectInput, 'Edited for refetch test');
+
+    // Toggle to Preview mode — triggers the refetch which now hangs forever
+    await user.click(screen.getByTestId('email-html-preview-toggle'));
+
+    // Close button must be disabled while the refetch is in-flight
+    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
+    const closeBtn = within(mainDialog).getByRole('button', { name: /close/i });
+    await waitFor(() => {
+      expect(closeBtn).toBeDisabled();
+    });
+
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
   });
