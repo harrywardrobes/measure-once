@@ -1,0 +1,114 @@
+# Task: Add a "Call Later" task flow and standardise the whole app's task system onto shared Google Calendar events
+
+Work on branch `claude/eager-euler-9eqtcn`. Commit and push when complete. Do not open a PR unless asked.
+
+## Background (verified in the codebase)
+
+- The "Contact Customer" modal is `src/react/components/modals/ContactCustomerModal.tsx`.
+  Its footer (when `phase === 'contact'`) currently renders `Send Upload Link`,
+  `No Response`, and `Done` buttons.
+- Calendar events are created server-side via `POST /api/events` in `server.js`
+  (`calendar.events.insert`), writing to the shared Google Calendar identified by
+  the `GOOGLE_SHARED_CALENDAR_ID` env var (see `getSharedCalendarId()` ~line 2569).
+  Events are tagged with `moContactId` / `moVisitType` so `GET /api/events?contactId`
+  can filter them. Related endpoints: `GET/POST /api/events`, `PATCH /api/events/:id`,
+  `DELETE /api/events/:id`.
+- The frontend's standard date/time input is the MUI `DateTimePicker`
+  (`@mui/x-date-pickers/DateTimePicker` with the dayjs adapter), as used in
+  `src/react/components/modals/ScheduleVisitModal.tsx`. Use THIS for `task_deadline`.
+- The app currently has a SEPARATE, HubSpot-backed task system that must be migrated:
+  - UI: `src/react/pages/customer-detail/TasksSection.tsx` (uses plain
+    `<input type="date">` — replace with the standard DateTimePicker).
+  - Endpoints in `server.js`: `GET/POST /api/contacts/:id/tasks`, `PATCH/DELETE /api/tasks/:id`
+    (uses `hs_task_subject`, `hs_timestamp`, `hs_task_status`, `hs_task_body`).
+  - Type `HubSpotTask` in `src/react/pages/customer-detail/types.ts`.
+  - Urgency logic `getTaskUrgency` (in TasksSection) and `broadcastUrgencyChanged`
+    (`src/react/utils/broadcastUrgencyChanged.ts`); tasks also surface in
+    `src/react/pages/ProjectsPage.tsx` and `src/react/pages/CustomerDetailPage.tsx`.
+
+## Decisions already made (do not re-litigate)
+
+1. **Backend:** A task IS a Google Calendar event on the shared calendar — reuse the
+   existing `/api/events` plumbing. Do NOT use the Google Tasks API.
+2. **Scope:** Standardise the ENTIRE app task system onto this calendar-event model,
+   replacing the HubSpot-backed task storage. There should be one standardised task
+   shape used everywhere.
+3. **Assigned user:** Defaults to the current logged-in user, editable via a dropdown
+   of staff accounts.
+4. **Call Later side-effect:** None. It only creates the task and closes — it must NOT
+   log a contact attempt or change lead status.
+
+## Standardised task model
+
+Define ONE canonical task shape used across server and client. Back it with a shared
+Google Calendar event carrying these `extendedProperties.private` tags:
+- `moTask: "1"`            — marks the event as a task (so it can be distinguished from visits)
+- `moContactId`            — the customer the task belongs to (`task_customer`)
+- `moAssignedUserId`       — the assigned staff user id (`task_assigned_user`)
+- `moTaskStatus`           — `open` | `completed` (calendar events have no native done-state)
+
+Field mapping:
+- `task_name`          → event `summary`
+- `task_description`   → event `description`
+- `task_customer`      → `moContactId` (passed in from where the task is created; store
+                          the contact name too if convenient for display)
+- `task_assigned_user` → `moAssignedUserId`; also add that user as an event attendee
+                          so it shows on their view of the shared calendar
+- `task_deadline`      → event `start.dateTime` (set `end.dateTime` to start + a small
+                          default, e.g. 30 min). Selected via MUI `DateTimePicker`.
+
+## Server work (`server.js`)
+
+1. Add task endpoints backed by the shared calendar (mirror the auth/privilege/rate-limit
+   and `getSharedCalendarId()` patterns already used by `/api/events`):
+   - `GET /api/tasks?contactId=…` and/or `?assignedUserId=…` — list task-tagged events.
+   - `POST /api/tasks` — create a task event with the tags above.
+   - `PATCH /api/tasks/:id` — update name/description/deadline/assignee and toggle
+     `moTaskStatus` (complete/reopen).
+   - `DELETE /api/tasks/:id`.
+   Reuse the calendar error handling (`calendarErrorMessage` / Google auth-error path)
+   already present for events.
+2. Add a staff-list endpoint for the assignee dropdown if one doesn't already exist
+   (there is no general non-admin `/api/users`). Add `GET /api/users` returning
+   `{ id, name, email }` for active staff (privilege `member`+). Name = first+last or email.
+3. Remove/replace the HubSpot task endpoints (`/api/contacts/:id/tasks`, `/api/tasks/:id`)
+   and any task-urgency reads that depend on HubSpot tasks, repointing them at the new
+   calendar-event model. Keep the public behaviour (urgency colours, per-contact listing)
+   intact.
+
+## Client work
+
+1. **Standard task modal** — create a reusable `TaskModal` (e.g.
+   `src/react/components/modals/TaskModal.tsx`) following `ScheduleVisitModal`'s structure
+   (`FullScreenModal`, MUI fields, `DateTimePicker`, error handling, draft-free is fine).
+   Inputs:
+   - `task_name` — `TextField`, required.
+   - `task_description` — multiline `TextField`.
+   - `task_customer` — read-only display, taken from the creating context.
+   - `task_assigned_user` — `Select` populated from `GET /api/users`, defaulting to the
+     current user from `useAuth()`.
+   - `task_deadline` — MUI `DateTimePicker` (same component/config as ScheduleVisitModal).
+   On submit → `POST /api/tasks` → success toast ("Task added to the shared calendar") → close.
+
+2. **Call Later button** — in `ContactCustomerModal.tsx`, add a `Call Later` button to the
+   `phase === 'contact'` footer (alongside Send Upload Link / No Response / Done). Clicking
+   it opens the `TaskModal` with `task_customer` pre-filled from the modal's contact context
+   (`contactId` / `contactName`). It must NOT log an attempt or change status. Add a
+   `data-testid` (e.g. `cc-call-later`) consistent with the existing `cc-*` test ids.
+
+3. **Migrate `TasksSection.tsx`** to the new endpoints and the standardised task shape:
+   - Replace `HubSpotTask` usage with the canonical task type.
+   - Swap the plain `<input type="date">` inputs (add + inline edit) for the standard
+     MUI `DateTimePicker`.
+   - Keep add / complete-toggle / delete / edit working against `/api/tasks`.
+   - Keep urgency colouring and `broadcastUrgencyChanged` behaviour working off the new model.
+   - Update `ProjectsPage.tsx` and `CustomerDetailPage.tsx` task reads accordingly.
+
+## Constraints & finishing
+
+- Match the existing code style, MUI usage, `data-testid` conventions, and error/toast
+  patterns (`useToast`, `calendarErrorMessage`, `openConnectModal` for Google auth errors).
+- Update or add tests following the patterns under `test/` (e.g. `test/arrange-visit/`,
+  `test/card-action-handlers/`) and any relevant component stories.
+- Run the project's typecheck/lint/test scripts and make sure they pass.
+- Commit with a clear message and push to `claude/eager-euler-9eqtcn`.
