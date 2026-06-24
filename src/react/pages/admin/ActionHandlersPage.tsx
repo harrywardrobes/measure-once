@@ -48,7 +48,8 @@ import type {
   VisitType,
 } from './HandlerConfigBlocks';
 import { usePageTitle } from '../../hooks/usePageTitle';
-import { CAH_ORPHANED_DISMISSED_KEY, CAH_CONFLICT_DISMISSED_KEY, ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { CAH_ORPHANED_DISMISSED_PREFIX, CAH_ORPHANED_DISMISSED_LEGACY_KEY, CAH_CONFLICT_DISMISSED_PREFIX, CAH_CONFLICT_DISMISSED_LEGACY_KEY, ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY, ADMIN_DEEP_LINK_KEY } from '../../constants/localStorageKeys';
+import { useAuth } from '../../contexts/AuthContext';
 import { DEFAULT_WORKFLOW, WorkflowStage } from '../../lib/workflowConfig';
 import { useWorkflow } from '../../hooks/useWorkflow';
 
@@ -217,8 +218,11 @@ function navigateToTab(tabId: string, itemKey?: string | number) {
     ((window as unknown as Record<string, unknown>).adminSwitchToTab as (id: string) => void)(tabId);
   } else {
     try {
-      localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
-      localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, tabId);
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const groupKey = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+      const tabKey   = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
+      localStorage.setItem(groupKey, 'configuration');
+      localStorage.setItem(tabKey, tabId);
     } catch { /* ignore */ }
     location.href = '/admin';
   }
@@ -1056,9 +1060,14 @@ export function ActionHandlersPage() {
   const [statuses,              setStatuses]              = useState<LeadStatus[]>([]);
   const [conflicts,             setConflicts]             = useState<ConflictData>({ total: 0, conflicts: [] });
   const [orphanedCount,         setOrphanedCount]         = useState(0);
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const [orphanedDismissed,     setOrphanedDismissed]     = useState<number | null>(() => {
     try {
-      const v = localStorage.getItem(CAH_ORPHANED_DISMISSED_KEY);
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${CAH_ORPHANED_DISMISSED_PREFIX}${uid}` : CAH_ORPHANED_DISMISSED_LEGACY_KEY;
+      const v = localStorage.getItem(k);
       if (v === null) return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : null;
@@ -1067,7 +1076,11 @@ export function ActionHandlersPage() {
     }
   });
   const [dismissed,             setDismissed]             = useState<string>(() => {
-    try { return localStorage.getItem(CAH_CONFLICT_DISMISSED_KEY) ?? ''; } catch { return ''; }
+    try {
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${CAH_CONFLICT_DISMISSED_PREFIX}${uid}` : CAH_CONFLICT_DISMISSED_LEGACY_KEY;
+      return localStorage.getItem(k) ?? '';
+    } catch { return ''; }
   });
   const [loading,               setLoading]               = useState(true);
   const [editorOpen,            setEditorOpen]            = useState<EditorOpenState | null>(null);
@@ -1084,6 +1097,12 @@ export function ActionHandlersPage() {
   };
 
   useEffect(() => { _toastRef.fn = toast; return () => { _toastRef.fn = null; }; }, [toast]);
+
+  // ── Migration shims — clear old unscoped keys once per browser session ──
+  useEffect(() => {
+    try { localStorage.removeItem(CAH_ORPHANED_DISMISSED_LEGACY_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(CAH_CONFLICT_DISMISSED_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -1229,7 +1248,7 @@ export function ActionHandlersPage() {
               data-testid="orphaned-bindings-banner"
               severity="warning"
               onClose={() => {
-                try { localStorage.setItem(CAH_ORPHANED_DISMISSED_KEY, String(orphanedCount)); } catch { /* restricted context */ }
+                try { if (userId) localStorage.setItem(`${CAH_ORPHANED_DISMISSED_PREFIX}${userId}`, String(orphanedCount)); } catch { /* restricted context */ } // ls-key-ok: user-scoped key built from imported prefix constant
                 setOrphanedDismissed(orphanedCount);
               }}
               sx={{ mb: 2 }}
@@ -1274,7 +1293,7 @@ export function ActionHandlersPage() {
                     className="adm-cab-dismiss"
                     id="cah-conflict-banner-dismiss"
                     onClick={() => {
-                      try { localStorage.setItem(CAH_CONFLICT_DISMISSED_KEY, conflictKey); } catch { /* restricted context */ }
+                      try { if (userId) localStorage.setItem(`${CAH_CONFLICT_DISMISSED_PREFIX}${userId}`, conflictKey); } catch { /* restricted context */ } // ls-key-ok: user-scoped key built from imported prefix constant
                       setDismissed(conflictKey);
                     }}>
                     ✕
@@ -1353,8 +1372,11 @@ export function ActionHandlersPage() {
                                             (win.adminSwitchToTab as (id: string) => void)('cardactions');
                                           } else {
                                             try {
-                                              localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, 'configuration');
-                                              localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, 'cardactions');
+                                              const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+                                              const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+                                              const tk = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
+                                              localStorage.setItem(gk, 'configuration');
+                                              localStorage.setItem(tk, 'cardactions');
                                             } catch { /* restricted context */ }
                                             location.href = '/admin';
                                           }

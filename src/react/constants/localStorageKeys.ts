@@ -6,18 +6,40 @@
  * Naming convention:
  *   - Static keys:  ALL_CAPS constant whose value is the literal key string.
  *   - Dynamic keys: ALL_CAPS _PREFIX constant; caller appends a dynamic segment
- *     (e.g. contact ID) to build the full key.
+ *     (e.g. contact ID or user ID) to build the full key.
+ *
+ * Per-user scoping:
+ *   Keys that represent per-user preferences (filters, UI state, drafts) use a
+ *   `_PREFIX` constant and are scoped to the logged-in user ID so they do not
+ *   bleed between accounts on shared devices.  Pattern:
+ *     `${SOME_PREFIX}${userId}`
+ *   Each has a corresponding `_LEGACY_KEY` for the one-off migration shim that
+ *   clears the old unscoped entry on mount.
  */
 
 // ── Admin UI state ─────────────────────────────────────────────────────────────
-export const ADMIN_ACTIVE_GROUP_KEY = 'adminActiveGroup';
-export const ADMIN_ACTIVE_TAB_KEY   = 'adminActiveTab';
 
-/** Active sub-tab within the admin Visits tab (Catalogues/Questionnaire/etc.). */
-export const ADMIN_VISITS_SUBTAB_KEY = 'adminVisitsSubtab';
+/** Prefix for the per-user active admin group: `${ADMIN_ACTIVE_GROUP_PREFIX}${userId}` */
+export const ADMIN_ACTIVE_GROUP_PREFIX = 'mo:admin:active-group:';
+/** @deprecated Unscoped key superseded by ADMIN_ACTIVE_GROUP_PREFIX; kept for migration shim only. */
+export const ADMIN_ACTIVE_GROUP_LEGACY_KEY = 'adminActiveGroup'; // ls-key-ok: migration shim — clearing the old unscoped key
+
+/** Prefix for the per-user active admin tab: `${ADMIN_ACTIVE_TAB_PREFIX}${userId}` */
+export const ADMIN_ACTIVE_TAB_PREFIX = 'mo:admin:active-tab:';
+/** @deprecated Unscoped key superseded by ADMIN_ACTIVE_TAB_PREFIX; kept for migration shim only. */
+export const ADMIN_ACTIVE_TAB_LEGACY_KEY = 'adminActiveTab'; // ls-key-ok: migration shim — clearing the old unscoped key
+
+/** Prefix for the per-user active admin Visits subtab: `${ADMIN_VISITS_SUBTAB_PREFIX}${userId}` */
+export const ADMIN_VISITS_SUBTAB_PREFIX = 'mo:admin:visits-subtab:';
+/** @deprecated Unscoped key superseded by ADMIN_VISITS_SUBTAB_PREFIX; kept for migration shim only. */
+export const ADMIN_VISITS_SUBTAB_LEGACY_KEY = 'adminVisitsSubtab'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Recent customers cache ─────────────────────────────────────────────────────
-export const CP_RECENT_CUSTOMERS_KEY = 'cp_recent_customers';
+
+/** Prefix for the per-user recent-customers list: `${CP_RECENT_CUSTOMERS_PREFIX}${userId}` */
+export const CP_RECENT_CUSTOMERS_PREFIX = 'mo:cp:recent:';
+/** @deprecated Unscoped key superseded by CP_RECENT_CUSTOMERS_PREFIX; kept for migration shim only. */
+export const CP_RECENT_CUSTOMERS_LEGACY_KEY = 'cp_recent_customers'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Customer detail ───────────────────────────────────────────────────────────
 /** Prefix for per-contact room-tab index: `${CUSTOMER_ROOM_IDX_PREFIX}${contactId}` */
@@ -43,12 +65,28 @@ export const CUSTOMERS_SORT_KEY = 'customers_sort';
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 
 // ── Projects page ─────────────────────────────────────────────────────────────
-export const PROJECTS_STALENESS_KEY = 'projectsStalenessActive';
-export const PROJECTS_SUBSTAGE_KEY  = 'projectsHiddenSubstages';
+
+/** Prefix for the per-user staleness filter: `${PROJECTS_STALENESS_PREFIX}${userId}` */
+export const PROJECTS_STALENESS_PREFIX = 'mo:projects:staleness:';
+/** @deprecated Unscoped key superseded by PROJECTS_STALENESS_PREFIX; kept for migration shim only. */
+export const PROJECTS_STALENESS_LEGACY_KEY = 'projectsStalenessActive'; // ls-key-ok: migration shim — clearing the old unscoped key
+
+/** Prefix for the per-user hidden-substages map: `${PROJECTS_SUBSTAGE_PREFIX}${userId}` */
+export const PROJECTS_SUBSTAGE_PREFIX = 'mo:projects:substage:';
+/** @deprecated Unscoped key superseded by PROJECTS_SUBSTAGE_PREFIX; kept for migration shim only. */
+export const PROJECTS_SUBSTAGE_LEGACY_KEY = 'projectsHiddenSubstages'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
-export const INVOICE_PAGE_KEY  = 'mo_invoice_page';
-export const INVOICE_DRAFT_KEY = 'mo_invoice_draft';
+
+/** Prefix for the per-user invoice list page number: `${INVOICE_PAGE_PREFIX}${userId}` */
+export const INVOICE_PAGE_PREFIX  = 'mo:invoices:page:';
+/** @deprecated Unscoped key superseded by INVOICE_PAGE_PREFIX; kept for migration shim only. */
+export const INVOICE_PAGE_LEGACY_KEY = 'mo_invoice_page'; // ls-key-ok: migration shim — clearing the old unscoped key
+
+/** Prefix for the per-user invoice draft map: `${INVOICE_DRAFT_PREFIX}${userId}` */
+export const INVOICE_DRAFT_PREFIX = 'mo:invoices:draft:';
+/** @deprecated Unscoped key superseded by INVOICE_DRAFT_PREFIX; kept for migration shim only. */
+export const INVOICE_DRAFT_LEGACY_KEY = 'mo_invoice_draft'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
 export const ONBOARDING_DRAFT_KEY = 'mo:onboarding:draft';
@@ -61,15 +99,29 @@ export const CONTACTS_LAST_SYNC_META_KEY = 'customersLastSyncAt';
 export const PRIORITY_ACTIVE_DAYS_META_KEY = 'priorityActiveDays';
 
 // ── Trades page ───────────────────────────────────────────────────────────────
-export const TRADES_TYPE_FILTER_KEY = 'tradesTypeFilter';
+
+/** Prefix for the per-user trades type filter: `${TRADES_TYPE_FILTER_PREFIX}${userId}` */
+export const TRADES_TYPE_FILTER_PREFIX = 'mo:trades:type-filter:';
+/** @deprecated Unscoped key superseded by TRADES_TYPE_FILTER_PREFIX; kept for migration shim only. */
+export const TRADES_TYPE_FILTER_LEGACY_KEY = 'tradesTypeFilter'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Questionnaire builder ─────────────────────────────────────────────────────
-/** Active visit-type filter in the Questionnaire subtab (all | design | survey). */
-export const QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY = 'questionnaireVisitTypeFilter';
+/** Prefix for the per-user visit-type filter in the Questionnaire subtab: `${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${userId}` */
+export const QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX = 'mo:admin:questionnaire-visit-type:';
+/** @deprecated Unscoped key superseded by QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX; kept for migration shim only. */
+export const QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY = 'questionnaireVisitTypeFilter'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Action handlers page ──────────────────────────────────────────────────────
-export const CAH_ORPHANED_DISMISSED_KEY = 'cah_orphaned_dismissed_count';
-export const CAH_CONFLICT_DISMISSED_KEY = 'cah_conflict_dismissed_key';
+
+/** Prefix for the per-user orphaned-handlers dismissed count: `${CAH_ORPHANED_DISMISSED_PREFIX}${userId}` */
+export const CAH_ORPHANED_DISMISSED_PREFIX = 'mo:cah:orphaned-dismissed:';
+/** @deprecated Unscoped key superseded by CAH_ORPHANED_DISMISSED_PREFIX; kept for migration shim only. */
+export const CAH_ORPHANED_DISMISSED_LEGACY_KEY = 'cah_orphaned_dismissed_count'; // ls-key-ok: migration shim — clearing the old unscoped key
+
+/** Prefix for the per-user conflict-dismissed key: `${CAH_CONFLICT_DISMISSED_PREFIX}${userId}` */
+export const CAH_CONFLICT_DISMISSED_PREFIX = 'mo:cah:conflict-dismissed:';
+/** @deprecated Unscoped key superseded by CAH_CONFLICT_DISMISSED_PREFIX; kept for migration shim only. */
+export const CAH_CONFLICT_DISMISSED_LEGACY_KEY = 'cah_conflict_dismissed_key'; // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Admin deep-link ────────────────────────────────────────────────────────────
 /** Written by WorkflowPage before tab-switching; consumed + cleared by the target tab on mount. */

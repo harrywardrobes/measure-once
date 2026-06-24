@@ -1,6 +1,7 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
 import { TASK_CHANGED_COOLDOWN_MS } from '../constants/timings';
+import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -1703,10 +1704,13 @@ export function CustomersPage(): React.ReactElement {
   // first visit. Existing cache entries (for recently-viewed contacts not
   // currently on this page) are preserved in their MRU order; visible
   // contacts are merged in without displacing them.
+  const { user: _authUser } = useAuth();
+  const _authUserId = _authUser?.id;
+
   React.useEffect(() => {
     if (!contacts.length) return;
     try {
-      const KEY = CP_RECENT_CUSTOMERS_KEY;
+      const KEY = _authUserId ? `${CP_RECENT_CUSTOMERS_PREFIX}${_authUserId}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
       type CacheEntry = { id: string; name: string; company: string; ts: number };
       const existing: CacheEntry[] = JSON.parse(localStorage.getItem(KEY) || '[]');
       const byId = new Map<string, CacheEntry>(existing.map((e) => [e.id, e]));
@@ -1725,7 +1729,7 @@ export function CustomersPage(): React.ReactElement {
     } catch {
       /* ignore localStorage errors */
     }
-  }, [contacts]);
+  }, [contacts, _authUserId]);
 
   // Resolve rooms for display on a contact card. Stage and archived filtering
   // are now both server-side: when a stage is active and showArchived is false,

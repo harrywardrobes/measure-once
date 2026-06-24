@@ -1,5 +1,6 @@
 import React from 'react';
-import { TRADES_TYPE_FILTER_KEY } from '../constants/localStorageKeys';
+import { TRADES_TYPE_FILTER_PREFIX, TRADES_TYPE_FILTER_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Accordion,
   AccordionDetails,
@@ -1290,9 +1291,29 @@ export function TradesPage() {
   const [loadError, setLoadError] = React.useState('');
   const [directory, setDirectory] = React.useState<PhoneDirectory>({ team: [], trades: [], customers: [] });
 
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const [typeFilter, setTypeFilter] = React.useState<string>(() => {
-    try { return localStorage.getItem(TRADES_TYPE_FILTER_KEY) || ''; } catch { return ''; }
+    try {
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${TRADES_TYPE_FILTER_PREFIX}${uid}` : TRADES_TYPE_FILTER_LEGACY_KEY;
+      return localStorage.getItem(k) || '';
+    } catch { return ''; }
   });
+
+  React.useEffect(() => {
+    try { localStorage.removeItem(TRADES_TYPE_FILTER_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
+
+  React.useEffect(() => {
+    if (!userId) return;
+    try {
+      const stored = localStorage.getItem(`${TRADES_TYPE_FILTER_PREFIX}${userId}`); // ls-key-ok: user-scoped key built from imported prefix constant
+      setTypeFilter(stored || '');
+    } catch { /* ignore */ }
+  }, [userId]);
+
   const [search, setSearch] = React.useState<string>(() => {
     return new URLSearchParams(location.search).get('q') || '';
   });
@@ -1398,7 +1419,9 @@ export function TradesPage() {
 
   const handleTypeFilter = (type: string) => {
     setTypeFilter(type);
-    try { localStorage.setItem(TRADES_TYPE_FILTER_KEY, type); } catch { /* ignore */ }
+    try {
+      if (userId) localStorage.setItem(`${TRADES_TYPE_FILTER_PREFIX}${userId}`, type); // ls-key-ok: user-scoped key built from imported prefix constant
+    } catch { /* ignore */ }
   };
 
   const handleEdit = (trade: Trade) => {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PROJECTS_STALENESS_KEY, PROJECTS_SUBSTAGE_KEY } from '../constants/localStorageKeys';
+import { PROJECTS_STALENESS_PREFIX, PROJECTS_STALENESS_LEGACY_KEY, PROJECTS_SUBSTAGE_PREFIX, PROJECTS_SUBSTAGE_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeUrgencyChanged } from '../utils/broadcastUrgencyChanged';
 import {
@@ -73,23 +74,26 @@ const PROJECTS_STALENESS_DAYS = 30;
 
 const STALENESS_STAGES = new Set(['sales', 'designvisit']);
 
-function loadStalenessActive(): boolean {
+function loadStalenessActive(userId?: string | number): boolean {
   try {
-    return localStorage.getItem(PROJECTS_STALENESS_KEY) === 'true';
+    const k = userId ? `${PROJECTS_STALENESS_PREFIX}${userId}` : PROJECTS_STALENESS_LEGACY_KEY;
+    return localStorage.getItem(k) === 'true';
   } catch {
     return false;
   }
 }
 
-function saveStalenessActive(active: boolean): void {
+function saveStalenessActive(active: boolean, userId?: string | number): void {
   try {
-    localStorage.setItem(PROJECTS_STALENESS_KEY, String(active));
+    const k = userId ? `${PROJECTS_STALENESS_PREFIX}${userId}` : PROJECTS_STALENESS_LEGACY_KEY;
+    localStorage.setItem(k, String(active));
   } catch { /* ignore */ }
 }
 
-function loadHiddenSubstagesForStage(stageKey: string): Set<string> {
+function loadHiddenSubstagesForStage(stageKey: string, userId?: string | number): Set<string> {
   try {
-    const raw = localStorage.getItem(PROJECTS_SUBSTAGE_KEY);
+    const k = userId ? `${PROJECTS_SUBSTAGE_PREFIX}${userId}` : PROJECTS_SUBSTAGE_LEGACY_KEY;
+    const raw = localStorage.getItem(k);
     const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
     return new Set<string>(parsed[stageKey] || []);
   } catch {
@@ -97,12 +101,13 @@ function loadHiddenSubstagesForStage(stageKey: string): Set<string> {
   }
 }
 
-function saveHiddenSubstagesForStage(stageKey: string, hidden: Set<string>): void {
+function saveHiddenSubstagesForStage(stageKey: string, hidden: Set<string>, userId?: string | number): void {
   try {
-    const raw = localStorage.getItem(PROJECTS_SUBSTAGE_KEY);
+    const k = userId ? `${PROJECTS_SUBSTAGE_PREFIX}${userId}` : PROJECTS_SUBSTAGE_LEGACY_KEY;
+    const raw = localStorage.getItem(k);
     const parsed: Record<string, string[]> = raw ? JSON.parse(raw) : {};
     parsed[stageKey] = [...hidden];
-    localStorage.setItem(PROJECTS_SUBSTAGE_KEY, JSON.stringify(parsed));
+    localStorage.setItem(k, JSON.stringify(parsed));
   } catch { /* ignore */ }
 }
 
@@ -1041,8 +1046,24 @@ export function ProjectsPage() {
   const [groupBy, setGroupBy] = useState(false);
   const [staleDismissed, setStaleDismissed] = useState(false);
 
+  const { user: _projectsUser } = useAuth();
+  const _projectsUserId = _projectsUser?.id;
+
+  useEffect(() => {
+    try {
+      localStorage.removeItem(PROJECTS_STALENESS_LEGACY_KEY);
+      localStorage.removeItem(PROJECTS_SUBSTAGE_LEGACY_KEY);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    setStalenessActive(loadStalenessActive(_projectsUserId));
+  }, [_projectsUserId]);
+
   // ── Staleness filter ──────────────────────────────────────────────────────
-  const [stalenessActive, setStalenessActive] = useState<boolean>(loadStalenessActive);
+  const [stalenessActive, setStalenessActive] = useState<boolean>(() =>
+    loadStalenessActive((window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id),
+  );
 
   // ── Substage filter ───────────────────────────────────────────────────────
   const [hiddenSubstages, setHiddenSubstages] = useState<Set<string>>(new Set());
@@ -1271,15 +1292,15 @@ export function ProjectsPage() {
   }, [prefsLoading, prefs]);
 
 
-  // ── Load hidden substages from localStorage when stage filter changes ──────
+  // ── Load hidden substages from localStorage when stage filter or user changes ─
   useEffect(() => {
     if (filter && filter !== '__mine__') {
-      setHiddenSubstages(loadHiddenSubstagesForStage(filter));
+      setHiddenSubstages(loadHiddenSubstagesForStage(filter, _projectsUserId));
     } else {
       setHiddenSubstages(new Set());
     }
     setSubstageFilterAnchor(null);
-  }, [filter]);
+  }, [filter, _projectsUserId]);
 
   const myRooms = filter === '__mine__';
   const stageKeyFilter = myRooms ? '' : filter;
@@ -1333,8 +1354,8 @@ export function ProjectsPage() {
   const handleStalenessToggle = useCallback(() => {
     const next = !stalenessActive;
     setStalenessActive(next);
-    saveStalenessActive(next);
-  }, [stalenessActive]);
+    saveStalenessActive(next, _projectsUserId);
+  }, [stalenessActive, _projectsUserId]);
 
   const toggleSubstage = useCallback((id: string) => {
     setHiddenSubstages((prev) => {
@@ -1342,11 +1363,11 @@ export function ProjectsPage() {
       if (next.has(id)) next.delete(id);
       else next.add(id);
       if (filter && filter !== '__mine__') {
-        saveHiddenSubstagesForStage(filter, next);
+        saveHiddenSubstagesForStage(filter, next, _projectsUserId);
       }
       return next;
     });
-  }, [filter]);
+  }, [filter, _projectsUserId]);
 
   // ── Fitter picker ──────────────────────────────────────────────────────────
   const handleOpenPicker = useCallback((contactId: string, roomIdx: number) => {

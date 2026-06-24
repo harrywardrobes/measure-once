@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ADMIN_ACTIVE_GROUP_KEY, ADMIN_ACTIVE_TAB_KEY, CP_RECENT_CUSTOMERS_KEY } from '../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_PREFIX, ADMIN_ACTIVE_TAB_LEGACY_KEY, CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
 import { useQBInvoices } from '../hooks/useQBInvoices';
@@ -195,6 +196,11 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [settings, setSettings] = useState<SearchSettings | null>(null);
+
+  // ── Migration shim — clear the old unscoped recent-customers key once per browser session ──
+  useEffect(() => {
+    try { localStorage.removeItem(CP_RECENT_CUSTOMERS_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
   // null = not yet fetched; true = dev environment; false = production
   const [isDevelopment, setIsDevelopment] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -246,7 +252,11 @@ export function CommandPalette() {
       if (typeof window.adminSwitchGroup === 'function') {
         window.adminSwitchGroup(groupId);
       } else {
-        try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId); } catch (_) {}
+        try {
+          const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+          const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+          localStorage.setItem(gk, groupId);
+        } catch (_) {}
         location.href = '/admin';
       }
     };
@@ -257,8 +267,11 @@ export function CommandPalette() {
         window.adminSwitchToTab(tabId);
       } else {
         try {
-          localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId);
-          localStorage.setItem(ADMIN_ACTIVE_TAB_KEY, tabId);
+          const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+          const gk = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+          const tk = uid ? `${ADMIN_ACTIVE_TAB_PREFIX}${uid}`   : ADMIN_ACTIVE_TAB_LEGACY_KEY;
+          localStorage.setItem(gk, groupId);
+          localStorage.setItem(tk, tabId);
         } catch (_) {}
         location.href = '/admin';
       }
@@ -404,10 +417,15 @@ export function CommandPalette() {
         (a.label.toLowerCase().includes(q) || a.hint.toLowerCase().includes(q)))
     : activeActions.filter(a => isAdminTabVisible(a.id));
 
+  const { user: _cpUser } = useAuth();
+  const _cpUserId = _cpUser?.id;
+
   let recentCustomers: Array<{ id: string; name: string; company?: string }> = [];
   if (!q) {
     try {
-      recentCustomers = JSON.parse(localStorage.getItem(CP_RECENT_CUSTOMERS_KEY) || '[]');
+      const uid = _cpUserId ?? (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const cpKey = uid ? `${CP_RECENT_CUSTOMERS_PREFIX}${uid}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
+      recentCustomers = JSON.parse(localStorage.getItem(cpKey) || '[]');
     } catch (_) {}
   }
 

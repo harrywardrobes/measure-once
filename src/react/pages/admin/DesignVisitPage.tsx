@@ -7,7 +7,8 @@ import { GET, POST } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { TabBar } from '../../components/TabBar';
 import { QuestionnaireBuilder } from './QuestionnaireBuilder';
-import { ADMIN_VISITS_SUBTAB_KEY } from '../../constants/localStorageKeys';
+import { ADMIN_VISITS_SUBTAB_PREFIX, ADMIN_VISITS_SUBTAB_LEGACY_KEY } from '../../constants/localStorageKeys';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   DvHandle, DvFurniture, DvDoorStyle, DvTerms, AnyItem,
   CatalogueTable, DvItemEditorDialog, useCatalogueData,
@@ -84,17 +85,35 @@ export function DesignVisitPage() {
   usePageTitle('Visits · Measure Once');
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const [subtab, setSubtab] = useState<VisitsSubtab>(() => {
     try {
-      const saved = localStorage.getItem(ADMIN_VISITS_SUBTAB_KEY) as VisitsSubtab | null;
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${ADMIN_VISITS_SUBTAB_PREFIX}${uid}` : ADMIN_VISITS_SUBTAB_LEGACY_KEY;
+      const saved = localStorage.getItem(k) as VisitsSubtab | null;
       if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) return saved;
     } catch { /* ignore */ }
     return 'catalogues';
   });
+
+  React.useEffect(() => {
+    try { localStorage.removeItem(ADMIN_VISITS_SUBTAB_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
+
+  React.useEffect(() => {
+    if (!userId) return;
+    try {
+      const saved = localStorage.getItem(`${ADMIN_VISITS_SUBTAB_PREFIX}${userId}`) as VisitsSubtab | null; // ls-key-ok: user-scoped key built from imported prefix constant
+      if (saved && VISITS_SUBTABS.some((t) => t.key === saved)) setSubtab(saved);
+    } catch { /* ignore */ }
+  }, [userId]);
+
   const handleSubtab = useCallback((key: string) => {
     setSubtab(key as VisitsSubtab);
-    try { localStorage.setItem(ADMIN_VISITS_SUBTAB_KEY, key); } catch { /* ignore */ }
-  }, []);
+    try { if (userId) localStorage.setItem(`${ADMIN_VISITS_SUBTAB_PREFIX}${userId}`, key); } catch { /* ignore */ } // ls-key-ok: user-scoped key built from imported prefix constant
+  }, [userId]);
 
   const {
     handles, furniture, doorStyles,

@@ -28,7 +28,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
-import { QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY } from '../../constants/localStorageKeys';
+import { QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX, QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY } from '../../constants/localStorageKeys';
+import { useAuth } from '../../contexts/AuthContext';
 import type {
   VisitQuestionScope,
   VisitQuestionType,
@@ -282,13 +283,32 @@ function QuestionRow({
 }
 
 export function QuestionnaireBuilder() {
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const [questions, setQuestions] = useState<AdminQuestion[]>([]);
   const [loadErr, setLoadErr] = useState('');
   const [edit, setEdit] = useState<EditState>({ open: false, question: null });
   const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>(() => {
-    const stored = localStorage.getItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY);
-    return (stored === 'design' || stored === 'survey') ? stored : 'all';
+    try {
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${uid}` : QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY;
+      const stored = localStorage.getItem(k);
+      return (stored === 'design' || stored === 'survey') ? stored : 'all';
+    } catch { return 'all'; }
   });
+
+  useEffect(() => {
+    try { localStorage.removeItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const stored = localStorage.getItem(`${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${userId}`); // ls-key-ok: user-scoped key built from imported prefix constant
+      setVisitTypeFilter((stored === 'design' || stored === 'survey') ? stored : 'all');
+    } catch { /* ignore */ }
+  }, [userId]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -401,7 +421,9 @@ export function QuestionnaireBuilder() {
             onChange={(_e, val) => {
               if (val !== null) {
                 setVisitTypeFilter(val as VisitTypeFilter);
-                localStorage.setItem(QUESTIONNAIRE_VISIT_TYPE_FILTER_KEY, val as VisitTypeFilter);
+                try {
+                  if (userId) localStorage.setItem(`${QUESTIONNAIRE_VISIT_TYPE_FILTER_PREFIX}${userId}`, val as VisitTypeFilter); // ls-key-ok: user-scoped key built from imported prefix constant
+                } catch { /* ignore */ }
               }
             }}
             size="small"

@@ -74,10 +74,19 @@
   }
 
   /* ── Tabs ── */
+  var _adminUserId = '';
+  try {
+    _adminUserId = String(window.__moHeaderUser?.id || '');
+  } catch (_) {}
+
+  function _adminTabKey() {
+    return _adminUserId ? 'mo:admin:active-tab:' + _adminUserId : 'adminActiveTab';
+  }
+
   function switchTab(id) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + id));
-    try { localStorage.setItem('adminActiveTab', id); } catch (_) {}
+    try { localStorage.setItem(_adminTabKey(), id); } catch (_) {}
     // Mount any React island in the newly-active panel on first use.
     // mountKnown() skips tab-panel elements that lack the `active` class,
     // so this call is a no-op for already-mounted or shell-only tabs.
@@ -258,7 +267,7 @@
 
     const validTabs = ['team', 'permissions', 'requests', 'auditlog', 'hubspot', 'quickbooks', 'settings', 'stages', 'cardactions', 'actionhandlers', 'designvisit', 'search', 'maps', 'emailtemplates', 'workflow', 'devenv', 'offline'];
     let savedTab;
-    try { savedTab = localStorage.getItem('adminActiveTab'); } catch (_) {}
+    try { savedTab = localStorage.getItem(_adminTabKey()); } catch (_) {}
     if (savedTab && validTabs.includes(savedTab)) switchTab(savedTab);
 
     // Show the Dev Environment tab (always visible; toggle inside controls filtering).

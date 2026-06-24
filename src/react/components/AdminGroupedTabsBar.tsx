@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ADMIN_ACTIVE_GROUP_KEY } from '../constants/localStorageKeys';
+import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_GROUP_LEGACY_KEY, ADMIN_ACTIVE_TAB_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import { TabBar } from './TabBar';
 import type { TabBarTab } from './TabBar';
 
@@ -191,11 +192,16 @@ export function AdminGroupedTabsBarInner({
 // ── Full component with DOM observation ───────────────────────────────────────
 
 export function AdminGroupedTabsBar() {
+  const { user } = useAuth();
+  const userId = user?.id;
+
   const [tabs, setTabs] = useState<LegacyTab[]>(() => readLegacyTabs());
   const [activeTabId, setActiveTabId] = useState<string | null>(() => readActiveTabId());
   const [activeGroupId, setActiveGroupId] = useState<GroupId | null>(() => {
     try {
-      const saved = localStorage.getItem(ADMIN_ACTIVE_GROUP_KEY) as GroupId | null;
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const k = uid ? `${ADMIN_ACTIVE_GROUP_PREFIX}${uid}` : ADMIN_ACTIVE_GROUP_LEGACY_KEY;
+      const saved = localStorage.getItem(k) as GroupId | null;
       if (saved && TAB_GROUPS.some((g) => g.id === saved)) return saved;
     } catch (_) {}
     return null;
@@ -225,10 +231,25 @@ export function AdminGroupedTabsBar() {
     return () => mo.disconnect();
   }, []);
 
+  // ── Migration shims — clear old unscoped keys once per browser session ──
+  useEffect(() => {
+    try { localStorage.removeItem(ADMIN_ACTIVE_GROUP_LEGACY_KEY); } catch { /* ignore */ }
+    try { localStorage.removeItem(ADMIN_ACTIVE_TAB_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
+
+  // Re-read the scoped key whenever the authenticated user identity changes
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const saved = localStorage.getItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`) as GroupId | null; // ls-key-ok: user-scoped key built from imported prefix constant
+      if (saved && TAB_GROUPS.some((g) => g.id === saved)) setActiveGroupId(saved);
+    } catch { /* ignore */ }
+  }, [userId]);
+
   const handleGroupSelect = useCallback(
     (groupId: GroupId) => {
       setActiveGroupId(groupId);
-      try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, groupId); } catch (_) {}
+      try { if (userId) localStorage.setItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`, groupId); } catch (_) {} // ls-key-ok: user-scoped key built from imported prefix constant
 
       // Auto-select the first visible sub-tab in the newly selected group.
       const firstTab = firstVisibleTabInGroup(groupId, tabs);
@@ -237,7 +258,7 @@ export function AdminGroupedTabsBar() {
         setActiveTabId(firstTab);
       }
     },
-    [tabs],
+    [tabs, userId],
   );
 
   const handleTabSelect = useCallback((tabId: string) => {
@@ -248,9 +269,9 @@ export function AdminGroupedTabsBar() {
     const gid = groupForTab(tabId);
     if (gid) {
       setActiveGroupId(gid);
-      try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, gid); } catch (_) {}
+      try { if (userId) localStorage.setItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`, gid); } catch (_) {} // ls-key-ok: user-scoped key built from imported prefix constant
     }
-  }, []);
+  }, [userId]);
 
   // Expose globals so external callers (Command Palette, etc.) can
   // programmatically switch to a group or a specific tab without touching
@@ -316,8 +337,8 @@ export function AdminGroupedTabsBar() {
     const gid = groupForTab(activeTabId);
     if (!gid) return;
     setActiveGroupId(gid);
-    try { localStorage.setItem(ADMIN_ACTIVE_GROUP_KEY, gid); } catch (_) {}
-  }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
+    try { if (userId) localStorage.setItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`, gid); } catch (_) {} // ls-key-ok: user-scoped key built from imported prefix constant
+  }, [activeTabId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AdminGroupedTabsBarInner

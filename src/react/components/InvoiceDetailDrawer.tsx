@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { INVOICE_DRAFT_KEY as DRAFT_KEY } from '../constants/localStorageKeys';
+import { INVOICE_DRAFT_PREFIX, INVOICE_DRAFT_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import { useBeforeUnloadGuard } from '../hooks/useBeforeUnloadGuard';
 import { useConnectionToast } from '../context/ConnectionToastContext';
 import { ApiError } from '../utils/api';
@@ -66,9 +67,13 @@ interface InvoiceDraft {
   memo: string;
 }
 
-export function loadDraft(invId: string): InvoiceDraft | null {
+function _draftKey(userId?: string | number): string {
+  return userId ? `${INVOICE_DRAFT_PREFIX}${userId}` : INVOICE_DRAFT_LEGACY_KEY;
+}
+
+export function loadDraft(invId: string, userId?: string | number): InvoiceDraft | null {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(_draftKey(userId));
     if (!raw) return null;
     const map = JSON.parse(raw) as Record<string, InvoiceDraft>;
     return map[invId] ?? null;
@@ -77,22 +82,24 @@ export function loadDraft(invId: string): InvoiceDraft | null {
   }
 }
 
-export function saveDraft(invId: string, draft: InvoiceDraft) {
+export function saveDraft(invId: string, draft: InvoiceDraft, userId?: string | number) {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const k = _draftKey(userId);
+    const raw = localStorage.getItem(k);
     const map: Record<string, InvoiceDraft> = raw ? JSON.parse(raw) : {};
     map[invId] = draft;
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(map));
+    localStorage.setItem(k, JSON.stringify(map));
   } catch { /* ignore */ }
 }
 
-export function clearDraft(invId: string) {
+export function clearDraft(invId: string, userId?: string | number) {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const k = _draftKey(userId);
+    const raw = localStorage.getItem(k);
     if (!raw) return;
     const map: Record<string, InvoiceDraft> = JSON.parse(raw);
     delete map[invId];
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(map));
+    localStorage.setItem(k, JSON.stringify(map));
   } catch { /* ignore */ }
 }
 
@@ -138,6 +145,8 @@ export function InvoiceDetailDrawer({
   open, invId, allIds, onClose, onNavigate, isAdmin, onSaved,
 }: InvoiceDetailDrawerProps) {
   const { notifyApiError } = useConnectionToast();
+  const { user: _drawerUser } = useAuth();
+  const _drawerUserId = _drawerUser?.id;
   const [inv, setInv]         = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -151,6 +160,11 @@ export function InvoiceDetailDrawer({
   const hasNext    = currentIdx < allIds.length - 1;
 
   useBeforeUnloadGuard(edit.dirty);
+
+  // ── Migration shim — clear the old unscoped draft key once per browser session ──
+  useEffect(() => {
+    try { localStorage.removeItem(INVOICE_DRAFT_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     if (!open || !invId) return;
@@ -166,7 +180,7 @@ export function InvoiceDetailDrawer({
         if (cancelled) return;
         if (data.error) throw new Error(data.error);
         setInv(data);
-        const draft = loadDraft(invId);
+        const draft = loadDraft(invId, _drawerUserId);
         setEdit({
           due:   draft !== null ? draft.due : (data.dueDate || nowDate()),
           email: draft?.email ?? data.email   ?? '',
@@ -179,12 +193,12 @@ export function InvoiceDetailDrawer({
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [open, invId]);
+  }, [open, invId, _drawerUserId]);
 
   useEffect(() => {
     if (!invId || !edit.dirty) return;
-    saveDraft(invId, { due: edit.due, email: edit.email, memo: edit.memo });
-  }, [invId, edit]);
+    saveDraft(invId, { due: edit.due, email: edit.email, memo: edit.memo }, _drawerUserId);
+  }, [invId, edit, _drawerUserId]);
 
   const handleClose = useCallback(() => {
     const doClose = () => {
@@ -246,7 +260,7 @@ export function InvoiceDetailDrawer({
         email:     edit.email || null,
       } : prev);
       setEdit(prev => ({ ...prev, dirty: false }));
-      clearDraft(inv.id);
+      clearDraft(inv.id, _drawerUserId);
       try {
         const bc = new BroadcastChannel('mo_invoices');
         bc.postMessage({ type: 'invoice-saved', id: inv.id });
@@ -301,10 +315,10 @@ export function InvoiceDetailDrawer({
 
   const handleDiscard = useCallback(() => {
     if (!inv) return;
-    clearDraft(inv.id);
+    clearDraft(inv.id, _drawerUserId);
     setEdit({ due: inv.dueDate ?? '', email: inv.email ?? '', memo: inv.memo ?? '', dirty: false });
     setSaveMsg({ text: 'Changes discarded', ok: true });
-  }, [inv]);
+  }, [inv, _drawerUserId]);
 
   const baseline = inv ? { due: inv.dueDate ?? '', email: inv.email ?? '', memo: inv.memo ?? '' } : null;
   const isDueChanged   = !!baseline && edit.due   !== baseline.due;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMER_ROOM_IDX_PREFIX } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY, CUSTOMER_ROOM_IDX_PREFIX } from '../constants/localStorageKeys';
 import { flushSync } from 'react-dom';
 import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
 import { useWorkflowData } from '../context/WorkflowDataContext';
@@ -88,7 +88,9 @@ export function CustomerDetailPage() {
   const [contact,      setContact]      = useState<Contact | null>(null);
   const [cachedName] = useState<string | null>(() => {
     try {
-      const list = JSON.parse(localStorage.getItem(CP_RECENT_CUSTOMERS_KEY) || '[]') as Array<{ id: string; name: string }>;
+      const uid = (window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id;
+      const key = uid ? `${CP_RECENT_CUSTOMERS_PREFIX}${uid}` : CP_RECENT_CUSTOMERS_LEGACY_KEY;
+      const list = JSON.parse(localStorage.getItem(key) || '[]') as Array<{ id: string; name: string }>;
       return list.find(r => r.id === contactId)?.name ?? null;
     } catch { return null; }
   });

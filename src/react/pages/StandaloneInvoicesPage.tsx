@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { INVOICE_PAGE_KEY as PAGE_KEY } from '../constants/localStorageKeys';
+import { INVOICE_PAGE_PREFIX, INVOICE_PAGE_LEGACY_KEY } from '../constants/localStorageKeys';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Alert,
   Box,
@@ -36,16 +37,20 @@ type _Icons = typeof RefreshIcon | typeof SearchIcon | typeof WarningAmberIcon;
 
 const PAGE_LIMIT = 25;
 
-function loadPage(): number {
+function _pageKey(userId?: string | number): string {
+  return userId ? `${INVOICE_PAGE_PREFIX}${userId}` : INVOICE_PAGE_LEGACY_KEY;
+}
+
+function loadPage(userId?: string | number): number {
   try {
-    const raw = localStorage.getItem(PAGE_KEY);
+    const raw = localStorage.getItem(_pageKey(userId));
     const n = raw ? parseInt(raw, 10) : 1;
     return Number.isFinite(n) && n >= 1 ? n : 1;
   } catch { return 1; }
 }
 
-function savePage(page: number) {
-  try { localStorage.setItem(PAGE_KEY, String(page)); } catch { /* ignore */ }
+function savePage(page: number, userId?: string | number) {
+  try { localStorage.setItem(_pageKey(userId), String(page)); } catch { /* ignore */ }
 }
 
 // ── Status chip ───────────────────────────────────────────────────────────────
@@ -91,6 +96,8 @@ export function StandaloneInvoicesPage() {
   usePageTitle('Invoices · Measure Once');
   useConnectionCheck();
   const { isAdmin } = usePrivilege();
+  const { user: _invUser } = useAuth();
+  const _invUserId = _invUser?.id;
 
   const qb = useQBInvoices();
   const { connected, company, invoices, loading, loadError, error, errorCode, refresh: loadInvoices, triggerLoad } = qb;
@@ -114,7 +121,7 @@ export function StandaloneInvoicesPage() {
 
   const [filter, setFilter] = useState<'all' | 'overdue' | 'outstanding'>('all');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState<number>(() => loadPage());
+  const [page, setPage] = useState<number>(() => loadPage((window as unknown as { __moHeaderUser?: { id?: string } }).__moHeaderUser?.id));
 
   const [panelOpen, setPanelOpen]   = useState(false);
   const [panelInvId, setPanelInvId] = useState<string | null>(null);
@@ -169,10 +176,20 @@ export function StandaloneInvoicesPage() {
     return list;
   }, [sorted, filter, q]);
 
+  useEffect(() => {
+    try { localStorage.removeItem(INVOICE_PAGE_LEGACY_KEY); } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (!_invUserId) return;
+    const stored = loadPage(_invUserId);
+    setPage(stored);
+  }, [_invUserId]);
+
   // Reset to page 1 when filter/search changes
   useEffect(() => {
     setPage(1);
-    savePage(1);
+    savePage(1, _invUserId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, q]);
 
@@ -183,9 +200,9 @@ export function StandaloneInvoicesPage() {
 
   const handlePageChange = useCallback((p: number) => {
     setPage(p);
-    savePage(p);
+    savePage(p, _invUserId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  }, [_invUserId]);
 
   const totalBalance = visible.reduce((s, inv) => s + (inv.balance ?? 0), 0);
   const overdueCount = sorted.filter(inv => invoiceStatus(inv) === 'overdue').length;
