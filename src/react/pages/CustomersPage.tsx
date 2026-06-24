@@ -1643,37 +1643,17 @@ export function CustomersPage(): React.ReactElement {
           />
 
           <Stack direction="row" spacing={0.5} sx={{ whiteSpace: 'nowrap', flexShrink: 0, alignItems: 'center' }}>
-            {(() => {
-              const counts = store.counts || {};
-              const hiddenCount = !showExcluded
-                ? store.statuses.filter((s) => s.excluded_from_sales && (counts[s.key] || 0) > 0).length
-                : 0;
-              const label = hiddenCount > 0
-                ? `${hiddenCount} status${hiddenCount === 1 ? '' : 'es'} hidden`
-                : undefined;
-              return (
-                <Tooltip title={label} arrow disableHoverListener={!label}>
-                  <Badge
-                    badgeContent={hiddenCount || null}
-                    color="warning"
-                    overlap="rectangular"
-                    sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', minWidth: 16, height: 16, padding: '0 4px' } }}
-                  >
-                    <Typography variant="body2">Show all</Typography>
-                  </Badge>
-                </Tooltip>
-              );
-            })()}
+            <Typography variant="body2">Show all</Typography>
             <Toggle
               checked={showExcluded}
               title="Show lead statuses excluded from sales"
               onChange={(next) => {
                 setShowExcluded(next);
+                setPage(1);
                 if (!next) {
                   const excluded = store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key);
                   if (leadStatus && excluded.includes(leadStatus)) {
                     setLeadStatus('');
-                                    setPage(1);
                   }
                 }
               }}
