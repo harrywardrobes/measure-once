@@ -628,6 +628,21 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
     deepLinkedRef.current = targetId;
     setExpanded(prev => (prev.has(targetId) ? prev : new Set(prev).add(targetId)));
     loadDetail(targetId);
+    // If the detail is already cached with stale photo URLs, re-sign immediately
+    // so thumbnails fill in right away rather than waiting for the 10-minute timer.
+    const existing = detailsRef.current[targetId];
+    if (existing && !existing.loading && existing.data && !existing.error) {
+      if (detailNeedsResign(existing.data)) {
+        void fetchFreshUrlsForDetail(targetId, existing.data).then(fresh => {
+          if (!fresh) return;
+          setDetails(d => {
+            const cur = d[targetId];
+            if (!cur?.data) return d;
+            return { ...d, [targetId]: { ...cur, data: applyFreshUrlsToDetail(cur.data, fresh) } };
+          });
+        });
+      }
+    }
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-dv-id="${targetId}"]`);
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
