@@ -24,11 +24,23 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 let _promise: Promise<CurrentUser | null> | null = null;
 
+async function attemptFetchUser(): Promise<CurrentUser | null> {
+  const r = await fetch('/api/auth/user', { headers: { Accept: 'application/json' } });
+  if (r.ok) return r.json() as Promise<CurrentUser>;
+  if (r.status === 401) return null; // genuinely unauthenticated — do not retry
+  // Any other status (5xx, etc.) — throw so the caller can retry
+  throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
+}
+
 function fetchUser(): Promise<CurrentUser | null> {
   if (!_promise) {
-    _promise = fetch('/api/auth/user', { headers: { Accept: 'application/json' } })
-      .then(r => (r.ok ? (r.json() as Promise<CurrentUser>) : null))
-      .catch(() => null);
+    _promise = attemptFetchUser().catch(async () => {
+      // Transient server/network error — wait briefly and retry once before
+      // treating the session as expired. This prevents a momentary 5xx from
+      // the /api/auth/user endpoint kicking a genuinely logged-in user to /login.
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      return attemptFetchUser().catch(() => null);
+    });
   }
   return _promise;
 }

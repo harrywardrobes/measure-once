@@ -94,7 +94,6 @@ function parseContactRooms(contact: Contact): Room[] {
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { Accept: 'application/json' } });
   if (r.status === 401) {
-    location.href = '/login';
     throw new Error('Unauthorized');
   }
   const data = await r.json().catch(() => ({}));

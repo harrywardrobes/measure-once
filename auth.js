@@ -2430,15 +2430,24 @@ const isAuthenticated = async (req, res, next) => {
       try {
         const approved = await isEmailApproved(email);
         if (!approved) {
+          logger.warn({ email, path: req.path, method: req.method }, '[isAuthenticated] 401: email not in allowed_emails — session invalidated');
           req.logout(() => {});
           return res.status(401).json({ message: 'Unauthorized' });
         }
-      } catch {
+      } catch (err) {
+        logger.error({ err: err.message, path: req.path, method: req.method }, '[isAuthenticated] 500: DB error during isEmailApproved');
         return res.status(500).json({ message: 'Authorization check failed' });
       }
     }
     return next();
   }
+  logger.warn({
+    path: req.path,
+    method: req.method,
+    hasSession: !!(req.session && req.session.id),
+    passportAuth: !!(req.isAuthenticated && req.isAuthenticated()),
+    hasUser: !!(req.user),
+  }, '[isAuthenticated] 401: no valid session');
   return res.status(401).json({ message: 'Unauthorized' });
 };
 
