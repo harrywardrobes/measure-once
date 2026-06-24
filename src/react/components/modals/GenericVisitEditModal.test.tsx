@@ -532,6 +532,36 @@ describe('GenericVisitEditModal — gcal appointment delete action', () => {
   });
 });
 
+describe('GenericVisitEditModal — gcal delete button disabled while save is in flight', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('disables the delete button while a save is in flight (submitting=true)', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderEditModal(onClose);
+
+    // Confirm the delete button starts out enabled
+    expect(screen.getByTestId('gcal-visit-delete-btn')).not.toBeDisabled();
+
+    // Make the form dirty before triggering the in-flight save
+    const notesInput = screen.getByRole('textbox', { name: /notes/i });
+    await user.type(notesInput, ' — extra note');
+
+    // Click "Save changes" — sendOrQueue is mocked to hang → submitting=true
+    await user.click(screen.getByTestId('generic-visit-save'));
+
+    // Wait for submitting state (primary button becomes disabled)
+    await waitFor(() => {
+      expect(screen.getByTestId('generic-visit-save')).toBeDisabled();
+    });
+
+    // Delete button must also be disabled while the save is in flight
+    expect(screen.getByTestId('gcal-visit-delete-btn')).toBeDisabled();
+  });
+});
+
 describe('GenericVisitEditModal — edit mode, discard guard: isLocked suppresses prompt', () => {
   afterEach(() => {
     vi.restoreAllMocks();
