@@ -3229,19 +3229,23 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
       newAssignedUserId !== (previousAssignedUserId || null) &&
       creatorId && newAssignedUserId !== creatorId
     ) {
-      const creatorName = req.user?.first_name
-        ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
-        : (req.user?.email || 'A team member');
-      const ep = event.data?.extendedProperties?.private || {};
-      const deadlineRaw = event.data?.start?.dateTime || event.data?.start?.date;
-      const deadlineDate = deadlineRaw ? new Date(deadlineRaw) : new Date();
-      _sendTaskAssignmentNotification({
-        assignedUserId: newAssignedUserId,
-        creatorName,
-        taskName: event.data?.summary || '',
-        taskDescription: event.data?.description || '',
-        contactName: ep.moContactName || '',
-        deadline: deadlineDate,
+      getPageFilterConfig().then(cfg => {
+        if (cfg.task_assignment_emails_enabled === 'false') return;
+        const creatorName = req.user?.first_name
+          ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
+          : (req.user?.email || 'A team member');
+        const ep = event.data?.extendedProperties?.private || {};
+        const deadlineRaw = event.data?.start?.dateTime || event.data?.start?.date;
+        const deadlineDate = deadlineRaw ? new Date(deadlineRaw) : new Date();
+        return _sendTaskAssignmentNotification({
+          assignedUserId: newAssignedUserId,
+          creatorName,
+          taskName: event.data?.summary || '',
+          taskDescription: event.data?.description || '',
+          contactName: ep.moContactName || '',
+          deadline: deadlineDate,
+          isReassignment: true,
+        });
       }).catch(err => logger.warn({ err }, 'Task reassignment notification failed (non-fatal)'));
     }
   } catch (e) {
@@ -7497,7 +7501,7 @@ function _createMailTransport() {
 function _buildFromHeader() { return _depInv_buildFromHeader(); }
 function _buildReplyTo()    { return _depInv_buildReplyTo(); }
 
-async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, taskName, taskDescription, contactName, deadline }) {
+async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, taskName, taskDescription, contactName, deadline, isReassignment = false }) {
   const transport = _createMailTransport();
   if (!transport) return;
 
@@ -7513,14 +7517,18 @@ async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, ta
     hour: '2-digit', minute: '2-digit',
   });
 
-  const subject = contactName
-    ? `New task assigned to you – ${contactName}`
-    : 'New task assigned to you';
+  const subject = isReassignment
+    ? (contactName ? `Task reassigned to you – ${contactName}` : 'Task reassigned to you')
+    : (contactName ? `New task assigned to you – ${contactName}` : 'New task assigned to you');
+
+  const actionLine = isReassignment
+    ? `${creatorName} has reassigned a task to you.`
+    : `${creatorName} has assigned you a new task.`;
 
   const lines = [
     `Hi ${assignee.first_name || 'there'},`,
     '',
-    `${creatorName} has assigned you a new task.`,
+    actionLine,
     '',
     `Task: ${taskName}`,
     ...(taskDescription ? [`Description: ${taskDescription}`] : []),
