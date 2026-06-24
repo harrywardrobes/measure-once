@@ -422,6 +422,116 @@ describe('GenericVisitEditModal — legacy-appointment delete action', () => {
   });
 });
 
+describe('GenericVisitEditModal — gcal appointment delete action', () => {
+  let originalFetch: typeof window.fetch;
+
+  beforeEach(() => {
+    originalFetch = window.fetch;
+  });
+
+  afterEach(() => {
+    window.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('shows a "Delete appointment" button in the footer for edit mode with a googleEventId', () => {
+    renderEditModal(vi.fn());
+
+    expect(screen.getByTestId('gcal-visit-delete-btn')).toBeTruthy();
+  });
+
+  it('does NOT show the gcal delete button when there is no googleEventId', () => {
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    expect(screen.queryByTestId('gcal-visit-delete-btn')).toBeNull();
+  });
+
+  it('clicking "Delete appointment" reveals confirm and cancel buttons and hides the delete button', async () => {
+    const user = userEvent.setup();
+    renderEditModal(vi.fn());
+
+    await user.click(screen.getByTestId('gcal-visit-delete-btn'));
+
+    expect(screen.getByTestId('gcal-visit-delete-confirm-btn')).toBeTruthy();
+    expect(screen.getByTestId('gcal-visit-delete-cancel-btn')).toBeTruthy();
+    expect(screen.queryByTestId('gcal-visit-delete-btn')).toBeNull();
+  });
+
+  it('"Cancel" on the confirmation hides the confirm buttons and restores the delete button', async () => {
+    const user = userEvent.setup();
+    renderEditModal(vi.fn());
+
+    await user.click(screen.getByTestId('gcal-visit-delete-btn'));
+    await user.click(screen.getByTestId('gcal-visit-delete-cancel-btn'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('gcal-visit-delete-confirm-btn')).toBeNull();
+    });
+    expect(screen.getByTestId('gcal-visit-delete-btn')).toBeTruthy();
+  });
+
+  it('confirming delete calls DELETE /api/events/:googleEventId, shows a toast, and closes the modal', async () => {
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    const showToast = vi.fn();
+    const { useToast } = await import('../../contexts/ToastContext');
+    vi.mocked(useToast).mockReturnValue(showToast);
+
+    window.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof _input === 'string' ? _input : String(_input);
+      if (url.includes('/api/events/') && init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    }) as typeof window.fetch;
+
+    const user = userEvent.setup();
+    render(
+      <GenericVisitEditModal
+        mode="edit"
+        visit={{ ...VISIT_FIXTURE }}
+        open
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    await user.click(screen.getByTestId('gcal-visit-delete-btn'));
+    await user.click(screen.getByTestId('gcal-visit-delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/deleted/i), false);
+
+    const calls = vi.mocked(window.fetch).mock.calls;
+    const deleteCall = calls.find(
+      ([input, init]) =>
+        String(input).includes(`/api/events/${VISIT_FIXTURE.googleEventId}`) &&
+        (init as RequestInit | undefined)?.method === 'DELETE',
+    );
+    expect(deleteCall).toBeTruthy();
+  });
+
+  it('shows an error message and restores the delete button if the delete request fails', async () => {
+    window.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'Server error' }), { status: 500 }),
+    ) as typeof window.fetch;
+
+    const user = userEvent.setup();
+    renderEditModal(vi.fn());
+
+    await user.click(screen.getByTestId('gcal-visit-delete-btn'));
+    await user.click(screen.getByTestId('gcal-visit-delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not delete/i)).toBeTruthy();
+    });
+    expect(screen.getByTestId('gcal-visit-delete-btn')).toBeTruthy();
+  });
+});
+
 describe('GenericVisitEditModal — edit mode, discard guard: isLocked suppresses prompt', () => {
   afterEach(() => {
     vi.restoreAllMocks();

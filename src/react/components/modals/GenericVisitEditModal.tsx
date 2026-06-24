@@ -220,7 +220,25 @@ export function GenericVisitEditModal(props: Props) {
     }
   }
 
+  async function handleDeleteGcal() {
+    if (!isEdit) return;
+    const visit = (props as EditProps).visit;
+    setDeleting(true);
+    try {
+      await DELETE(`/api/events/${visit.googleEventId}`);
+      showToast(`${label} deleted`, false);
+      handleClose();
+      props.onSaved?.();
+    } catch (e) {
+      setError('Could not delete: ' + (e instanceof Error ? e.message : 'error'));
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const isLegacyAppointment = isEdit && !isCreate && !(props as EditProps).visit.googleEventId;
+  const isGcalAppointment   = isEdit && !isCreate && !!(props as EditProps).visit.googleEventId;
 
   const dialogTitle = isCreate
     ? (contactName ? `Schedule ${label.toLowerCase()} for ${contactName}` : `Schedule ${label.toLowerCase()}`)
@@ -231,23 +249,57 @@ export function GenericVisitEditModal(props: Props) {
       <FullScreenModal
         open={props.open}
         onClose={handleRequestClose}
-        disableClose={submitting}
+        disableClose={submitting || deleting}
         title={dialogTitle}
         footer={
-          <>
-            <Button onClick={handleRequestClose} disabled={submitting}>Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              disabled={submitting || isLegacyAppointment}
-              startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
-              data-testid="generic-visit-save"
-            >
-              {submitting
-                ? (isCreate ? 'Scheduling…' : 'Saving…')
-                : (isCreate ? 'Schedule' : 'Save changes')}
-            </Button>
-          </>
+          isGcalAppointment && confirmDelete ? (
+            <>
+              <Button
+                color="error"
+                variant="contained"
+                onClick={() => void handleDeleteGcal()}
+                disabled={deleting}
+                startIcon={deleting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                sx={{ mr: 'auto' }}
+                data-testid="gcal-visit-delete-confirm-btn"
+              >
+                {deleting ? 'Deleting…' : 'Confirm delete'}
+              </Button>
+              <Button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                data-testid="gcal-visit-delete-cancel-btn"
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              {isGcalAppointment && (
+                <Button
+                  color="error"
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={submitting || deleting}
+                  sx={{ mr: 'auto' }}
+                  data-testid="gcal-visit-delete-btn"
+                >
+                  Delete appointment
+                </Button>
+              )}
+              <Button onClick={handleRequestClose} disabled={submitting || deleting}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={handleSubmit}
+                disabled={submitting || isLegacyAppointment || deleting}
+                startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : undefined}
+                data-testid="generic-visit-save"
+              >
+                {submitting
+                  ? (isCreate ? 'Scheduling…' : 'Saving…')
+                  : (isCreate ? 'Schedule' : 'Save changes')}
+              </Button>
+            </>
+          )
         }
       >
         <Stack spacing={2} sx={{ mt: 0.5 }}>
