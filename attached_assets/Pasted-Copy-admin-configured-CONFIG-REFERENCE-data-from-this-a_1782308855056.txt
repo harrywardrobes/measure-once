@@ -1,0 +1,76 @@
+Copy admin-configured CONFIG/REFERENCE data from this app's DEVELOPMENT
+Postgres database to the PRODUCTION database. Context: Replit's publish-time
+dev→prod diff only syncs SCHEMA, not data, and boot-time migration seeds are
+skipped in production (NODE_ENV=production). So config I built in the dev admin
+panel never reached prod and must be copied by hand. Do NOT copy customer or
+transactional data.
+
+GOAL
+Move only the tables listed under "COPY" below from dev → prod. Use an
+idempotent upsert approach: INSERT ... ON CONFLICT DO NOTHING (or DO UPDATE
+where a row already exists by primary key), so re-running is safe and existing
+prod rows aren't blindly clobbered.
+
+BEFORE YOU START
+1. Confirm you have connection details for BOTH databases (dev and prod). Show
+   me how you'll connect to each and which is which before running anything.
+2. Take a safety backup of the prod tables you're about to write (pg_dump
+   --data-only of just the COPY tables) and tell me where it is.
+3. Show me the row counts in dev for every COPY table, and the current row
+   counts in prod, so we can sanity-check before and after.
+
+COPY — load in THIS order so foreign keys resolve:
+  Group A (card-action cluster, order matters):
+    1. lead_status_config
+    2. lead_substatuses           (FK -> lead_status_config)
+    3. card_action_handlers
+    4. card_action_handler_bindings  (FK -> the three above; load LAST)
+    5. stage_action_labels
+  Group B (catalogue, then supplier joins):
+    6. catalog_handles, catalog_doors, catalog_finishes, catalog_ranges,
+       catalog_pairings
+    7. suppliers
+    8. catalog_handle_suppliers, catalog_door_suppliers
+  Group C (other admin config, any order):
+    email_templates, nav_role_configs, role_permissions, job_roles,
+    visit_questions, terms_conditions_versions, search_settings,
+    page_filter_config, workshop_settings, qb_settings
+
+SPECIAL CASES
+- app_settings: copy it, BUT after copying force dev_mode_enabled = 'false' in
+  prod (it must never be on in production).
+- For any table with a SERIAL/identity id that you copy preserving ids
+  (card_action_handlers.id, lead_substatuses.id, catalog_* ids, suppliers.id,
+  etc.), reset the prod sequence afterward, e.g.
+  SELECT setval(pg_get_serial_sequence('card_action_handlers','id'),
+                (SELECT COALESCE(MAX(id),1) FROM card_action_handlers));
+  Do this for every copied table that has a serial id, or the next prod insert
+  will collide.
+
+DO NOT COPY (environment-specific — leave prod's own values alone):
+  users, allowed_emails, bootstrap_admin_emails, admin_settings, sessions,
+  account_requests, password_set_tokens, qb_tokens, google_oauth_tokens.
+  (OAuth/QB tokens are encrypted with an env-specific key and won't decrypt in
+  prod — they must be re-authorised in prod, not copied.)
+
+DO NOT COPY (customer / transactional / logs — must stay untouched in prod):
+  design_visits and all design_visit_*; survey_visits and all survey_visit_*;
+  customer_info_submissions, customer_info_resend_log; photo_review_outcomes;
+  visit_answers; contact_attempt_tracking, contact_attempt_history,
+  contact_attempt_history_log, contact_attempt_log; whatsapp_messages;
+  open_deal_invoices, open_deal_declines; qb_send_log; google_maps_usage;
+  ideas, idea_comments, idea_votes; substatus_clear_failures; admin_audit_log,
+  trade_audit_log, db_editor_audit; and the trade_* contact tables
+  (trade_contacts, trade_companies, trade_company_contacts,
+  trade_company_submissions) — prod owns those.
+
+AFTER
+- Re-show prod row counts for every COPY table and diff against the before
+  counts.
+- Spot-check that card_action_handler_bindings rows still resolve to valid
+  handler_id / status_key / substatus_id in prod (no orphaned FKs).
+- Summarise exactly what changed and confirm nothing in the DO NOT COPY lists
+  was touched.
+
+Work one group at a time, show me the SQL before executing it against prod,
+and pause for my confirmation before the first prod write.
