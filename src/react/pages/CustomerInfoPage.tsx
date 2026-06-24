@@ -47,9 +47,11 @@ interface GenericFields {
 }
 
 interface DraftPayload extends FormData {
-  savedPhotoKeys?:  string[];
-  savedPhotoNames?: string[];
-  genericFields?:   GenericFields;
+  savedPhotoKeys?:      string[];
+  savedPhotoNames?:     string[];
+  savedPhotoUrls?:      string[];
+  savedPhotoExpiries?:  number[];
+  genericFields?:       GenericFields;
 }
 
 interface UploadedPhoto {
@@ -91,6 +93,20 @@ function lsKey(token: string): string {
   return CUSTOMER_INFO_DRAFT_PREFIX + token;
 }
 
+/**
+ * Extract the `exp` Unix timestamp (seconds) from a signed customer-info
+ * preview URL, e.g. `/api/customer-info-preview/...?exp=1234567890&sig=...`.
+ * Returns null when the URL is not a signed preview URL (e.g. blob: URLs).
+ */
+function getSignedUrlExpiry(url: string): number | null {
+  if (!url.startsWith('/api/customer-info-preview/')) return null;
+  try {
+    const qs = url.split('?')[1] ?? '';
+    const exp = parseInt(new URLSearchParams(qs).get('exp') ?? '', 10);
+    return Number.isFinite(exp) ? exp : null;
+  } catch { return null; }
+}
+
 function loadDraft(token: string): Partial<DraftPayload> {
   if (!token) return {};
   try {
@@ -105,8 +121,10 @@ function saveDraft(token: string, data: FormData, photos: UploadedPhoto[], gener
   try {
     const payload: DraftPayload = {
       ...data,
-      savedPhotoKeys:  photos.map(p => p.key),
-      savedPhotoNames: photos.map(p => p.name),
+      savedPhotoKeys:      photos.map(p => p.key),
+      savedPhotoNames:     photos.map(p => p.name),
+      savedPhotoUrls:      photos.map(p => p.previewUrl),
+      savedPhotoExpiries:  photos.map(p => getSignedUrlExpiry(p.previewUrl) ?? 0),
     };
     if (generic) payload.genericFields = generic;
     localStorage.setItem(lsKey(token), JSON.stringify(payload));
@@ -121,13 +139,29 @@ function clearDraft(token: string) {
   } catch { /* ignore */ }
 }
 
-function buildRestoredPhotos(keys: string[], names?: string[]): UploadedPhoto[] {
+/**
+ * Build the initial UploadedPhoto array from a restored draft.
+ * For any photo whose stored signed URL still has > 5 minutes of life left,
+ * the URL is used directly so the sign endpoint can be skipped on restore.
+ */
+function buildRestoredPhotos(
+  keys: string[],
+  names?: string[],
+  urls?: string[],
+  expiries?: number[],
+): UploadedPhoto[] {
+  const nowSec = Math.floor(Date.now() / 1000);
   return keys.map((k, i) => {
     const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
     const fallback = isPdf ? 'document.pdf' : 'photo';
+    const storedUrl = urls?.[i] ?? '';
+    const storedExp = expiries?.[i] ?? 0;
+    const isFresh =
+      storedUrl.startsWith('/api/customer-info-preview/') &&
+      storedExp > nowSec + 300;
     return {
       key:        k,
-      previewUrl: '',
+      previewUrl: isFresh ? storedUrl : '',
       name:       names?.[i] || fallback,
       isPdf,
     };
@@ -140,11 +174,14 @@ async function resignSavedPhotosAfterRestore(
   setPhotosFn: (updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => void,
 ): Promise<void> {
   if (!initialPhotos.length) return;
+  // Skip photos that already have a fresh signed URL from the draft.
+  const stalePhotos = initialPhotos.filter(p => !p.previewUrl);
+  if (!stalePhotos.length) return; // All photos are fresh — skip network round-trip
   try {
     const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/sign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: initialPhotos.map(p => p.key) }),
+      body: JSON.stringify({ keys: stalePhotos.map(p => p.key) }),
     });
     const d = await r.json();
     if (!r.ok) return;
@@ -153,6 +190,7 @@ async function resignSavedPhotosAfterRestore(
       byKey[result.key] = result.url;
     }
     setPhotosFn(prev => prev.map(p => {
+      if (p.previewUrl) return p; // Already has a fresh URL — leave it alone
       if (!(p.key in byKey)) return p;
       const url = byKey[p.key];
       if (!url) return { ...p, unavailable: true };
@@ -423,7 +461,7 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
             setPhotos(restored);
             void resignSavedPhotosAfterRestore(stored, restored, setPhotos);
           }
@@ -486,7 +524,7 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
             setPhotos(restored);
             void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
           }
@@ -504,7 +542,7 @@ export function CustomerInfoPage() {
           roomCount: draft.roomCount || '1',
         }));
         if (draft.savedPhotoKeys?.length) {
-          const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+          const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
           setPhotos(restored);
           void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
         }
