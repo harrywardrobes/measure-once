@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { TASK_CHANGED_COOLDOWN_MS } from '../constants/timings';
 import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -1616,11 +1617,12 @@ export function CustomersPage(): React.ReactElement {
 
   // When a task is added or completed (from the customer detail page or any
   // other tab), re-fetch the open-task-count for just that one contact so the
-  // badge updates without a full page reload.  A 300ms debounce matches the
-  // pattern used in CustomerDetailPage so that rapid-fire broadcasts (e.g.
-  // the scroll-triggered IntersectionObserver crossing the threshold multiple
+  // badge updates without a full page reload.  A debounce matches the pattern
+  // used in CustomerDetailPage so that rapid-fire broadcasts (e.g. the
+  // scroll-triggered IntersectionObserver crossing the threshold multiple
   // times, or several broadcasts arriving in quick succession) collapse into a
   // single network call per contact instead of hammering the API.
+  // See src/react/constants/timings.ts to tune the window.
   React.useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const unsubscribe = subscribeTaskChanged(({ contactId }) => {
@@ -1648,7 +1650,7 @@ export function CustomersPage(): React.ReactElement {
             .catch(() => {
               /* best-effort — stale count is acceptable on failure */
             });
-        }, 300),
+        }, TASK_CHANGED_COOLDOWN_MS),
       );
     });
     return () => {
