@@ -353,7 +353,7 @@ function queuedBodyToExistingVisit(
  * opens.  Non-signed strings (data: URIs, legacy /uploads/ paths) are left
  * alone — they are either self-contained or already non-expiring.
  */
-function isViewUrlStale(viewUrl: string | undefined): boolean {
+export function isViewUrlStale(viewUrl: string | undefined): boolean {
   if (!viewUrl) return true;
   const m = viewUrl.match(/[?&]exp=(\d+)/);
   if (!m) return false; // not a signed URL — nothing to refresh
@@ -379,7 +379,7 @@ function isViewUrlStale(viewUrl: string | undefined): boolean {
  * returned unchanged — the underlying image data still re-submits correctly,
  * only the preview thumbnail is temporarily missing.
  */
-async function resignResumedImages(visitId: number, visit: ExistingVisit): Promise<ExistingVisit> {
+export async function resignResumedImages(visitId: number, visit: ExistingVisit): Promise<ExistingVisit> {
   const rooms = visit.rooms || [];
   const needsResign = rooms.some(r =>
     (r.images || []).some(img => img.storageKey?.startsWith('obj:') && isViewUrlStale(img.viewUrl))
