@@ -439,12 +439,21 @@ export function CustomerDetailPage() {
   // ── Refresh tasks when a task changes in another tab/device ──────────────
 
   useEffect(() => {
-    return subscribeTaskChanged(({ contactId: changedId }) => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeTaskChanged(({ contactId: changedId }) => {
       if (changedId !== contactId) return;
-      apiFetch<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${contactId}`)
-        .then(data => { setTasks(data.results || []); })
-        .catch(() => { /* non-fatal — keep existing tasks */ });
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        apiFetch<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${contactId}`)
+          .then(data => { setTasks(data.results || []); })
+          .catch(() => { /* non-fatal — keep existing tasks */ });
+      }, 300);
     });
+    return () => {
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      unsubscribe();
+    };
   }, [contactId]);
 
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
