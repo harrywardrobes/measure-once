@@ -255,11 +255,12 @@ async function main() {
     // ── (S) Success path ─────────────────────────────────────────────────────
     console.log('\n  [S] success: create handle + upload PNG');
 
-    // Open the Add Handle modal.
+    // Open the Add Handle modal via the window function exposed by the React
+    // island.  The React admin page no longer uses onclick attributes on the
+    // rendered buttons; instead it exposes openDvHandleEditor on window.
     const sAddClicked = await page.evaluate(() => {
-      const btn = document.querySelector('button[onclick="openDvHandleEditor()"]');
-      if (!btn) return false;
-      btn.click();
+      if (typeof window.openDvHandleEditor !== 'function') return false;
+      window.openDvHandleEditor();
       return true;
     });
     record(
@@ -366,15 +367,16 @@ async function main() {
         false,
       );
     } else {
-      // Re-open the same handle in the editor.
+      // Re-open the same handle in the editor.  The React island exposes
+      // openDvHandleEditor(id) rather than a generic openDvItemEditor(type, id).
       const fEditClicked = await page.evaluate((id) => {
-        if (typeof window.openDvItemEditor !== 'function') return false;
-        window.openDvItemEditor('handle', id);
+        if (typeof window.openDvHandleEditor !== 'function') return false;
+        window.openDvHandleEditor(id);
         return true;
       }, seededHandleId);
       record(
         '[F] re-open Edit modal for the seeded handle',
-        'openDvItemEditor("handle", id) callable',
+        'window.openDvHandleEditor(id) callable',
         `clicked=${fEditClicked}`,
         fEditClicked,
       );

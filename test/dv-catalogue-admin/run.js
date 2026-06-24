@@ -37,7 +37,7 @@ const PROBE_LABELS = [
 //   (D)      Door-style modal — open via "+ Add style", fill Name + Image URL,
 //            click Save: Save disables + shows "Saving…", modal closes, new
 //            row appears in #dv-door-styles-wrap without reload.
-//   (H/edit) Handle edit — re-open the seeded handle via openDvItemEditor,
+//   (H/edit) Handle edit — re-open the seeded handle via window.openDvHandleEditor(id),
 //            assert Save button label reads "Save" (not "Add"), the modal is
 //            pre-filled with the existing name + style (the handle style
 //            dropdown's "preserve existing value" branch), rename + change
@@ -339,7 +339,10 @@ async function main() {
     // Helper: drive one Add-modal flow and assert the in-flight UX +
     // in-place list refresh.
     //
-    //   spec.addBtnSelector  — CSS selector for the "+ Add …" button.
+    //   spec.openEditorFnName — name of the window function to call to open
+    //                          the Add modal (e.g. 'openDvHandleEditor').
+    //                          The React island exposes these directly on
+    //                          window; there are no onclick attributes.
     //   spec.endpoint        — POST URL to intercept and delay (so we can
     //                          observe Save being disabled mid-request).
     //   spec.fillForm(page)  — async; fills the modal's inputs.
@@ -373,14 +376,15 @@ async function main() {
       };
       page.on('request', reqListener);
 
-      // Click "+ Add …".  We dispatch via in-page click() so a re-render
-      // can't move the element from under Puppeteer.
-      const addClicked = await page.evaluate((sel) => {
-        const btn = document.querySelector(sel);
-        if (!btn) return false;
-        btn.click();
+      // Call the window function exposed by the React island to open the
+      // Add modal.  The React admin page exposes openDvHandleEditor,
+      // openDvFurnitureEditor, and openDvDoorStyleEditor directly on window
+      // rather than via onclick attributes on the rendered buttons.
+      const addClicked = await page.evaluate((fnName) => {
+        if (typeof window[fnName] !== 'function') return false;
+        window[fnName]();
         return true;
-      }, spec.addBtnSelector);
+      }, spec.openEditorFnName);
       record(
         `[${label}] click + Add opens the modal`,
         'modal with #dvie-name appears',
@@ -465,7 +469,9 @@ async function main() {
     // and the DB row reflects the edit.
     //
     //   spec.type            — 'handle' | 'furniture' | 'door-style' (used to
-    //                          look up openDvItemEditor(type, id)).
+    //                          dispatch to the correct window.openDv*Editor(id)
+    //                          function — the React island exposes per-type
+    //                          functions rather than a single openDvItemEditor).
     //   spec.endpoint        — base URL (no trailing id) for the PATCH route.
     //   spec.wrapId          — id of the list wrap that should refresh.
     //   spec.targetId        — id of the seeded row to edit.
@@ -480,15 +486,22 @@ async function main() {
       console.log(`\n  [${label}] edit existing row id=${spec.targetId}`);
 
       // Open the editor for the seeded row directly (avoids fishing the Edit
-      // button out of a row that just re-rendered).
+      // button out of a row that just re-rendered).  The React island exposes
+      // per-type window functions; dispatch to the right one by type.
       const opened = await page.evaluate(({ type, id }) => {
-        if (typeof window.openDvItemEditor !== 'function') return false;
-        window.openDvItemEditor(type, id);
+        const fnMap = {
+          'handle':     'openDvHandleEditor',
+          'furniture':  'openDvFurnitureEditor',
+          'door-style': 'openDvDoorStyleEditor',
+        };
+        const fn = fnMap[type];
+        if (!fn || typeof window[fn] !== 'function') return false;
+        window[fn](id);
         return true;
       }, { type: spec.type, id: spec.targetId });
       record(
-        `[${label}/edit] openDvItemEditor('${spec.type}', ${spec.targetId}) is callable`,
-        'window.openDvItemEditor exists and was called',
+        `[${label}/edit] open editor for '${spec.type}' id=${spec.targetId} via window fn`,
+        `window.openDv${spec.type === 'handle' ? 'Handle' : spec.type === 'furniture' ? 'Furniture' : 'DoorStyle'}Editor(${spec.targetId}) callable`,
         `opened=${opened}`,
         opened,
       );
@@ -629,20 +642,22 @@ async function main() {
       // probe in case a prior flow swapped it back.
       await page.evaluate(() => { window.confirm = () => true; });
 
-      // Sanity: the row's Delete button is rendered with the expected onclick.
-      const btnSelector =
-        `button[onclick="deleteDvItem('${spec.type}', ${spec.targetId})"]`;
+      // Sanity: window.deleteDvItem is exposed by the React island and the
+      // wrap has at least one row.  The old admin page used onclick attributes
+      // on each Delete button; the React island instead exposes a single
+      // window.deleteDvItem(type, id) function that the test calls directly.
       const baselineRows = await page.evaluate((id) => {
         const w = document.getElementById(id);
         return w ? w.querySelectorAll('tbody tr').length : -1;
       }, spec.wrapId);
-      const btnPresent = await page.evaluate((sel) =>
-        !!document.querySelector(sel), btnSelector);
+      const dvItemCallable = await page.evaluate(
+        () => typeof window.deleteDvItem === 'function',
+      );
       record(
-        `[${label}/del] row Delete button rendered (${btnSelector})`,
-        'button present in wrap',
-        `present=${btnPresent} baselineRows=${baselineRows}`,
-        btnPresent === true && baselineRows > 0,
+        `[${label}/del] window.deleteDvItem callable and wrap has rows`,
+        'window.deleteDvItem is a function and baselineRows > 0',
+        `callable=${dvItemCallable} baselineRows=${baselineRows}`,
+        dvItemCallable === true && baselineRows > 0,
       );
 
       // Intercept DELETE so we can assert the right endpoint was hit.
@@ -661,11 +676,11 @@ async function main() {
       page.on('request',  reqListener);
       page.on('response', respListener);
 
-      // Click the row's Delete button in-page.
-      await page.evaluate((sel) => {
-        const btn = document.querySelector(sel);
-        if (btn) btn.click();
-      }, btnSelector);
+      // Call window.deleteDvItem directly — the React island exposes it as a
+      // window function rather than via onclick attributes on each row button.
+      await page.evaluate(({ type, id }) => {
+        window.deleteDvItem(type, id);
+      }, { type: spec.type, id: spec.targetId });
 
       // Wait for the wrap to refresh (row count drops) and the DELETE to land.
       const shrank = await pollPage(page, ({ id, baseline }) => {
@@ -738,9 +753,9 @@ async function main() {
 
     // ── (H) Handle ────────────────────────────────────────────────────────────
     await runAddFlow('H', {
-      addBtnLabel:     '+ Add handle',
-      addBtnSelector:  'button[onclick="openDvHandleEditor()"]',
-      endpoint:        '/api/admin/catalog/handles',
+      addBtnLabel:      '+ Add handle',
+      openEditorFnName: 'openDvHandleEditor',
+      endpoint:         '/api/admin/catalog/handles',
       wrapId:          'dv-handles-wrap',
       assertExpected:  `wrap contains "${HANDLE_NAME}" and "${HANDLE_STYLE}"`,
       assertObserved:  t => `name=${t.includes(HANDLE_NAME)} style=${t.includes(HANDLE_STYLE)}`,
@@ -836,10 +851,15 @@ async function main() {
         [`/uploads/handles/${handleImgFilename}`, createdHandle.id],
       );
 
-      // Re-render the wrap so the Delete button for the seeded row is in DOM.
-      await page.evaluate(() => window.loadDvHandles && window.loadDvHandles());
-      await pollPage(page, (sel) => !!document.querySelector(sel),
-        `button[onclick="deleteDvItem('handle', ${createdHandle.id})"]`, 6000);
+      // Re-render the handles wrap so the row is current before the delete
+      // probe runs.  The React island only exposes loadDvCatalogue (reloads
+      // all three tables), so we use that and wait for the edited name to
+      // appear in the wrap text rather than looking for an onclick attribute.
+      await page.evaluate(() => window.loadDvCatalogue && window.loadDvCatalogue());
+      await pollPage(page, (marker) => {
+        const w = document.getElementById('dv-handles-wrap');
+        return w && w.textContent.includes(marker) ? true : null;
+      }, HANDLE_NAME_EDITED, 6000);
 
       await runDeleteFlow('H', {
         type:          'handle',
@@ -867,9 +887,9 @@ async function main() {
 
     // ── (F) Furniture range ───────────────────────────────────────────────────
     await runAddFlow('F', {
-      addBtnLabel:     '+ Add range',
-      addBtnSelector:  'button[onclick="openDvFurnitureEditor()"]',
-      endpoint:        '/api/admin/catalog/ranges',
+      addBtnLabel:      '+ Add range',
+      openEditorFnName: 'openDvFurnitureEditor',
+      endpoint:         '/api/admin/catalog/ranges',
       wrapId:          'dv-furniture-wrap',
       assertExpected:  `wrap contains "${FURNITURE_NAME}" and "${FURNITURE_DESC}"`,
       assertObserved:  t => `name=${t.includes(FURNITURE_NAME)} desc=${t.includes(FURNITURE_DESC)}`,
@@ -932,9 +952,12 @@ async function main() {
 
     // ── (F) Furniture range — delete existing row ────────────────────────────
     if (furnitureRow) {
-      await page.evaluate(() => window.loadDvFurniture && window.loadDvFurniture());
-      await pollPage(page, (sel) => !!document.querySelector(sel),
-        `button[onclick="deleteDvItem('furniture', ${furnitureRow.id})"]`, 6000);
+      // Re-render the furniture wrap and wait for the edited row to appear.
+      await page.evaluate(() => window.loadDvCatalogue && window.loadDvCatalogue());
+      await pollPage(page, (marker) => {
+        const w = document.getElementById('dv-furniture-wrap');
+        return w && w.textContent.includes(marker) ? true : null;
+      }, FURNITURE_NAME_EDITED, 6000);
 
       await runDeleteFlow('F', {
         type:          'furniture',
@@ -961,9 +984,9 @@ async function main() {
 
     // ── (D) Door style ────────────────────────────────────────────────────────
     await runAddFlow('D', {
-      addBtnLabel:     '+ Add style',
-      addBtnSelector:  'button[onclick="openDvDoorStyleEditor()"]',
-      endpoint:        '/api/admin/catalog/doors',
+      addBtnLabel:      '+ Add style',
+      openEditorFnName: 'openDvDoorStyleEditor',
+      endpoint:         '/api/admin/catalog/doors',
       wrapId:          'dv-door-styles-wrap',
       assertExpected:  `wrap contains "${DOOR_NAME}" and the image URL`,
       assertObserved:  t => `name=${t.includes(DOOR_NAME)} url=${t.includes(DOOR_IMG_URL)}`,
@@ -1026,9 +1049,12 @@ async function main() {
 
     // ── (D) Door style — delete existing row ─────────────────────────────────
     if (doorRow) {
-      await page.evaluate(() => window.loadDvDoorStyles && window.loadDvDoorStyles());
-      await pollPage(page, (sel) => !!document.querySelector(sel),
-        `button[onclick="deleteDvItem('door-style', ${doorRow.id})"]`, 6000);
+      // Re-render the door-styles wrap and wait for the edited row to appear.
+      await page.evaluate(() => window.loadDvCatalogue && window.loadDvCatalogue());
+      await pollPage(page, (marker) => {
+        const w = document.getElementById('dv-door-styles-wrap');
+        return w && w.textContent.includes(marker) ? true : null;
+      }, DOOR_NAME_EDITED, 6000);
 
       await runDeleteFlow('D', {
         type:          'door-style',
@@ -1112,8 +1138,10 @@ async function writeReport(runId, findings) {
     '  follow-up `GET /api/admin/catalog/handles` returns the row with',
     '  `style === "Bar"`, proving the dropdown value reached the database.',
     '- **(H/F/D) Edit via modal**: for the row each add-flow just created:',
-    '  - `openDvItemEditor(type, id)` is called directly so the modal opens',
-    '    in edit mode for a known target id.',
+    '  - The matching `window.openDv{Handle|Furniture|DoorStyle}Editor(id)`',
+    '    function is called directly so the modal opens in edit mode for a',
+    '    known target id (the React island exposes per-type window functions',
+    '    rather than a single `openDvItemEditor`).',
     '  - The Save button reads "Save" (not "Add") and the modal pre-fills',
     '    the existing values (`#dvie-name`; plus `#dvie-style` for the',
     '    handle — exercising the dropdown\'s "preserve existing value"',
@@ -1126,12 +1154,13 @@ async function writeReport(runId, findings) {
     '    a full page reload (`window.__pageLoadToken` preserved) — and the',
     '    DB row for the same id reflects the edit (`name`, plus `style` /',
     '    `description` / `image_url`).',
-    '- **(H/F/D) Delete via row button**: for the row each add/edit flow just',
-    '  produced:',
+    '- **(H/F/D) Delete via window function**: for the row each add/edit flow',
+    '  just produced:',
     '  - `window.confirm` is stubbed to return `true` so `deleteDvItem()`',
     '    proceeds past its confirm-prompt branch.',
-    '  - The row\'s Delete button (rendered with',
-    '    `onclick="deleteDvItem(\'<type>\', <id>)"`) is clicked in-page.',
+    '  - `window.deleteDvItem(type, id)` is called directly — the React island',
+    '    exposes this function on window rather than via onclick attributes on',
+    '    the rendered Delete buttons.',
     '  - A `DELETE` request lands on the matching endpoint',
     '    (`/api/admin/catalog/handles/:id`, `/api/admin/catalog/ranges/:id`,',
     '    `/api/admin/catalog/doors/:id`) and returns a 2xx (response listener).',
