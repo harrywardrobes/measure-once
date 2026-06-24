@@ -7,6 +7,8 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Tooltip,
@@ -28,9 +30,10 @@ interface DigestSettings {
 
 interface PageFilterConfigEntry {
   label: string;
-  type: 'number' | 'json';
+  type: 'number' | 'json' | 'string';
   min?: number;
   max?: number;
+  allowedValues?: string[];
   currentValue: number | string;
 }
 
@@ -328,7 +331,7 @@ export function SettingsPage() {
               {/* Customers list */}
               <Box>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Customers list</Typography>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ alignItems: 'flex-start' }}>
                   <TextField
                     size="small"
                     label="Default page size"
@@ -339,6 +342,23 @@ export function SettingsPage() {
                     helperText="Contacts shown per page."
                     sx={{ width: 200 }}
                   />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                      Priority first mode
+                    </Typography>
+                    <Select
+                      size="small"
+                      value={pageFilterDraft['customers_priority_sort_mode'] ?? 'last_contacted'}
+                      onChange={e => setPageFilterDraft(d => ({ ...d, customers_priority_sort_mode: e.target.value }))}
+                      sx={{ minWidth: 300 }}
+                    >
+                      <MenuItem value="last_contacted">Last contacted first (never-contacted on top)</MenuItem>
+                      <MenuItem value="newest">Newest created first (legacy)</MenuItem>
+                    </Select>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                      Controls how &quot;Priority first&quot; orders the Customers list.
+                    </Typography>
+                  </Box>
                 </Stack>
               </Box>
 

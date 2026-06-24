@@ -1821,16 +1821,77 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       });
     }
 
-    const effectiveComparator =
-      priorityFirst && !leadStatus
-        ? (a, b) => {
-            const aNull = !a.properties?.hs_lead_status;
-            const bNull = !b.properties?.hs_lead_status;
-            if (aNull && !bNull) return -1;
-            if (!aNull && bNull) return 1;
-            return comparator(a, b);
+    let effectiveComparator;
+    if (priorityFirst && !leadStatus) {
+      // Read the configured sort mode (cached with the rest of page filter config).
+      let prioritySortMode = 'last_contacted';
+      try {
+        const cfg = await getPageFilterConfig();
+        if (cfg.customers_priority_sort_mode === 'newest') prioritySortMode = 'newest';
+      } catch (_) {}
+
+      if (prioritySortMode === 'last_contacted') {
+        // Build a map of contactId → max attempted_at from contact_attempt_log
+        // for all contacts currently in the filtered set.  Coalesce with each
+        // contact's HubSpot notes_last_contacted property so whichever is later
+        // wins, then sort ascending (never-contacted → most-recently-contacted).
+        const contactIds = contacts.map(c => c.id);
+        let lastAttemptMap = {};
+        if (contactIds.length > 0) {
+          try {
+            const { rows: attemptRows } = await pool.query(
+              `SELECT hubspot_contact_id, MAX(attempted_at) AS last_attempt
+               FROM contact_attempt_log
+               WHERE hubspot_contact_id = ANY($1::text[])
+               GROUP BY hubspot_contact_id`,
+              [contactIds],
+            );
+            for (const r of attemptRows) {
+              lastAttemptMap[r.hubspot_contact_id] = r.last_attempt ? new Date(r.last_attempt).toISOString() : null;
+            }
+          } catch (dbErr) {
+            logger.warn({ err: dbErr.message }, '[contacts-all] could not load contact_attempt_log for priority sort:');
           }
-        : comparator;
+        }
+
+        const getLastContacted = (c) => {
+          const fromLog = lastAttemptMap[c.id] || null;
+          const fromHs  = c.properties?.notes_last_contacted || null;
+          if (!fromLog && !fromHs) return null;
+          if (!fromLog) return fromHs;
+          if (!fromHs)  return fromLog;
+          return fromLog > fromHs ? fromLog : fromHs;
+        };
+
+        effectiveComparator = (a, b) => {
+          const aLast = getLastContacted(a);
+          const bLast = getLastContacted(b);
+          // Never-contacted (null) sorts first (highest priority).
+          if (!aLast && bLast) return -1;
+          if (aLast && !bLast) return  1;
+          if (!aLast && !bLast) {
+            // Both never contacted — tie-break by createdate descending.
+            return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+          }
+          // Ascending by last-contacted (longest since contact = first).
+          const cmp = aLast.localeCompare(bLast);
+          if (cmp !== 0) return cmp;
+          // Tie-break by createdate descending.
+          return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+        };
+      } else {
+        // Legacy "newest created first" mode — pin no-status contacts then newest.
+        effectiveComparator = (a, b) => {
+          const aNull = !a.properties?.hs_lead_status;
+          const bNull = !b.properties?.hs_lead_status;
+          if (aNull && !bNull) return -1;
+          if (!aNull && bNull) return  1;
+          return comparator(a, b);
+        };
+      }
+    } else {
+      effectiveComparator = comparator;
+    }
     contacts = [...contacts].sort(effectiveComparator);
 
     const total      = contacts.length;
@@ -5019,11 +5080,12 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
 // without a code deploy. Defaults are seeded on boot.
 
 const PAGE_FILTER_CONFIG_DEFAULTS = {
-  sales_staleness_days:              { value: 28,   label: 'Sales board — staleness cutoff (days)',       type: 'number', min: 1, max: 365 },
-  sales_page_size:                   { value: 25,   label: 'Sales board — default page size',             type: 'number', min: 5, max: 100 },
-  surveys_page_size:                 { value: 25,   label: 'Surveys board — default page size',           type: 'number', min: 5, max: 100 },
-  customers_page_size:               { value: 25,   label: 'Customers list — default page size',          type: 'number', min: 5, max: 100 },
-  surveys_hidden_substages_default:  { value: '[]', label: 'Surveys board — hidden substages (JSON)',    type: 'json'                      },
+  sales_staleness_days:              { value: 28,              label: 'Sales board — staleness cutoff (days)',       type: 'number', min: 1, max: 365 },
+  sales_page_size:                   { value: 25,              label: 'Sales board — default page size',             type: 'number', min: 5, max: 100 },
+  surveys_page_size:                 { value: 25,              label: 'Surveys board — default page size',           type: 'number', min: 5, max: 100 },
+  customers_page_size:               { value: 25,              label: 'Customers list — default page size',          type: 'number', min: 5, max: 100 },
+  surveys_hidden_substages_default:  { value: '[]',            label: 'Surveys board — hidden substages (JSON)',     type: 'json'                      },
+  customers_priority_sort_mode:      { value: 'last_contacted', label: 'Customers list — "Priority first" sort mode', type: 'string', allowedValues: ['last_contacted', 'newest'] },
 };
 
 async function ensurePageFilterConfigTable() {
@@ -5111,6 +5173,8 @@ app.patch('/api/admin/page-filter-config', isAuthenticated, requireAdmin, async 
           try { JSON.parse(coerced); } catch {
             return res.status(400).json({ error: `${key}: invalid JSON.` });
           }
+        } else if (def.allowedValues && !def.allowedValues.includes(coerced)) {
+          return res.status(400).json({ error: `${key}: must be one of ${def.allowedValues.join(', ')}.` });
         }
       }
       await pool.query(
