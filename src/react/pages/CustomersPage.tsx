@@ -1612,8 +1612,20 @@ export function CustomersPage(): React.ReactElement {
   // When a task is added or completed (from the customer detail page or any
   // other tab), re-fetch the open-task-count for just that one contact so the
   // badge updates without a full page reload.
+  //
+  // A per-contact cooldown map (500 ms) prevents redundant fetches when the
+  // IntersectionObserver fires broadcastTaskChanged on every viewport entry —
+  // e.g. the user scrolling past the Tasks section repeatedly.  The first
+  // broadcast for a given contact fires immediately; subsequent ones within the
+  // cooldown window are dropped.
+  const taskChangedCooldownRef = React.useRef<Map<string, number>>(new Map());
+  const TASK_CHANGED_COOLDOWN_MS = 500;
   React.useEffect(() => {
     return subscribeTaskChanged(async ({ contactId }) => {
+      const now = Date.now();
+      const lastFetch = taskChangedCooldownRef.current.get(contactId) ?? 0;
+      if (now - lastFetch < TASK_CHANGED_COOLDOWN_MS) return;
+      taskChangedCooldownRef.current.set(contactId, now);
       try {
         const res = await fetch('/api/contacts/open-task-counts', {
           method: 'POST',
@@ -1629,7 +1641,7 @@ export function CustomersPage(): React.ReactElement {
         /* best-effort — stale count is acceptable on failure */
       }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-fill the customer name cache so that clicking any contact from the
   // list shows the correct name in the browser tab immediately, even on a
