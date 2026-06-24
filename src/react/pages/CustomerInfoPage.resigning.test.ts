@@ -485,6 +485,37 @@ describe('restore → re-sign → draft-persist integration', () => {
     expect(fetchSpy).not.toHaveBeenCalled(); // fast-path: no re-sign needed
   });
 
+  it('writes savedPhotoExpiries correctly when there is no pre-existing draft (cold start)', async () => {
+    const staleExp = NOW_S + BUF - 60;
+    const staleUrl = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+    const newExp   = NOW_S + 3600;
+    const newUrl   = `/api/customer-info-preview/abc/p.jpg?exp=${newExp}&sig=new`;
+
+    // localStorage is empty — no pre-existing draft key at all
+    expect(localStorage.getItem(LS_KEY)).toBeNull();
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/p.jpg', url: newUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/p.jpg'], ['p.jpg'], [staleUrl], [staleExp],
+    );
+    expect(restored[0].previewUrl).toBe(''); // stale → cleared, re-sign will run
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUrls[0]).toBe(newUrl);
+    expect(saved.savedPhotoExpiries[0]).toBe(newExp);
+    expect(saved.savedPhotoKeys[0]).toBe('photos/p.jpg');
+    expect(saved.savedPhotoNames[0]).toBe('p.jpg');
+  });
+
   it('preserves non-photo draft fields (e.g. genericFields) when persisting re-signed photos', async () => {
     const staleExp  = NOW_S + BUF - 60;
     const staleUrl  = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
