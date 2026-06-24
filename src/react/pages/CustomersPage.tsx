@@ -1158,6 +1158,7 @@ export function CustomersPage(): React.ReactElement {
     contactsStale,
     fromCache,
     lastSyncAt,
+    priorityActiveDays,
     page,
     setPage,
     patchContact,
@@ -1869,6 +1870,7 @@ export function CustomersPage(): React.ReactElement {
           <Alert severity="info" sx={{ py: 0 }} data-testid="contacts-offline-banner">
             You&apos;re offline — showing saved customers from your last visit.
             {lastSyncAt ? ` Last synced ${formatLastSynced(lastSyncAt)}.` : ' This list may be out of date.'}
+            {sortBy === 'priority' ? ` Priority filter: last ${priorityActiveDays} days.` : ''}
           </Alert>
         ) : null}
 

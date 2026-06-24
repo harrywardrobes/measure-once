@@ -78,6 +78,9 @@ export type UsePaginatedContactsResult = {
   /** Epoch-ms time of the last successful contacts fetch, or null if unknown.
    *  Used to render a "Last synced at …" indicator when offline. */
   lastSyncAt: number | null;
+  /** Admin-configured active-window size in days used by the priority filter.
+   *  Hydrated from IndexedDB on mount so offline renders use the same value. */
+  priorityActiveDays: number;
   page: number;
   setPage: (p: number) => void;
   /**
@@ -527,5 +530,5 @@ export function usePaginatedContacts(
     [],
   );
 
-  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, page: effectivePage, setPage, patchContact };
+  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, priorityActiveDays, page: effectivePage, setPage, patchContact };
 }
