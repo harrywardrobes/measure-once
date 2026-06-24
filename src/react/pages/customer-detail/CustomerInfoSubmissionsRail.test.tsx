@@ -384,3 +384,58 @@ describe('CustomerInfoSubmissionsRail — PDF chip rendering', () => {
     expect(pdfImages).toHaveLength(0);
   });
 });
+
+// ── skipped-photo-alert tests ──────────────────────────────────────────────────
+
+const SKIPPED_SUBMISSION = {
+  ...PDF_SUBMISSION,
+  id: 20,
+  email_skipped_count: 2,
+  photoUrls: ['/api/customer-info-photos/photo.jpg?token=img1'],
+};
+
+const NO_SKIP_SUBMISSION = {
+  ...PDF_SUBMISSION,
+  id: 21,
+  email_skipped_count: 0,
+  photoUrls: ['/api/customer-info-photos/photo.jpg?token=img2'],
+};
+
+describe('CustomerInfoSubmissionsRail — skipped-photo-alert banner', () => {
+  let restoreFetch: () => void;
+
+  afterEach(() => {
+    restoreFetch?.();
+    vi.restoreAllMocks();
+  });
+
+  it('renders skipped-photo-alert when email_skipped_count > 0', async () => {
+    restoreFetch = mockFetch([SKIPPED_SUBMISSION]);
+    stubPrivilege('member');
+
+    const user = userEvent.setup();
+    render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const reviewBtn = await screen.findByTestId('review-btn');
+    await user.click(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('skipped-photo-alert')).toBeTruthy();
+    });
+  });
+
+  it('does NOT render skipped-photo-alert when email_skipped_count === 0', async () => {
+    restoreFetch = mockFetch([NO_SKIP_SUBMISSION]);
+    stubPrivilege('member');
+
+    const user = userEvent.setup();
+    render(<CustomerInfoSubmissionsRail contactId={CONTACT_ID} />);
+
+    const reviewBtn = await screen.findByTestId('review-btn');
+    await user.click(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('skipped-photo-alert')).toBeNull();
+    });
+  });
+});
