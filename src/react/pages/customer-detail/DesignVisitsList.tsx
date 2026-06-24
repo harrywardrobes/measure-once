@@ -594,6 +594,22 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
       } else {
         next.add(id);
         loadDetail(id);
+        // If the detail is already loaded (loadDetail was a no-op) and has
+        // stale photo URLs, re-sign immediately so thumbnails fill in right away
+        // rather than waiting for the background 10-minute timer.
+        const existing = detailsRef.current[id];
+        if (existing && !existing.loading && existing.data && !existing.error) {
+          if (detailNeedsResign(existing.data)) {
+            void fetchFreshUrlsForDetail(id, existing.data).then(fresh => {
+              if (!fresh) return;
+              setDetails(d => {
+                const cur = d[id];
+                if (!cur?.data) return d;
+                return { ...d, [id]: { ...cur, data: applyFreshUrlsToDetail(cur.data, fresh) } };
+              });
+            });
+          }
+        }
       }
       return next;
     });
