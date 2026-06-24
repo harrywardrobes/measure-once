@@ -888,7 +888,7 @@ function CustomerCard({
         onMouseLeave={handler ? () => setStripHovered(false) : undefined}
         sx={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
           px: 2,
           py: '9px',
@@ -901,7 +901,7 @@ function CustomerCard({
           '&:hover': (handler && !dispatchingAction) ? { filter: 'brightness(0.96)' } : undefined,
         }}
       >
-        <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
+        <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem', minWidth: 0 }}>
           {handler && (dispatchingAction ? 'Opening…' : (
             <>
               {activitySummary && (
