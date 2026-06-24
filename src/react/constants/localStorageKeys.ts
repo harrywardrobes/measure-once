@@ -36,6 +36,9 @@ export const CUSTOMERS_LEAD_STATUS_KEY = 'customers_lead_status';
 /** sessionStorage – active stage tab on the customers list. */
 export const CUSTOMERS_STAGE_KEY = 'customers_stage';
 
+/** sessionStorage – sort-by selection on the customers list (omitted when default 'priority'). */
+export const CUSTOMERS_SORT_KEY = 'customers_sort';
+
 /** sessionStorage – viewer-privilege banner dismissed for this session. */
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
 import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
@@ -143,7 +143,11 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
 
 function readUrlState() {
   const p = new URLSearchParams(location.search);
-  const rawSort = p.get('sort') || 'priority';
+  const urlSort = p.get('sort');
+  let rawSort = urlSort || '';
+  if (!rawSort) {
+    try { rawSort = sessionStorage.getItem(CUSTOMERS_SORT_KEY) || ''; } catch { /* ignore */ }
+  }
   const sort = SORT_OPTIONS.some((o) => o.value === rawSort) ? rawSort : 'priority';
   let q = p.get('q') || '';
   if (!q) {
@@ -1296,6 +1300,16 @@ export function CustomersPage(): React.ReactElement {
       }
     } catch { /* ignore */ }
   }, [stageFilter]);
+
+  React.useEffect(() => {
+    try {
+      if (sortBy && sortBy !== 'priority') {
+        sessionStorage.setItem(CUSTOMERS_SORT_KEY, sortBy);
+      } else {
+        sessionStorage.removeItem(CUSTOMERS_SORT_KEY);
+      }
+    } catch { /* ignore */ }
+  }, [sortBy]);
 
   // Reflect filter changes in the URL.
   React.useEffect(() => {
