@@ -1630,7 +1630,7 @@ export function CustomersPage(): React.ReactElement {
         </Box>
 
 
-        {/* ── Sort row: search | sort-by | Show all ───────────────────────── */}
+        {/* ── Sort row: sort-by | Show all | search ───────────────────────── */}
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ alignItems: { sm: 'center' } }}>
           <SortSelect
             value={sortBy}
@@ -1659,6 +1659,39 @@ export function CustomersPage(): React.ReactElement {
               }}
             />
           </Stack>
+
+          <TextField
+            size="small"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search customers…"
+            sx={{ width: 220 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: searchInput ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      edge="end"
+                      aria-label="Clear search"
+                      onClick={() => {
+                        setSearchInput('');
+                        setSearch('');
+                        setPage(1);
+                      }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+          />
 
         </Stack>
 
