@@ -11,10 +11,10 @@
 async function badBatchDownload(keys) {
   const results = [];
   for (const key of keys) {
-    const bytes = await downloadAsBytes(key);
+    const bytes = await downloadBytes(key);
     results.push(bytes);
   }
-  const extra = await downloadAsBytes('extra-key');
+  const extra = await downloadBytes('extra-key');
   results.push(extra);
   return results;
 }

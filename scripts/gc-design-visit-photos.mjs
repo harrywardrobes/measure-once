@@ -13,8 +13,10 @@
 //
 // Requirements:
 //   DATABASE_URL (or DATABASE_URL_TEST) must be set in the environment.
-//   The Replit Object Storage bucket must be provisioned (REPLIT_DB_URL /
-//   .replit wiring picks it up automatically).
+//   The active storage backend (see STORAGE_BACKEND in storage.js) must be
+//   provisioned. On the default `replit` backend the Object Storage bucket is
+//   wired in via .replit automatically; under STORAGE_BACKEND=gcs the script
+//   auto-targets Google Cloud Storage instead.
 //
 // Safety:
 //   The script only touches objects whose name starts with
@@ -45,26 +47,15 @@ async function getReferencedKeys(db) {
 
 // ── Bucket: list all design-visit-images objects ──────────────────────────────
 
-async function listBucketKeys(client) {
+async function listBucketKeys(storage) {
+  const names = await storage.list('design-visit-images/');
   const keys = [];
-  let cursor;
-  do {
-    const opts = { prefix: 'design-visit-images/' };
-    if (cursor) opts.cursor = cursor;
-    const res = await client.list(opts);
-    if (res && res.ok === false) {
-      throw new Error('Object storage list failed: ' + (res.error?.message || 'unknown'));
+  for (const name of names) {
+    if (typeof name === 'string') {
+      const opaqueKey = opaqueKeyFromObjectName(name);
+      if (opaqueKey) keys.push({ name, opaqueKey });
     }
-    const objects = res?.value ?? res?.objects ?? [];
-    for (const obj of objects) {
-      const name = obj.name ?? obj.key ?? obj;
-      if (typeof name === 'string') {
-        const opaqueKey = opaqueKeyFromObjectName(name);
-        if (opaqueKey) keys.push({ name, opaqueKey });
-      }
-    }
-    cursor = res?.cursor ?? res?.nextCursor ?? null;
-  } while (cursor);
+  }
   return keys;
 }
 
@@ -82,11 +73,11 @@ async function main() {
   }
   const db = new pg.Pool({ connectionString: dbUrl, max: 1 });
 
-  // Object storage client
-  let client;
+  // Storage abstraction (auto-selects the backend from STORAGE_BACKEND).
+  let storage;
   try {
-    const { Client } = await import('@replit/object-storage');
-    client = new Client();
+    const mod = await import('../storage.js');
+    storage = mod.default ?? mod;
   } catch (e) {
     console.error('[gc-design-visit-photos] Object Storage unavailable:', e.message);
     await db.end();
@@ -99,7 +90,7 @@ async function main() {
     console.log(`[gc-design-visit-photos] ${referenced.size} key(s) referenced in DB`);
 
     console.log('[gc-design-visit-photos] listing bucket objects…');
-    const bucketObjects = await listBucketKeys(client);
+    const bucketObjects = await listBucketKeys(storage);
     console.log(`[gc-design-visit-photos] ${bucketObjects.length} opaque object(s) in bucket`);
 
     const orphans = bucketObjects.filter(o => !referenced.has(o.opaqueKey));
@@ -117,10 +108,7 @@ async function main() {
         console.log(`[gc-design-visit-photos] DRY RUN would delete: ${o.name}`);
       } else {
         try {
-          const res = await client.delete(o.name, { ignoreNotFound: true });
-          if (res && res.ok === false) {
-            throw new Error(res.error?.message || 'unknown');
-          }
+          await storage.deleteObject(o.name, { ignoreNotFound: true });
           console.log(`[gc-design-visit-photos] deleted: ${o.name}`);
           deleted++;
         } catch (e) {

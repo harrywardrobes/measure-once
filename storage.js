@@ -104,6 +104,28 @@ const replitBackend = {
     const objects = res?.value ?? res?.objects ?? [];
     return objects.some(obj => (obj.name ?? obj.key ?? obj) === name);
   },
+
+  async list(prefix) {
+    const client = getReplitClient();
+    const names = [];
+    let cursor;
+    do {
+      const opts = {};
+      if (prefix) opts.prefix = prefix;
+      if (cursor) opts.cursor = cursor;
+      const res = await client.list(opts);
+      if (res && res.ok === false) {
+        throw new Error('Object storage list failed: ' + (res.error?.message || 'unknown'));
+      }
+      const objects = res?.value ?? res?.objects ?? [];
+      for (const obj of objects) {
+        const name = obj.name ?? obj.key ?? obj;
+        if (typeof name === 'string') names.push(name);
+      }
+      cursor = res?.cursor ?? res?.nextCursor ?? null;
+    } while (cursor);
+    return names;
+  },
 };
 
 // ── Google Cloud Storage backend (dormant unless STORAGE_BACKEND=gcs) ─────────
@@ -175,6 +197,12 @@ const gcsBackend = {
     const [exists] = await bucket.file(name).exists();
     return !!exists;
   },
+
+  async list(prefix) {
+    const bucket = getGcsBucket();
+    const [files] = await bucket.getFiles(prefix ? { prefix } : {});
+    return files.map(f => f.name);
+  },
 };
 
 function getBackend() {
@@ -188,4 +216,5 @@ module.exports = {
   downloadBytes: (...args) => getBackend().downloadBytes(...args),
   deleteObject: (...args) => getBackend().deleteObject(...args),
   objectExists: (...args) => getBackend().objectExists(...args),
+  list: (...args) => getBackend().list(...args),
 };
