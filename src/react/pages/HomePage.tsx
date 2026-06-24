@@ -435,6 +435,11 @@ function TaskSection({
                     </Typography>
                   ) : null}
                 </Stack>
+                {t.task_assigned_user?.name ? (
+                  <Typography variant="caption" color="text.secondary">
+                    Assigned to {t.task_assigned_user.name}
+                  </Typography>
+                ) : null}
               </HomeCard>
             );
           })}
