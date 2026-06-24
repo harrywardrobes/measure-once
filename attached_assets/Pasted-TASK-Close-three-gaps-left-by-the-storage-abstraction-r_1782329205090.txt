@@ -1,0 +1,73 @@
+TASK: Close three gaps left by the storage-abstraction refactor (storage.js).
+The orphan-photo GC script still talks to @replit/object-storage directly, which
+will break when STORAGE_BACKEND=gcs. Add a list() capability to storage.js and
+route the script through it, and refresh the parallel-download guard's auto-scan
+constant.
+
+BACKGROUND:
+- storage.js is the single storage abstraction (backends: 'replit' default,
+  'gcs'). It exposes uploadBytes/uploadFile/downloadBytes/deleteObject/objectExists
+  but NO general list().
+- scripts/gc-design-visit-photos.mjs (the orphaned design-visit photo collector)
+  still does `await import('@replit/object-storage')`, `new Client()`,
+  client.list(...) and client.delete(...). It is now the ONLY non-test file that
+  imports the SDK directly, so on the GCS backend it would operate on the wrong
+  storage. The DB stores opaque keys (obj:<id>.<ext>) mapping to object names
+  under the design-visit-images/ prefix; the script lists bucket objects and
+  deletes those not referenced in the DB.
+- scripts/check-parallel-downloads.mjs line 146 still sets
+  DOWNLOAD_CALL = 'downloadAsBytes'. The explicit TARGETS were already updated to
+  'downloadBytes', but this auto-scan constant no longer matches any real call.
+
+WHAT TO DO:
+1. Add a list() method to storage.js on BOTH backends, with a normalised return
+   shape (an array of plain object-name strings — do NOT leak the SDK envelopes):
+     async list(prefix?)   // returns string[] of object names, optionally
+                           //   filtered by prefix
+   - Replit backend: wrap client.list({ prefix }); unwrap res.value/res.objects
+     and map each entry to its name/key string; throw on res.ok === false (same
+     pattern as the other replit methods).
+   - GCS backend: `const [files] = await bucket.getFiles({ prefix }); return
+     files.map(f => f.name);`
+   Export list() alongside the existing methods.
+
+2. Refactor scripts/gc-design-visit-photos.mjs to use storage.js instead of
+   @replit/object-storage:
+   - Remove the `import('@replit/object-storage')` / `new Client()` block.
+   - Replace listBucketKeys(client) so it calls storage.list('design-visit-images/')
+     (keep the existing opaque-key mapping logic that turns an object name into
+     its obj:<id>.<ext> key).
+   - Replace the deletion call with storage.deleteObject(o.name,
+     { ignoreNotFound: true }) (storage.deleteObject already resolves true and
+     swallows 404, so drop the res.ok === false handling).
+   - Keep DRY_RUN behaviour, logging, counts, and the DB-referenced-keys logic
+     unchanged. The script must work unchanged on the default ('replit') backend
+     and automatically target GCS when STORAGE_BACKEND=gcs.
+
+3. In scripts/check-parallel-downloads.mjs, change DOWNLOAD_CALL from
+   'downloadAsBytes' to 'downloadBytes' so the zero-enrollment auto-scan again
+   matches real storage calls. Verify the script's self-test fixture still passes
+   (update the fixture's call name if the self-test relies on the constant).
+
+4. Optional tidy: the comments in customer-info.js (around lines 432, 457, 1519)
+   still say "uploadFromFilename"/"downloadAsBytes". Update the wording to the
+   storage.* method names. No behaviour change.
+
+CONSTRAINTS:
+- @replit/object-storage must end up imported in exactly ONE non-test file:
+  storage.js. After this change, grep the repo (excluding test/ and node_modules)
+  to confirm no other file imports it.
+- Do not change object-name layout, opaque-key format, the DB schema, or GC
+  semantics (only orphans — keys not referenced in the DB — are deleted).
+- Default ('replit') backend behaviour must be identical to today.
+
+ACCEPTANCE CRITERIA:
+- storage.js exports list() and both backends return string[] of object names.
+- scripts/gc-design-visit-photos.mjs no longer imports @replit/object-storage and
+  runs via storage.js; `npm run gc:design-visit-photos:dry-run` works on the
+  default backend and reports the same orphan set as before.
+- `grep -rl "@replit/object-storage" --include="*.js" --include="*.mjs" .`
+  (excluding node_modules and test/) returns only storage.js.
+- `node scripts/check-parallel-downloads.mjs` passes with DOWNLOAD_CALL =
+  'downloadBytes'.
+- npm run test:parallel-downloads and test:photo-storage-errors pass.
