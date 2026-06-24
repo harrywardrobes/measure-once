@@ -127,9 +127,9 @@ interface PrefillResponse {
   }>;
 }
 
-function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingSurveyVisit | null): Step1Data {
+function makeDefaultStep1(defaultDuration: number, existingVisit?: ExistingSurveyVisit | null, defaultDate?: string): Step1Data {
   const s: Step1Data = {
-    visitDate: existingVisit ? '' : nowDateTime(),
+    visitDate: existingVisit ? '' : (defaultDate ?? nowDateTime()),
     duration: String(defaultDuration),
     structuredAddress: emptyAddress(),
     designerName: '',
@@ -265,6 +265,14 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [step, setStep] = useState(1);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
+  /**
+   * Captured once at mount so that the step1 state initializer and the
+   * initialStep1Ref baseline always use the same timestamp string.
+   * Prevents a false-positive "unsaved changes" prompt if a minute-boundary
+   * rolls over between the two `makeDefaultStep1` calls.
+   */
+  const [mountDefaultDate] = useState(nowDateTime);
+
   const [orphanedDraftKeys] = useState<string[]>(() =>
     editMode || demo ? [] : extractOrphanedDraftKeys(storageKey)
   );
@@ -284,7 +292,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       const draft = loadDraft(storageKey);
       if (draft) return draft.step1;
     }
-    return makeDefaultStep1(defaultDuration, existingVisit);
+    return makeDefaultStep1(defaultDuration, existingVisit, mountDefaultDate);
   });
 
   const [rooms, setRooms] = useState<RoomData[]>(() => {
@@ -340,7 +348,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   const intermediateStatusFiredRef = useRef(false);
 
-  const initialStep1Ref = useRef<Step1Data>(makeDefaultStep1(defaultDuration, existingVisit));
+  const initialStep1Ref = useRef<Step1Data>(makeDefaultStep1(defaultDuration, existingVisit, mountDefaultDate));
   const initialRoomsRef = useRef<RoomData[]>(normaliseRooms(existingVisit));
 
   const pendingUploadKeysRef = useRef<Set<string>>(new Set());

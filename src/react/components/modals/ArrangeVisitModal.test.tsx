@@ -37,6 +37,7 @@ vi.mock('./ScheduleVisitModal', () => ({
 }));
 
 import { ArrangeVisitModal } from './ArrangeVisitModal';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -163,6 +164,54 @@ async function waitForBookedStep() {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('ArrangeVisitModal — discard guard on untouched new visit', () => {
+  let restoreFetch: () => void;
+
+  beforeEach(() => {
+    vi.mocked(useDiscardGuard).mockClear();
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('passes hasUnsavedChanges=false to useDiscardGuard once the call step loads (pre-filled bookedSlot date is not dirty)', async () => {
+    restoreFetch = mockFetch({ eventsItems: [] });
+
+    renderModal();
+
+    // Wait for the contact to load and the modal to enter the 'call' step.
+    // The 'No answer' button is only rendered at step='call'.
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // All renders after the contact loads must pass hasUnsavedChanges=false.
+    // step='call', madeProgress=false → hasUnsavedChanges=false.
+    // The pre-filled bookedSlot (dayjs(nowDateTime())) must NOT count as dirty.
+    const calls = vi.mocked(useDiscardGuard).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[0]).toBe(false);
+  });
+
+  it('passes hasUnsavedChanges=true once the user reaches the booked step', async () => {
+    seedDraft();
+    restoreFetch = mockFetch({ eventsItems: [] });
+
+    renderModal();
+    await waitForBookedStep();
+
+    // step='booked' → hasUnsavedChanges=true
+    const calls = vi.mocked(useDiscardGuard).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[0]).toBe(true);
+  });
+});
 
 describe('ArrangeVisitModal — duplicate-visit guard', () => {
   let restoreFetch: () => void;
