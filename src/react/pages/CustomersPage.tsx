@@ -1,11 +1,10 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
-import { TASK_CHANGED_COOLDOWN_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
-import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
+import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeCustomerInfoLinkChanged } from '../utils/broadcastCustomerInfoLink';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
@@ -1623,7 +1622,7 @@ export function CustomersPage(): React.ReactElement {
   // scroll-triggered IntersectionObserver crossing the threshold multiple
   // times, or several broadcasts arriving in quick succession) collapse into a
   // single network call per contact instead of hammering the API.
-  // See src/react/constants/timings.ts to tune the window.
+  // See src/react/utils/broadcastTaskChanged.ts (TASK_CHANGED_DEBOUNCE_MS) to tune the window.
   React.useEffect(() => {
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const unsubscribe = subscribeTaskChanged(({ contactId }) => {
@@ -1651,7 +1650,7 @@ export function CustomersPage(): React.ReactElement {
             .catch(() => {
               /* best-effort — stale count is acceptable on failure */
             });
-        }, TASK_CHANGED_COOLDOWN_MS),
+        }, TASK_CHANGED_DEBOUNCE_MS),
       );
     });
     return () => {

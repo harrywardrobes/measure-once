@@ -31,7 +31,7 @@ import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } fro
 import { LEAD_STATUS_REMOVED_MESSAGE, GET, isGoogleAuthError } from '../utils/api';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
-import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
+import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -450,7 +450,7 @@ export function CustomerDetailPage() {
         apiFetch<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${contactId}`)
           .then(data => { setTasks(data.results || []); })
           .catch(() => { /* non-fatal — keep existing tasks */ });
-      }, 300);
+      }, TASK_CHANGED_DEBOUNCE_MS);
     });
     return () => {
       if (debounceTimer !== null) clearTimeout(debounceTimer);

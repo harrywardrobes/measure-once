@@ -5,6 +5,13 @@
  */
 export const TASK_CHANGED_CHANNEL = 'mo:task_changed';
 
+/**
+ * Debounce window (ms) used by task-changed subscribers to collapse rapid-fire
+ * broadcasts into a single re-fetch.  Centralised here so all listeners stay
+ * in sync and the value is easy to tune in one place.
+ */
+export const TASK_CHANGED_DEBOUNCE_MS = 300;
+
 /** Shape of every message posted on TASK_CHANGED_CHANNEL. */
 export interface TaskChangedMessage {
   contactId: string;
