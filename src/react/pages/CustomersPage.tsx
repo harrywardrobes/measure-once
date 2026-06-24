@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_PREFIX, CP_RECENT_CUSTOMERS_LEGACY_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { COPY_DONE_RESET_MS, SEARCH_INPUT_DEBOUNCE_MS, EMAIL_DUPE_CHECK_DEBOUNCE_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
@@ -819,7 +820,7 @@ function CustomerCard({
     navigator.clipboard.writeText(activeLinkUrl).then(() => {
       setCopyDone(true);
       if (copyDoneTimerRef.current) clearTimeout(copyDoneTimerRef.current);
-      copyDoneTimerRef.current = setTimeout(() => setCopyDone(false), 1500);
+      copyDoneTimerRef.current = setTimeout(() => setCopyDone(false), COPY_DONE_RESET_MS);
     }).catch(() => {});
   }, [activeLinkUrl]);
 
@@ -1327,7 +1328,7 @@ export function CustomersPage(): React.ReactElement {
     const h = setTimeout(() => {
       setSearch(searchInput.trim());
       setPage(1);
-    }, 250);
+    }, SEARCH_INPUT_DEBOUNCE_MS);
     return () => clearTimeout(h);
   }, [searchInput]);
 
@@ -2174,7 +2175,7 @@ function NewCustomerDialog({
         .finally(() => {
           if (!cancelled) setCheckingDup(false);
         });
-    }, 400);
+    }, EMAIL_DUPE_CHECK_DEBOUNCE_MS);
     return () => {
       cancelled = true;
       clearTimeout(h);

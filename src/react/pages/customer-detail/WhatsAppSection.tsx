@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { COPY_DONE_RESET_MS } from '../../constants/timings';
 import { PROVIDER_COLORS, STATUS_COLORS } from '../../theme';
 import { WhatsAppMessage } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
@@ -103,7 +104,7 @@ export function WhatsAppModal({ contactId, phone, open, onClose }: Pick<Props, '
       });
       if (!r.ok) throw new Error(`${r.status}`);
       setSendSuccess(true);
-      setTimeout(onClose, 1500);
+      setTimeout(onClose, COPY_DONE_RESET_MS);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'error';
       setSendError(`Failed to send: ${msg}`);

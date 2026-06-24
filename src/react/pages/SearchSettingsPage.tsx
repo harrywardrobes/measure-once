@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { SUCCESS_BANNER_HIDE_MS } from '../constants/timings';
 import { STATUS_COLORS } from '../theme';
 import { SearchActionList, type SearchAction } from '../components/SearchActionList';
 import { usePageTitle } from '../hooks/usePageTitle';
@@ -115,7 +116,7 @@ export function SearchSettingsPage() {
         action_order: ordered.map(a => a.id),
       });
       setStatus({ text: 'Saved ✓', ok: true });
-      window.setTimeout(() => setStatus(null), 2500);
+      window.setTimeout(() => setStatus(null), SUCCESS_BANNER_HIDE_MS);
     } catch (e: unknown) {
       setStatus({ text: 'Save failed: ' + (e instanceof Error ? e.message : String(e)), ok: false });
     } finally {

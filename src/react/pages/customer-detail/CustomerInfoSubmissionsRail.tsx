@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { COPY_DONE_RESET_MS } from '../../constants/timings';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -606,7 +607,7 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
     navigator.clipboard.writeText(sub.form_link).then(() => {
       setCopied(true);
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-      copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
+      copiedTimerRef.current = setTimeout(() => setCopied(false), COPY_DONE_RESET_MS);
     }).catch(() => {
       // Clipboard write failed — silent
     });

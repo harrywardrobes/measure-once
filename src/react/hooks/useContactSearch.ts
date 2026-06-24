@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CONTACT_SEARCH_DEBOUNCE_MS } from '../constants/timings';
 
 export interface ContactSearchResult {
   id: string;
@@ -14,8 +15,6 @@ export interface UseContactSearchResult {
   contacts: ContactSearchResult[];
   loading: boolean;
 }
-
-const DEBOUNCE_MS = 200;
 
 export function useContactSearch(query: string, enabled: boolean): UseContactSearchResult {
   const [contacts, setContacts] = useState<ContactSearchResult[]>([]);
@@ -58,7 +57,7 @@ export function useContactSearch(query: string, enabled: boolean): UseContactSea
       } finally {
         if (!ctrl.signal.aborted) setLoading(false);
       }
-    }, DEBOUNCE_MS);
+    }, CONTACT_SEARCH_DEBOUNCE_MS);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);

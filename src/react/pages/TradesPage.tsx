@@ -1,5 +1,6 @@
 import React from 'react';
 import { TRADES_TYPE_FILTER_PREFIX, TRADES_TYPE_FILTER_LEGACY_KEY } from '../constants/localStorageKeys';
+import { CONFLICT_CHECK_DEBOUNCE_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Accordion,
@@ -679,7 +680,7 @@ function RenderedContactSlot({
       setPhoneConflict(c);
       phoneConflictRef.current = c;
       onConflictChange(index, c, emailConflictRef.current);
-    }, 300);
+    }, CONFLICT_CHECK_DEBOUNCE_MS);
     return () => { if (phoneDebounce.current) clearTimeout(phoneDebounce.current); };
   }, [slot.phone, trades, directory, editingId]);
 
@@ -690,7 +691,7 @@ function RenderedContactSlot({
       setEmailConflict(c);
       emailConflictRef.current = c;
       onConflictChange(index, phoneConflictRef.current, c);
-    }, 300);
+    }, CONFLICT_CHECK_DEBOUNCE_MS);
     return () => { if (emailDebounce.current) clearTimeout(emailDebounce.current); };
   }, [slot.email, trades, editingId]);
 
@@ -875,7 +876,7 @@ function TradeFormDialog({
     if (companyPhoneDebounce.current) clearTimeout(companyPhoneDebounce.current);
     companyPhoneDebounce.current = setTimeout(() => {
       setCompanyPhoneConflict(findPhoneConflict(form.company_phone, trades, directory, editingId));
-    }, 300);
+    }, CONFLICT_CHECK_DEBOUNCE_MS);
     return () => { if (companyPhoneDebounce.current) clearTimeout(companyPhoneDebounce.current); };
   }, [form.company_phone, trades, directory, editingId]);
 

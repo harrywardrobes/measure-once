@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { CONFLICT_CHECK_DEBOUNCE_MS } from '../../constants/timings';
 import {
   Alert, AlertTitle, Autocomplete, Box, Button, Card, CardContent, Chip, CircularProgress,
   Collapse, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, Grid, IconButton,
@@ -626,13 +627,13 @@ export function AdminRequestsPage() {
   // typing pauses (mirrors the Add team member form on the Team tab).
   useEffect(() => {
     const value = approveForm.mobile_number;
-    const t = setTimeout(() => setDebouncedApproveMobile(value), 300);
+    const t = setTimeout(() => setDebouncedApproveMobile(value), CONFLICT_CHECK_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [approveForm.mobile_number]);
 
   useEffect(() => {
     const value = approveForm.ec_phone;
-    const t = setTimeout(() => setDebouncedApproveEcPhone(value), 300);
+    const t = setTimeout(() => setDebouncedApproveEcPhone(value), CONFLICT_CHECK_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [approveForm.ec_phone]);
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { SUCCESS_BANNER_HIDE_MS, REJECTION_BANNER_HIDE_MS } from '../constants/timings';
 import {
   Alert,
   Avatar,
@@ -108,7 +109,7 @@ export function ProfilePage(): React.ReactElement {
         if (prev?.has_pending_photo) {
           setApprovalSuccess(true);
           if (approvalTimerRef.current) clearTimeout(approvalTimerRef.current);
-          approvalTimerRef.current = setTimeout(() => setApprovalSuccess(false), 2500);
+          approvalTimerRef.current = setTimeout(() => setApprovalSuccess(false), SUCCESS_BANNER_HIDE_MS);
           setReloadNonce((n) => n + 1);
         }
         return prev;
@@ -119,7 +120,7 @@ export function ProfilePage(): React.ReactElement {
         if (prev?.has_pending_photo) {
           setRejectionFeedback(true);
           if (rejectionTimerRef.current) clearTimeout(rejectionTimerRef.current);
-          rejectionTimerRef.current = setTimeout(() => setRejectionFeedback(false), 3500);
+          rejectionTimerRef.current = setTimeout(() => setRejectionFeedback(false), REJECTION_BANNER_HIDE_MS);
           setReloadNonce((n) => n + 1);
         }
         return prev;
@@ -331,7 +332,7 @@ function IdentityCard({
         if (fileRef.current) fileRef.current.value = '';
         setPhotoSuccess(true);
         if (successTimerRef.current) clearTimeout(successTimerRef.current);
-        successTimerRef.current = setTimeout(() => setPhotoSuccess(false), 2500);
+        successTimerRef.current = setTimeout(() => setPhotoSuccess(false), SUCCESS_BANNER_HIDE_MS);
         showToast('Photo submitted for approval');
         onReload();
       }
