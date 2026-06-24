@@ -303,13 +303,23 @@ describe('restore → re-sign → draft-persist integration', () => {
   const BUF    = 300; // 5-min freshness buffer used by buildRestoredPhotos
 
   // Minimal saveDraft-style helper: merges fresh photo arrays into the stored draft.
+  // Mirrors the real saveDraft() which also writes savedPhotoExpiries by parsing
+  // the `exp` query-param from each signed preview URL.
   function persistFreshPhotos(freshPhotos: UploadedPhoto[]) {
     const existing: Record<string, unknown> = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
     localStorage.setItem(LS_KEY, JSON.stringify({
       ...existing,
-      savedPhotoKeys:  freshPhotos.map(p => p.key),
-      savedPhotoNames: freshPhotos.map(p => p.name),
-      savedPhotoUrls:  freshPhotos.map(p => p.previewUrl),
+      savedPhotoKeys:     freshPhotos.map(p => p.key),
+      savedPhotoNames:    freshPhotos.map(p => p.name),
+      savedPhotoUrls:     freshPhotos.map(p => p.previewUrl),
+      savedPhotoExpiries: freshPhotos.map(p => {
+        if (!p.previewUrl.startsWith('/api/customer-info-preview/')) return 0;
+        try {
+          const qs  = p.previewUrl.split('?')[1] ?? '';
+          const exp = parseInt(new URLSearchParams(qs).get('exp') ?? '', 10);
+          return Number.isFinite(exp) ? exp : 0;
+        } catch { return 0; }
+      }),
     }));
   }
 
@@ -423,6 +433,56 @@ describe('restore → re-sign → draft-persist integration', () => {
     // localStorage is untouched
     const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
     expect(saved.savedPhotoUrls[0]).toBe(freshUrl);
+  });
+
+  it('treats a re-signed photo as fresh on the next restore — no re-sign in cycle 2', async () => {
+    const staleExp   = NOW_S + BUF - 60;             // expired relative to NOW_S
+    const freshExpC1 = NOW_S + 3600;                 // expiry returned by the sign endpoint
+    const staleUrl   = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+    const freshUrl   = `/api/customer-info-preview/abc/p.jpg?exp=${freshExpC1}&sig=new`;
+
+    // Seed localStorage with a draft whose photo URL is stale
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:     ['photos/p.jpg'],
+      savedPhotoNames:    ['p.jpg'],
+      savedPhotoUrls:     [staleUrl],
+      savedPhotoExpiries: [staleExp],
+    }));
+
+    // ── Cycle 1: stale photo gets re-signed, draft persisted with fresh URL + expiry ──
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/p.jpg', url: freshUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restoredC1 = buildRestoredPhotos(['photos/p.jpg'], ['p.jpg'], [staleUrl], [staleExp]);
+    expect(restoredC1[0].previewUrl).toBe(''); // stale → cleared
+
+    const setPhotosC1 = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restoredC1));
+    await resignSavedPhotosAfterRestore(TOKEN, restoredC1, setPhotosC1, persistFreshPhotos);
+
+    expect(fetchSpy).toHaveBeenCalledOnce(); // sign was called in cycle 1
+
+    // Draft now has the fresh URL AND its parsed expiry
+    const savedAfterC1 = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(savedAfterC1.savedPhotoUrls[0]).toBe(freshUrl);
+    expect(savedAfterC1.savedPhotoExpiries[0]).toBe(freshExpC1);
+
+    // ── Cycle 2: restore from updated draft — photo is fresh, no re-sign needed ──
+    fetchSpy.mockClear();
+
+    const restoredC2 = buildRestoredPhotos(
+      savedAfterC1.savedPhotoKeys,
+      savedAfterC1.savedPhotoNames,
+      savedAfterC1.savedPhotoUrls,
+      savedAfterC1.savedPhotoExpiries,
+    );
+    expect(restoredC2[0].previewUrl).toBe(freshUrl); // fresh URL retained
+
+    await resignSavedPhotosAfterRestore(TOKEN, restoredC2, vi.fn());
+    expect(fetchSpy).not.toHaveBeenCalled(); // fast-path: no re-sign needed
   });
 
   it('preserves non-photo draft fields (e.g. genericFields) when persisting re-signed photos', async () => {
