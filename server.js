@@ -3144,16 +3144,19 @@ app.post('/api/tasks', isAuthenticated, requirePrivilege('member'), calendarEven
     const assignedUserId = task_assigned_user?.userId ? String(task_assigned_user.userId) : null;
     const creatorId = req.user?.id ? String(req.user.id) : null;
     if (assignedUserId && creatorId && assignedUserId !== creatorId) {
-      const creatorName = req.user?.first_name
-        ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
-        : (req.user?.email || 'A team member');
-      _sendTaskAssignmentNotification({
-        assignedUserId,
-        creatorName,
-        taskName: String(task_name).trim(),
-        taskDescription: task_description ? String(task_description).trim() : '',
-        contactName: task_customer?.contactName ? String(task_customer.contactName) : '',
-        deadline: deadlineDate,
+      getPageFilterConfig().then(cfg => {
+        if (cfg.task_assignment_emails_enabled === 'false') return;
+        const creatorName = req.user?.first_name
+          ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
+          : (req.user?.email || 'A team member');
+        return _sendTaskAssignmentNotification({
+          assignedUserId,
+          creatorName,
+          taskName: String(task_name).trim(),
+          taskDescription: task_description ? String(task_description).trim() : '',
+          contactName: task_customer?.contactName ? String(task_customer.contactName) : '',
+          deadline: deadlineDate,
+        });
       }).catch(err => logger.warn({ err }, 'Task assignment notification failed (non-fatal)'));
     }
   } catch (e) {
@@ -5206,6 +5209,7 @@ const PAGE_FILTER_CONFIG_DEFAULTS = {
   customers_page_size:               { value: 25,              label: 'Customers list — default page size',          type: 'number', min: 5, max: 100 },
   surveys_hidden_substages_default:  { value: '[]',            label: 'Surveys board — hidden substages (JSON)',     type: 'json'                      },
   customers_priority_sort_mode:      { value: 'last_contacted', label: 'Customers list — "Priority first" sort mode', type: 'string', allowedValues: ['last_contacted', 'newest'] },
+  task_assignment_emails_enabled:    { value: 'true',          label: 'Task assignment — send email notifications',  type: 'string', allowedValues: ['true', 'false'] },
 };
 
 async function ensurePageFilterConfigTable() {

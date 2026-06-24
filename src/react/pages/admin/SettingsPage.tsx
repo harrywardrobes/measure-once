@@ -7,9 +7,11 @@ import {
   CardContent,
   CircularProgress,
   Divider,
+  FormControlLabel,
   MenuItem,
   Select,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -237,6 +239,53 @@ export function SettingsPage() {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
               "Send now" bypasses the send-gate and sends immediately if there are stale conflicts.
             </Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>Notifications</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Control which automated email notifications are sent to team members.
+          </Typography>
+
+          {pageFilterConfig === null ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">Loading…</Typography>
+            </Box>
+          ) : (
+            <Stack spacing={1.5}>
+              <Box>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={pageFilterDraft['task_assignment_emails_enabled'] !== 'false'}
+                      onChange={e => {
+                        const val = e.target.checked ? 'true' : 'false';
+                        setPageFilterDraft(d => ({ ...d, task_assignment_emails_enabled: val }));
+                      }}
+                    />
+                  }
+                  label="Send email when a task is assigned to a team member"
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 6 }}>
+                  When enabled, an email is sent to the assignee whenever a task is created and
+                  assigned to someone other than the creator. Requires SMTP to be configured.
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  onClick={savePageFilterConfig}
+                  disabled={pageFilterSaving}
+                  startIcon={pageFilterSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
+                >
+                  {pageFilterSaving ? 'Saving…' : 'Save'}
+                </Button>
+              </Box>
+            </Stack>
           )}
         </CardContent>
       </Card>

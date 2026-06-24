@@ -43,7 +43,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/page-filter-config',        level: 'auth' },
   { method: 'GET',    path: '/api/nav-role-config',           level: 'auth' },
   { method: 'GET',    path: '/api/platform-users',            level: 'manager' },
-  { method: 'GET',    path: '/api/users',                    level: 'member' },
   { method: 'GET',    path: '/api/users/me/prefs',            level: 'auth' },
   { method: 'PATCH',  path: '/api/users/me/prefs',            level: 'auth',    body: {} },
   { method: 'POST',   path: '/api/users/me/photo',            level: 'auth',    body: {} },
@@ -65,7 +64,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/contacts/0',                level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/contacts/0/localdata',      level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/contacts/0/notes',          level: 'auth',    needsHubspot: true },
-  { method: 'GET',    path: '/api/contacts/0/tasks',          level: 'auth',    needsHubspot: true },
   { method: 'GET',    path: '/api/emails',                    level: 'auth',    needsGoogle: true },
   { method: 'GET',    path: '/api/events',                    level: 'auth',    needsGoogle: true },
   { method: 'GET',    path: '/api/localdata/all',             level: 'auth',    needsHubspot: true },
@@ -107,7 +105,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/users',                     level: 'member' },
 
   // ── self-or-admin (foreign id picked at runtime) ──────────────────────────
-  { method: 'GET',    path: '/api/users',                     level: 'member' },
   { method: 'GET',    path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin' },
   // Photos are team-roster profile pictures intentionally visible to all
   // authenticated users (admin.html loads them for every team member).
@@ -123,11 +120,10 @@ const ROUTES = [
   { method: 'POST',   path: '/api/deals/0/checklist',         level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/contacts/0/workflow',       level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/deals/0/workflow',          level: 'member',  body: {}, needsHubspot: true },
-  { method: 'POST',   path: '/api/contacts/0/tasks',          level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/contacts/urgency',          level: 'auth',    body: {}, needsHubspot: true },
   { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
-  { method: 'POST',   path: '/api/tasks',                     level: 'member',  body: {}, needsGoogle: true },
   { method: 'POST',   path: '/api/contacts/open-task-counts', level: 'member',  body: {}, needsGoogle: true },
+  { method: 'POST',   path: '/api/tasks',                     level: 'member',  body: {}, needsGoogle: true },
   { method: 'PATCH',  path: '/api/tasks/0',                   level: 'member',  body: {}, needsHubspot: true },
   { method: 'DELETE', path: '/api/tasks/0',                   level: 'member',  needsHubspot: true },
   { method: 'POST',   path: '/api/emails/send',               level: 'member',  body: {}, needsGoogle: true },
@@ -236,6 +232,8 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/conflict-digest/send-now',             level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/page-filter-config',                   level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/page-filter-config',                   level: 'admin', body: {} },
+  { method: 'GET',    path: '/api/admin/hubspot/priority-active-days',         level: 'admin' },
+  { method: 'POST',   path: '/api/admin/hubspot/priority-active-days',         level: 'admin', body: { value: 60 } },
   { method: 'GET',    path: '/api/admin/audit-log',                            level: 'admin' },
   { method: 'GET',    path: '/api/admin/capabilities',                         level: 'admin' },
   { method: 'PATCH',  path: '/api/admin/capabilities',                         level: 'admin', body: {} },
