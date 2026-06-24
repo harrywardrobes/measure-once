@@ -130,6 +130,7 @@ const ROUTES = [
   { method: 'POST',   path: '/api/events',                    level: 'member',  body: {}, needsGoogle: true },
   { method: 'PATCH',  path: '/api/events/0',                  level: 'member',  body: {}, needsGoogle: true },
   { method: 'DELETE', path: '/api/events/0',                  level: 'member',  needsGoogle: true },
+  { method: 'DELETE', path: '/api/visits/0',                  level: 'member' },
   { method: 'POST',   path: '/api/personal-tasks',            level: 'member',  body: {} },
   { method: 'PATCH',  path: '/api/personal-tasks/0',          level: 'member',  body: {} },
   { method: 'DELETE', path: '/api/personal-tasks/0',          level: 'member' },

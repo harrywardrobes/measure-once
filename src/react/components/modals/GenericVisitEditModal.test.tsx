@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
@@ -315,6 +315,110 @@ describe('GenericVisitEditModal — edit mode, legacy-appointment warning (no go
 
     expect(onClose).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+});
+
+describe('GenericVisitEditModal — legacy-appointment delete action', () => {
+  let originalFetch: typeof window.fetch;
+
+  beforeEach(() => {
+    originalFetch = window.fetch;
+  });
+
+  afterEach(() => {
+    window.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  it('shows a "Delete" button inside the legacy warning alert', () => {
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    expect(screen.getByTestId('legacy-visit-delete-btn')).toBeTruthy();
+  });
+
+  it('clicking "Delete" reveals confirm and cancel buttons', async () => {
+    const user = userEvent.setup();
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    await user.click(screen.getByTestId('legacy-visit-delete-btn'));
+
+    expect(screen.getByTestId('legacy-visit-delete-confirm-btn')).toBeTruthy();
+    expect(screen.getByTestId('legacy-visit-delete-cancel-btn')).toBeTruthy();
+    expect(screen.queryByTestId('legacy-visit-delete-btn')).toBeNull();
+  });
+
+  it('"Cancel" on the confirmation hides the confirm buttons and restores the Delete button', async () => {
+    const user = userEvent.setup();
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    await user.click(screen.getByTestId('legacy-visit-delete-btn'));
+    await user.click(screen.getByTestId('legacy-visit-delete-cancel-btn'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('legacy-visit-delete-confirm-btn')).toBeNull();
+    });
+    expect(screen.getByTestId('legacy-visit-delete-btn')).toBeTruthy();
+  });
+
+  it('confirming delete calls DELETE /api/visits/:id, shows a toast, and closes the modal', async () => {
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    const showToast = vi.fn();
+    const { useToast } = await import('../../contexts/ToastContext');
+    vi.mocked(useToast).mockReturnValue(showToast);
+
+    window.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof _input === 'string' ? _input : String(_input);
+      if (url.includes('/api/visits/') && init?.method === 'DELETE') {
+        return new Response(JSON.stringify({ success: true }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    }) as typeof window.fetch;
+
+    const user = userEvent.setup();
+    render(
+      <GenericVisitEditModal
+        mode="edit"
+        visit={{ ...VISIT_FIXTURE, googleEventId: null }}
+        open
+        onClose={onClose}
+        onSaved={onSaved}
+      />,
+    );
+
+    await user.click(screen.getByTestId('legacy-visit-delete-btn'));
+    await user.click(screen.getByTestId('legacy-visit-delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+    expect(onSaved).toHaveBeenCalledOnce();
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/removed/i), false);
+
+    const calls = vi.mocked(window.fetch).mock.calls;
+    const deleteCall = calls.find(
+      ([input, init]) =>
+        String(input).includes(`/api/visits/${VISIT_FIXTURE.id}`) &&
+        (init as RequestInit | undefined)?.method === 'DELETE',
+    );
+    expect(deleteCall).toBeTruthy();
+  });
+
+  it('shows an error message if the delete request fails', async () => {
+    window.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'Server error' }), { status: 500 }),
+    ) as typeof window.fetch;
+
+    const user = userEvent.setup();
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    await user.click(screen.getByTestId('legacy-visit-delete-btn'));
+    await user.click(screen.getByTestId('legacy-visit-delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not delete/i)).toBeTruthy();
+    });
+    expect(screen.getByTestId('legacy-visit-delete-btn')).toBeTruthy();
   });
 });
 

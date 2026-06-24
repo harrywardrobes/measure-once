@@ -2927,6 +2927,27 @@ app.delete('/api/events/:id', isAuthenticated, requirePrivilege('member'), async
   }
 });
 
+// DELETE /api/visits/:id — remove a legacy (pre-Google-Calendar) visit row.
+// The visits table was dropped in production; if Postgres returns
+// "undefined_table" (42P01) we treat it as already gone and return success.
+// Any other DB error is re-thrown so the client receives an honest 500.
+app.delete('/api/visits/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ error: 'Invalid visit id' });
+  }
+  try {
+    await pool.query('DELETE FROM visits WHERE id = $1', [id]);
+  } catch (dbErr) {
+    if (dbErr?.code !== '42P01') {
+      // Not a missing-table error — surface it to the client.
+      return res.status(500).json({ error: dbErr?.message || 'Database error' });
+    }
+    // visits table has been dropped — treat the row as already gone.
+  }
+  res.json({ success: true });
+});
+
 // ── HubSpot: Contact Notes + Workflow Data ────────────────────────────────────
 app.get('/api/contacts/:id/notes', requireHubspotToken, async (req, res) => {
   const contactId = String(req.params.id || '');

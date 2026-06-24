@@ -14,7 +14,7 @@ import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
-import { POST, isGoogleAuthError } from '../../utils/api';
+import { POST, DELETE, isGoogleAuthError } from '../../utils/api';
 import { openConnectModal } from '../../context/ConnectionToastContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
@@ -90,6 +90,8 @@ export function GenericVisitEditModal(props: Props) {
   const [notes, setNotes] = useState(isCreate ? '' : (props.visit.notes || ''));
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const hasUnsavedChanges = (() => {
     const [rs, re] = range;
     return (
@@ -201,6 +203,23 @@ export function GenericVisitEditModal(props: Props) {
     }
   }
 
+  async function handleDeleteLegacy() {
+    if (!isEdit) return;
+    const visit = (props as EditProps).visit;
+    setDeleting(true);
+    try {
+      await DELETE(`/api/visits/${visit.id}`);
+      showToast(`${label} removed`, false);
+      handleClose();
+      props.onSaved?.();
+    } catch (e) {
+      setError('Could not delete: ' + (e instanceof Error ? e.message : 'error'));
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const isLegacyAppointment = isEdit && !isCreate && !(props as EditProps).visit.googleEventId;
 
   const dialogTitle = isCreate
@@ -233,7 +252,44 @@ export function GenericVisitEditModal(props: Props) {
       >
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           {isLegacyAppointment && (
-            <Alert severity="warning">
+            <Alert
+              severity="warning"
+              action={
+                !confirmDelete ? (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    onClick={() => setConfirmDelete(true)}
+                    data-testid="legacy-visit-delete-btn"
+                  >
+                    Delete
+                  </Button>
+                ) : (
+                  <Stack spacing={1} sx={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Button
+                      size="small"
+                      color="error"
+                      variant="contained"
+                      onClick={() => void handleDeleteLegacy()}
+                      disabled={deleting}
+                      startIcon={deleting ? <CircularProgress size={12} color="inherit" /> : undefined}
+                      data-testid="legacy-visit-delete-confirm-btn"
+                    >
+                      {deleting ? 'Deleting…' : 'Confirm delete'}
+                    </Button>
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={deleting}
+                      data-testid="legacy-visit-delete-cancel-btn"
+                    >
+                      Cancel
+                    </Button>
+                  </Stack>
+                )
+              }
+            >
               This appointment was created before the Google Calendar migration and cannot be edited here.
               Please delete it and create a new one from the shared calendar.
             </Alert>
