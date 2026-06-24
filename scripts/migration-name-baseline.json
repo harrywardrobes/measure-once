@@ -59,5 +59,6 @@
   "1784200000001_supplier-fk",
   "1785500000000_design-visits-visit-notes",
   "1785600000000_survey-visits-visit-notes",
-  "1785700000000_priority-sort-mode"
+  "1785700000000_priority-sort-mode",
+  "1785800000000_drop-corrected-email-mobile"
 ]

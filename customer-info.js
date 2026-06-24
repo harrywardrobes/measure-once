@@ -1204,8 +1204,6 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
         `UPDATE customer_info_submissions SET
            submitted_at       = NOW(),
            form_link          = NULL,
-           corrected_email    = NULL,
-           corrected_mobile   = NULL,
            address_line1      = $1,
            city               = $2,
            postcode           = $3,
@@ -1904,7 +1902,7 @@ router.get('/api/customer-info/unmatched',
   async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT id, contact_name, contact_email, contact_phone, corrected_email, corrected_mobile,
+        `SELECT id, contact_name, contact_email, contact_phone,
                 address_line1, city, postcode, structured_address,
                 room_count, room_notes, photo_keys, submitted_at, created_at,
                 email_skipped_count

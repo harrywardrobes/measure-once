@@ -1228,18 +1228,9 @@ async function main() {
           : `status=${mSubmitRes.status} body=${JSON.stringify(mSubmitRes.json).slice(0, 200)}`);
 
       if (mSubmitOk) {
-        // Assert DB stores NULL (correctedMobile is ignored)
-        const mDbR = await pool.query(
-          `SELECT corrected_mobile FROM customer_info_submissions WHERE token_hash = $1`,
-          [mHashB]
-        );
-        const mDbMobile = mDbR.rows[0]?.corrected_mobile;
-        const mDbOk = mDbMobile === null;
-        record('CI-M1b.corrected-mobile-null-in-db',
-          mDbOk,
-          mDbOk
-            ? `corrected_mobile is NULL (as expected)`
-            : `expected NULL, got "${mDbMobile}"`);
+        // Note: corrected_mobile column has been dropped from the schema; the
+        // DB-level NULL check (CI-M1b.corrected-mobile-null-in-db) is no longer
+        // applicable and has been removed.
 
         // Assert admin notification email does NOT contain mobile row
         let mAdminEmail = null;
