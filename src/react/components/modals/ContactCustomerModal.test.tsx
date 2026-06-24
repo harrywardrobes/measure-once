@@ -46,8 +46,9 @@ function makeFetch(opts: {
   submitStatus?: number;
   submitHangs?: boolean;
   sendEmailHangs?: boolean;
+  emailPreviewHangs?: boolean;
 } = {}) {
-  const { submitStatus = 200, submitHangs = false, sendEmailHangs = false } = opts;
+  const { submitStatus = 200, submitHangs = false, sendEmailHangs = false, emailPreviewHangs = false } = opts;
   const orig = window.fetch;
   window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
@@ -67,6 +68,7 @@ function makeFetch(opts: {
     }
     // Email template fetch (initial) and preview refetch
     if (url.includes('/email-preview') && method === 'POST') {
+      if (emailPreviewHangs) return new Promise(() => {});
       return new Response(JSON.stringify(EMAIL_TEMPLATE), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
@@ -277,12 +279,39 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     });
 
     // While sending, handleRequestClose returns early (isLocked=true) — no dialog,
-    // no close. The FullScreenModal disableClose=phase==='advancing' keeps button
-    // enabled but the guard silently swallows the request. Verify no discard dialog.
+    // no close. disableClose only covers phase==='advancing' and emailPreviewLoading,
+    // so the button stays enabled but the guard silently swallows the request.
     const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
     await user.click(within(mainDialog).getByRole('button', { name: /close/i }));
 
     // Modal stays open — neither onClose called nor discard dialog shown
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+
+  it('disables the close button while the email template is still loading (emailPreviewLoading)', async () => {
+    // The email-preview fetch hangs so emailPreviewLoading stays true.
+    // disableClose=(emailFlow !== 'idle' && emailPreviewLoading) → close button disabled.
+    restoreFetch = makeFetch({ emailPreviewHangs: true });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderModal(onClose);
+    await waitForContactStep();
+
+    // Open email flow — template fetch starts but never resolves
+    await user.click(screen.getByTestId('contact-method-email-btn'));
+
+    // The subject input should not yet have the template value (fetch is hanging)
+    // Wait briefly to confirm the loading state is active
+    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
+    const closeBtn = within(mainDialog).getByRole('button', { name: /close/i });
+
+    // Close button must be disabled while the template fetch is in-flight
+    await waitFor(() => {
+      expect(closeBtn).toBeDisabled();
+    });
+
+    // onClose must not have been called and no discard dialog should appear
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
   });

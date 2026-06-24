@@ -674,7 +674,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     <FullScreenModal
       open
       onClose={handleRequestClose}
-      disableClose={phase === 'advancing'}
+      disableClose={phase === 'advancing' || (emailFlow !== 'idle' && emailPreviewLoading)}
       title={titleStr}
       headerActions={
         demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
