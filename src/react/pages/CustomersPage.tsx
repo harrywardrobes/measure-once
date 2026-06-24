@@ -1912,6 +1912,7 @@ export function CustomersPage(): React.ReactElement {
         {!loading && contactsStale ? (
           <Alert severity="warning" sx={{ py: 0 }} id="contacts-stale-banner">
             Contact list may be out of date — HubSpot is temporarily unavailable.
+            {sortBy === 'priority' ? ` Priority filter: last ${priorityActiveDays} days.` : ''}
           </Alert>
         ) : null}
 
