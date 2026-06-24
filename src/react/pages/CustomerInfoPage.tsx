@@ -172,6 +172,7 @@ async function resignSavedPhotosAfterRestore(
   token: string,
   initialPhotos: UploadedPhoto[],
   setPhotosFn: (updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => void,
+  onResigned?: (photos: UploadedPhoto[]) => void,
 ): Promise<void> {
   if (!initialPhotos.length) return;
   // Skip photos that already have a fresh signed URL from the draft.
@@ -189,13 +190,27 @@ async function resignSavedPhotosAfterRestore(
     for (const result of d.results as Array<{ key: string; url: string | null }>) {
       byKey[result.key] = result.url;
     }
-    setPhotosFn(prev => prev.map(p => {
+    const applyUpdate = (p: UploadedPhoto): UploadedPhoto => {
       if (p.previewUrl) return p; // Already has a fresh URL — leave it alone
       if (!(p.key in byKey)) return p;
       const url = byKey[p.key];
       if (!url) return { ...p, unavailable: true };
       return { ...p, previewUrl: url };
-    }));
+    };
+    // Compute the next photos array from `prev` (the actual current state at
+    // flush time) so that any photo removed during the async sign request is
+    // not resurrected in the draft.
+    let nextPhotos: UploadedPhoto[] | undefined;
+    setPhotosFn(prev => {
+      nextPhotos = prev.map(applyUpdate);
+      return nextPhotos;
+    });
+    // Re-save the draft with the fresh signed URLs so the next restore within
+    // the same TTL window can skip the sign endpoint entirely.
+    // `setPhotosFn` is a React useState setter: React calls functional updaters
+    // synchronously during the state-update flush, so `nextPhotos` is set by
+    // the time the microtask continuation here runs.
+    if (onResigned && nextPhotos) onResigned(nextPhotos);
   } catch {
     /* Graceful: leave placeholder state if the sign request fails */
   }
@@ -463,7 +478,11 @@ export function CustomerInfoPage() {
           if (draft.savedPhotoKeys?.length) {
             const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
             setPhotos(restored);
-            void resignSavedPhotosAfterRestore(stored, restored, setPhotos);
+            const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
+            draftFormData.roomCount = draft.roomCount || '1';
+            void resignSavedPhotosAfterRestore(stored, restored, setPhotos, freshPhotos => {
+              saveDraft(stored, draftFormData, freshPhotos, draft.genericFields);
+            });
           }
           setIsGeneric(true);
           setPageState('main');
@@ -526,7 +545,11 @@ export function CustomerInfoPage() {
           if (draft.savedPhotoKeys?.length) {
             const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
             setPhotos(restored);
-            void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
+            const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
+            draftFormData.roomCount = draft.roomCount || '1';
+            void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos, freshPhotos => {
+              saveDraft(urlToken, draftFormData, freshPhotos, draft.genericFields);
+            });
           }
           setPageState('main');
           return;
@@ -544,7 +567,11 @@ export function CustomerInfoPage() {
         if (draft.savedPhotoKeys?.length) {
           const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
           setPhotos(restored);
-          void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos);
+          const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
+          draftFormData.roomCount = draft.roomCount || '1';
+          void resignSavedPhotosAfterRestore(urlToken, restored, setPhotos, freshPhotos => {
+            saveDraft(urlToken, draftFormData, freshPhotos);
+          });
         }
         setPageState('main');
       })
