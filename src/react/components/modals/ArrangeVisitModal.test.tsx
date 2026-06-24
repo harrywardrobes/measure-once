@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 
@@ -36,8 +36,18 @@ vi.mock('./ScheduleVisitModal', () => ({
   ),
 }));
 
+/**
+ * offlineQueue is dynamically imported inside doBook and handleOutcome.
+ * Default implementation returns a successful response so existing tests are unaffected.
+ * The isLocked test overrides this to hang so submitting=true can be observed.
+ */
+vi.mock('../../lib/offlineQueue', () => ({
+  sendOrQueue: vi.fn(async () => ({ ok: true, queued: false, status: 200, data: {} })),
+}));
+
 import { ArrangeVisitModal } from './ArrangeVisitModal';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { sendOrQueue } from '../../lib/offlineQueue';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -118,6 +128,14 @@ function mockFetch(opts: {
       }
       return new Response(JSON.stringify({ error: 'Server error' }), {
         status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Best-effort contact address PATCH used by doBook — always succeeds.
+    if (url.includes('/api/contacts/') && method === 'PATCH') {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -213,6 +231,131 @@ describe('ArrangeVisitModal — discard guard on untouched new visit', () => {
   });
 });
 
+describe('ArrangeVisitModal — discard guard dialog behavior (real hook)', () => {
+  let restoreFetch: () => void;
+
+  beforeEach(async () => {
+    sessionStorage.clear();
+    // Use the real useDiscardGuard so dialog rendering can be tested end-to-end.
+    const real = await vi.importActual<typeof import('../../hooks/useDiscardGuard')>('../../hooks/useDiscardGuard');
+    vi.mocked(useDiscardGuard).mockImplementation(real.useDiscardGuard);
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('calls onClose directly when the modal is in the untouched call step (clean state)', async () => {
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // step='call', madeProgress=false → hasUnsavedChanges=false → X closes immediately
+    const dialog = screen.getByRole('dialog');
+    const closeBtn = within(dialog).getByRole('button', { name: /close/i });
+    await user.click(closeBtn);
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+
+  it('shows the discard dialog when the modal is at the booked step (dirty state)', async () => {
+    seedDraft();
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await waitForBookedStep();
+
+    // step='booked' → hasUnsavedChanges=true → X opens discard dialog
+    const dialog = screen.getByRole('dialog');
+    const closeBtn = within(dialog).getByRole('button', { name: /close/i });
+    await user.click(closeBtn);
+
+    expect(await screen.findByRole('dialog', { name: /discard changes/i })).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('"Keep editing" dismisses the discard dialog and returns to the booked step', async () => {
+    seedDraft();
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await waitForBookedStep();
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+    await screen.findByRole('dialog', { name: /discard changes/i });
+
+    await user.click(screen.getByRole('button', { name: /keep editing/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('av-booked-confirm')).toBeTruthy();
+  });
+
+  it('"Discard changes" closes the modal from the booked step', async () => {
+    seedDraft();
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await waitForBookedStep();
+
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+    await screen.findByRole('dialog', { name: /discard changes/i });
+
+    await user.click(screen.getByRole('button', { name: /discard changes/i }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
 describe('ArrangeVisitModal — duplicate-visit guard', () => {
   let restoreFetch: () => void;
   let draftKey: string;
@@ -261,5 +404,55 @@ describe('ArrangeVisitModal — duplicate-visit guard', () => {
       expect(screen.getByRole('alert')).toBeTruthy();
     });
     expect(screen.queryByTestId('schedule-visit-modal')).toBeNull();
+  });
+});
+
+describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () => {
+  let restoreFetch: () => void;
+
+  beforeEach(async () => {
+    sessionStorage.clear();
+    // Use the real useDiscardGuard so the guard state is genuine.
+    const real = await vi.importActual<typeof import('../../hooks/useDiscardGuard')>('../../hooks/useDiscardGuard');
+    vi.mocked(useDiscardGuard).mockImplementation(real.useDiscardGuard);
+    // Make sendOrQueue hang so the modal stays in submitting=true indefinitely.
+    vi.mocked(sendOrQueue).mockImplementation(async () => new Promise(() => { /* never resolves */ }));
+  });
+
+  afterEach(() => {
+    restoreFetch?.();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('disables the close button and shows no dialog while a booking submit is in flight', async () => {
+    seedDraft();
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    await waitForBookedStep();
+
+    // Click "Confirm booking" — doBook() sets submitting=true then hangs on sendOrQueue
+    await user.click(screen.getByTestId('av-booked-confirm'));
+
+    // Wait for submitting state: the modal becomes locked (disableClose=submitting)
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: /close/i })).toBeDisabled();
+    });
+
+    // No discard dialog should have appeared while locked
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
