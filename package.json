@@ -167,6 +167,8 @@
     "test:design-visit-hubspot-retry:ci": "node scripts/with-test-db.js test/design-visit-hubspot-retry/run.js",
     "gc:design-visit-photos": "node scripts/gc-design-visit-photos.mjs",
     "gc:design-visit-photos:dry-run": "node scripts/gc-design-visit-photos.mjs --dry-run",
+    "migrate:objects": "node scripts/migrate-objects.mjs",
+    "migrate:objects:dry-run": "node scripts/migrate-objects.mjs --dry-run",
     "test:hubspot-credential-audit": "node test/hubspot-credential-audit/run.js",
     "test:hubspot-credential-audit:ci": "node scripts/with-test-db.js test/hubspot-credential-audit/run.js",
     "test:lead-status-guard": "node test/lead-status-guard/run.js",
