@@ -4,6 +4,7 @@ import {
   resignSavedPhotosAfterRestore,
   type UploadedPhoto,
 } from './CustomerInfoPage';
+import { CUSTOMER_INFO_DRAFT_PREFIX } from '../constants/localStorageKeys';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -272,5 +273,185 @@ describe('buildRestoredPhotos → resignSavedPhotosAfterRestore boundary integra
 
     await resignSavedPhotosAfterRestore('tok', photos, vi.fn());
     expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+});
+
+// ── Integration: restore → re-sign → draft-persist round-trip ─────────────────
+//
+// These tests exercise the full chain that the three call-sites in
+// CustomerInfoPage follow:
+//   1. buildRestoredPhotos  — turn draft arrays back into UploadedPhoto objects
+//   2. resignSavedPhotosAfterRestore — fetch fresh signed URLs for stale photos
+//   3. onResigned callback  — write the fresh photos back to localStorage
+//
+// The onResigned callback here mirrors exactly what the real saveDraft() call
+// inside each call-site does (writes savedPhotoUrls / Keys / Names to
+// localStorage under CUSTOMER_INFO_DRAFT_PREFIX + token).
+
+describe('restore → re-sign → draft-persist integration', () => {
+  const TOKEN = 'test-token-abc';
+  const LS_KEY = CUSTOMER_INFO_DRAFT_PREFIX + TOKEN;
+  const NOW_S  = 1_700_100_000;
+  const BUF    = 300; // 5-min freshness buffer used by buildRestoredPhotos
+
+  // Minimal saveDraft-style helper: merges fresh photo arrays into the stored draft.
+  function persistFreshPhotos(freshPhotos: UploadedPhoto[]) {
+    const existing: Record<string, unknown> = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      ...existing,
+      savedPhotoKeys:  freshPhotos.map(p => p.key),
+      savedPhotoNames: freshPhotos.map(p => p.name),
+      savedPhotoUrls:  freshPhotos.map(p => p.previewUrl),
+    }));
+  }
+
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_S * 1000);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('writes the fresh signed URL to localStorage after a stale photo is re-signed', async () => {
+    const staleExp = NOW_S + BUF - 60;                                   // expired
+    const staleUrl = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+    const freshUrl = `/api/customer-info-preview/abc/p.jpg?exp=${NOW_S + 3600}&sig=new`;
+
+    // Seed localStorage with a draft whose photo URL is stale
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:  ['photos/p.jpg'],
+      savedPhotoNames: ['p.jpg'],
+      savedPhotoUrls:  [staleUrl],
+      savedPhotoExpiries: [staleExp],
+    }));
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/p.jpg', url: freshUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/p.jpg'], ['p.jpg'], [staleUrl], [staleExp],
+    );
+    expect(restored[0].previewUrl).toBe(''); // stale → empty, confirms re-sign will run
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrl);
+  });
+
+  it('updates only the stale photo URL while preserving the fresh photo URL in localStorage', async () => {
+    const freshExp = NOW_S + BUF + 600;
+    const staleExp = NOW_S + BUF - 60;
+    const freshUrl  = `/api/customer-info-preview/abc/a.jpg?exp=${freshExp}&sig=keep`;
+    const staleUrl  = `/api/customer-info-preview/abc/b.jpg?exp=${staleExp}&sig=old`;
+    const resignedUrl = `/api/customer-info-preview/abc/b.jpg?exp=${NOW_S + 3600}&sig=new`;
+
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:  ['photos/a.jpg', 'photos/b.jpg'],
+      savedPhotoNames: ['a.jpg', 'b.jpg'],
+      savedPhotoUrls:  [freshUrl, staleUrl],
+      savedPhotoExpiries: [freshExp, staleExp],
+    }));
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/b.jpg', url: resignedUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/a.jpg', 'photos/b.jpg'],
+      ['a.jpg', 'b.jpg'],
+      [freshUrl, staleUrl],
+      [freshExp, staleExp],
+    );
+    expect(restored[0].previewUrl).toBe(freshUrl);  // fresh — kept
+    expect(restored[1].previewUrl).toBe('');          // stale — cleared
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrl);    // fresh photo unchanged
+    expect(saved.savedPhotoUrls[1]).toBe(resignedUrl); // stale photo now has fresh URL
+  });
+
+  it('does NOT call onResigned and leaves localStorage unchanged when all photos are fresh', async () => {
+    const freshExp = NOW_S + BUF + 600;
+    const freshUrl = `/api/customer-info-preview/abc/a.jpg?exp=${freshExp}&sig=keep`;
+
+    const originalPayload = {
+      savedPhotoKeys:  ['photos/a.jpg'],
+      savedPhotoNames: ['a.jpg'],
+      savedPhotoUrls:  [freshUrl],
+      savedPhotoExpiries: [freshExp],
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(originalPayload));
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const onResigned = vi.fn();
+
+    const restored = buildRestoredPhotos(
+      ['photos/a.jpg'], ['a.jpg'], [freshUrl], [freshExp],
+    );
+    expect(restored[0].previewUrl).toBe(freshUrl); // still fresh
+
+    await resignSavedPhotosAfterRestore(TOKEN, restored, vi.fn(), onResigned);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onResigned).not.toHaveBeenCalled();
+
+    // localStorage is untouched
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrl);
+  });
+
+  it('preserves non-photo draft fields (e.g. genericFields) when persisting re-signed photos', async () => {
+    const staleExp  = NOW_S + BUF - 60;
+    const staleUrl  = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+    const freshUrl  = `/api/customer-info-preview/abc/p.jpg?exp=${NOW_S + 3600}&sig=new`;
+
+    const originalDraft = {
+      roomNotes: 'master bedroom',
+      savedPhotoKeys:  ['photos/p.jpg'],
+      savedPhotoNames: ['p.jpg'],
+      savedPhotoUrls:  [staleUrl],
+      savedPhotoExpiries: [staleExp],
+      genericFields: { email: 'user@example.com', phone: '555-1234' },
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(originalDraft));
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/p.jpg', url: freshUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/p.jpg'], ['p.jpg'], [staleUrl], [staleExp],
+    );
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    // Fresh URL persisted
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrl);
+    // Non-photo fields left intact by the merge in persistFreshPhotos
+    expect(saved.roomNotes).toBe('master bedroom');
+    expect(saved.genericFields).toEqual({ email: 'user@example.com', phone: '555-1234' });
   });
 });
