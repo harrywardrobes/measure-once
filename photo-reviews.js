@@ -244,7 +244,7 @@ router.post('/api/card-actions/review-customer-photos',
       let lockR;
       try {
         lockR = await reviewClient.query(
-          `SELECT id, contact_id, contact_name, contact_email, corrected_email, submitted_at
+          `SELECT id, contact_id, contact_name, contact_email, submitted_at
            FROM customer_info_submissions
            WHERE id = $1 AND contact_id = $2
            FOR UPDATE`,
@@ -287,7 +287,7 @@ router.post('/api/card-actions/review-customer-photos',
         return res.status(409).json({ error: 'This submission has already been reviewed.' });
       }
 
-      toEmail = submission.corrected_email || submission.contact_email;
+      toEmail = submission.contact_email;
       if (!toEmail) {
         await reviewClient.query('ROLLBACK');
         return res.status(400).json({ error: 'No email address on record for this customer.' });

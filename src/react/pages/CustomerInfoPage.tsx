@@ -34,8 +34,6 @@ import { normalizePhone, formatPhone } from '../utils/phoneFormatters';
 type PageState = 'loading' | 'main' | 'submitted' | 'expired' | 'already_submitted' | 'error';
 
 interface FormData {
-  correctedEmail:    string;
-  correctedMobile:   string;
   structuredAddress: StructuredAddress;
   roomCount:         string;
   roomNotes:         string;
@@ -381,8 +379,6 @@ export function CustomerInfoPage() {
   const [errorMsg, setErrorMsg]     = useState('');
 
   const [formData, setFormData] = useState<FormData>({
-    correctedEmail:    '',
-    correctedMobile:   '',
     structuredAddress: emptyAddress(),
     roomCount:         '1',
     roomNotes:         '',
@@ -399,7 +395,6 @@ export function CustomerInfoPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr]   = useState('');
 
-  const [mobileError, setMobileError] = useState('');
   const [phoneError, setPhoneError]   = useState('');
 
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -632,25 +627,6 @@ export function CustomerInfoPage() {
     }
   }
 
-  // Blur handler for the correctedMobile field (non-generic flow only).
-  // Reformats the raw input to international display form and validates.
-  function handleMobileBlur() {
-    const raw = formData.correctedMobile.trim();
-    if (!raw) {
-      setMobileError('');
-      return;
-    }
-    const e164 = normalizePhone(raw, 'GB');
-    if (e164 === null) {
-      setMobileError('Please enter a valid mobile number (e.g. 07700 900123).');
-    } else {
-      // Reformat to international display form in-place
-      const displayVal = formatPhone(e164);
-      setFormData(prev => ({ ...prev, correctedMobile: displayVal }));
-      setMobileError('');
-      if (activeToken) saveDraft(activeToken, { ...formData, correctedMobile: displayVal }, photos);
-    }
-  }
 
   async function handleSubmit() {
     setSubmitErr('');
@@ -670,16 +646,6 @@ export function CustomerInfoPage() {
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors);
         setSubmitErr('Please fill in all required fields above.');
-        return;
-      }
-    }
-
-    // Validate correctedMobile if provided (non-generic flow)
-    if (!isGeneric && formData.correctedMobile.trim()) {
-      const mobileNorm = normalizePhone(formData.correctedMobile.trim(), 'GB');
-      if (mobileNorm === null) {
-        setMobileError('Please enter a valid mobile number (e.g. 07700 900123).');
-        setSubmitErr('Please fix the errors above.');
         return;
       }
     }
@@ -705,9 +671,6 @@ export function CustomerInfoPage() {
         body.email        = genericFields.email.trim();
         body.phone        = genericFields.phone.trim();
         body.haveWeSpoken = genericFields.haveWeSpoken.trim() || undefined;
-      } else {
-        body.correctedEmail  = formData.correctedEmail.trim()  || undefined;
-        body.correctedMobile = formData.correctedMobile.trim() || undefined;
       }
 
       const r = await fetch(`/api/customer-info/${encodeURIComponent(activeToken)}`, {
@@ -961,7 +924,7 @@ export function CustomerInfoPage() {
                     />
                   </>
                 ) : (
-                  /* Token mode: show masked details with optional corrections */
+                  /* Token mode: show masked details read-only */
                   <>
                     {(maskedEmail || maskedPhone) && (
                       <Box
@@ -982,36 +945,8 @@ export function CustomerInfoPage() {
                         {maskedPhone && (
                           <Typography variant="body2">Phone: <strong>{maskedPhone}</strong></Typography>
                         )}
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                          If anything looks wrong, you can correct it below.
-                        </Typography>
                       </Box>
                     )}
-
-                    <TextField
-                      label="Correct my mobile number (optional)"
-                      placeholder="e.g. 07700 900123"
-                      value={formData.correctedMobile}
-                      onChange={e => {
-                        handleFieldChange('correctedMobile')(e);
-                        if (mobileError) setMobileError('');
-                      }}
-                      onBlur={handleMobileBlur}
-                      fullWidth
-                      size="small"
-                      error={!!mobileError}
-                      helperText={mobileError || undefined}
-                      slotProps={{ htmlInput: { inputMode: 'tel' } }}
-                    />
-                    <TextField
-                      label="Correct my email address (optional)"
-                      placeholder="e.g. me@example.com"
-                      value={formData.correctedEmail}
-                      onChange={handleFieldChange('correctedEmail')}
-                      fullWidth
-                      size="small"
-                      type="email"
-                    />
                   </>
                 )}
 

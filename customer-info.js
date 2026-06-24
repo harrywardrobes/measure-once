@@ -194,7 +194,7 @@ async function sendAdminNotificationEmail(submission) {
   const replyTo = buildReplyTo();
   const { id: submissionId, contact_id, contact_name, contact_email,
           address_line1, city, postcode, room_count, room_notes, have_we_spoken,
-          contact_phone, corrected_mobile } = submission;
+          contact_phone } = submission;
 
   const roomLabel = room_count === '1' ? '1 room' : room_count === '2' ? '2 rooms' : '3+ rooms';
   const addressParts = [address_line1, city, postcode].filter(Boolean);
@@ -293,19 +293,12 @@ async function sendAdminNotificationEmail(submission) {
     ? `<tr><td><strong>Phone</strong></td><td>${escapeHtml(formattedPhone)}</td></tr>`
     : '';
 
-  const formattedMobile = corrected_mobile ? formatPhone(corrected_mobile) : null;
-  const correctedMobileText = formattedMobile ? `Mobile:       ${formattedMobile}` : '';
-  const correctedMobileHtml = formattedMobile
-    ? `<tr><td><strong>Mobile (corrected)</strong></td><td>${escapeHtml(formattedMobile)}</td></tr>`
-    : '';
-
   const tmpl = await getEmailTemplate(ADMIN_NOTIFICATION_TEMPLATE_KEY);
   let { subject, text, html } = renderEmail(tmpl, {
     textVars: {
       customerName, customerEmail, address, rooms: roomLabel,
       notes: notesValue, photoSummary: photoSummaryText,
       contactPhone: contactPhoneText,
-      correctedMobile: correctedMobileText,
     },
     htmlVars: {
       customerName:    escapeHtml(customerName),
@@ -315,7 +308,6 @@ async function sendAdminNotificationEmail(submission) {
       notes:           escapeHtml(notesValue),
       photoSummary:    photoSummaryHtml,
       contactPhone:    contactPhoneHtml,
-      correctedMobile: correctedMobileHtml,
     },
   });
   if (have_we_spoken && String(have_we_spoken).trim()) {
@@ -1067,7 +1059,6 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   }
 
   const {
-    correctedEmail, correctedMobile,
     structuredAddress,
     roomCount, roomNotes,
     photoKeys,
@@ -1096,16 +1087,6 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
     normalisedPhone = normalizePhone(submittedPhone.trim(), 'GB');
     if (normalisedPhone === null) {
       return res.status(400).json({ error: 'Please enter a valid phone number (e.g. 07700 900123).' });
-    }
-  }
-
-  // Normalise correctedMobile to E.164 (non-generic flow only).
-  // If a mobile was provided but cannot be parsed as a valid number, reject early.
-  let normalisedMobile = null;
-  if (!preRow.is_generic && correctedMobile && typeof correctedMobile === 'string' && correctedMobile.trim()) {
-    normalisedMobile = normalizePhone(correctedMobile.trim(), 'GB');
-    if (normalisedMobile === null) {
-      return res.status(400).json({ error: 'Please enter a valid mobile number.' });
     }
   }
 
@@ -1223,19 +1204,17 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
         `UPDATE customer_info_submissions SET
            submitted_at       = NOW(),
            form_link          = NULL,
-           corrected_email    = $1,
-           corrected_mobile   = $2,
-           address_line1      = $3,
-           city               = $4,
-           postcode           = $5,
-           structured_address = $6::jsonb,
-           room_count         = $7,
-           room_notes         = $8,
-           photo_keys         = $9::jsonb
-         WHERE id = $10`,
+           corrected_email    = NULL,
+           corrected_mobile   = NULL,
+           address_line1      = $1,
+           city               = $2,
+           postcode           = $3,
+           structured_address = $4::jsonb,
+           room_count         = $5,
+           room_notes         = $6,
+           photo_keys         = $7::jsonb
+         WHERE id = $8`,
         [
-          correctedEmail    || null,
-          normalisedMobile  || null,
           addressLine1.trim(),
           city.trim(),
           postcode.trim(),
@@ -1361,7 +1340,7 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   // — customer thank-you email
   // — HubSpot lead-status/address patch (non-generic path only; generic path
   //   resolved HubSpot above where it also populates `fresh` with contact_id)
-  const emailTo = fresh.corrected_email || fresh.contact_email;
+  const emailTo = fresh.contact_email;
   const postSubmitTasks = [
     sendAdminNotificationEmail(fresh).catch(e => {
       logger.error({ err: e.message }, '[customer-info] Admin notification failed:');
@@ -1801,8 +1780,8 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
 );
 
 // Authenticated (member+): list all submissions for a contact
-// Viewers are intentionally excluded — the response includes form_link,
-// signed photo URLs, and corrected contact details that a viewer must not see.
+// Viewers are intentionally excluded — the response includes form_link
+// and signed photo URLs that a viewer must not see.
 // form_link (a public bearer credential) is only returned to manager/admin
 // users — a regular member can view submission history but cannot extract the
 // live bearer URL to impersonate the customer on the public form.
@@ -1827,7 +1806,7 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
 
   const r = await pool.query(
     `SELECT id, contact_name, contact_email, contact_phone, created_at, expires_at, submitted_at,
-            corrected_email, corrected_mobile, address_line1, city, postcode,
+            address_line1, city, postcode,
             structured_address,
             room_count, room_notes, photo_keys, masked_email, email_skipped_count,
             CASE WHEN submitted_at IS NULL THEN form_link ELSE NULL END AS form_link

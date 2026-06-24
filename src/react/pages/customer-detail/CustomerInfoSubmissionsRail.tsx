@@ -42,8 +42,6 @@ interface Submission {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  corrected_email: string | null;
-  corrected_mobile: string | null;
   address_line1: string | null;
   city: string | null;
   postcode: string | null;
@@ -71,8 +69,6 @@ interface CachedPhotoSubmission {
   postcode: string | null;
   roomCount: string | null;
   roomNotes: string | null;
-  correctedEmail: string | null;
-  correctedMobile: string | null;
   submittedAt: string | null;
   emailSkippedCount: number;
   photoUrls: string[];
@@ -96,8 +92,6 @@ function cachedToSubmission(c: CachedPhotoSubmission): Submission {
     contact_name: c.contactName ?? null,
     contact_email: c.contactEmail ?? null,
     contact_phone: c.contactPhone ?? null,
-    corrected_email: c.correctedEmail ?? null,
-    corrected_mobile: c.correctedMobile ?? null,
     address_line1: c.addressLine1 ?? null,
     city: c.city ?? null,
     postcode: c.postcode ?? null,
@@ -912,7 +906,6 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
               {sub.submitted_at && (
                 <Typography variant="caption" color="text.secondary">
                   Submitted {fmtDate(sub.submitted_at)}
-                  {(sub.corrected_email || sub.corrected_mobile) && ' · Customer provided corrections'}
                 </Typography>
               )}
 
@@ -933,17 +926,6 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
                     Address
                   </Typography>
                   <Typography variant="body2">{address}</Typography>
-                </Box>
-              )}
-
-              {/* Corrections */}
-              {(sub.corrected_email || sub.corrected_mobile) && (
-                <Box>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', display: 'block', mb: 0.25 }}>
-                    Contact corrections
-                  </Typography>
-                  {sub.corrected_email  && <Typography variant="body2">Email: {sub.corrected_email}</Typography>}
-                  {sub.corrected_mobile && <Typography variant="body2">Mobile: {formatPhone(sub.corrected_mobile)}</Typography>}
                 </Box>
               )}
 

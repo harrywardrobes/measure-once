@@ -423,7 +423,6 @@ async function main() {
     if (rawToken) {
       // Base for valid fields (roomCount and photoKeys are fine; we vary address fields)
       const validBase = {
-        correctedEmail: '', correctedMobile: '',
         addressLine1: '42 Test Road', city: 'Manchester', postcode: 'M1 1AA',
         roomCount: '2', roomNotes: '', photoKeys: uploadedKeys,
       };
@@ -541,8 +540,6 @@ async function main() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          correctedEmail:  '',
-          correctedMobile: '',
           structuredAddress: {
             addressLines: ['42 Test Road'],
             locality: 'Manchester', postalCode: 'M1 1AA',
@@ -1167,18 +1164,21 @@ async function main() {
       } // end if (g7SeedOk)
     }
 
-    // ── CI-M1: correctedMobile normalisation ─────────────────────────────────
-    // Exercises the E.164 normalisation path for correctedMobile:
-    //   a) Invalid mobile → POST returns 400
-    //   b) Messy UK mobile → DB stores E.164, staff API returns E.164
-    //
-    // We insert a fresh non-generic row directly so this scenario is isolated
-    // from CI-4 (which deliberately submits an empty correctedMobile).
+    // ── CI-M1: correctedMobile is ignored (fields removed) ───────────────────
+    // Verifies that:
+    //   a) Sending correctedMobile is silently ignored (not a 400)
+    //   b) corrected_mobile is always NULL in the DB after submit
+    //   c) Admin notification email contains no mobile row
     {
       const contactIdM = String(600000000 + Math.floor(Math.random() * 99999999));
 
-      // ── CI-M1a: invalid mobile → 400 ──────────────────────────────────────
-      // Insert a fresh non-submitted token for contactIdM.
+      const mValidAddress = {
+        addressLines: ['10 Mobile Street'],
+        locality: 'London', postalCode: 'SW1A 1AA',
+        administrativeArea: '', country: 'GB',
+      };
+
+      // ── CI-M1a: correctedMobile is ignored, not a 400 ─────────────────────
       const mRawTokenA  = crypto.randomBytes(32).toString('hex');
       const mHashA      = crypto.createHash('sha256').update(mRawTokenA).digest('hex');
       const mExpiresA   = new Date(Date.now() + 86_400_000);
@@ -1190,24 +1190,19 @@ async function main() {
                  'm***@***.local', '07***0000')`,
         [contactIdM, mHashA, mExpiresA.toISOString()]
       );
-      const mValidAddress = {
-        addressLines: ['10 Mobile Street'],
-        locality: 'London', postalCode: 'SW1A 1AA',
-        administrativeArea: '', country: 'GB',
-      };
       const mV1 = await postSubmit(BASE, mRawTokenA, {
         correctedMobile: '12345',
         structuredAddress: mValidAddress,
         roomCount: '1', roomNotes: '', photoKeys: [],
       });
-      const mV1Ok = mV1.status === 400 && !!mV1.json?.error;
-      record('CI-M1a.invalid-mobile-400',
+      const mV1Ok = mV1.status === 200 && mV1.json?.ok === true;
+      record('CI-M1a.corrected-mobile-ignored',
         mV1Ok,
         mV1Ok
-          ? `400 error="${mV1.json.error}"`
+          ? `200 ok=true (correctedMobile silently ignored)`
           : `status=${mV1.status} body=${JSON.stringify(mV1.json).slice(0, 200)}`);
 
-      // ── CI-M1b: messy UK mobile → DB stores E.164, admin email shows formatted ─
+      // ── CI-M1b: corrected_mobile is always NULL in DB ─────────────────────
       const mRawTokenB = crypto.randomBytes(32).toString('hex');
       const mHashB     = crypto.createHash('sha256').update(mRawTokenB).digest('hex');
       const mExpiresB  = new Date(Date.now() + 86_400_000);
@@ -1226,44 +1221,27 @@ async function main() {
         roomCount: '1', roomNotes: '', photoKeys: [],
       });
       const mSubmitOk = mSubmitRes.status === 200 && mSubmitRes.json?.ok === true;
-      record('CI-M1b.messy-mobile-submit-200',
+      record('CI-M1b.submit-200',
         mSubmitOk,
         mSubmitOk
           ? `POST 200 ok=true`
           : `status=${mSubmitRes.status} body=${JSON.stringify(mSubmitRes.json).slice(0, 200)}`);
 
       if (mSubmitOk) {
-        // Assert DB stores E.164
+        // Assert DB stores NULL (correctedMobile is ignored)
         const mDbR = await pool.query(
           `SELECT corrected_mobile FROM customer_info_submissions WHERE token_hash = $1`,
           [mHashB]
         );
         const mDbMobile = mDbR.rows[0]?.corrected_mobile;
-        const mDbOk = mDbMobile === '+447902819990';
-        record('CI-M1b.e164-in-db',
+        const mDbOk = mDbMobile === null;
+        record('CI-M1b.corrected-mobile-null-in-db',
           mDbOk,
           mDbOk
-            ? `corrected_mobile="${mDbMobile}" (E.164)`
-            : `expected "+447902819990", got "${mDbMobile}"`);
+            ? `corrected_mobile is NULL (as expected)`
+            : `expected NULL, got "${mDbMobile}"`);
 
-        // Assert staff API returns E.164 (formatting is done in the React layer, not the API)
-        const mListRes = await adminClient.get(`/api/customer-info/by-contact/${contactIdM}`);
-        const mListBody = mListRes.json;
-        const mSubmittedRow = Array.isArray(mListBody)
-          ? mListBody.find(r => r.corrected_mobile)
-          : null;
-        const mApiMobile = mSubmittedRow?.corrected_mobile;
-        const mApiOk = mApiMobile === '+447902819990';
-        record('CI-M1b.e164-in-api-response',
-          mApiOk,
-          mApiOk
-            ? `by-contact API corrected_mobile="${mApiMobile}"`
-            : `expected "+447902819990", got "${mApiMobile}" (row: ${JSON.stringify(mSubmittedRow)?.slice(0, 200)})`);
-
-        // Assert admin notification email contains the formatted mobile number.
-        // formatPhone('+447902819990') → '+44 7902 819990'
-        // Text body:  "Mobile:       +44 7902 819990"
-        // HTML body:  <tr><td><strong>Mobile (corrected)</strong></td><td>+44 7902 819990</td></tr>
+        // Assert admin notification email does NOT contain mobile row
         let mAdminEmail = null;
         await pollFn(async () => {
           const mails = readMailJsonl(mailFile);
@@ -1278,31 +1256,32 @@ async function main() {
             ? `admin notification email captured subject="${mAdminEmail.subject}"`
             : `no admin notification email after M1b submit`);
 
-        const mMobileInText = mAdminEmail
-          && typeof mAdminEmail.text === 'string'
-          && mAdminEmail.text.includes('Mobile:')
-          && mAdminEmail.text.includes('+44 7902 819990');
-        record('CI-M1b.mobile-in-email-text',
-          mMobileInText === true,
-          mMobileInText === true
-            ? `"Mobile: +44 7902 819990" found in admin email text body`
-            : `formatted mobile NOT found in admin email text body (email captured: ${!!mAdminEmail})`);
+        const noMobileInText = mAdminEmail
+          ? (typeof mAdminEmail.text !== 'string' || !mAdminEmail.text.includes('Mobile:'))
+          : null;
+        record('CI-M1b.no-mobile-in-email-text',
+          noMobileInText === true,
+          noMobileInText === true
+            ? `mobile row correctly absent from admin email text body`
+            : noMobileInText === null
+              ? `skipped — no admin email captured`
+              : `unexpected "Mobile:" found in admin email text body`);
 
-        const mMobileInHtml = mAdminEmail
-          && typeof mAdminEmail.html === 'string'
-          && mAdminEmail.html.includes('Mobile (corrected)')
-          && mAdminEmail.html.includes('+44 7902 819990');
-        record('CI-M1b.mobile-in-email-html',
-          mMobileInHtml === true,
-          mMobileInHtml === true
-            ? `"Mobile (corrected)" row with "+44 7902 819990" found in admin email HTML body`
-            : `formatted mobile NOT found in admin email HTML body (email captured: ${!!mAdminEmail})`);
+        const noMobileInHtml = mAdminEmail
+          ? (typeof mAdminEmail.html !== 'string' || !mAdminEmail.html.includes('Mobile (corrected)'))
+          : null;
+        record('CI-M1b.no-mobile-in-email-html',
+          noMobileInHtml === true,
+          noMobileInHtml === true
+            ? `mobile row correctly absent from admin email HTML body`
+            : noMobileInHtml === null
+              ? `skipped — no admin email captured`
+              : `unexpected mobile <tr> found in admin email HTML body`);
       } else {
-        record('CI-M1b.e164-in-db', false, 'skipped — submit failed');
-        record('CI-M1b.e164-in-api-response', false, 'skipped — submit failed');
+        record('CI-M1b.corrected-mobile-null-in-db', false, 'skipped — submit failed');
         record('CI-M1b.admin-email-captured', false, 'skipped — submit failed');
-        record('CI-M1b.mobile-in-email-text', false, 'skipped — submit failed');
-        record('CI-M1b.mobile-in-email-html', false, 'skipped — submit failed');
+        record('CI-M1b.no-mobile-in-email-text', false, 'skipped — submit failed');
+        record('CI-M1b.no-mobile-in-email-html', false, 'skipped — submit failed');
       }
 
       // Clean up CI-M1 rows
