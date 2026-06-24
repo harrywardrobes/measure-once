@@ -918,13 +918,22 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
   // Collect all renderable thumbnails across all rooms (flat list for the
   // lightbox) and precompute each room's starting offset into that list so
   // per-room strip buttons can open the lightbox at the correct index.
+  // roomLabel is populated when there are multiple rooms so the lightbox
+  // caption shows which room each photo belongs to while navigating.
+  const hasMultipleRooms = rooms.filter(r => (r.images || []).some(
+    img => img.viewUrl || img.storageKey?.startsWith('data:')
+  )).length > 1;
   const thumbnails: LightboxPhoto[] = [];
   const roomThumbOffsets: number[] = [];
   for (const r of rooms) {
     roomThumbOffsets.push(thumbnails.length);
     for (const img of r.images || []) {
       const src = img.viewUrl || (img.storageKey?.startsWith('data:') ? img.storageKey : '');
-      if (src) thumbnails.push({ src, alt: r.room_name ? `${r.room_name} photo` : 'Room photo' });
+      if (src) thumbnails.push({
+        src,
+        alt: r.room_name ? `${r.room_name} photo` : 'Room photo',
+        roomLabel: hasMultipleRooms && r.room_name ? r.room_name : undefined,
+      });
     }
   }
 

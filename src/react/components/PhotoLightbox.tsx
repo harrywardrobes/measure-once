@@ -9,6 +9,8 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 export interface LightboxPhoto {
   src: string;
   alt: string;
+  /** Optional room name shown in the lightbox caption when navigating multi-room visits. */
+  roomLabel?: string;
 }
 
 export interface PhotoLightboxProps {
@@ -92,8 +94,8 @@ export function PhotoLightbox({ open, photos, initialIndex = 0, onClose }: Photo
         <CloseIcon />
       </IconButton>
 
-      {/* Photo counter */}
-      {photos.length > 1 && (
+      {/* Photo counter / room label */}
+      {(photos.length > 1 || current?.roomLabel) && (
         <Box
           sx={{
             position: 'absolute',
@@ -109,9 +111,22 @@ export function PhotoLightbox({ open, photos, initialIndex = 0, onClose }: Photo
             py: 0.5,
             userSelect: 'none',
             zIndex: 10,
+            textAlign: 'center',
+            whiteSpace: 'nowrap',
           }}
         >
-          {index + 1} / {photos.length}
+          {current?.roomLabel ? (
+            <>
+              {current.roomLabel}
+              {photos.length > 1 && (
+                <Box component="span" sx={{ ml: 1, opacity: 0.7 }}>
+                  {index + 1} / {photos.length}
+                </Box>
+              )}
+            </>
+          ) : (
+            `${index + 1} / ${photos.length}`
+          )}
         </Box>
       )}
 

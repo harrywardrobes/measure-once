@@ -101,14 +101,14 @@ describe('resignResumedImages — short-circuit: no opaque keys needing resign',
 
   it('returns visit unchanged and issues no fetch when rooms is empty', async () => {
     const visit = makeVisit({ rooms: [] });
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
     expect(result).toBe(visit);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('returns visit unchanged and issues no fetch when no room has images', async () => {
     const visit = makeVisit({ rooms: [{ room_name: 'Kitchen', images: [] }] });
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
     expect(result).toBe(visit);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -120,7 +120,7 @@ describe('resignResumedImages — short-circuit: no opaque keys needing resign',
         images: [makeImage('obj:bucket/photo.jpg', signedUrl(BUFFER_SEC + 600))],
       }],
     });
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
     expect(result).toBe(visit);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -132,7 +132,7 @@ describe('resignResumedImages — short-circuit: no opaque keys needing resign',
         images: [makeImage('data:image/jpeg;base64,abc', undefined)],
       }],
     });
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
     expect(result).toBe(visit);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -141,7 +141,7 @@ describe('resignResumedImages — short-circuit: no opaque keys needing resign',
     const visit = makeVisit({
       rooms: [{ room_name: 'Lounge', images: [{ viewUrl: undefined }] }],
     });
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
     expect(result).toBe(visit);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -174,7 +174,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       }],
     });
 
-    await resignResumedImages(VISIT_ID, visit);
+    await resignResumedImages(visit);
 
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -198,7 +198,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       }],
     });
 
-    await resignResumedImages(VISIT_ID, visit);
+    await resignResumedImages(visit);
 
     expect(fetchSpy).toHaveBeenCalledOnce();
   });
@@ -219,7 +219,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result.rooms![0].images![0].viewUrl).toBe(freshUrl);
   });
@@ -244,7 +244,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result.rooms![0].images![0].viewUrl).toBe(originalFreshUrl);
     expect(result.rooms![0].images![1].viewUrl).toBe(freshUrl);
@@ -272,7 +272,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       ],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result.rooms![0].images![0].viewUrl).toBe(url1);
     expect(result.rooms![1].images![0].viewUrl).toBe(url2);
@@ -294,7 +294,7 @@ describe('resignResumedImages — stale keys trigger the bulk resign endpoint', 
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result).toBe(visit);
   });
@@ -319,7 +319,7 @@ describe('resignResumedImages — server error path', () => {
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result).toBe(visit);
   });
@@ -336,7 +336,7 @@ describe('resignResumedImages — server error path', () => {
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result).toBe(visit);
   });
@@ -353,7 +353,7 @@ describe('resignResumedImages — server error path', () => {
       }],
     });
 
-    const result = await resignResumedImages(VISIT_ID, visit);
+    const result = await resignResumedImages(visit);
 
     expect(result).toBe(visit);
   });
