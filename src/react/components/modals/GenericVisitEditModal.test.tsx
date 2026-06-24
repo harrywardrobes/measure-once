@@ -286,6 +286,38 @@ describe('GenericVisitEditModal — edit mode, discard guard: dirty state shows 
   });
 });
 
+describe('GenericVisitEditModal — edit mode, legacy-appointment warning (no googleEventId)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows the legacy-appointment warning alert when googleEventId is null', async () => {
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    expect(
+      await screen.findByRole('alert'),
+    ).toHaveTextContent(/created before the google calendar migration/i);
+  });
+
+  it('disables the "Save changes" button when googleEventId is null', () => {
+    renderEditModal(vi.fn(), { googleEventId: null });
+
+    expect(screen.getByTestId('generic-visit-save')).toBeDisabled();
+  });
+
+  it('calls onClose immediately on close when no edits have been made (no discard dialog)', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderEditModal(onClose, { googleEventId: null });
+
+    const dialog = screen.getByRole('dialog', { name: /edit design visit for alice green/i });
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+});
+
 describe('GenericVisitEditModal — edit mode, discard guard: isLocked suppresses prompt', () => {
   afterEach(() => {
     vi.restoreAllMocks();
