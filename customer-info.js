@@ -429,7 +429,7 @@ const MAX_TOTAL_UPLOADS_PER_TOKEN = 50;
 
 // Write upload data to disk (OS temp dir) rather than buffering in Node's heap.
 // This eliminates the up-to-225 MB per-request RAM spike that memoryStorage()
-// would cause, and lets us stream directly to object storage via uploadFromFilename.
+// would cause, and lets us stream directly to object storage via storage.uploadFile.
 const _photoUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, os.tmpdir()),
@@ -454,7 +454,7 @@ function _friendlyStorageError(err) {
 }
 
 // Upload a photo from a local temp file path directly to object storage.
-// Using uploadFromFilename avoids loading the full file into Node's heap —
+// Using storage.uploadFile avoids loading the full file into Node's heap —
 // the client streams from disk. The temp file is the caller's responsibility
 // to delete after this function returns (whether it succeeds or throws).
 async function uploadPhotoFileToStorage(filePath, mimeType) {
@@ -1516,7 +1516,7 @@ router.post('/api/customer-info/:token/photos',
       return res.status(429).json({ error: 'Photo upload limit reached for this link. Please contact us if you need to add more photos.' });
     }
 
-    // Upload each file from disk to object storage via uploadFromFilename
+    // Upload each file from disk to object storage via storage.uploadFile
     // (streams from disk — no heap buffering).
     const keys = [];
     for (const file of files) {

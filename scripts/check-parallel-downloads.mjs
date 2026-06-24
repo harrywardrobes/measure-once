@@ -143,7 +143,7 @@ const AUTO_SCAN_FILES = [
 ];
 
 // The download helper name used in auto-scan and self-test.
-const DOWNLOAD_CALL = 'downloadAsBytes';
+const DOWNLOAD_CALL = 'downloadBytes';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
