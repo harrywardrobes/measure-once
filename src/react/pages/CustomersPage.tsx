@@ -560,10 +560,16 @@ function saveCustomersScroll() {
 
 function CustomerCardSkeleton() {
   return (
-    <Card data-testid="loading-skeleton" variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
+    <Card data-testid="loading-skeleton" variant="outlined" sx={{ width: '100%', overflow: 'hidden', containerType: 'inline-size' }}>
       <Box sx={{ p: 2 }}>
-        {/* Two-column on md+; single column on mobile — mirrors real CustomerCard */}
-        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
+        {/* Two-column at container ≥400px; single column below — mirrors real CustomerCard container-query threshold */}
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'flex-start' },
+        }}>
 
           {/* Left column — name + contact chips */}
           <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
@@ -575,7 +581,14 @@ function CustomerCardSkeleton() {
           </Box>
 
           {/* Right column — lead status chip */}
-          <Box sx={{ flex: '0 1 auto', display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+          <Box sx={{
+            flex: '0 1 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+            alignItems: 'flex-start',
+            '@container (min-width: 400px)': { alignItems: 'flex-end' },
+          }}>
             <Skeleton variant="rounded" width={64} height={20} />
           </Box>
 
@@ -834,8 +847,8 @@ function CustomerCard({
         onClick={saveCustomersScroll}
         sx={{ p: 2, display: 'block' }}
       >
-        {/* Two-column layout on md+; single column on mobile */}
-        <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', md: 'row' }, alignItems: { md: 'flex-start' } }}>
+        {/* Two-column layout at container ≥400px; single column below — driven by containerType on the Card */}
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column', alignItems: 'flex-start', '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'flex-start' } }}>
 
           {/* Left column — name + contact identifiers */}
           <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
@@ -859,7 +872,7 @@ function CustomerCard({
           </Box>
 
           {/* Right column — lead status, QB badge */}
-          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: { xs: 'flex-start', md: 'flex-end' } }}>
+          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'flex-start', '@container (min-width: 400px)': { alignItems: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
