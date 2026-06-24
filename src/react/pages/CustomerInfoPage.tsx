@@ -1237,10 +1237,12 @@ export function CustomerInfoPage() {
                             borderRadius: 1.5,
                             overflow: 'hidden',
                             aspectRatio: '1',
-                            bgcolor: 'grey.100',
+                            bgcolor: p.unavailable ? 'grey.50' : 'grey.100',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            border: p.unavailable ? '2px solid' : 'none',
+                            borderColor: p.unavailable ? 'warning.main' : undefined,
                           }}
                         >
                           {p.previewUrl ? (
@@ -1248,13 +1250,38 @@ export function CustomerInfoPage() {
                               component="img"
                               src={p.previewUrl}
                               alt={p.name}
-                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: p.unavailable ? 0.35 : 1 }}
                             />
                           ) : (
                             <Box sx={{ textAlign: 'center', p: 0.5 }}>
                               <CloudUploadIcon sx={{ fontSize: 22, color: 'grey.400' }} />
                               <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2, mt: 0.25 }}>
                                 saved
+                              </Typography>
+                            </Box>
+                          )}
+                          {p.unavailable && (
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                inset: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                bgcolor: 'rgba(255,255,255,0.55)',
+                                p: 0.5,
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.55rem',
+                                  color: 'text.disabled',
+                                  lineHeight: 1.2,
+                                  textAlign: 'center',
+                                }}
+                              >
+                                File no longer available
                               </Typography>
                             </Box>
                           )}
@@ -1283,11 +1310,25 @@ export function CustomerInfoPage() {
                     </Box>
                   )}
 
-                  {photos.some(p => p.unavailable) && (
-                    <Alert severity="warning" sx={{ mt: 1.5 }}>
-                      Some files from your saved draft are no longer available. Please remove them and re-upload before submitting.
-                    </Alert>
-                  )}
+                  {photos.some(p => p.unavailable) && (() => {
+                    const unavailableNames = photos
+                      .filter(p => p.unavailable)
+                      .map(p => p.name)
+                      .filter(n => n && !n.startsWith('blob:'));
+                    return (
+                      <Alert severity="warning" sx={{ mt: 1.5 }}>
+                        {unavailableNames.length > 0 ? (
+                          <>
+                            <strong>{unavailableNames.join(', ')}</strong>
+                            {' '}
+                            {unavailableNames.length === 1 ? 'is' : 'are'} no longer available. Please remove {unavailableNames.length === 1 ? 'it' : 'them'} and re-upload before submitting.
+                          </>
+                        ) : (
+                          'Some files from your saved draft are no longer available. Please remove them and re-upload before submitting.'
+                        )}
+                      </Alert>
+                    );
+                  })()}
                 </Box>
 
                 {/* Notes */}
