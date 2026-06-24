@@ -8,6 +8,7 @@ import { SyncStatePill } from '../../components/SyncStatePill';
 import { DesignVisitWizard, type DesignVisitWizardHandler, type DesignVisitWizardCtx, type ExistingVisit } from '../../components/DesignVisitWizard';
 import { useQBInvoices } from '../../hooks/useQBInvoices';
 import { evictCachedRecord } from '../../lib/offlineDb';
+import { PhotoLightbox, type LightboxPhoto } from '../../components/PhotoLightbox';
 
 const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
 const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
@@ -896,10 +897,13 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
   const rooms = visit.rooms || [];
   const grand = rooms.reduce((s, r) => s + (Number(r.unit_price_pence) || 0) * (Number(r.unit_count) || 0), 0);
 
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   // Collect all renderable thumbnails: signed URLs and data: URIs only.
   // Opaque `obj:` storage keys without a viewUrl are skipped — they have no
   // displayable src until the background resign produces a fresh signed URL.
-  const thumbnails: Array<{ src: string; alt: string }> = [];
+  const thumbnails: LightboxPhoto[] = [];
   for (const r of rooms) {
     for (const img of r.images || []) {
       const src = img.viewUrl || (img.storageKey?.startsWith('data:') ? img.storageKey : '');
@@ -907,8 +911,19 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
     }
   }
 
+  const openLightbox = useCallback((index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  }, []);
+
   return (
     <>
+      <PhotoLightbox
+        open={lightboxOpen}
+        photos={thumbnails}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
+      />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8, color: 'var(--ink-3)' }}>
         {visit.handle_name          && <span><strong>Handle:</strong> {visit.handle_name}</span>}
         {visit.furniture_range_name && <span><strong>Furniture range:</strong> {visit.furniture_range_name}</span>}
@@ -956,19 +971,33 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
           style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}
         >
           {thumbnails.map((t, i) => (
-            <img
+            <button
               key={i}
-              src={t.src}
-              alt={t.alt}
+              type="button"
+              aria-label={`View ${t.alt} full screen`}
+              onClick={() => openLightbox(i)}
               style={{
-                width: 56,
-                height: 56,
-                objectFit: 'cover',
-                borderRadius: 6,
+                padding: 0,
                 border: '1px solid var(--stone)',
+                borderRadius: 6,
+                cursor: 'zoom-in',
+                background: 'none',
                 flexShrink: 0,
+                lineHeight: 0,
               }}
-            />
+            >
+              <img
+                src={t.src}
+                alt={t.alt}
+                style={{
+                  width: 56,
+                  height: 56,
+                  objectFit: 'cover',
+                  borderRadius: 5,
+                  display: 'block',
+                }}
+              />
+            </button>
           ))}
         </div>
       )}
