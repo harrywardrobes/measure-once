@@ -796,6 +796,7 @@ let _stageConfigCache  = null; // { map: Map<string,string>, fetchedAt: number }
 function _invalidateContactsConfigCache() {
   _excludedKeysCache = null;
   _stageConfigCache  = null;
+  _devModeCache      = null;
 }
 
 const ALL_CONTACTS_PROPERTIES = [
@@ -5679,7 +5680,7 @@ app.post('/api/admin/hubspot/dev-mode', isAuthenticated, requireAdmin, async (re
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
       [devMode ? 'true' : 'false']
     );
-    _devModeCache = null;
+    _invalidateContactsConfigCache();
     const adminEmail = req.user?.email || 'unknown';
     await logAdminAction(adminEmail, 'set_dev_mode', null, `devMode=${devMode}`);
     res.json({ ok: true, devMode });
