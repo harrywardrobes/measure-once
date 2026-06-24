@@ -3222,31 +3222,47 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
     const event = await calendar.events.patch({ calendarId, eventId, requestBody: updates });
     res.json(calendarEventToTask(event.data));
 
-    // Fire-and-forget notification email when the task is reassigned to a different user
+    // Fire-and-forget notification emails on assignment changes
     const creatorId = req.user?.id ? String(req.user.id) : null;
-    if (
-      newAssignedUserId &&
-      newAssignedUserId !== (previousAssignedUserId || null) &&
-      creatorId && newAssignedUserId !== creatorId
-    ) {
-      getPageFilterConfig().then(cfg => {
-        if (cfg.task_assignment_emails_enabled === 'false') return;
-        const creatorName = req.user?.first_name
-          ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
-          : (req.user?.email || 'A team member');
-        const ep = event.data?.extendedProperties?.private || {};
-        const deadlineRaw = event.data?.start?.dateTime || event.data?.start?.date;
-        const deadlineDate = deadlineRaw ? new Date(deadlineRaw) : new Date();
-        return _sendTaskAssignmentNotification({
-          assignedUserId: newAssignedUserId,
-          creatorName,
-          taskName: event.data?.summary || '',
-          taskDescription: event.data?.description || '',
-          contactName: ep.moContactName || '',
-          deadline: deadlineDate,
-          isReassignment: true,
-        });
-      }).catch(err => logger.warn({ err }, 'Task reassignment notification failed (non-fatal)'));
+    const assignmentChanged = previousAssignedUserId &&
+      (newAssignedUserId || '') !== previousAssignedUserId;
+    if (assignmentChanged || (newAssignedUserId && newAssignedUserId !== (previousAssignedUserId || null))) {
+      const creatorName = req.user?.first_name
+        ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
+        : (req.user?.email || 'A team member');
+      const ep = event.data?.extendedProperties?.private || {};
+      const deadlineRaw = event.data?.start?.dateTime || event.data?.start?.date;
+      const deadlineDate = deadlineRaw ? new Date(deadlineRaw) : new Date();
+
+      // Notify the new assignee (if there is one and they didn't self-assign)
+      if (newAssignedUserId && newAssignedUserId !== (previousAssignedUserId || null) &&
+          creatorId && newAssignedUserId !== creatorId) {
+        getPageFilterConfig().then(cfg => {
+          if (cfg.task_assignment_emails_enabled === 'false') return;
+          return _sendTaskAssignmentNotification({
+            assignedUserId: newAssignedUserId,
+            creatorName,
+            taskName: event.data?.summary || '',
+            taskDescription: event.data?.description || '',
+            contactName: ep.moContactName || '',
+            deadline: deadlineDate,
+            isReassignment: true,
+          });
+        }).catch(err => logger.warn({ err }, 'Task reassignment notification failed (non-fatal)'));
+      }
+
+      // Notify the previous assignee that the task has been taken from them
+      if (assignmentChanged) {
+        getPageFilterConfig().then(cfg => {
+          if (cfg.task_assignment_emails_enabled === 'false') return;
+          return _sendTaskUnassignmentNotification({
+            previousAssignedUserId,
+            creatorName,
+            taskName: event.data?.summary || '',
+            contactName: ep.moContactName || '',
+          });
+        }).catch(err => logger.warn({ err }, 'Task unassignment notification failed (non-fatal)'));
+      }
     }
   } catch (e) {
     const code = classifyGoogleError(e);
@@ -7536,6 +7552,46 @@ async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, ta
     `Due: ${deadlineStr}`,
     '',
     'Log in to Measure Once to view your tasks.',
+  ];
+  const text = lines.join('\n');
+  const html = lines
+    .map(l => l === '' ? '<br>' : `<p style="margin:0 0 4px">${escapeHtml(l)}</p>`)
+    .join('');
+
+  await transport.sendMail({
+    from: _buildFromHeader(),
+    to: assignee.email,
+    subject,
+    text,
+    html,
+  });
+}
+
+async function _sendTaskUnassignmentNotification({ previousAssignedUserId, creatorName, taskName, contactName }) {
+  const transport = _createMailTransport();
+  if (!transport) return;
+
+  const { rows } = await pool.query(
+    'SELECT email, first_name FROM users WHERE id = $1',
+    [previousAssignedUserId]
+  );
+  if (!rows.length || !rows[0].email) return;
+
+  const assignee = rows[0];
+
+  const subject = contactName
+    ? `Task unassigned – ${contactName}`
+    : 'A task has been unassigned from you';
+
+  const lines = [
+    `Hi ${assignee.first_name || 'there'},`,
+    '',
+    `${creatorName} has reassigned the following task away from you.`,
+    '',
+    `Task: ${taskName}`,
+    ...(contactName ? [`Customer: ${contactName}`] : []),
+    '',
+    'Log in to Measure Once to view your current tasks.',
   ];
   const text = lines.join('\n');
   const html = lines
