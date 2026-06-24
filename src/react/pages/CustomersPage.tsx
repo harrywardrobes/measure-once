@@ -825,7 +825,7 @@ function CustomerCard({
   const showCopyButton = (stripHovered || copyDone) && activeLinkUrl !== null;
 
   return (
-    <Card data-testid="customer-card" variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden' }}>
+    <Card data-testid="customer-card" variant="outlined" sx={{ width: '100%', opacity: allArchived ? 0.7 : 1, overflow: 'hidden', containerType: 'inline-size' }}>
       <CardActionArea
         component="a"
         href={`/customers/${encodeURIComponent(contact.id)}`}
@@ -909,7 +909,7 @@ function CustomerCard({
                 sx={{
                   display: 'flex',
                   flexDirection: 'column',
-                  '@media (min-width: 400px)': { flexDirection: 'row', alignItems: 'baseline' },
+                  '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'baseline' },
                 }}
               >
                 <Tooltip
@@ -925,7 +925,7 @@ function CustomerCard({
                     {activitySummary}
                     <Box
                       component="span"
-                      sx={{ display: 'none', mx: '4px', '@media (min-width: 400px)': { display: 'inline' } }}
+                      sx={{ display: 'none', mx: '4px', '@container (min-width: 400px)': { display: 'inline' } }}
                     >
                       ·
                     </Box>
