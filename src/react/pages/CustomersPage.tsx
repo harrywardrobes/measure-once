@@ -902,10 +902,16 @@ function CustomerCard({
           '&:hover': (handler && !dispatchingAction) ? { filter: 'brightness(0.96)' } : undefined,
         }}
       >
-        <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem', minWidth: 0 }}>
+        <Typography component="div" sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem', minWidth: 0 }}>
           {handler && (dispatchingAction ? 'Opening…' : (
-            <>
-              {activitySummary && (
+            activitySummary ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  '@media (min-width: 400px)': { flexDirection: 'row', alignItems: 'baseline' },
+                }}
+              >
                 <Tooltip
                   title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
                   arrow
@@ -914,14 +920,20 @@ function CustomerCard({
                 >
                   <Box
                     component="span"
-                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px', fontSize: '0.72rem' }}
+                    sx={{ fontWeight: 500, opacity: 0.6, fontSize: '0.72rem' }}
                   >
-                    {activitySummary} ·
+                    {activitySummary}
+                    <Box
+                      component="span"
+                      sx={{ display: 'none', mx: '4px', '@media (min-width: 400px)': { display: 'inline' } }}
+                    >
+                      ·
+                    </Box>
                   </Box>
                 </Tooltip>
-              )}
-              {actionLabel}
-            </>
+                <Box component="span">{actionLabel}</Box>
+              </Box>
+            ) : actionLabel
           ))}
         </Typography>
         {handler && (dispatchingAction ? (
