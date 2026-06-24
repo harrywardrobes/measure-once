@@ -939,7 +939,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                     )}
                                   </Typography>
                                 )}
-                                {emailViewMode !== 'preview' && (
+                                {emailViewMode === 'edit' && (
                                   <Box sx={{ display: 'flex', gap: 1 }}>
                                     <Button
                                       data-testid="email-preview-send-btn"
