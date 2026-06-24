@@ -3122,6 +3122,23 @@ app.post('/api/tasks', isAuthenticated, requirePrivilege('member'), calendarEven
       },
     });
     res.json(calendarEventToTask(event.data));
+
+    // Fire-and-forget notification email when task is assigned to someone else
+    const assignedUserId = task_assigned_user?.userId ? String(task_assigned_user.userId) : null;
+    const creatorId = req.user?.id ? String(req.user.id) : null;
+    if (assignedUserId && creatorId && assignedUserId !== creatorId) {
+      const creatorName = req.user?.first_name
+        ? `${req.user.first_name} ${req.user.last_name || ''}`.trim()
+        : (req.user?.email || 'A team member');
+      _sendTaskAssignmentNotification({
+        assignedUserId,
+        creatorName,
+        taskName: String(task_name).trim(),
+        taskDescription: task_description ? String(task_description).trim() : '',
+        contactName: task_customer?.contactName ? String(task_customer.contactName) : '',
+        deadline: deadlineDate,
+      }).catch(err => logger.warn({ err }, 'Task assignment notification failed (non-fatal)'));
+    }
   } catch (e) {
     const code = classifyGoogleError(e);
     res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
@@ -7333,6 +7350,52 @@ function _createMailTransport() {
 }
 function _buildFromHeader() { return _depInv_buildFromHeader(); }
 function _buildReplyTo()    { return _depInv_buildReplyTo(); }
+
+async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, taskName, taskDescription, contactName, deadline }) {
+  const transport = _createMailTransport();
+  if (!transport) return;
+
+  const { rows } = await pool.query(
+    'SELECT email, first_name FROM users WHERE id = $1',
+    [assignedUserId]
+  );
+  if (!rows.length || !rows[0].email) return;
+
+  const assignee = rows[0];
+  const deadlineStr = deadline.toLocaleString('en-GB', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+
+  const subject = contactName
+    ? `New task assigned to you – ${contactName}`
+    : 'New task assigned to you';
+
+  const lines = [
+    `Hi ${assignee.first_name || 'there'},`,
+    '',
+    `${creatorName} has assigned you a new task.`,
+    '',
+    `Task: ${taskName}`,
+    ...(taskDescription ? [`Description: ${taskDescription}`] : []),
+    ...(contactName    ? [`Customer: ${contactName}`]         : []),
+    `Due: ${deadlineStr}`,
+    '',
+    'Log in to Measure Once to view your tasks.',
+  ];
+  const text = lines.join('\n');
+  const html = lines
+    .map(l => l === '' ? '<br>' : `<p style="margin:0 0 4px">${escapeHtml(l)}</p>`)
+    .join('');
+
+  await transport.sendMail({
+    from: _buildFromHeader(),
+    to: assignee.email,
+    subject,
+    text,
+    html,
+  });
+}
 
 // ── deposit_invoice_followup: not-proceeding → DECLINED_DEAL ─────────────────
 // Shares the decline-deal pipeline: reject pending estimate, optionally void
