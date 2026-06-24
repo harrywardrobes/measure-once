@@ -41,8 +41,6 @@ interface Submission {
   postcode: string | null;
   roomCount: string | null;
   roomNotes: string | null;
-  correctedEmail: string | null;
-  correctedMobile: string | null;
   submittedAt: string | null;
   emailSkippedCount: number;
   photoUrls: string[];
@@ -512,12 +510,6 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 )}
                 <DetailRow label="Address" value={[submission.addressLine1, submission.city, submission.postcode].filter(Boolean).join(', ')} />
                 <DetailRow label="Rooms" value={roomCountLabel(submission.roomCount)} />
-                {submission.correctedEmail && (
-                  <DetailRow label="Email (corrected)" value={submission.correctedEmail} />
-                )}
-                {submission.correctedMobile && (
-                  <DetailRow label="Mobile (corrected)" value={formatPhone(submission.correctedMobile)} />
-                )}
               </Box>
 
               {submission.roomNotes && (

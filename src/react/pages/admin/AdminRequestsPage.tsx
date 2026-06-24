@@ -54,8 +54,6 @@ export type UnmatchedSub = {
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  corrected_email: string | null;
-  corrected_mobile: string | null;
   address_line1: string | null;
   city: string | null;
   postcode: string | null;
@@ -98,10 +96,8 @@ const UNDO_GRACE_MS = 6000;
 export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinked: (id: number) => void }) {
   const [open, setOpen] = useState(false);
   const displayName = sub.contact_name || '—';
-  const emailCorrected = Boolean(sub.corrected_email);
-  const displayEmail = sub.corrected_email || sub.contact_email || '—';
-  const phoneCorrected = Boolean(sub.corrected_mobile);
-  const displayPhone = formatPhone(sub.corrected_mobile ?? sub.contact_phone) || '—';
+  const displayEmail = sub.contact_email || '—';
+  const displayPhone = formatPhone(sub.contact_phone) || '—';
   const photoCount = Array.isArray(sub.photoUrls) ? sub.photoUrls.length : 0;
 
   // Link-to-customer dialog state
@@ -248,16 +244,8 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>{displayName}</Typography>
               <Typography variant="caption" color="text.secondary">{displayEmail}</Typography>
-              {emailCorrected && (
-                <Chip label="corrected" size="small" color="secondary" variant="outlined"
-                  sx={{ height: 16, fontSize: '0.6rem', '& .MuiChip-label': { px: '5px' } }} />
-              )}
               {displayPhone !== '—' && (
                 <Typography variant="caption" color="text.secondary">· {displayPhone}</Typography>
-              )}
-              {displayPhone !== '—' && phoneCorrected && (
-                <Chip label="corrected" size="small" color="secondary" variant="outlined"
-                  sx={{ height: 16, fontSize: '0.6rem', '& .MuiChip-label': { px: '5px' } }} />
               )}
             </Stack>
             <Stack direction="row" spacing={1} sx={{ mt: 0.25, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -285,26 +273,10 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
         <Collapse in={open}>
           <Box sx={{ px: 2, pb: 2, pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
             <Stack spacing={1}>
-              {(sub.corrected_email || (sub.corrected_mobile && !sub.contact_phone)) && (
-                <Box>
-                  <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Contact corrections</Typography>
-                  {sub.corrected_email && (
-                    <Typography variant="body2" color="text.secondary">Email: {sub.corrected_email}</Typography>
-                  )}
-                  {sub.corrected_mobile && !sub.contact_phone && (
-                    <Typography variant="body2" color="text.secondary">Mobile: {formatPhone(sub.corrected_mobile)}</Typography>
-                  )}
-                </Box>
-              )}
               {sub.contact_phone && (
                 <Box>
                   <Typography variant="overline" sx={{ fontSize: '0.65rem' }}>Phone</Typography>
                   <Typography variant="body2" color="text.secondary">{formatPhone(sub.contact_phone)}</Typography>
-                  {sub.corrected_mobile && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                      Corrected: {formatPhone(sub.corrected_mobile)}
-                    </Typography>
-                  )}
                 </Box>
               )}
               {(sub.address_line1 || sub.city || sub.postcode) && (

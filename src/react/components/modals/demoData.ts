@@ -298,8 +298,6 @@ export interface DemoSubmissionData {
   postcode: string | null;
   roomCount: string | null;
   roomNotes: string | null;
-  correctedEmail: string | null;
-  correctedMobile: string | null;
   submittedAt: string | null;
   emailSkippedCount: number;
   photoUrls: string[];
@@ -346,8 +344,6 @@ export const DEMO_SUBMISSION: DemoSubmissionData = {
   postcode: 'SW1A 1AA',
   roomCount: '2',
   roomNotes: 'Kitchen and living/dining room. Looking for a modern shaker style.',
-  correctedEmail: null,
-  correctedMobile: null,
   submittedAt: null,
   emailSkippedCount: 0,
   photoUrls: [DEMO_PHOTO_1, DEMO_PHOTO_2],

@@ -26,8 +26,6 @@ const BASE_SUB: UnmatchedSub = {
   contact_name: 'Jane Smith',
   contact_email: 'jane@example.com',
   contact_phone: null,
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -40,53 +38,6 @@ const BASE_SUB: UnmatchedSub = {
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
-
-describe('UnmatchedSubCard — corrected badges', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  const noop = () => {};
-
-  it('shows a "corrected" chip next to the email when corrected_email is set', () => {
-    render(
-      <UnmatchedSubCard
-        sub={{ ...BASE_SUB, corrected_email: 'corrected@example.com' }}
-        onLinked={noop}
-      />,
-    );
-    expect(screen.getAllByText('corrected')).toHaveLength(1);
-  });
-
-  it('shows a "corrected" chip next to the phone when corrected_mobile is set', () => {
-    render(
-      <UnmatchedSubCard
-        sub={{ ...BASE_SUB, corrected_mobile: '07700900000' }}
-        onLinked={noop}
-      />,
-    );
-    expect(screen.getAllByText('corrected')).toHaveLength(1);
-  });
-
-  it('shows no "corrected" chip when neither correction field is set', () => {
-    render(<UnmatchedSubCard sub={BASE_SUB} onLinked={noop} />);
-    expect(screen.queryAllByText('corrected')).toHaveLength(0);
-  });
-
-  it('shows two "corrected" chips when both corrected_email and corrected_mobile are set', () => {
-    render(
-      <UnmatchedSubCard
-        sub={{
-          ...BASE_SUB,
-          corrected_email: 'corrected@example.com',
-          corrected_mobile: '07700900000',
-        }}
-        onLinked={noop}
-      />,
-    );
-    expect(screen.getAllByText('corrected')).toHaveLength(2);
-  });
-});
 
 describe('UnmatchedSubCard — room count in expanded panel', () => {
   afterEach(() => {
