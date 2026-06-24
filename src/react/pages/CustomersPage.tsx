@@ -143,6 +143,12 @@ const SORT_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'name-desc', label: 'Name Z–A' },
 ];
 
+/** Single source of truth for the CustomerCard two-column container-query breakpoint.
+ *  CustomerCardSkeleton mirrors this layout — both must reference this constant so
+ *  changing the threshold keeps skeleton and card pixel-perfect in sync. */
+const CUSTOMER_CARD_CONTAINER_BREAKPOINT = 400; // px
+const CCARD_CQ = `@container (min-width: ${CUSTOMER_CARD_CONTAINER_BREAKPOINT}px)` as const;
+
 function readUrlState() {
   const p = new URLSearchParams(location.search);
   const urlSort = p.get('sort');
@@ -562,13 +568,14 @@ function CustomerCardSkeleton() {
   return (
     <Card data-testid="loading-skeleton" variant="outlined" sx={{ width: '100%', overflow: 'hidden', containerType: 'inline-size' }}>
       <Box sx={{ p: 2 }}>
-        {/* Two-column at container ≥400px; single column below — mirrors real CustomerCard container-query threshold */}
+        {/* Two-column at CUSTOMER_CARD_CONTAINER_BREAKPOINT; single column below.
+            Layout mirrors CustomerCard — keep in sync via the shared CCARD_CQ constant. */}
         <Box sx={{
           display: 'flex',
           gap: 2,
           flexDirection: 'column',
           alignItems: 'flex-start',
-          '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'flex-start' },
+          [CCARD_CQ]: { flexDirection: 'row', alignItems: 'flex-start' },
         }}>
 
           {/* Left column — name + contact chips */}
@@ -587,7 +594,7 @@ function CustomerCardSkeleton() {
             flexDirection: 'column',
             gap: 0.75,
             alignItems: 'flex-start',
-            '@container (min-width: 400px)': { alignItems: 'flex-end' },
+            [CCARD_CQ]: { alignItems: 'flex-end' },
           }}>
             <Skeleton variant="rounded" width={64} height={20} />
           </Box>
@@ -847,8 +854,8 @@ function CustomerCard({
         onClick={saveCustomersScroll}
         sx={{ p: 2, display: 'block' }}
       >
-        {/* Two-column layout at container ≥400px; single column below — driven by containerType on the Card */}
-        <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column', alignItems: 'flex-start', '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'flex-start' } }}>
+        {/* Two-column layout at CUSTOMER_CARD_CONTAINER_BREAKPOINT; single column below — driven by containerType on the Card */}
+        <Box sx={{ display: 'flex', gap: 2, flexDirection: 'column', alignItems: 'flex-start', [CCARD_CQ]: { flexDirection: 'row', alignItems: 'flex-start' } }}>
 
           {/* Left column — name + contact identifiers */}
           <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
@@ -872,7 +879,7 @@ function CustomerCard({
           </Box>
 
           {/* Right column — lead status, QB badge */}
-          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'flex-start', '@container (min-width: 400px)': { alignItems: 'flex-end' } }}>
+          <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'flex-start', [CCARD_CQ]: { alignItems: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
             {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
@@ -924,7 +931,7 @@ function CustomerCard({
                 sx={{
                   display: 'flex',
                   flexDirection: 'column',
-                  '@container (min-width: 400px)': { flexDirection: 'row', alignItems: 'baseline' },
+                  [CCARD_CQ]: { flexDirection: 'row', alignItems: 'baseline' },
                 }}
               >
                 <Tooltip
@@ -940,7 +947,7 @@ function CustomerCard({
                     {activitySummary}
                     <Box
                       component="span"
-                      sx={{ display: 'none', mx: '4px', '@container (min-width: 400px)': { display: 'inline' } }}
+                      sx={{ display: 'none', mx: '4px', [CCARD_CQ]: { display: 'inline' } }}
                     >
                       ·
                     </Box>
