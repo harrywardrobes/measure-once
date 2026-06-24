@@ -1343,11 +1343,20 @@ export function CustomerInfoPage() {
                       .filter(p => p.unavailable)
                       .map(p => p.name)
                       .filter(n => n && !n.startsWith('blob:'));
+                    const MAX_DISPLAY = 3;
+                    const MAX_NAME_LEN = 30;
+                    const truncate = (name: string) =>
+                      name.length > MAX_NAME_LEN ? name.slice(0, MAX_NAME_LEN) + '…' : name;
+                    const displayed = unavailableNames.slice(0, MAX_DISPLAY).map(truncate);
+                    const overflow = unavailableNames.length - MAX_DISPLAY;
+                    const nameList = overflow > 0
+                      ? displayed.join(', ') + ` … and ${overflow} other${overflow === 1 ? '' : 's'}`
+                      : displayed.join(', ');
                     return (
                       <Alert severity="warning" sx={{ mt: 1.5 }}>
                         {unavailableNames.length > 0 ? (
                           <>
-                            <strong>{unavailableNames.join(', ')}</strong>
+                            <strong>{nameList}</strong>
                             {' '}
                             {unavailableNames.length === 1 ? 'is' : 'are'} no longer available. Please remove {unavailableNames.length === 1 ? 'it' : 'them'} and re-upload before submitting.
                           </>
