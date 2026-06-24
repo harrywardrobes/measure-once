@@ -1,0 +1,66 @@
+Fix a bug on the Customers page where the action-strip LABEL on each customer
+card doesn't match the MODAL that opens when you click it. Right now a card can
+read "Upload Photos + Info" but clicking it opens the Contact Customer modal —
+and in practice every card is opening the Contact Customer modal.
+
+ROOT CAUSE
+The label and the modal are resolved from two independent data sources that have
+drifted apart:
+
+  • LABEL  → resolveActionLabel() reads the `stage_action_labels` table
+            (GET /api/stage-action-labels), keyed by stageKey|leadStatusKey.
+  • MODAL  → cardActionHandlerFor() reads the `card_action_handlers` table
+            (GET /api/card-action-handlers), keyed by the same composite key.
+
+Nothing guarantees the two tables agree. In src/react/pages/CustomersPage.tsx
+(around lines 733–744) the card renders the label from one source and dispatches
+the handler from the other, so they can disagree.
+
+The "every card opens Contact Customer" symptom comes from the handler lookup in
+src/react/hooks/useCardActionHandlers.ts (cardActionHandlerFor, ~lines 153–170),
+which falls through this chain:
+
+    stage|status  →  stage|''  →  __global__|''  →  null
+
+If a single `contact_customer` handler is bound to the global slot and the more
+specific stage/status bindings don't match, EVERY card falls through to that
+global Contact Customer handler. A likely contributor: the lookup builds the
+stage key by stripping underscores (e.g. "design_visit" → "designvisit", see
+CustomersPage.tsx ~line 730) but buildIndexes() in useCardActionHandlers.ts only
+lowercases binding stage_key values (no underscore stripping), so a stored
+"design_visit" binding can never match and falls through to the global handler.
+
+REQUIRED FIX — make the label a single source of truth derived from the handler
+that will actually run, so the label and the action can never drift:
+
+  1. In CustomersPage.tsx, change the action-strip label so it ALWAYS derives
+     from the resolved `handler` object (the same one passed to
+     dispatchCardActionHandler), not from the separate stage_action_labels
+     lookup. Use this precedence:
+         handler.config.action_name (humanised)  →  HANDLER_TYPE_LABELS[handler.type]
+     Drop resolveActionLabel() as a label source when a handler is resolved, so
+     a card can never show a label that disagrees with the modal it opens.
+     (HANDLER_TYPE_LABELS lives in src/react/utils/handlerMeta.ts.)
+
+  2. Fix the handler-resolution mismatch so the CORRECT handler is matched
+     instead of falling through to the global Contact Customer handler:
+     normalise the stage key consistently on BOTH sides. Apply the same
+     lowercase + underscore-strip normalisation to binding stage_key values in
+     buildIndexes() (useCardActionHandlers.ts) that the lookup key already uses,
+     so e.g. "design_visit" bindings match the "designvisit" lookup key.
+
+ACCEPTANCE CRITERIA
+  • On the Customers page, the text shown on each card's action strip always
+    matches the modal that opens when you click it.
+  • Cards no longer all open the Contact Customer modal — each card opens the
+    modal for its actually-bound handler.
+  • If no specific handler is bound for a card's stage/lead-status, behaviour is
+    unchanged (global fallback still applies, and the label reflects whatever
+    handler actually runs).
+  • Add/adjust a unit test around cardActionHandlerFor / buildIndexes proving a
+    "design_visit" binding resolves correctly and does not fall through to the
+    global handler.
+
+Note: ProjectsPage.tsx uses the same label/handler pattern (around lines
+564–577). Apply the same single-source-of-truth label change there too for
+consistency, even though the report is about the Customers page.

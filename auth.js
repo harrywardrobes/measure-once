@@ -734,7 +734,13 @@ function loginSessionUser(req, sessionUser) {
   return new Promise((resolve, reject) => {
     req.session.regenerate((regenerateErr) => {
       if (regenerateErr) return reject(regenerateErr);
-      req.login(sessionUser, (err) => err ? reject(err) : resolve(sessionUser));
+      req.login(sessionUser, (loginErr) => {
+        if (loginErr) return reject(loginErr);
+        req.session.save((saveErr) => {
+          if (saveErr) return reject(saveErr);
+          resolve(sessionUser);
+        });
+      });
     });
   });
 }
