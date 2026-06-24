@@ -8,12 +8,15 @@ import {
   Card,
   CardActionArea,
   Chip,
+  IconButton,
   Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
 import { useToastContext } from '../contexts/ToastContext';
@@ -26,13 +29,16 @@ import { WorkflowDef } from '../lib/workflowConfig';
 import { useWorkflowData } from '../context/WorkflowDataContext';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
-type _Icons = typeof RefreshIcon | typeof WarningAmberIcon;
+type _Icons = typeof RefreshIcon | typeof WarningAmberIcon | typeof ChevronLeftIcon | typeof ChevronRightIcon;
 
-type PersonalTask = {
+type ContactTask = {
   id: string;
-  title: string;
-  done?: boolean;
-  dueDate?: string;
+  task_name: string;
+  task_description: string;
+  task_customer: { contactId: string; contactName: string };
+  task_assigned_user: { userId: string; name: string };
+  task_deadline: string;
+  task_status: 'open' | 'completed';
 };
 
 type Contact = {
@@ -192,40 +198,44 @@ function DateHeader() {
   );
 }
 
+const TASKS_PER_PAGE = 5;
+
 function TaskSection({
   tasks,
   loading,
   todayMs,
 }: {
-  tasks: PersonalTask[];
+  tasks: ContactTask[];
   loading: boolean;
   todayMs: number;
 }) {
+  const [page, setPage] = React.useState(1);
+
+  const open = tasks.filter((t) => t.task_status !== 'completed');
+
+  const overdue = open.filter(
+    (t) => t.task_deadline && new Date(t.task_deadline).getTime() < todayMs,
+  );
+
+  const totalPages = Math.max(1, Math.ceil(open.length / TASKS_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * TASKS_PER_PAGE;
+  const visible = open.slice(pageStart, pageStart + TASKS_PER_PAGE);
+
   if (loading) {
     return (
       <Box sx={{ mb: 3 }}>
-        <SectionHeader title="My Tasks" />
+        <SectionHeader title="Tasks" />
         <SkeletonCard titleW="48%" />
         <SkeletonCard titleW="54%" />
       </Box>
     );
   }
-  const overdue = tasks.filter(
-    (t) => !t.done && t.dueDate && new Date(t.dueDate).getTime() < todayMs,
-  );
-  const today = tasks.filter(
-    (t) =>
-      !t.done &&
-      t.dueDate &&
-      new Date(t.dueDate).getTime() >= todayMs &&
-      new Date(t.dueDate).getTime() < todayMs + 86400000,
-  );
-  const due = [...overdue, ...today];
-  const visible = due.slice(0, 4);
+
   return (
     <Box sx={{ mb: 3 }}>
       <SectionHeader
-        title="My Tasks"
+        title="Tasks"
         badge={
           overdue.length ? (
             <Chip
@@ -238,35 +248,80 @@ function TaskSection({
           ) : null
         }
       />
-      {due.length === 0 ? (
+      {open.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-          No tasks due today — you're all clear.
+          No open tasks — you're all clear.
         </Typography>
       ) : (
         <>
           {visible.map((t) => {
-            const isOvr = !!t.dueDate && new Date(t.dueDate).getTime() < todayMs;
+            const isOvr =
+              !!t.task_deadline && new Date(t.task_deadline).getTime() < todayMs;
+            const contactId = t.task_customer?.contactId;
+            const contactName = t.task_customer?.contactName;
             return (
-              <HomeCard key={t.id}>
+              <HomeCard
+                key={t.id}
+                onClick={
+                  contactId
+                    ? () => {
+                        const open = (
+                          window as unknown as { openProject?: (id: string, idx: number) => void }
+                        ).openProject;
+                        if (typeof open === 'function') open(contactId, 0);
+                        else location.href = `/customers/${encodeURIComponent(contactId)}`;
+                      }
+                    : undefined
+                }
+              >
                 <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                  {t.title}
+                  {t.task_name}
                 </Typography>
-                {t.dueDate ? (
-                  <Typography
-                    variant="caption"
-                    sx={{ color: isOvr ? 'error.main' : 'text.secondary' }}
-                  >
-                    {isOvr ? '⚠ Overdue · ' : ''}
-                    {fmtDate(t.dueDate)}
-                  </Typography>
-                ) : null}
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.25 }}>
+                  {t.task_deadline ? (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: isOvr ? 'error.main' : 'text.secondary' }}
+                    >
+                      {isOvr ? '⚠ Overdue · ' : ''}
+                      {fmtDate(t.task_deadline)}
+                    </Typography>
+                  ) : null}
+                  {contactName ? (
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
+                      · {contactName}
+                    </Typography>
+                  ) : null}
+                </Stack>
               </HomeCard>
             );
           })}
-          {due.length > 4 ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', py: 1 }}>
-              +{due.length - 4} more tasks
-            </Typography>
+          {totalPages > 1 ? (
+            <Stack
+              direction="row"
+              sx={{ alignItems: 'center', justifyContent: 'center', mt: 0.5 }}
+              spacing={1}
+            >
+              <IconButton
+                size="small"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                aria-label="Previous page"
+              >
+                <ChevronLeftIcon fontSize="small" />
+              </IconButton>
+              <Typography variant="caption" color="text.secondary">
+                {safePage} / {totalPages}
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                aria-label="Next page"
+              >
+                <ChevronRightIcon fontSize="small" />
+              </IconButton>
+            </Stack>
           ) : null}
         </>
       )}
@@ -474,7 +529,7 @@ export function HomePage(): React.ReactElement {
   const { isAdmin } = usePrivilege();
   const { devMode } = useDevMode({ enabled: isAdmin });
 
-  const [tasks, setTasks] = React.useState<PersonalTask[]>([]);
+  const [tasks, setTasks] = React.useState<ContactTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
 
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
@@ -526,8 +581,8 @@ export function HomePage(): React.ReactElement {
 
   const loadTasks = React.useCallback(() => {
     setTasksLoading(true);
-    jget<PersonalTask[]>('/api/personal-tasks')
-      .then((rows) => setTasks(Array.isArray(rows) ? rows : []))
+    jget<{ results: ContactTask[] }>('/api/tasks')
+      .then((data) => setTasks(Array.isArray(data?.results) ? data.results : []))
       .catch(() => setTasks([]))
       .finally(() => setTasksLoading(false));
   }, []);
