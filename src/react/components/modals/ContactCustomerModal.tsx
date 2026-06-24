@@ -12,7 +12,9 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError } from '../../utils/api';
+import { openConnectModal } from '../../context/ConnectionToastContext';
+import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
@@ -423,7 +425,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       broadcastContactAttemptLogged(contactId);
     } catch (e) {
       const err = e as ApiError;
-      if (err.status === 400) {
+      if (isGoogleAuthError(e)) {
+        setEmailSubmitError('GOOGLE_AUTH');
+        setEmailSubmitRetry(false);
+        openConnectModal('google', 'Google is disconnected — reconnect it to send emails from your Gmail account.');
+      } else if (err.status === 400) {
         setEmailSubmitError(err.message || 'Please check your input and try again.');
         setEmailSubmitRetry(false);
       } else if (err.status != null && err.status >= 500) {
@@ -976,7 +982,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                 {emailPreviewError && (
                                   <Alert severity="error" sx={{ mb: 0.75, py: 0 }}>{emailPreviewError}</Alert>
                                 )}
-                                {emailSubmitError && (
+                                {emailSubmitError === 'GOOGLE_AUTH' && (
+                                  <GoogleAuthAlert sx={{ mb: 0.5, py: 0 }} />
+                                )}
+                                {emailSubmitError && emailSubmitError !== 'GOOGLE_AUTH' && (
                                   <Typography variant="caption" color="error" sx={{ display: 'block', mb: 0.5 }}>
                                     {emailSubmitError}
                                     {emailSubmitRetry && (

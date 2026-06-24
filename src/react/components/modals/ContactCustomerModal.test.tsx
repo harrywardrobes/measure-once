@@ -13,11 +13,16 @@ vi.mock('../../context/ConnectionToastContext', () => ({
   useServiceStatuses: vi.fn(() => new Map()),
 }));
 
+vi.mock('../GoogleAuthAlert', () => ({
+  GoogleAuthAlert: () => <span>Reconnect Google</span>,
+}));
+
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: vi.fn(() => ({ user: { name: 'Test User', email: 'test@example.com' } })),
 }));
 
 import { ContactCustomerModal } from './ContactCustomerModal';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 
 const CONTACT_ID = 'c-42';
 const CONTACT_DATA = {
@@ -410,5 +415,67 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     }, { timeout: 3000 });
 
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+  });
+
+  it('shows GoogleAuthAlert and calls openConnectModal when send-email returns 401 GOOGLE_AUTH', async () => {
+    const orig = window.fetch;
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.endsWith('/api/card-actions/contact-customer') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_DATA), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/email-preview') && method === 'POST') {
+        return new Response(JSON.stringify(EMAIL_TEMPLATE), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/send-email') && method === 'POST') {
+        return new Response(
+          JSON.stringify({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const mockOpenConnectModal = openConnectModal as ReturnType<typeof vi.fn>;
+    mockOpenConnectModal.mockClear();
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderModal(onClose);
+    await waitForContactStep();
+
+    await user.click(screen.getByTestId('contact-method-email-btn'));
+
+    const subjectInput = await screen.findByRole('textbox', { name: /subject/i });
+    await waitFor(() => {
+      expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
+    });
+
+    await user.click(screen.getByTestId('email-preview-send-btn'));
+
+    await waitFor(() => {
+      expect(mockOpenConnectModal).toHaveBeenCalledWith(
+        'google',
+        expect.any(String),
+      );
+    });
+
+    expect(screen.getByText(/reconnect google/i)).toBeTruthy();
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
