@@ -378,8 +378,16 @@ export function isViewUrlStale(viewUrl: string | undefined): boolean {
  * Best-effort: if the request fails (e.g. the user is offline) the visit is
  * returned unchanged — the underlying image data still re-submits correctly,
  * only the preview thumbnail is temporarily missing.
+ *
+ * When the visit has more than 100 opaque keys the server returns HTTP 400
+ * (TOO_MANY_PHOTOS). This is an expected, informational condition — `onTooManyPhotos`
+ * is called instead of treating it as a crash, and the visit is returned unchanged
+ * so the wizard still opens.
  */
-export async function resignResumedImages(visitId: number, visit: ExistingVisit): Promise<ExistingVisit> {
+export async function resignResumedImages(
+  visit: ExistingVisit,
+  onTooManyPhotos?: () => void,
+): Promise<ExistingVisit> {
   const rooms = visit.rooms || [];
   const needsResign = rooms.some(r =>
     (r.images || []).some(img => img.storageKey?.startsWith('obj:') && isViewUrlStale(img.viewUrl))
@@ -388,7 +396,11 @@ export async function resignResumedImages(visitId: number, visit: ExistingVisit)
 
   let urls: Record<string, string> = {};
   try {
-    const r = await fetch(`/api/design-visits/${visitId}/photos/resign`, { method: 'POST' });
+    const r = await fetch(`/api/design-visits/${visit.id}/photos/resign`, { method: 'POST' });
+    if (r.status === 400) {
+      onTooManyPhotos?.();
+      return visit;
+    }
     if (r.ok) {
       const data = await r.json();
       if (data?.urls && typeof data.urls === 'object') {
@@ -425,6 +437,7 @@ function visitIdFromHash(hash: string): number | null {
 
 export function DesignVisitsList({ contactId, visits, loading, error, fromCache, onRefresh }: Props) {
   const { isAdmin } = usePrivilege();
+  const showToast = useToast();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [details, setDetails] = useState<Record<number, DetailState>>({});
   const [wizardState, setWizardState] = useState<WizardState | null>(null);
@@ -565,11 +578,16 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
     // Re-sign any expired or absent photo thumbnails in a single bulk request
     // before the wizard opens. Signed URLs have a ~1 h TTL; a visit loaded from
     // cache (page open >1 h) or from the offline queue will have stale viewUrls.
-    existingVisit = await resignResumedImages(id, existingVisit);
+    existingVisit = await resignResumedImages(existingVisit, () => {
+      showToast(
+        'This visit has too many photos to refresh all at once. ' +
+        'Scroll through the rooms to refresh individual thumbnails.',
+      );
+    });
 
     setEditingId(id);
     setWizardState({ handler: { config: {} }, ctx, existingVisit });
-  }, [visits, details, contactId, pendingEditByVisitId]);
+  }, [visits, details, contactId, pendingEditByVisitId, showToast]);
 
   const handleEdit = useCallback((id: number) => {
     openWizardForEdit(id);
