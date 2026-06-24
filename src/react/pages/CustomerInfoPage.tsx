@@ -1282,6 +1282,12 @@ export function CustomerInfoPage() {
                       ))}
                     </Box>
                   )}
+
+                  {photos.some(p => p.unavailable) && (
+                    <Alert severity="warning" sx={{ mt: 1.5 }}>
+                      Some files from your saved draft are no longer available. Please remove them and re-upload before submitting.
+                    </Alert>
+                  )}
                 </Box>
 
                 {/* Notes */}
