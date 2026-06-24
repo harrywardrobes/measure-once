@@ -49,15 +49,17 @@ interface GenericFields {
 }
 
 interface DraftPayload extends FormData {
-  savedPhotoKeys?: string[];
-  genericFields?: GenericFields;
+  savedPhotoKeys?:  string[];
+  savedPhotoNames?: string[];
+  genericFields?:   GenericFields;
 }
 
 interface UploadedPhoto {
-  key:        string;
-  previewUrl: string;
-  name:       string;
-  isPdf?:     boolean;
+  key:          string;
+  previewUrl:   string;
+  name:         string;
+  isPdf?:       boolean;
+  unavailable?: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -100,10 +102,14 @@ function loadDraft(token: string): Partial<DraftPayload> {
   return {};
 }
 
-function saveDraft(token: string, data: FormData, photoKeys: string[], generic?: GenericFields) {
+function saveDraft(token: string, data: FormData, photos: UploadedPhoto[], generic?: GenericFields) {
   if (!token) return;
   try {
-    const payload: DraftPayload = { ...data, savedPhotoKeys: photoKeys };
+    const payload: DraftPayload = {
+      ...data,
+      savedPhotoKeys:  photos.map(p => p.key),
+      savedPhotoNames: photos.map(p => p.name),
+    };
     if (generic) payload.genericFields = generic;
     localStorage.setItem(lsKey(token), JSON.stringify(payload));
   } catch { /* ignore */ }
@@ -115,6 +121,49 @@ function clearDraft(token: string) {
     localStorage.removeItem(lsKey(token));
     localStorage.removeItem(GENERIC_CI_DRAFT_TOKEN_KEY);
   } catch { /* ignore */ }
+}
+
+function buildRestoredPhotos(keys: string[], names?: string[]): UploadedPhoto[] {
+  return keys.map((k, i) => {
+    const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
+    const fallback = isPdf ? 'document.pdf' : 'photo';
+    return {
+      key:        k,
+      previewUrl: '',
+      name:       names?.[i] || fallback,
+      isPdf,
+    };
+  });
+}
+
+async function resignPdfsAfterRestore(
+  token: string,
+  initialPhotos: UploadedPhoto[],
+  setPhotosFn: (updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => void,
+): Promise<void> {
+  const pdfPhotos = initialPhotos.filter(p => p.isPdf);
+  if (!pdfPhotos.length) return;
+  try {
+    const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/sign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: pdfPhotos.map(p => p.key) }),
+    });
+    const d = await r.json();
+    if (!r.ok) return;
+    const byKey: Record<string, string | null> = {};
+    for (const result of d.results as Array<{ key: string; url: string | null }>) {
+      byKey[result.key] = result.url;
+    }
+    setPhotosFn(prev => prev.map(p => {
+      if (!p.isPdf || !(p.key in byKey)) return p;
+      const url = byKey[p.key];
+      if (!url) return { ...p, unavailable: true };
+      return { ...p, previewUrl: url };
+    }));
+  } catch {
+    /* Graceful: leave placeholder state if the sign request fails */
+  }
 }
 
 function getStoredGenericToken(): string {
@@ -380,15 +429,9 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            setPhotos(draft.savedPhotoKeys.map(k => {
-              const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
-              return {
-                key: k,
-                previewUrl: '',
-                name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-                isPdf,
-              };
-            }));
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+            setPhotos(restored);
+            void resignPdfsAfterRestore(stored, restored, setPhotos);
           }
           setIsGeneric(true);
           setPageState('main');
@@ -449,15 +492,9 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            setPhotos(draft.savedPhotoKeys.map(k => {
-              const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
-              return {
-                key: k,
-                previewUrl: '',
-                name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-                isPdf,
-              };
-            }));
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+            setPhotos(restored);
+            void resignPdfsAfterRestore(urlToken, restored, setPhotos);
           }
           setPageState('main');
           return;
@@ -473,15 +510,9 @@ export function CustomerInfoPage() {
           roomCount: draft.roomCount || '1',
         }));
         if (draft.savedPhotoKeys?.length) {
-          setPhotos(draft.savedPhotoKeys.map(k => {
-            const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
-            return {
-              key: k,
-              previewUrl: '',
-              name: k.replace(/^obj:ci_[^.]+\./, '').replace(/^/, 'photo.') || 'photo',
-              isPdf,
-            };
-          }));
+          const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames);
+          setPhotos(restored);
+          void resignPdfsAfterRestore(urlToken, restored, setPhotos);
         }
         setPageState('main');
       })
@@ -495,14 +526,14 @@ export function CustomerInfoPage() {
   useEffect(() => {
     if (pageState !== 'main' || !activeToken) return;
     if (!draftSavedRef.current) { draftSavedRef.current = true; return; }
-    saveDraft(activeToken, formData, photos.map(p => p.key), isGeneric ? genericFields : undefined);
+    saveDraft(activeToken, formData, photos, isGeneric ? genericFields : undefined);
   }, [formData, photos, genericFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFieldChange(field: keyof FormData) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setFormData(prev => {
         const updated = { ...prev, [field]: e.target.value };
-        if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key), isGeneric ? genericFields : undefined);
+        if (activeToken) saveDraft(activeToken, updated, photos, isGeneric ? genericFields : undefined);
         return updated;
       });
     };
@@ -512,7 +543,7 @@ export function CustomerInfoPage() {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setGenericFields(prev => {
         const updated = { ...prev, [field]: e.target.value };
-        if (activeToken) saveDraft(activeToken, formData, photos.map(p => p.key), updated);
+        if (activeToken) saveDraft(activeToken, formData, photos, updated);
         return updated;
       });
       if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
@@ -561,7 +592,7 @@ export function CustomerInfoPage() {
       });
       setPhotos(prev => {
         const updated = [...prev, ...newPhotos];
-        if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key), isGeneric ? genericFields : undefined);
+        if (activeToken) saveDraft(activeToken, formData, updated, isGeneric ? genericFields : undefined);
         return updated;
       });
       if (truncated) {
@@ -577,7 +608,7 @@ export function CustomerInfoPage() {
   function removePhoto(key: string) {
     setPhotos(prev => {
       const updated = prev.filter(p => p.key !== key);
-      if (activeToken) saveDraft(activeToken, formData, updated.map(p => p.key), isGeneric ? genericFields : undefined);
+      if (activeToken) saveDraft(activeToken, formData, updated, isGeneric ? genericFields : undefined);
       return updated;
     });
   }
@@ -597,7 +628,7 @@ export function CustomerInfoPage() {
       const displayVal = formatPhone(e164);
       setGenericFields(prev => ({ ...prev, phone: displayVal }));
       setPhoneError('');
-      if (activeToken) saveDraft(activeToken, formData, photos.map(p => p.key), { ...genericFields, phone: displayVal });
+      if (activeToken) saveDraft(activeToken, formData, photos, { ...genericFields, phone: displayVal });
     }
   }
 
@@ -617,7 +648,7 @@ export function CustomerInfoPage() {
       const displayVal = formatPhone(e164);
       setFormData(prev => ({ ...prev, correctedMobile: displayVal }));
       setMobileError('');
-      if (activeToken) saveDraft(activeToken, { ...formData, correctedMobile: displayVal }, photos.map(p => p.key));
+      if (activeToken) saveDraft(activeToken, { ...formData, correctedMobile: displayVal }, photos);
     }
   }
 
@@ -991,7 +1022,7 @@ export function CustomerInfoPage() {
                   onChange={(next) => {
                     setFormData(prev => {
                       const updated = { ...prev, structuredAddress: next };
-                      if (activeToken) saveDraft(activeToken, updated, photos.map(p => p.key));
+                      if (activeToken) saveDraft(activeToken, updated, photos);
                       return updated;
                     });
                   }}
@@ -1136,7 +1167,7 @@ export function CustomerInfoPage() {
                               position: 'relative',
                               borderRadius: 1.5,
                               aspectRatio: '1',
-                              bgcolor: 'grey.100',
+                              bgcolor: p.unavailable ? 'grey.50' : 'grey.100',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1144,27 +1175,62 @@ export function CustomerInfoPage() {
                               gap: 0.5,
                               p: 0.75,
                               border: '1px solid',
-                              borderColor: 'grey.200',
+                              borderColor: p.unavailable ? 'warning.light' : 'grey.200',
                             }}
                           >
-                            <PictureAsPdfIcon sx={{ fontSize: 28, color: 'error.main' }} />
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                fontSize: '0.55rem',
-                                color: 'text.secondary',
-                                lineHeight: 1.2,
-                                wordBreak: 'break-all',
-                                textAlign: 'center',
-                                maxWidth: '100%',
-                                overflow: 'hidden',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                              }}
-                            >
-                              {p.name}
-                            </Typography>
+                            <PictureAsPdfIcon
+                              sx={{ fontSize: 28, color: p.unavailable ? 'text.disabled' : 'error.main' }}
+                            />
+                            {p.unavailable ? (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontSize: '0.55rem',
+                                  color: 'text.disabled',
+                                  lineHeight: 1.2,
+                                  textAlign: 'center',
+                                }}
+                              >
+                                File no longer available
+                              </Typography>
+                            ) : (
+                              <>
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    fontSize: '0.55rem',
+                                    color: 'text.secondary',
+                                    lineHeight: 1.2,
+                                    wordBreak: 'break-all',
+                                    textAlign: 'center',
+                                    maxWidth: '100%',
+                                    overflow: 'hidden',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                  }}
+                                >
+                                  {p.name}
+                                </Typography>
+                                {p.previewUrl && (
+                                  <Typography
+                                    component="a"
+                                    href={p.previewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    variant="caption"
+                                    sx={{
+                                      fontSize: '0.5rem',
+                                      color: 'primary.main',
+                                      textDecoration: 'underline',
+                                      lineHeight: 1,
+                                    }}
+                                  >
+                                    View
+                                  </Typography>
+                                )}
+                              </>
+                            )}
                             <Button
                               size="small"
                               onClick={() => removePhoto(p.key)}

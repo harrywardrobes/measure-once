@@ -499,6 +499,18 @@ function signCustomerPhotoUrl(storageKey) {
   return `/api/customer-info-photos/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
 }
 
+function signPublicCustomerPhotoUrl(storageKey) {
+  // Like signCustomerPhotoUrl but signs for the unauthenticated preview route
+  // so customers can view/download their own uploaded files after a draft restore.
+  if (!storageKey || typeof storageKey !== 'string') return null;
+  if (!storageKey.startsWith('obj:ci_')) return null;
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return null;
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const sig = crypto.createHmac('sha256', secret).update(`${storageKey}|${exp}`).digest('hex');
+  return `/api/customer-info-preview/${encodeURIComponent(storageKey)}?exp=${exp}&sig=${sig}`;
+}
+
 function verifyCustomerPhotoUrl(storageKey, exp, sig) {
   if (!storageKey || !storageKey.startsWith('obj:ci_')) return false;
   const secret = process.env.SESSION_SECRET;
@@ -981,6 +993,62 @@ router.get('/api/customer-info/:token', async (req, res) => {
     maskedPhone:  row.masked_phone,
     contactName:  row.contact_name,
   });
+});
+
+// Public: sign saved PDF/photo keys so a customer can verify and preview them
+// after a draft restore. Gated by a valid, unsubmitted form token.
+// POST /api/customer-info/:token/sign
+router.post('/api/customer-info/:token/sign', express.json({ limit: '4kb' }), async (req, res) => {
+  const row = await lookupToken(req.params.token);
+  if (!row) return res.status(404).json({ error: 'Link not found.' });
+  if (row.submitted_at) return res.status(410).json({ error: 'Already submitted.' });
+  if (new Date(row.expires_at) < new Date()) return res.status(410).json({ error: 'Link expired.' });
+
+  const keys = req.body?.keys;
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return res.status(400).json({ error: 'keys must be a non-empty array.' });
+  }
+  if (keys.length > 20) {
+    return res.status(400).json({ error: 'Too many keys — maximum 20 per request.' });
+  }
+
+  // Verify object existence for each key before signing so the caller can
+  // immediately render "file no longer available" instead of getting a 404
+  // only after clicking. Use client.list (header-only, no content download)
+  // rather than downloadAsBytes (up to 15 MB per file) to keep this cheap.
+  let client = null;
+  try {
+    const { Client } = require('@replit/object-storage');
+    client = new Client();
+  } catch {
+    // If storage is misconfigured, sign all valid keys optimistically so the
+    // tile doesn't incorrectly show "unavailable" due to a config issue.
+    const results = keys.map(key => {
+      if (typeof key !== 'string' || !key.startsWith('obj:ci_')) return { key, url: null };
+      return { key, url: signPublicCustomerPhotoUrl(key) };
+    });
+    return res.json({ results });
+  }
+
+  const results = await Promise.all(keys.map(async key => {
+    if (typeof key !== 'string' || !key.startsWith('obj:ci_')) {
+      return { key, url: null };
+    }
+    const storagePath = `customer-info-photos/${key.slice('obj:ci_'.length)}`;
+    try {
+      const listRes = await client.list({ prefix: storagePath });
+      const objects = listRes?.value ?? listRes?.objects ?? [];
+      const exists = objects.some(obj => (obj.name ?? obj.key ?? obj) === storagePath);
+      if (!exists) return { key, url: null };
+    } catch {
+      // If the list call itself fails, sign optimistically — better to give a
+      // potentially-broken link than a false "unavailable" notice.
+      return { key, url: signPublicCustomerPhotoUrl(key) };
+    }
+    return { key, url: signPublicCustomerPhotoUrl(key) };
+  }));
+
+  res.json({ results });
 });
 
 // Public: submit the form
@@ -1559,6 +1627,51 @@ router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) =
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] Failed to serve photo:');
     res.status(500).json({ error: 'Failed to serve image.' });
+  }
+});
+
+// Public: serve a customer-uploaded file via a short-lived HMAC-signed URL.
+// No staff authentication required — the HMAC signature is the sole gate.
+// Used by the customer-info page after a draft restore to let customers
+// verify and download PDFs they previously uploaded.
+// GET /api/customer-info-preview/:key?exp=...&sig=...
+router.get('/api/customer-info-preview/:key', async (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  const { exp, sig } = req.query;
+  if (!verifyCustomerPhotoUrl(key, exp, sig)) {
+    return res.status(403).json({ error: 'Invalid or expired preview URL.' });
+  }
+  try {
+    const { Client } = require('@replit/object-storage');
+    let client;
+    try {
+      client = new Client();
+    } catch (e) {
+      throw _friendlyStorageError(e);
+    }
+    const id   = key.slice('obj:ci_'.length);
+    const name = `customer-info-photos/${id}`;
+    let dl;
+    try {
+      dl = await client.downloadAsBytes(name);
+    } catch (e) {
+      throw _friendlyStorageError(e);
+    }
+    if (!dl || dl.ok === false) {
+      return res.status(404).json({ error: 'File not found.' });
+    }
+    const buf = Array.isArray(dl.value) ? dl.value[0] : dl.value;
+    const ext  = id.split('.').pop() || 'jpg';
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg';
+    res.set('Content-Type', mime);
+    res.set('Cache-Control', 'private, max-age=3600');
+    if (ext === 'pdf') {
+      res.set('Content-Disposition', 'inline');
+    }
+    res.send(buf);
+  } catch (err) {
+    logger.error({ err: err.message }, '[customer-info] Failed to serve preview:');
+    res.status(500).json({ error: 'Failed to serve file.' });
   }
 });
 
