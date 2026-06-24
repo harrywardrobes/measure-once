@@ -3,6 +3,7 @@ import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KE
 import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
+import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeCustomerInfoLinkChanged } from '../utils/broadcastCustomerInfoLink';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
@@ -1580,6 +1581,28 @@ export function CustomersPage(): React.ReactElement {
         }));
       } catch {
         /* best-effort — stale data is fine on failure */
+      }
+    });
+  }, []);
+
+  // When a task is added or completed (from the customer detail page or any
+  // other tab), re-fetch the open-task-count for just that one contact so the
+  // badge updates without a full page reload.
+  React.useEffect(() => {
+    return subscribeTaskChanged(async ({ contactId }) => {
+      try {
+        const res = await fetch('/api/contacts/open-task-counts', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: [contactId] }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
+        const counts = data.openTaskCounts || {};
+        setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
+      } catch {
+        /* best-effort — stale count is acceptable on failure */
       }
     });
   }, []);

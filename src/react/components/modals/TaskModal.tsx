@@ -16,6 +16,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
+import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -150,6 +151,7 @@ export function TaskModal({
       }) as CalendarTask;
       showToast('Task added to the shared calendar', false);
       clearDraft(key);
+      broadcastTaskChanged(contactId);
       onCreated?.(task);
       onClose();
     } catch (e) {

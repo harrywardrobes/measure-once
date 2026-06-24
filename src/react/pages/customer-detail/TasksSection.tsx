@@ -14,6 +14,7 @@ import { CalendarTask } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
+import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 
 interface Props {
   contactId: string;
@@ -106,6 +107,7 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
       const task: CalendarTask = await r.json();
       onTasksChange([...tasks, task]);
       broadcastUrgencyChanged(contactId);
+      broadcastTaskChanged(contactId);
       setSubject('');
       setDueDate(dayjs().add(1, 'day').startOf('hour'));
       setShowAddTask(false);
@@ -137,7 +139,10 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
       notifyApiError('google', e);
       onTasksChange(tasks);
     }
-    if (succeeded) broadcastUrgencyChanged(contactId);
+    if (succeeded) {
+      broadcastUrgencyChanged(contactId);
+      broadcastTaskChanged(contactId);
+    }
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   const deleteTask = useCallback(async (taskId: string) => {
@@ -160,7 +165,10 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
         onTasksChange(restore);
       }
     }
-    if (succeeded) broadcastUrgencyChanged(contactId);
+    if (succeeded) {
+      broadcastUrgencyChanged(contactId);
+      broadcastTaskChanged(contactId);
+    }
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   const startEditSubject = useCallback((task: CalendarTask) => {
