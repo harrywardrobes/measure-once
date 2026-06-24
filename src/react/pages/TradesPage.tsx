@@ -195,7 +195,7 @@ async function apiFetch<T>(method: string, path: string, body?: unknown): Promis
     init.body = JSON.stringify(body);
   }
   const r = await fetch(path, init);
-  if (r.status === 401) { location.href = '/login'; throw new Error('Unauthorized'); }
+  if (r.status === 401) { throw new Error('Unauthorized'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);

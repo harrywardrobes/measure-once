@@ -238,7 +238,6 @@ function contactName(c: Contact): string {
 async function apiGet<T = unknown>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { Accept: 'application/json' } });
   if (r.status === 401) {
-    location.href = '/login';
     throw new Error('Unauthorized');
   }
   const data = await r.json().catch(() => ({}));
@@ -257,7 +256,6 @@ async function apiPost<T = unknown>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body ?? {}),
   });
   if (r.status === 401) {
-    location.href = '/login';
     throw new Error('Unauthorized');
   }
   const data = await r.json().catch(() => ({}));

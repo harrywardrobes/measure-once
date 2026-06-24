@@ -38,7 +38,6 @@ async function apiFetch<T>(method: string, path: string, body?: unknown): Promis
     if (data.code === 'GOOGLE_AUTH' || data.code === 'GOOGLE_ERROR') {
       throw new ApiError(data.error || 'Google authentication required', data.code, 401);
     }
-    window.location.href = '/login';
     throw new ApiError('Unauthorized', 'UNAUTHORIZED', 401);
   }
 

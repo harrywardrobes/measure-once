@@ -62,7 +62,7 @@ export function OnboardingPage() {
   React.useEffect(() => {
     fetch('/api/onboarding/me')
       .then(r => {
-        if (r.status === 401) { location.href = '/login'; return null; }
+        if (r.status === 401) { return null; }
         if (!r.ok) return null;
         return r.json();
       })

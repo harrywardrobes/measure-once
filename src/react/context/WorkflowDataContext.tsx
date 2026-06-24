@@ -84,7 +84,7 @@ export function WorkflowDataProvider({ children }: { children: React.ReactNode }
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
-      if (r.status === 401) { window.location.href = '/login'; return; }
+      if (r.status === 401) return;
       const data = await r.json().catch(() => ({})) as Record<string, Room[]>;
       if (!r.ok) return;
 

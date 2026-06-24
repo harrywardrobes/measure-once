@@ -389,7 +389,7 @@ export function usePaginatedContacts(
     (async () => {
       try {
         const r = await fetch(`/api/contacts-all?${qs}`, { signal: ctrl.signal, headers: { Accept: 'application/json' } });
-        if (r.status === 401) { location.href = '/login'; return; }
+        if (r.status === 401) return;
         const data = await r.json().catch(() => ({})) as ContactsResponse;
         if (!r.ok) {
           const err = new Error((data as { error?: string }).error || `HTTP ${r.status}`);

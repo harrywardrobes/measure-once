@@ -57,7 +57,7 @@ function showToast(msg: string, isError = false) {
 
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(path, { headers: { Accept: 'application/json' } });
-  if (r.status === 401) { location.href = '/login'; throw new Error('Unauthorized'); }
+  if (r.status === 401) { throw new Error('Unauthorized'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((data as { error?: string }).error || `HTTP ${r.status}`);
   return data as T;

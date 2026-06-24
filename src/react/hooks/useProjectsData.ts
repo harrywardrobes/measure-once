@@ -141,7 +141,6 @@ export function useProjectsData(): ProjectsData {
 
         if (leadsRes.status === 401 || workflowRes.status === 401 ||
             localdataRes.status === 401 || usersRes.status === 401) {
-          window.location.href = '/login';
           return;
         }
 

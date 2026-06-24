@@ -80,7 +80,7 @@ async function apiFetch<T>(method: string, url: string, body?: unknown): Promise
     init.body = JSON.stringify(body);
   }
   const r = await fetch(url, init);
-  if (r.status === 401) { location.href = '/login'; throw new Error('Unauthorized'); }
+  if (r.status === 401) { throw new Error('Unauthorized'); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error((data as { error?: string }).error || `HTTP ${r.status}`);
   return data as T;

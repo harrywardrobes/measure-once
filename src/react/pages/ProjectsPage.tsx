@@ -1175,7 +1175,7 @@ export function ProjectsPage() {
       const res = await fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
         headers: { Accept: 'application/json' },
       });
-      if (res.status === 401) { window.location.href = '/login'; return; }
+      if (res.status === 401) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as Contact;
       const topLevelAddr = (data as unknown as { structuredAddress?: Contact['properties']['structuredAddress'] }).structuredAddress;
@@ -1562,7 +1562,7 @@ export function ProjectsPage() {
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ fitterId: fitterId || null }),
         });
-        if (r.status === 401) { window.location.href = '/login'; return; }
+        if (r.status === 401) return;
         const result = (await r.json().catch(() => ({}))) as { syncFailed?: boolean; error?: string; code?: string };
         if (!r.ok) {
           const err = Object.assign(new Error(result.error || `HTTP ${r.status}`), { code: result.code });
