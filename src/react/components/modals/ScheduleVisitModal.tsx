@@ -38,6 +38,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, PATCH, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
 import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
@@ -259,6 +260,7 @@ export function ScheduleVisitModal({
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
     useDiscardGuard(demo ? false : hasUnsavedChanges, handleDismiss, submitting);
+  useBeforeUnloadGuard(demo ? false : hasUnsavedChanges);
 
   async function doSubmit() {
     if (demo) return;

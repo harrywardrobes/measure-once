@@ -19,8 +19,11 @@ import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler
 import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
@@ -190,6 +193,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [emailPreviewHtml,    setEmailPreviewHtml]    = useState('');
   const [emailFetchedBody,    setEmailFetchedBody]    = useState('');
   const [emailFetchedSubject, setEmailFetchedSubject] = useState('');
+  // Stable template baseline — set only on initial load, never on refetch.
+  // Dirty detection compares against these so a preview refresh cannot clear
+  // unsaved-changes state.
+  const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
+  const [emailTemplateBody,    setEmailTemplateBody]    = useState('');
   const [emailSubmitError,    setEmailSubmitError]    = useState('');
   const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
   const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
@@ -199,6 +207,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logConfirmTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailPreviewDebounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPostCloseActionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (demo) {
@@ -317,10 +326,12 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     }
 
     if (demo) {
-      setEmailSubject('Fitted Wardrobes');
-      setEmailBody(
-        "Hi there,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team",
-      );
+      const demoSubject = 'Fitted Wardrobes';
+      const demoBody    = "Hi there,\n\nI hope you're doing well. I wanted to reach out and follow up on your enquiry with us.\n\nPlease don't hesitate to get in touch if you have any questions — we're happy to help.\n\nKind regards,\nThe team";
+      setEmailSubject(demoSubject);
+      setEmailBody(demoBody);
+      setEmailTemplateSubject(demoSubject);
+      setEmailTemplateBody(demoBody);
       return;
     }
 
@@ -335,6 +346,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       setEmailPreviewHtml(result.html || '');
       setEmailFetchedBody(result.text || '');
       setEmailFetchedSubject(result.subject || '');
+      // Stable baseline — set once here, never overwritten by refetch.
+      setEmailTemplateSubject(result.subject || '');
+      setEmailTemplateBody(result.text || '');
     } catch (e) {
       const err = e as ApiError;
       setEmailPreviewError(err.message || 'Could not load email preview.');
@@ -531,10 +545,40 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       contactPhone: contactData?.phone || '',
       contactMobile: contactData?.mobile || '',
     };
+    pendingPostCloseActionRef.current = () => {
+      setTimeout(() => {
+        dispatchCardActionHandler({ id: 0, type: 'upload_photos_and_info', config: {} }, ctx);
+      }, 0);
+    };
+    handleRequestClose();
+  }
+
+  const isLocked = submitting || emailFlow === 'sending' || phase === 'advancing';
+  const hasUnsavedChanges = !isLocked && !demo && (
+    (openPanel !== null && noteText.trim() !== '') ||
+    (emailFlow !== 'idle' && (
+      emailSubject.trim() !== emailTemplateSubject.trim() ||
+      emailBody.trim()    !== emailTemplateBody.trim()
+    ))
+  );
+
+  function handleDiscard() {
+    const action = pendingPostCloseActionRef.current;
+    pendingPostCloseActionRef.current = null;
     onClose();
-    setTimeout(() => {
-      dispatchCardActionHandler({ id: 0, type: 'upload_photos_and_info', config: {} }, ctx);
-    }, 0);
+    if (action) action();
+  }
+
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing: _handleKeepEditing } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleDiscard,
+    isLocked,
+  );
+  useBeforeUnloadGuard(hasUnsavedChanges);
+
+  function handleKeepEditing() {
+    pendingPostCloseActionRef.current = null;
+    _handleKeepEditing();
   }
 
   const displayName = contactData?.contactName || contactName || 'the customer';
@@ -556,7 +600,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
 
   let footerNode: React.ReactNode = null;
   if (phase === 'loading') {
-    footerNode = <Button onClick={onClose}>Cancel</Button>;
+    footerNode = <Button onClick={handleRequestClose}>Cancel</Button>;
   } else if (phase === 'contact') {
     footerNode = (
       <>
@@ -610,9 +654,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }
 
   return (
+    <>
     <FullScreenModal
       open
-      onClose={onClose}
+      onClose={handleRequestClose}
       disableClose={phase === 'advancing'}
       title={titleStr}
       headerActions={
@@ -1401,5 +1446,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
         </Typography>
       )}
     </FullScreenModal>
+    <DiscardConfirmDialog
+      open={confirmDiscardOpen}
+      onDiscard={handleDiscard}
+      onKeepEditing={handleKeepEditing}
+    />
+    </>
   );
 }

@@ -36,9 +36,12 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { GET, POST, DELETE } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import dayjs from 'dayjs';
 import { DEMO_CONTACT } from './demoData';
 import { DemoActionTooltip } from './demoMode';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { ModalContactHeader } from './ModalContactHeader';
 import { ScheduleVisitModal } from './ScheduleVisitModal';
@@ -108,6 +111,8 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
 
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
+  const [emailFetchedSubject, setEmailFetchedSubject] = useState('');
+  const [emailFetchedBody, setEmailFetchedBody] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
 
@@ -165,8 +170,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   function fetchResendTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null) {
     if (demo) {
       const firstName = (info?.contactName || '').split(' ')[0] || 'there';
-      setEmailSubject('Your design visit — getting in touch');
-      setEmailBody(`Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`);
+      const subj = 'Your design visit — getting in touch';
+      const body = `Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`;
+      setEmailSubject(subj);
+      setEmailBody(body);
+      setEmailFetchedSubject(subj);
+      setEmailFetchedBody(body);
       return;
     }
     setEmailLoading(true);
@@ -186,12 +195,20 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
     })
       .then((data) => {
         const d = data as { subject?: string; body_text?: string };
-        setEmailSubject(d.subject ?? '');
-        setEmailBody(d.body_text ?? '');
+        const subj = d.subject ?? '';
+        const body = d.body_text ?? '';
+        setEmailSubject(subj);
+        setEmailBody(body);
+        setEmailFetchedSubject(subj);
+        setEmailFetchedBody(body);
       })
       .catch(() => {
-        setEmailSubject('Your design visit — getting in touch');
-        setEmailBody(`Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`);
+        const subj = 'Your design visit — getting in touch';
+        const body = `Hi ${firstName},\n\nThank you for your interest in booking a design visit with us.\n\nCould you please let us know your availability over the next week?\n\nBest regards`;
+        setEmailSubject(subj);
+        setEmailBody(body);
+        setEmailFetchedSubject(subj);
+        setEmailFetchedBody(body);
       })
       .finally(() => setEmailLoading(false));
   }
@@ -363,6 +380,21 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  const isLocked = step === 'outcome_in_progress';
+  const hasUnsavedChanges = !isLocked && !demo && step === 'resend' && !emailLoading && (
+    resendDate !== null ||
+    resendTime !== null ||
+    emailSubject.trim() !== emailFetchedSubject.trim() ||
+    emailBody.trim()    !== emailFetchedBody.trim()
+  );
+
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleClose,
+    isLocked,
+  );
+  useBeforeUnloadGuard(hasUnsavedChanges);
 
   const hubDialogOpen = open && step !== 'schedule' && !showDuplicateConfirm && !showRescheduleModal;
 
@@ -550,7 +582,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       <>
         <FullScreenModal
           open={hubDialogOpen}
-          onClose={handleClose}
+          onClose={handleRequestClose}
           disableClose={step !== 'hub'}
           title={dialogTitle}
           headerActions={
@@ -560,6 +592,12 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
         >
           {renderContent()}
         </FullScreenModal>
+
+        <DiscardConfirmDialog
+          open={confirmDiscardOpen}
+          onDiscard={handleClose}
+          onKeepEditing={handleKeepEditing}
+        />
 
         <ScheduleVisitModal
           handler={handler}

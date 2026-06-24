@@ -24,6 +24,7 @@ import { openConnectModal, useServiceStatuses } from '../../context/ConnectionTo
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
@@ -312,6 +313,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     handleDiscard,
     submitting,
   );
+  useBeforeUnloadGuard(demo ? false : _hasUnsavedChangesRef.current);
 
   async function handleOutcome(outcome: 'not_proceeding' | 'call_back_later') {
     if (outcome === 'call_back_later') {

@@ -30,8 +30,11 @@ import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
+import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
+import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_DEPOSIT_INVOICE } from './demoData';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -415,6 +418,20 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
   const displayName = loaderData?.contactName || ctxContactName || '';
   const isLoading   = step === 'loading';
   const isSubmittingStep = step === 'resend_submitting' || step === 'reminder_submitting' || step === 'not_proceeding_submitting';
+
+  const isLocked = submitting || isSubmittingStep;
+  const hasUnsavedChanges = !isLocked && !demo && (
+    (step === 'reminder' && reminderBody.trim() !== '') ||
+    (step === 'not_proceeding_confirm' && (voidInvoice || notProceedingConfirmed)) ||
+    (step === 'not_proceeding_email' && declineEmailBody.trim() !== '')
+  );
+
+  const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
+    hasUnsavedChanges,
+    handleClose,
+    isLocked,
+  );
+  useBeforeUnloadGuard(hasUnsavedChanges);
 
   function renderContactHeader(opts?: { loading?: boolean }) {
     return (
@@ -902,9 +919,10 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
   const actions = renderActions();
 
   return (
+    <>
     <FullScreenModal
       open={open}
-      onClose={handleClose}
+      onClose={handleRequestClose}
       disableClose={isSubmittingStep}
       title={
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -930,5 +948,11 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
     >
       {renderContent()}
     </FullScreenModal>
+    <DiscardConfirmDialog
+      open={confirmDiscardOpen}
+      onDiscard={handleClose}
+      onKeepEditing={handleKeepEditing}
+    />
+    </>
   );
 }

@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, isGoogleAuthError } from '../../utils/api';
 import { openConnectModal } from '../../context/ConnectionToastContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -107,6 +108,7 @@ export function GenericVisitEditModal(props: Props) {
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } =
     useDiscardGuard(hasUnsavedChanges, handleClose, submitting);
+  useBeforeUnloadGuard(hasUnsavedChanges);
 
   async function handleSubmit() {
     setError('');

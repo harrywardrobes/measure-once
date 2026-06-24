@@ -22,6 +22,7 @@ import { formatPhone } from '../../utils/phoneFormatters';
 import { REVIEW_PHOTOS_OUTCOME_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DEMO_SUBMISSION, DEMO_TOOLTIP } from './demoData';
@@ -322,6 +323,7 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     handleClose,
     submitting,
   );
+  useBeforeUnloadGuard(hasUnsavedChanges);
 
   const contactDisplay  = ctx.contactName || submission?.contactName || 'Customer';
   // Show masked email in the UI; the actual send target is resolved server-side from the submission record

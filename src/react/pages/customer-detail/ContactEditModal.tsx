@@ -9,6 +9,7 @@ import { AddressInput } from '../../components/AddressInput';
 import { emptyAddress, type StructuredAddress } from '../../../../shared/address';
 import { updateRecentCustomer } from '../../utils/formatters';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { FullScreenModal } from '../../components/modals/FullScreenModal';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
@@ -132,6 +133,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
     handleDiscard,
     saving,
   );
+  useBeforeUnloadGuard(hasUnsavedChanges);
 
   function handleChange(field: 'firstname' | 'lastname' | 'email' | 'phone' | 'mobilephone') {
     return (e: React.ChangeEvent<HTMLInputElement>) => {

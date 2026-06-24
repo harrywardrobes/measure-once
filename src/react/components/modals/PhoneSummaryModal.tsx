@@ -9,6 +9,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
@@ -97,6 +98,7 @@ export function PhoneSummaryModal({ handler, ctx, open, onClose, demo }: Props) 
     handleClose,
     submitting,
   );
+  useBeforeUnloadGuard(demo ? false : hasUnsavedChanges);
 
   async function handleSubmit() {
     if (demo) return;

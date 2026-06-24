@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { INVOICE_DRAFT_KEY as DRAFT_KEY } from '../constants/localStorageKeys';
+import { useBeforeUnloadGuard } from '../hooks/useBeforeUnloadGuard';
 import { useConnectionToast } from '../context/ConnectionToastContext';
 import { ApiError } from '../utils/api';
 import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
@@ -144,25 +145,12 @@ export function InvoiceDetailDrawer({
   const [saveMsg, setSaveMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [sending, setSending] = useState(false);
   const [saving, setSaving]   = useState(false);
-  const beforeUnloadRef = useRef<((e: BeforeUnloadEvent) => void) | null>(null);
 
   const currentIdx = allIds.indexOf(invId ?? '');
   const hasPrev    = currentIdx > 0;
   const hasNext    = currentIdx < allIds.length - 1;
 
-  useEffect(() => {
-    if (edit.dirty) {
-      const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-      window.addEventListener('beforeunload', handler);
-      beforeUnloadRef.current = handler;
-      return () => window.removeEventListener('beforeunload', handler);
-    } else {
-      if (beforeUnloadRef.current) {
-        window.removeEventListener('beforeunload', beforeUnloadRef.current);
-        beforeUnloadRef.current = null;
-      }
-    }
-  }, [edit.dirty]);
+  useBeforeUnloadGuard(edit.dirty);
 
   useEffect(() => {
     if (!open || !invId) return;
