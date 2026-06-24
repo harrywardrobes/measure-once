@@ -1,35 +1,34 @@
 import React, { useState, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Chip from '@mui/material/Chip';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined';
-import { HubSpotTask, stageColour, STAGE_KEYS } from './types';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import { CalendarTask } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
-import { nowDate } from '../../utils/dateDefaults';
-
-import { WorkflowDef } from '../../lib/workflowConfig';
 
 interface Props {
   contactId: string;
-  tasks: HubSpotTask[];
-  workflow: WorkflowDef | null;
-  onTasksChange: (tasks: HubSpotTask[]) => void;
+  tasks: CalendarTask[];
+  onTasksChange: (tasks: CalendarTask[]) => void;
 }
 
-function getTaskUrgency(tasks: HubSpotTask[]): string | null {
+function getTaskUrgency(tasks: CalendarTask[]): string | null {
   const now = Date.now();
   const oneDay = now + 86400000;
   const twoDay = now + 172800000;
   let urgency: string | null = null;
   for (const t of tasks) {
-    if (t.properties?.hs_task_status === 'COMPLETED') continue;
-    const due = parseInt(t.properties?.hs_timestamp || '0', 10);
+    if (t.task_status === 'completed') continue;
+    const due = t.task_deadline ? new Date(t.task_deadline).getTime() : 0;
     if (!due) continue;
     if (due <= oneDay) { urgency = 'red'; break; }
     else if (due <= twoDay && urgency !== 'red') urgency = 'orange';
@@ -37,70 +36,69 @@ function getTaskUrgency(tasks: HubSpotTask[]): string | null {
   return urgency;
 }
 
-export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Props) {
+export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
   const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
 
   const [showAddTask, setShowAddTask] = useState(false);
-  const [subject, setSubject]   = useState('');
-  const [dueDate, setDueDate]   = useState(nowDate);
-  const [stageKey, setStageKey] = useState('');
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [subject,    setSubject]      = useState('');
+  const [dueDate,    setDueDate]      = useState<Dayjs | null>(
+    dayjs().add(1, 'day').startOf('hour'),
+  );
+  const [saving, setSaving]   = useState(false);
+  const [error,  setError]    = useState<string | null>(null);
 
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editDueDate, setEditDueDate]     = useState('');
-  const [editSaving, setEditSaving]       = useState(false);
+  const [editingTaskId, setEditingTaskId]   = useState<string | null>(null);
+  const [editDueDate,   setEditDueDate]     = useState<Dayjs | null>(null);
+  const [editSaving,    setEditSaving]      = useState(false);
 
-  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
-  const [editSubject, setEditSubject]           = useState('');
-  const [editSubjectSaving, setEditSubjectSaving] = useState(false);
-
-  const [editingStageId, setEditingStageId]   = useState<string | null>(null);
-  const [editStageKey, setEditStageKey]       = useState('');
-  const [editStageSaving, setEditStageSaving] = useState(false);
+  const [editingSubjectId,    setEditingSubjectId]    = useState<string | null>(null);
+  const [editSubject,         setEditSubject]         = useState('');
+  const [editSubjectSaving,   setEditSubjectSaving]   = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
-    const aDone = a.properties?.hs_task_status === 'COMPLETED';
-    const bDone = b.properties?.hs_task_status === 'COMPLETED';
+    const aDone = a.task_status === 'completed';
+    const bDone = b.task_status === 'completed';
     if (aDone !== bDone) return aDone ? 1 : -1;
-    return parseInt(a.properties?.hs_timestamp || '0', 10) - parseInt(b.properties?.hs_timestamp || '0', 10);
+    const aTime = a.task_deadline ? new Date(a.task_deadline).getTime() : 0;
+    const bTime = b.task_deadline ? new Date(b.task_deadline).getTime() : 0;
+    return aTime - bTime;
   });
-
-  const stageOptions = Object.entries(workflow?.stages || {}).map(([k, s]) => (
-    <option key={k} value={k}>{s.label}</option>
-  ));
 
   const saveNewTask = useCallback(async () => {
     if (!subject.trim()) return;
     setSaving(true);
     try {
-      const r = await fetch(`/api/contacts/${contactId}/tasks`, {
+      const r = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: subject.trim(), dueDate: dueDate || null, stageKey: stageKey || null }),
+        body: JSON.stringify({
+          task_name: subject.trim(),
+          task_customer: { contactId, contactName: '' },
+          task_assigned_user: { userId: '', name: '' },
+          task_deadline: dueDate?.toISOString() ?? new Date().toISOString(),
+        }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
-      const task: HubSpotTask = await r.json();
+      const task: CalendarTask = await r.json();
       onTasksChange([...tasks, task]);
       broadcastUrgencyChanged(contactId);
       setSubject('');
-      setDueDate(nowDate());
-      setStageKey('');
+      setDueDate(dayjs().add(1, 'day').startOf('hour'));
       setShowAddTask(false);
     } catch (e: unknown) {
-      notifyApiError('hubspot', e);
+      notifyApiError('google', e);
       const msg = e instanceof Error ? e.message : 'error';
       setError(`Failed to create task: ${msg}`);
     } finally {
       setSaving(false);
     }
-  }, [contactId, dueDate, stageKey, subject, tasks, onTasksChange, notifyApiError]);
+  }, [contactId, dueDate, subject, tasks, onTasksChange, notifyApiError]);
 
   const toggleTaskDone = useCallback(async (taskId: string, currentlyDone: boolean) => {
-    const newStatus = currentlyDone ? 'NOT_STARTED' : 'COMPLETED';
+    const newStatus: 'open' | 'completed' = currentlyDone ? 'open' : 'completed';
     const updatedTasks = tasks.map(t =>
-      t.id === taskId ? { ...t, properties: { ...t.properties, hs_task_status: newStatus } } : t,
+      t.id === taskId ? { ...t, task_status: newStatus } : t,
     );
     onTasksChange(updatedTasks);
     let succeeded = false;
@@ -108,12 +106,12 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       const r = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hs_task_status: newStatus, contactId }),
+        body: JSON.stringify({ task_status: newStatus }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
       succeeded = true;
     } catch (e) {
-      notifyApiError('hubspot', e);
+      notifyApiError('google', e);
       onTasksChange(tasks);
     }
     if (succeeded) broadcastUrgencyChanged(contactId);
@@ -128,15 +126,11 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     onTasksChange(next);
     let succeeded = false;
     try {
-      const r = await fetch(`/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId }),
-      });
+      const r = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
       if (!r.ok) throw new Error(`${r.status}`);
       succeeded = true;
     } catch (e) {
-      notifyApiError('hubspot', e);
+      notifyApiError('google', e);
       if (removed) {
         const restore = [...next];
         restore.splice(idx, 0, removed);
@@ -146,8 +140,8 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
-  const startEditSubject = useCallback((task: HubSpotTask) => {
-    setEditSubject(task.properties?.hs_task_subject || '');
+  const startEditSubject = useCallback((task: CalendarTask) => {
+    setEditSubject(task.task_name || '');
     setEditingSubjectId(task.id);
   }, []);
 
@@ -156,76 +150,36 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     if (!trimmed) return;
     setEditSubjectSaving(true);
     const optimistic = tasks.map(t =>
-      t.id === taskId
-        ? { ...t, properties: { ...t.properties, hs_task_subject: trimmed } }
-        : t,
+      t.id === taskId ? { ...t, task_name: trimmed } : t,
     );
     onTasksChange(optimistic);
     try {
       const r = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId, hs_task_subject: trimmed }),
+        body: JSON.stringify({ task_name: trimmed }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
       setEditingSubjectId(null);
     } catch (e) {
-      notifyApiError('hubspot', e);
+      notifyApiError('google', e);
       onTasksChange(tasks);
     } finally {
       setEditSubjectSaving(false);
     }
-  }, [contactId, editSubject, tasks, onTasksChange, notifyApiError]);
+  }, [editSubject, tasks, onTasksChange, notifyApiError]);
 
-  const startEditStage = useCallback((task: HubSpotTask) => {
-    const body = task.properties?.hs_task_body || '';
-    const sk = body.startsWith('TASK_STAGE:') ? body.slice('TASK_STAGE:'.length).trim() : '';
-    setEditStageKey(sk);
-    setEditingStageId(task.id);
-  }, []);
-
-  const saveStage = useCallback(async (taskId: string) => {
-    setEditStageSaving(true);
-    const newBody = editStageKey ? `TASK_STAGE:${editStageKey}` : '';
-    const optimistic = tasks.map(t =>
-      t.id === taskId
-        ? { ...t, properties: { ...t.properties, hs_task_body: newBody } }
-        : t,
-    );
-    onTasksChange(optimistic);
-    try {
-      const r = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId, hs_task_body: newBody }),
-      });
-      if (!r.ok) throw new Error(`${r.status}`);
-      setEditingStageId(null);
-    } catch (e) {
-      notifyApiError('hubspot', e);
-      onTasksChange(tasks);
-    } finally {
-      setEditStageSaving(false);
-    }
-  }, [contactId, editStageKey, tasks, onTasksChange, notifyApiError]);
-
-  const startEditDue = useCallback((task: HubSpotTask) => {
-    const dueTsMs = task.properties?.hs_timestamp ? parseInt(task.properties.hs_timestamp, 10) : null;
-    const dateStr = dueTsMs ? new Date(dueTsMs).toISOString().slice(0, 10) : nowDate();
-    setEditDueDate(dateStr);
+  const startEditDue = useCallback((task: CalendarTask) => {
+    setEditDueDate(task.task_deadline ? dayjs(task.task_deadline) : dayjs().add(1, 'day').startOf('hour'));
     setEditingTaskId(task.id);
   }, []);
 
   const saveDueDate = useCallback(async (taskId: string) => {
+    if (!editDueDate || !editDueDate.isValid()) return;
     setEditSaving(true);
-    const newTimestamp = editDueDate
-      ? new Date(editDueDate + 'T12:00:00').toISOString()
-      : '';
-    const newTsMs = editDueDate ? String(new Date(editDueDate + 'T12:00:00').getTime()) : '';
+    const isoStr = editDueDate.toISOString();
     const optimistic = tasks.map(t =>
-      t.id === taskId
-        ? { ...t, properties: { ...t.properties, hs_timestamp: newTsMs } }
-        : t,
+      t.id === taskId ? { ...t, task_deadline: isoStr } : t,
     );
     onTasksChange(optimistic);
     let succeeded = false;
@@ -233,13 +187,13 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
       const r = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contactId, hs_timestamp: newTimestamp }),
+        body: JSON.stringify({ task_deadline: isoStr }),
       });
       if (!r.ok) throw new Error(`${r.status}`);
       succeeded = true;
       setEditingTaskId(null);
     } catch (e) {
-      notifyApiError('hubspot', e);
+      notifyApiError('google', e);
       onTasksChange(tasks);
     } finally {
       setEditSaving(false);
@@ -247,410 +201,311 @@ export function TasksSection({ contactId, tasks, workflow, onTasksChange }: Prop
     if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, editDueDate, tasks, onTasksChange, notifyApiError]);
 
+  void getTaskUrgency;
+
   return (
-    <div id="tasks-section" className="mb-6">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>Tasks</h3>
-        {!isViewer && (
-          <button
-            id="add-task-btn"
-            onClick={() => setShowAddTask(v => !v)}
-            className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
-            style={{ color: 'var(--orchid)' }}
-          >
-            {showAddTask ? 'Cancel' : '+ Add task'}
-          </button>
-        )}
-      </div>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <div id="tasks-section" className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>Tasks</h3>
+          {!isViewer && (
+            <button
+              id="add-task-btn"
+              onClick={() => setShowAddTask(v => !v)}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
+              style={{ color: 'var(--orchid)' }}
+            >
+              {showAddTask ? 'Cancel' : '+ Add task'}
+            </button>
+          )}
+        </div>
 
-      {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
 
-      {showAddTask && (
-        <Box sx={{
-          background: 'var(--paper-deep)',
-          border: '1px solid var(--stone)',
-          borderRadius: 'var(--radius-lg)',
-          p: '12px',
-          mb: '12px',
-        }}>
-          <input
-            id="task-subject"
-            type="text"
-            placeholder="Task description..."
-            value={subject}
-            onChange={e => setSubject(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && saveNewTask()}
-            className="w-full border rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none"
-            style={{ fontSize: 16 }}
-          />
-          <div className="flex gap-2 mb-2">
+        {showAddTask && (
+          <Box sx={{
+            background: 'var(--paper-deep)',
+            border: '1px solid var(--stone)',
+            borderRadius: 'var(--radius-lg)',
+            p: '12px',
+            mb: '12px',
+          }}>
             <input
-              id="task-due"
-              type="date"
-              value={dueDate}
-              onChange={e => setDueDate(e.target.value)}
-              className="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none"
+              id="task-subject"
+              type="text"
+              placeholder="Task description..."
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && void saveNewTask()}
+              className="w-full border rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none"
               style={{ fontSize: 16 }}
             />
-            <select
-              id="task-stage"
-              value={stageKey}
-              onChange={e => setStageKey(e.target.value)}
-              className="flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none"
-              style={{ fontSize: 16 }}
+            <Box sx={{ mb: '8px' }}>
+              <DateTimePicker
+                label="Due date & time"
+                value={dueDate}
+                onChange={(v: Dayjs | null) => setDueDate(v)}
+                slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+              />
+            </Box>
+            <button
+              onClick={() => void saveNewTask()}
+              disabled={saving}
+              className="w-full text-white text-sm font-medium py-2.5 rounded-xl transition task-save-btn"
+              style={{ minHeight: 44, background: 'var(--orchid)' }}
             >
-              <option value="">No stage</option>
-              {stageOptions}
-            </select>
-          </div>
-          <button
-            onClick={saveNewTask}
-            disabled={saving}
-            className="w-full text-white text-sm font-medium py-2.5 rounded-xl transition task-save-btn"
-            style={{ minHeight: 44, background: 'var(--orchid)' }}
-          >
-            {saving ? 'Saving…' : 'Save task'}
-          </button>
-        </Box>
-      )}
+              {saving ? 'Saving…' : 'Save task'}
+            </button>
+          </Box>
+        )}
 
-      {sorted.length > 0 ? (
-        <div className="space-y-1.5">
-          {sorted.map(task => {
-            const p        = task.properties || {};
-            const subj     = p.hs_task_subject || 'Untitled';
-            const body     = p.hs_task_body || '';
-            const sk       = body.startsWith('TASK_STAGE:') ? body.slice('TASK_STAGE:'.length).trim() : null;
-            const slabel   = sk ? (workflow?.stages?.[sk]?.label || sk) : null;
-            const colour   = sk ? stageColour(sk) : null;
-            const isDone   = p.hs_task_status === 'COMPLETED';
-            const dueTsMs  = p.hs_timestamp ? parseInt(p.hs_timestamp, 10) : null;
-            const overdue  = !!dueTsMs && dueTsMs < Date.now() && !isDone;
-            const dueLabel = dueTsMs
-              ? new Date(dueTsMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-              : null;
+        {sorted.length > 0 ? (
+          <div className="space-y-1.5">
+            {sorted.map(task => {
+              const isDone   = task.task_status === 'completed';
+              const dueMs    = task.task_deadline ? new Date(task.task_deadline).getTime() : null;
+              const overdue  = !!dueMs && dueMs < Date.now() && !isDone;
+              const dueLabel = dueMs
+                ? new Date(dueMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : null;
 
-            return (
-              <Box
-                key={task.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                  background: 'var(--paper)',
-                  border: '1px solid var(--stone)',
-                  borderRadius: 'var(--radius-lg)',
-                  p: '10px 12px',
-                  transition: 'background 0.1s',
-                  boxShadow: 'var(--shadow-sm)',
-                  opacity: isDone ? 0.55 : 1,
-                  '&:active': { background: 'var(--paper-deep)' },
-                }}
-              >
+              return (
                 <Box
-                  component="button"
-                  onClick={() => toggleTaskDone(task.id, isDone)}
-                  title={isDone ? 'Mark incomplete' : 'Mark complete'}
+                  key={task.id}
                   sx={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: '50%',
-                    border: isDone ? 'none' : '2px solid var(--stone-deep)',
-                    background: isDone ? 'success.dark' : 'none',
-                    color: isDone ? 'common.white' : 'inherit',
-                    flexShrink: 0,
-                    mt: '1px',
-                    cursor: 'pointer',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'border-color 0.15s, background 0.15s',
-                    WebkitTapHighlightColor: 'transparent',
-                    fontFamily: 'inherit',
-                    p: 0,
-                    '&:hover': {
-                      borderColor: isDone ? undefined : 'var(--orchid)',
-                      background: isDone ? 'success.dark' : undefined,
-                    },
+                    alignItems: 'flex-start',
+                    gap: '10px',
+                    background: 'var(--paper)',
+                    border: '1px solid var(--stone)',
+                    borderRadius: 'var(--radius-lg)',
+                    p: '10px 12px',
+                    transition: 'background 0.1s',
+                    boxShadow: 'var(--shadow-sm)',
+                    opacity: isDone ? 0.55 : 1,
+                    '&:active': { background: 'var(--paper-deep)' },
                   }}
                 >
-                  {isDone && <CheckIcon sx={{ fontSize: 12 }} />}
-                </Box>
+                  <Box
+                    component="button"
+                    onClick={() => void toggleTaskDone(task.id, isDone)}
+                    title={isDone ? 'Mark incomplete' : 'Mark complete'}
+                    sx={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      border: isDone ? 'none' : '2px solid var(--stone-deep)',
+                      background: isDone ? 'success.dark' : 'none',
+                      color: isDone ? 'common.white' : 'inherit',
+                      flexShrink: 0,
+                      mt: '1px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'border-color 0.15s, background 0.15s',
+                      WebkitTapHighlightColor: 'transparent',
+                      fontFamily: 'inherit',
+                      p: 0,
+                      '&:hover': {
+                        borderColor: isDone ? undefined : 'var(--orchid)',
+                        background: isDone ? 'success.dark' : undefined,
+                      },
+                    }}
+                  >
+                    {isDone && <CheckIcon sx={{ fontSize: 12 }} />}
+                  </Box>
 
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  {!isDone && !isViewer && editingSubjectId === task.id ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input
-                        type="text"
-                        value={editSubject}
-                        onChange={e => setEditSubject(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') saveSubject(task.id);
-                          if (e.key === 'Escape') setEditingSubjectId(null);
-                        }}
-                        autoFocus
-                        style={{
-                          flex: 1,
-                          fontSize: 13,
-                          borderRadius: 6,
-                          border: '1px solid var(--stone-deep)',
-                          padding: '2px 6px',
-                          fontFamily: 'inherit',
-                          minWidth: 0,
-                        }}
-                      />
-                      <Box
-                        component="button"
-                        onClick={() => saveSubject(task.id)}
-                        disabled={editSubjectSaving}
-                        title="Save subject"
-                        sx={{
-                          background: 'none', border: 'none', cursor: editSubjectSaving ? 'default' : 'pointer',
-                          color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
-                          borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                        }}
-                      >
-                        <CheckIcon sx={{ fontSize: '0.875rem' }} />
-                      </Box>
-                      <Box
-                        component="button"
-                        onClick={() => setEditingSubjectId(null)}
-                        title="Cancel"
-                        sx={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
-                          borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                          '&:hover': { color: 'error.main' },
-                        }}
-                      >
-                        <CloseIcon sx={{ fontSize: '0.875rem' }} />
-                      </Box>
-                    </Box>
-                  ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
-                      <Typography sx={{
-                        fontSize: '0.875rem',
-                        color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
-                        lineHeight: 1.4,
-                        wordBreak: 'break-word',
-                        textDecoration: isDone ? 'line-through' : 'none',
-                        flex: 1,
-                      }}>
-                        {subj}
-                      </Typography>
-                      {!isDone && !isViewer && (
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    {!isDone && !isViewer && editingSubjectId === task.id ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <input
+                          type="text"
+                          value={editSubject}
+                          onChange={e => setEditSubject(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') void saveSubject(task.id);
+                            if (e.key === 'Escape') setEditingSubjectId(null);
+                          }}
+                          autoFocus
+                          style={{
+                            flex: 1,
+                            fontSize: 13,
+                            borderRadius: 6,
+                            border: '1px solid var(--stone-deep)',
+                            padding: '2px 6px',
+                            fontFamily: 'inherit',
+                            minWidth: 0,
+                          }}
+                        />
                         <Box
                           component="button"
-                          onClick={() => startEditSubject(task)}
-                          title="Edit subject"
+                          onClick={() => void saveSubject(task.id)}
+                          disabled={editSubjectSaving}
+                          title="Save subject"
                           sx={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                            background: 'none', border: 'none', cursor: editSubjectSaving ? 'default' : 'pointer',
+                            color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
                             borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                            opacity: 0.6, mt: '2px',
-                            '&:hover': { color: 'var(--orchid)', opacity: 1 },
                           }}
                         >
-                          <DriveFileRenameOutlineIcon sx={{ fontSize: '0.8rem' }} />
+                          <CheckIcon sx={{ fontSize: '0.875rem' }} />
                         </Box>
-                      )}
-                    </Box>
-                  )}
-
-                  {(slabel || dueLabel || (!isDone && !isViewer)) && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
-                      {!isDone && !isViewer && editingStageId === task.id ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <select
-                            value={editStageKey}
-                            onChange={e => setEditStageKey(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') saveStage(task.id);
-                              if (e.key === 'Escape') setEditingStageId(null);
-                            }}
-                            autoFocus
-                            style={{
-                              fontSize: 12,
-                              borderRadius: 6,
-                              border: '1px solid var(--stone-deep)',
-                              padding: '2px 6px',
-                              fontFamily: 'inherit',
-                              background: 'var(--paper)',
-                              color: 'var(--ink-1)',
-                            }}
-                          >
-                            <option value="">No stage</option>
-                            {stageOptions}
-                          </select>
+                        <Box
+                          component="button"
+                          onClick={() => setEditingSubjectId(null)}
+                          title="Cancel"
+                          sx={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                            borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
+                            '&:hover': { color: 'error.main' },
+                          }}
+                        >
+                          <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                        <Typography sx={{
+                          fontSize: '0.875rem',
+                          color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
+                          lineHeight: 1.4,
+                          wordBreak: 'break-word',
+                          textDecoration: isDone ? 'line-through' : 'none',
+                          flex: 1,
+                        }}>
+                          {task.task_name || 'Untitled'}
+                        </Typography>
+                        {!isDone && !isViewer && (
                           <Box
                             component="button"
-                            onClick={() => saveStage(task.id)}
-                            disabled={editStageSaving}
-                            title="Save stage"
-                            sx={{
-                              background: 'none', border: 'none', cursor: editStageSaving ? 'default' : 'pointer',
-                              color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
-                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                            }}
-                          >
-                            <CheckIcon sx={{ fontSize: '0.875rem' }} />
-                          </Box>
-                          <Box
-                            component="button"
-                            onClick={() => setEditingStageId(null)}
-                            title="Cancel"
+                            onClick={() => startEditSubject(task)}
+                            title="Edit subject"
                             sx={{
                               background: 'none', border: 'none', cursor: 'pointer',
-                              color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                              color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
                               borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                              '&:hover': { color: 'error.main' },
+                              opacity: 0.6, mt: '2px',
+                              '&:hover': { color: 'var(--orchid)', opacity: 1 },
                             }}
                           >
-                            <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                            <DriveFileRenameOutlineIcon sx={{ fontSize: '0.8rem' }} />
                           </Box>
-                        </Box>
-                      ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          {slabel && colour && (
-                            <Chip
-                              label={slabel}
-                              size="small"
-                              sx={{
-                                fontSize: '0.67rem',
-                                fontWeight: 700,
-                                height: 'auto',
-                                borderRadius: 'var(--radius-pill)',
-                                background: colour.light,
-                                color: colour.text,
-                                letterSpacing: '0.02em',
-                                '& .MuiChip-label': { px: '7px', py: '2px' },
-                              }}
+                        )}
+                      </Box>
+                    )}
+
+                    {(task.task_assigned_user?.name || dueLabel || (!isDone && !isViewer)) && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
+                        {task.task_assigned_user?.name && (
+                          <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)' }}>
+                            {task.task_assigned_user.name}
+                          </Typography>
+                        )}
+
+                        {!isDone && !isViewer && editingTaskId === task.id ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <DateTimePicker
+                              value={editDueDate}
+                              onChange={(v: Dayjs | null) => setEditDueDate(v)}
+                              slotProps={{ textField: { size: 'small', sx: { fontSize: 12, width: 200 } } }}
                             />
-                          )}
-                          {!isDone && !isViewer && (
                             <Box
                               component="button"
-                              onClick={() => startEditStage(task)}
-                              title={slabel ? 'Edit stage' : 'Set stage'}
+                              onClick={() => void saveDueDate(task.id)}
+                              disabled={editSaving}
+                              title="Save due date"
                               sx={{
-                                background: 'none', border: 'none', cursor: 'pointer',
-                                color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
-                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                                opacity: 0.6,
-                                '&:hover': { color: 'var(--orchid)', opacity: 1 },
-                              }}
-                            >
-                              <LabelOutlinedIcon sx={{ fontSize: '0.8rem' }} />
-                            </Box>
-                          )}
-                        </Box>
-                      )}
-                      {!isDone && !isViewer && editingTaskId === task.id ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input
-                            type="date"
-                            value={editDueDate}
-                            onChange={e => setEditDueDate(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') saveDueDate(task.id);
-                              if (e.key === 'Escape') setEditingTaskId(null);
-                            }}
-                            style={{ fontSize: 13, borderRadius: 6, border: '1px solid var(--stone-deep)', padding: '2px 6px' }}
-                          />
-                          <Box
-                            component="button"
-                            onClick={() => saveDueDate(task.id)}
-                            disabled={editSaving}
-                            title="Save due date"
-                            sx={{
-                              background: 'none', border: 'none', cursor: editSaving ? 'default' : 'pointer',
-                              color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
-                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                            }}
-                          >
-                            <CheckIcon sx={{ fontSize: '0.875rem' }} />
-                          </Box>
-                          <Box
-                            component="button"
-                            onClick={() => setEditingTaskId(null)}
-                            title="Cancel"
-                            sx={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
-                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                              '&:hover': { color: 'error.main' },
-                            }}
-                          >
-                            <CloseIcon sx={{ fontSize: '0.875rem' }} />
-                          </Box>
-                        </Box>
-                      ) : (
-                        <>
-                          {dueLabel && (
-                            <Typography
-                              component="span"
-                              sx={{
-                                fontSize: '0.72rem',
-                                color: overdue ? 'error.main' : 'var(--ink-3)',
-                                fontWeight: overdue ? 700 : 500,
-                              }}
-                            >
-                              {overdue ? '⚠ ' : ''}{dueLabel}
-                            </Typography>
-                          )}
-                          {!isDone && !isViewer && (
-                            <Box
-                              component="button"
-                              onClick={() => startEditDue(task)}
-                              title="Edit due date"
-                              sx={{
-                                background: 'none', border: 'none', cursor: 'pointer',
-                                color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                                background: 'none', border: 'none', cursor: editSaving ? 'default' : 'pointer',
+                                color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
                                 borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                                opacity: 0.6,
-                                '&:hover': { color: 'var(--orchid)', opacity: 1 },
                               }}
                             >
-                              <EditCalendarIcon sx={{ fontSize: '0.8rem' }} />
+                              <CheckIcon sx={{ fontSize: '0.875rem' }} />
                             </Box>
-                          )}
-                        </>
-                      )}
-                    </Box>
-                  )}
-                </Box>
+                            <Box
+                              component="button"
+                              onClick={() => setEditingTaskId(null)}
+                              title="Cancel"
+                              sx={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
+                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
+                                '&:hover': { color: 'error.main' },
+                              }}
+                            >
+                              <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                            </Box>
+                          </Box>
+                        ) : (
+                          <>
+                            {dueLabel && (
+                              <Typography
+                                component="span"
+                                sx={{
+                                  fontSize: '0.72rem',
+                                  color: overdue ? 'error.main' : 'var(--ink-3)',
+                                  fontWeight: overdue ? 700 : 500,
+                                }}
+                              >
+                                {overdue ? '⚠ ' : ''}{dueLabel}
+                              </Typography>
+                            )}
+                            {!isDone && !isViewer && (
+                              <Box
+                                component="button"
+                                onClick={() => startEditDue(task)}
+                                title="Edit due date"
+                                sx={{
+                                  background: 'none', border: 'none', cursor: 'pointer',
+                                  color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
+                                  borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
+                                  opacity: 0.6,
+                                  '&:hover': { color: 'var(--orchid)', opacity: 1 },
+                                }}
+                              >
+                                <EditCalendarIcon sx={{ fontSize: '0.8rem' }} />
+                              </Box>
+                            )}
+                          </>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
 
-                <Box
-                  component="button"
-                  onClick={() => deleteTask(task.id)}
-                  title="Delete task"
-                  sx={{
-                    flexShrink: 0,
-                    color: 'var(--stone-deep)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    p: '2px',
-                    borderRadius: 'var(--radius-sm)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    WebkitTapHighlightColor: 'transparent',
-                    fontFamily: 'inherit',
-                    transition: 'color 0.15s',
-                    mt: '2px',
-                    '&:hover': { color: 'error.main' },
-                  }}
-                >
-                  <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                  <Box
+                    component="button"
+                    onClick={() => void deleteTask(task.id)}
+                    title="Delete task"
+                    sx={{
+                      flexShrink: 0,
+                      color: 'var(--stone-deep)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      p: '2px',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      WebkitTapHighlightColor: 'transparent',
+                      fontFamily: 'inherit',
+                      transition: 'color 0.15s',
+                      mt: '2px',
+                      '&:hover': { color: 'error.main' },
+                    }}
+                  >
+                    <CloseIcon sx={{ fontSize: '0.875rem' }} />
+                  </Box>
                 </Box>
-              </Box>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
+        )}
+      </div>
+    </LocalizationProvider>
   );
 }

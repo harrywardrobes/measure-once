@@ -101,6 +101,9 @@ export const OPEN_DEAL_DRAFT_PREFIX = 'mo-open-deal-draft-';
 /** Deposit-invoice followup modal drafts: `${DEPOSIT_INVOICE_DRAFT_PREFIX}${contactId}` */
 export const DEPOSIT_INVOICE_DRAFT_PREFIX = 'mo-deposit-invoice-draft-';
 
+/** Task modal drafts: `${TASK_MODAL_DRAFT_PREFIX}${contactId}` */
+export const TASK_MODAL_DRAFT_PREFIX = 'mo-task-modal-draft-';
+
 // ── Connect-services modal ─────────────────────────────────────────────────────
 /**
  * sessionStorage — set once per browser session when the "Connect your services"

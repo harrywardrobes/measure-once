@@ -2551,22 +2551,6 @@ async function verifyNoteAssociation(noteId, objectType, objectId) {
   }
 }
 
-// Verify that a HubSpot task is actually associated with the given object type + ID.
-// Returns true if the association exists, false otherwise (or on error).
-async function verifyTaskAssociation(taskId, objectType, objectId) {
-  try {
-    const r = await axios.get(
-      `${HS}/crm/v3/objects/tasks/${encodeURIComponent(taskId)}/associations/${encodeURIComponent(objectType)}`,
-      { headers: getHubSpotHeaders(), timeout: 8000 }
-    );
-    const ids = (r.data?.results || []).map(a => String(a.id));
-    return ids.includes(String(objectId));
-  } catch (e) {
-    // If the task doesn't exist or the association call fails, deny the update.
-    return false;
-  }
-}
-
 app.post('/api/deals/:id/checklist', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   try {
     const { checklistData, existingNoteId } = req.body;
@@ -2980,33 +2964,167 @@ app.post('/api/deals/:id/workflow', isAuthenticated, requirePrivilege('member'),
   }
 });
 
-// ── HubSpot: Tasks ────────────────────────────────────────────────────────────
-app.get('/api/contacts/:id/tasks', requireHubspotToken, async (req, res) => {
+// ── Calendar-backed Tasks ─────────────────────────────────────────────────────
+// Tasks are stored as Google Calendar events on the shared calendar, tagged
+// with extendedProperties.private: moTask=1, moContactId, moAssignedUserId,
+// moTaskStatus (open|completed).  These routes replace the former HubSpot-
+// backed task endpoints.
+
+function calendarEventToTask(ev) {
+  const ep = (ev.extendedProperties && ev.extendedProperties.private) || {};
+  return {
+    id: ev.id,
+    task_name: ev.summary || 'Untitled',
+    task_description: ev.description || '',
+    task_customer: {
+      contactId:   ep.moContactId   || '',
+      contactName: ep.moContactName || '',
+    },
+    task_assigned_user: {
+      userId: ep.moAssignedUserId   || '',
+      name:   ep.moAssignedUserName || '',
+    },
+    task_deadline: (ev.start && (ev.start.dateTime || ev.start.date)) || '',
+    task_status: ep.moTaskStatus === 'completed' ? 'completed' : 'open',
+  };
+}
+
+app.get('/api/tasks', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const googleTokens = await getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
   try {
-    const contactId = req.params.id;
-    if (!/^\d+$/.test(contactId)) {
-      return res.status(400).json({ error: 'Invalid contact id' });
+    const auth = getGoogleClient(googleTokens);
+    const calendar = getCalendarClient(auth);
+    const contactId      = String(req.query.contactId      || '').trim();
+    const assignedUserId = String(req.query.assignedUserId || '').trim();
+    if (contactId && !/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const privateExtendedProperty = ['moTask=1'];
+    if (contactId)      privateExtendedProperty.push(`moContactId=${contactId}`);
+    if (assignedUserId) privateExtendedProperty.push(`moAssignedUserId=${assignedUserId}`);
+
+    const listParams = {
+      calendarId,
+      maxResults: 100,
+      singleEvents: true,
+      orderBy: 'startTime',
+      timeMin: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+      privateExtendedProperty,
+    };
+    const events = await calendar.events.list(listParams);
+    const results = (events.data.items || []).map(ev => calendarEventToTask(ev));
+    res.json({ results });
+  } catch (e) {
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
+  }
+});
+
+app.post('/api/tasks', isAuthenticated, requirePrivilege('member'), calendarEventLimiter, async (req, res) => {
+  const googleTokens = await getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
+  try {
+    const { task_name, task_description, task_customer, task_assigned_user, task_deadline } = req.body;
+    if (!task_name || !String(task_name).trim()) return res.status(400).json({ error: 'task_name is required.' });
+    if (!task_deadline) return res.status(400).json({ error: 'task_deadline is required.' });
+    const deadlineDate = new Date(task_deadline);
+    if (isNaN(deadlineDate.getTime())) return res.status(400).json({ error: 'task_deadline is not a valid date.' });
+
+    const ep = {
+      moTask: '1',
+      moSource: 'measure-once',
+      moTaskStatus: 'open',
+    };
+    if (task_customer?.contactId)      ep.moContactId   = String(task_customer.contactId);
+    if (task_customer?.contactName)    ep.moContactName  = String(task_customer.contactName);
+    if (task_assigned_user?.userId)    ep.moAssignedUserId   = String(task_assigned_user.userId);
+    if (task_assigned_user?.name)      ep.moAssignedUserName = String(task_assigned_user.name);
+
+    const auth = getGoogleClient(googleTokens);
+    const calendar = getCalendarClient(auth);
+    const endDate = new Date(deadlineDate.getTime() + 30 * 60 * 1000);
+    const event = await calendar.events.insert({
+      calendarId,
+      requestBody: {
+        summary: String(task_name).trim(),
+        description: task_description ? String(task_description).trim() : '',
+        start: { dateTime: deadlineDate.toISOString() },
+        end:   { dateTime: endDate.toISOString() },
+        extendedProperties: { private: ep },
+      },
+    });
+    res.json(calendarEventToTask(event.data));
+  } catch (e) {
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
+  }
+});
+
+app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const googleTokens = await getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const eventId = String(req.params.id || '').trim();
+  if (!eventId) return res.status(400).json({ error: 'Invalid task id.' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
+  try {
+    const auth = getGoogleClient(googleTokens);
+    const calendar = getCalendarClient(auth);
+    const updates = {};
+    const epUpdates = {};
+
+    if (req.body.task_name !== undefined)        updates.summary     = String(req.body.task_name).trim();
+    if (req.body.task_description !== undefined) updates.description = String(req.body.task_description);
+    if (req.body.task_status !== undefined) {
+      if (!['open', 'completed'].includes(req.body.task_status)) {
+        return res.status(400).json({ error: 'task_status must be "open" or "completed".' });
+      }
+      epUpdates.moTaskStatus = req.body.task_status;
+    }
+    if (req.body.task_deadline !== undefined) {
+      const dd = new Date(req.body.task_deadline);
+      if (isNaN(dd.getTime())) return res.status(400).json({ error: 'task_deadline is not a valid date.' });
+      updates.start = { dateTime: dd.toISOString() };
+      updates.end   = { dateTime: new Date(dd.getTime() + 30 * 60 * 1000).toISOString() };
+    }
+    if (Object.keys(epUpdates).length > 0) {
+      updates.extendedProperties = { private: epUpdates };
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update.' });
     }
 
-    const assocR = await axios.get(
-      `${HS}/crm/v3/objects/contacts/${contactId}/associations/tasks`,
-      { headers: getHubSpotHeaders() }
-    );
-    const taskIds = assocR.data.results?.map(r => r.id) || [];
-    if (!taskIds.length) return res.json({ results: [] });
-
-    const taskR = await axios.post(
-      `${HS}/crm/v3/objects/tasks/batch/read`,
-      {
-        properties: ['hs_task_subject', 'hs_timestamp', 'hs_task_status', 'hs_task_body'],
-        inputs: taskIds.map(id => ({ id }))
-      },
-      { headers: getHubSpotHeaders() }
-    );
-    res.json(taskR.data);
+    const event = await calendar.events.patch({ calendarId, eventId, requestBody: updates });
+    res.json(calendarEventToTask(event.data));
   } catch (e) {
-    logger.error({ err: e.response?.data || e.message }, 'GET /api/contacts/:id/tasks HubSpot error:');
-    res.json({ results: [] });
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
+  }
+});
+
+app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const googleTokens = await getVerifiedGoogleTokens(req);
+  if (!googleTokens) return res.status(401).json({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' });
+  const eventId = String(req.params.id || '').trim();
+  if (!eventId) return res.status(400).json({ error: 'Invalid task id.' });
+  let calendarId;
+  try { calendarId = getSharedCalendarId(); }
+  catch (cfgErr) { return res.status(503).json({ error: cfgErr.message, code: cfgErr.code }); }
+  try {
+    const auth = getGoogleClient(googleTokens);
+    const calendar = getCalendarClient(auth);
+    await calendar.events.delete({ calendarId, eventId });
+    res.json({ success: true });
+  } catch (e) {
+    const code = classifyGoogleError(e);
+    res.status(code === 'GOOGLE_AUTH' ? 401 : 500).json({ error: e.message, code });
   }
 });
 
@@ -3161,124 +3279,24 @@ app.post('/api/contacts/urgency', isAuthenticated, requireHubspotToken, async (r
   }
 });
 
-app.post('/api/contacts/:id/tasks', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
+// ── Team members ─────────────────────────────────────────────────────────────
+// Returns all active users — used by TaskModal to populate the assignee picker.
+app.get('/api/users', isAuthenticated, requirePrivilege('member'), async (req, res) => {
   try {
-    const { subject, dueDate, stageKey } = req.body;
-    const contactId = req.params.id;
-    if (!/^\d+$/.test(contactId)) {
-      return res.status(400).json({ error: 'Invalid contact id' });
-    }
-
-    const properties = {
-      hs_task_subject: subject,
-      hs_task_status: 'NOT_STARTED',
-      hs_task_type: 'TODO'
-    };
-    if (dueDate) properties.hs_timestamp = new Date(dueDate + 'T12:00:00').toISOString();
-    if (stageKey) properties.hs_task_body = `TASK_STAGE:${stageKey}`;
-
-    const taskR = await hubspotRequestWithRetry('post',
-      `${HS}/crm/v3/objects/tasks`,
-      { properties }
+    const { rows } = await pool.query(
+      `SELECT id, first_name, last_name, email
+       FROM users
+       WHERE onboarding_status = 'active'
+       ORDER BY first_name, last_name, email`
     );
-    await hubspotRequestWithRetry('put',
-      `${HS}/crm/v3/objects/tasks/${taskR.data.id}/associations/contacts/${contactId}/task_to_contact`,
-      {}
-    );
-    res.json(taskR.data);
+    res.json(rows.map(u => ({
+      id:    String(u.id),
+      name:  [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || '',
+      email: u.email || '',
+    })));
   } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    logger.error({ err: e.response?.data || e.message }, 'POST /api/contacts/:id/tasks HubSpot error:');
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
-  }
-});
-
-app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
-  try {
-    const taskId = req.params.id;
-    if (!/^\d+$/.test(taskId)) {
-      return res.status(400).json({ error: 'Invalid task id' });
-    }
-
-    // Require the caller to identify the parent contact so we can verify the
-    // task actually belongs to it before mutating it (object-binding check).
-    const contactId = req.body.contactId != null ? String(req.body.contactId) : '';
-    if (!contactId || !/^\d+$/.test(contactId)) {
-      return res.status(400).json({ error: 'contactId is required.' });
-    }
-    const taskLinked = await verifyTaskAssociation(taskId, 'contacts', contactId);
-    if (!taskLinked) {
-      return res.status(403).json({ error: 'Task is not associated with this contact.' });
-    }
-
-    const TASK_ALLOWED = ['hs_task_status', 'hs_task_subject', 'hs_task_body', 'hs_timestamp', 'hs_task_priority', 'hs_task_type'];
-    const properties = {};
-    for (const key of TASK_ALLOWED) {
-      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
-        properties[key] = req.body[key];
-      }
-    }
-    if (Object.keys(properties).length === 0) {
-      return res.status(400).json({ error: 'No valid properties to update.' });
-    }
-
-    const r = await hubspotRequestWithRetry('patch',
-      `${HS}/crm/v3/objects/tasks/${taskId}`,
-      { properties }
-    );
-    res.json(r.data);
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    logger.error({ err: e.response?.data || e.message }, 'PATCH /api/tasks/:id HubSpot error:');
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
-  }
-});
-
-app.delete('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
-  try {
-    const taskId = req.params.id;
-    if (!/^\d+$/.test(taskId)) {
-      return res.status(400).json({ error: 'Invalid task id' });
-    }
-
-    // Require the caller to identify the parent contact so we can verify the
-    // task actually belongs to it before deleting it (object-binding check).
-    const contactId = req.body.contactId != null ? String(req.body.contactId) : '';
-    if (!contactId || !/^\d+$/.test(contactId)) {
-      return res.status(400).json({ error: 'contactId is required.' });
-    }
-    const taskLinked = await verifyTaskAssociation(taskId, 'contacts', contactId);
-    if (!taskLinked) {
-      return res.status(403).json({ error: 'Task is not associated with this contact.' });
-    }
-
-    await hubspotRequestWithRetry('delete',
-      `${HS}/crm/v3/objects/tasks/${taskId}`,
-      null
-    );
-    res.json({ success: true });
-  } catch (e) {
-    const status = e.response?.status;
-    if (status === 401 || status === 403) {
-      return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-    }
-    if (status === 429) {
-      return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-    }
-    logger.error({ err: e.response?.data || e.message }, 'DELETE /api/tasks/:id HubSpot error:');
-    res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+    logger.error({ err: e.message }, 'GET /api/users error:');
+    res.status(500).json({ error: 'Failed to load users.' });
   }
 });
 

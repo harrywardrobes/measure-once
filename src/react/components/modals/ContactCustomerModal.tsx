@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -27,6 +27,10 @@ import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
+
+const TaskModal = lazy(() =>
+  import('./TaskModal').then(m => ({ default: m.TaskModal }))
+);
 
 interface Props {
   contactId: string;
@@ -166,6 +170,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [attemptLog, setAttemptLog] = useState<AttemptLogEntry[]>([]);
 
   const [lastAttemptAt, setLastAttemptAt] = useState<string | null>(null);
+
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [lastAttemptBy, setLastAttemptBy] = useState<string | null>(null);
 
   const [historySessionCount,   setHistorySessionCount]   = useState(0);
@@ -621,6 +627,14 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
           data-testid="cc-no-response"
         >
           No Response
+        </Button>
+        <Button
+          onClick={() => setTaskModalOpen(true)}
+          variant="outlined"
+          color="secondary"
+          data-testid="cc-call-later"
+        >
+          Call Later
         </Button>
         <DemoActionTooltip demo={demo}>
           <Button
@@ -1451,6 +1465,19 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       onDiscard={handleDiscard}
       onKeepEditing={handleKeepEditing}
     />
+
+    {taskModalOpen && (
+      <Suspense fallback={null}>
+        <TaskModal
+          open
+          onClose={() => setTaskModalOpen(false)}
+          contactId={contactId}
+          contactName={displayName}
+          contactEmail={contactData?.contactEmail || contactEmail}
+          demo={demo}
+        />
+      </Suspense>
+    )}
     </>
   );
 }

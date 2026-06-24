@@ -16,7 +16,7 @@ import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
-  Contact, Room, HubSpotTask,
+  Contact, Room, CalendarTask,
   DesignVisit, GoogleEmail, WhatsAppMessage,
   contactName,
 } from './customer-detail/types';
@@ -98,7 +98,7 @@ export function CustomerDetailPage() {
   );
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');
-  const [tasks,        setTasks]        = useState<HubSpotTask[]>([]);
+  const [tasks,        setTasks]        = useState<CalendarTask[]>([]);
 
   const [selectedRoom, setSelectedRoom] = useState(0);
   const qb = useQBInvoices();
@@ -300,7 +300,7 @@ export function CustomerDetailPage() {
 
       const [localData, tasksData] = await Promise.all([
         apiFetch<unknown>(`/api/contacts/${contactId}/localdata`).catch(() => null),
-        apiFetch<{ results?: HubSpotTask[] }>(`/api/contacts/${contactId}/tasks`).catch(() => ({ results: [] })),
+        apiFetch<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${contactId}`).catch(() => ({ results: [] })),
       ]);
       setTasks(tasksData.results || []);
 
@@ -746,7 +746,6 @@ export function CustomerDetailPage() {
             <TasksSection
               contactId={contactId}
               tasks={tasks}
-              workflow={workflow}
               onTasksChange={setTasks}
             />
 

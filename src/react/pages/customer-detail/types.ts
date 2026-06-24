@@ -52,6 +52,42 @@ export interface HubSpotTask {
   };
 }
 
+/**
+ * A task backed by the shared Google Calendar.
+ *
+ * Google Calendar field mapping:
+ *   summary              → task_name
+ *   description          → task_description
+ *   start.dateTime       → task_deadline
+ *   extendedProperties.private.moTask            = "1"
+ *   extendedProperties.private.moContactId       → task_customer.contactId
+ *   extendedProperties.private.moContactName     → task_customer.contactName
+ *   extendedProperties.private.moAssignedUserId  → task_assigned_user.userId
+ *   extendedProperties.private.moAssignedUserName → task_assigned_user.name
+ *   extendedProperties.private.moTaskStatus      → task_status ("open"|"completed")
+ */
+export interface CalendarTask {
+  id: string;
+  task_name: string;
+  task_description?: string;
+  task_customer: {
+    contactId: string;
+    contactName: string;
+  };
+  task_assigned_user: {
+    userId: string;
+    name: string;
+  };
+  task_deadline: string;
+  task_status: 'open' | 'completed';
+}
+
+export interface StaffUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface LeadStatus {
   value: string;
   label: string;
