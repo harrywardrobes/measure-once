@@ -790,6 +790,13 @@ async function setupAuth(app) {
 
       const sessionUser = buildSessionUser(dbUser);
       await loginSessionUser(req, sessionUser);
+      logger.info({
+        reqSecure: req.secure,
+        xForwardedProto: req.headers['x-forwarded-proto'],
+        sessionID: req.sessionID,
+        hasPassportUser: !!req.session?.passport?.user,
+        setCookieHeader: res.getHeader('Set-Cookie'),
+      }, '[AUTH-DIAG] post-login session state');
       res.json({
         ok: true,
         onboarding_status: sessionUser.onboarding_status,
