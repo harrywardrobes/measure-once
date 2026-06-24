@@ -132,6 +132,12 @@ export interface DesignVisit {
   contact_email?: string;
 }
 
+export interface DesignVisitRoomImage {
+  storageKey: string;
+  mimeType?: string | null;
+  viewUrl?: string;
+}
+
 export interface DesignVisitRoom {
   room_name?: string;
   door_style_name?: string;
@@ -140,6 +146,7 @@ export interface DesignVisitRoom {
   depth_mm?: number | null;
   unit_count?: number;
   unit_price_pence?: number;
+  images?: DesignVisitRoomImage[];
 }
 
 export interface Visit {

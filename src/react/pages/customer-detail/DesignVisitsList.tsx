@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { DesignVisit, DesignVisitRoom, fmtDesignVisitWhen, fmtGbp } from './types';
+import { DesignVisit, DesignVisitRoom, DesignVisitRoomImage, fmtDesignVisitWhen, fmtGbp } from './types';
 import { DesignVisitStatusPill } from './DesignVisitStatusPill';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineVisitEntries, type PendingVisitEntry } from '../../hooks/useOfflineVisitEntries';
@@ -427,6 +427,59 @@ export async function resignResumedImages(
   };
 }
 
+/**
+ * Returns true when a loaded {@link DesignVisit} has at least one opaque photo
+ * (`obj:…` storage key) whose signed view URL is absent or within 5 minutes of
+ * expiry. Used by the background-refresh loop to decide whether to call the
+ * resign endpoint for a visit.
+ */
+function detailNeedsResign(visit: DesignVisit): boolean {
+  return (visit.rooms || []).some(r =>
+    (r.images || []).some(img => img.storageKey?.startsWith('obj:') && isViewUrlStale(img.viewUrl))
+  );
+}
+
+/**
+ * Merge a storageKey→signedUrl map (returned by the resign endpoint) into the
+ * rooms/images of a loaded {@link DesignVisit}, leaving all other fields intact.
+ */
+function applyFreshUrlsToDetail(visit: DesignVisit, urls: Record<string, string>): DesignVisit {
+  if (!visit.rooms) return visit;
+  return {
+    ...visit,
+    rooms: visit.rooms.map(r => ({
+      ...r,
+      images: (r.images || []).map((img: DesignVisitRoomImage) => {
+        const fresh = img.storageKey ? urls[img.storageKey] : undefined;
+        return fresh ? { ...img, viewUrl: fresh } : img;
+      }),
+    })),
+  };
+}
+
+/**
+ * Background resign of photo thumbnails for a single already-loaded visit
+ * detail. Calls the bulk resign endpoint only when at least one `obj:` key has
+ * a stale or absent view URL. Returns the fresh URL map on success or null when
+ * the request is skipped, offline, or encounters an error.
+ */
+async function fetchFreshUrlsForDetail(visitId: number, visit: DesignVisit): Promise<Record<string, string> | null> {
+  if (!detailNeedsResign(visit)) return null;
+  try {
+    const r = await fetch(`/api/design-visits/${visitId}/photos/resign`, { method: 'POST' });
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data?.urls || typeof data.urls !== 'object') return null;
+    const urls: Record<string, string> = {};
+    for (const [k, val] of Object.entries(data.urls as Record<string, unknown>)) {
+      if (typeof val === 'string') urls[k] = val;
+    }
+    return Object.keys(urls).length > 0 ? urls : null;
+  } catch {
+    return null; // offline or server error — leave existing viewUrls
+  }
+}
+
 /** Parse a `#design-visit-<id>` deep-link fragment into a numeric visit id. */
 function visitIdFromHash(hash: string): number | null {
   const m = hash.match(/^#design-visit-(\d+)$/);
@@ -470,6 +523,57 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
     prevIdsRef.current = current;
     if (removed) onRefresh();
   }, [pendingEntries, onRefresh]);
+
+  // Background photo refresh — keeps thumbnail strips in the expanded detail
+  // views alive without the user needing to re-open the wizard.
+  //
+  // Signed URLs have a ~1 h TTL. A user who leaves the customer detail page
+  // open for longer will see broken images when the URLs expire. This effect
+  // re-signs stale `obj:` keys for every already-loaded detail view on two
+  // triggers:
+  //   • page visibility regained (tab switched back / screen unlock)
+  //   • a 10-minute interval as a safety net for tabs that stay continuously
+  //     visible
+  //
+  // Best-effort: errors and offline states are silently swallowed so the
+  // background task never disrupts the UI.
+  const detailsRef = useRef(details);
+  useEffect(() => { detailsRef.current = details; }, [details]);
+
+  useEffect(() => {
+    const refreshStalePhotos = async () => {
+      const current = detailsRef.current;
+      const loaded = Object.entries(current).filter(
+        ([, s]) => !s.loading && s.data !== null && s.error === null
+      ) as Array<[string, { loading: boolean; data: DesignVisit; error: null }]>;
+
+      await Promise.all(
+        loaded.map(async ([idStr, state]) => {
+          const visitId = Number(idStr);
+          const fresh = await fetchFreshUrlsForDetail(visitId, state.data);
+          if (!fresh) return;
+          setDetails(d => {
+            const cur = d[visitId];
+            if (!cur?.data) return d;
+            return { ...d, [visitId]: { ...cur, data: applyFreshUrlsToDetail(cur.data, fresh) } };
+          });
+        })
+      );
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshStalePhotos();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    // 10-minute periodic check as a fallback for tabs that stay continuously visible
+    const timer = setInterval(refreshStalePhotos, 10 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      clearInterval(timer);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDetail = useCallback((id: number) => {
     setDetails(d => {
@@ -776,6 +880,17 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
   const rooms = visit.rooms || [];
   const grand = rooms.reduce((s, r) => s + (Number(r.unit_price_pence) || 0) * (Number(r.unit_count) || 0), 0);
 
+  // Collect all renderable thumbnails: signed URLs and data: URIs only.
+  // Opaque `obj:` storage keys without a viewUrl are skipped — they have no
+  // displayable src until the background resign produces a fresh signed URL.
+  const thumbnails: Array<{ src: string; alt: string }> = [];
+  for (const r of rooms) {
+    for (const img of r.images || []) {
+      const src = img.viewUrl || (img.storageKey?.startsWith('data:') ? img.storageKey : '');
+      if (src) thumbnails.push({ src, alt: r.room_name ? `${r.room_name} photo` : 'Room photo' });
+    }
+  }
+
   return (
     <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 8, color: 'var(--ink-3)' }}>
@@ -818,6 +933,28 @@ function DesignVisitDetail({ visit }: { visit: DesignVisit }) {
         </table>
       ) : (
         <p style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>No rooms recorded.</p>
+      )}
+      {thumbnails.length > 0 && (
+        <div
+          data-testid="dv-photo-strip"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}
+        >
+          {thumbnails.map((t, i) => (
+            <img
+              key={i}
+              src={t.src}
+              alt={t.alt}
+              style={{
+                width: 56,
+                height: 56,
+                objectFit: 'cover',
+                borderRadius: 6,
+                border: '1px solid var(--stone)',
+                flexShrink: 0,
+              }}
+            />
+          ))}
+        </div>
       )}
       {visit.notes         && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Notes:</strong> {visit.notes}</div>}
       {visit.visit_notes   && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}><strong>Visit notes:</strong> {visit.visit_notes}</div>}
