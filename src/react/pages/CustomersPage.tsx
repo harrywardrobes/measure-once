@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_KEY, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
-import { formatCurrency, compactRelativeTime, latestTimestamp, relativeTime } from '../utils/formatters';
+import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
@@ -63,7 +63,6 @@ import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { getActionStripColors } from '../utils/actionStripColors';
 import { usePageTitle } from '../hooks/usePageTitle';
-import { useNowTick } from '../hooks/useNowTick';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
 import { WorkflowDef } from '../lib/workflowConfig';
 import { useWorkflowData } from '../context/WorkflowDataContext';
@@ -656,7 +655,6 @@ function CustomerCard({
    */
   openTaskCount?: number;
 }) {
-  const now = useNowTick();
   const name = contactName(contact);
   const email = contact.properties?.email || '';
   const phone = contact.properties?.phone || '';
@@ -733,10 +731,16 @@ function CustomerCard({
     primaryStageKey,
   });
 
-  const activityTs = latestTimestamp(lastAttempt?.at, contact.properties?.notes_last_contacted);
-  const activityCounter = (!dispatchingAction && actionLabel && activityTs)
-    ? compactRelativeTime(activityTs, now)
-    : null;
+  const activitySummary: string | null = (() => {
+    if (dispatchingAction || !actionLabel) return null;
+    if (lastAttempt?.at) {
+      const { line1, line2 } = formatActivityRow(lastAttempt, relativeTime(lastAttempt.at));
+      return `${line1} · ${line2}`;
+    }
+    const fallbackDate = contact.properties?.notes_last_contacted;
+    if (fallbackDate) return `Last contacted ${relativeTime(fallbackDate)}`;
+    return null;
+  })();
 
   const handleActionClick = useCallback(
     async (e: React.MouseEvent) => {
@@ -900,7 +904,7 @@ function CustomerCard({
         <Typography sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem' }}>
           {handler && (dispatchingAction ? 'Opening…' : (
             <>
-              {activityCounter && (
+              {activitySummary && (
                 <Tooltip
                   title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
                   arrow
@@ -909,9 +913,9 @@ function CustomerCard({
                 >
                   <Box
                     component="span"
-                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px' }}
+                    sx={{ fontWeight: 500, opacity: 0.6, mr: '4px', fontSize: '0.72rem' }}
                   >
-                    {activityCounter} ·
+                    {activitySummary} ·
                   </Box>
                 </Tooltip>
               )}
