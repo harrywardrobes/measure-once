@@ -1322,28 +1322,10 @@ export function CustomerInfoPage() {
                               component="img"
                               src={p.previewUrl}
                               alt={p.name}
-                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: p.unavailable ? 0.35 : 1 }}
+                              sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                             />
-                          ) : (
+                          ) : p.unavailable ? (
                             <Box sx={{ textAlign: 'center', p: 0.5 }}>
-                              <CloudUploadIcon sx={{ fontSize: 22, color: 'grey.400' }} />
-                              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2, mt: 0.25 }}>
-                                saved
-                              </Typography>
-                            </Box>
-                          )}
-                          {p.unavailable && (
-                            <Box
-                              sx={{
-                                position: 'absolute',
-                                inset: 0,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                bgcolor: 'rgba(255,255,255,0.55)',
-                                p: 0.5,
-                              }}
-                            >
                               <Typography
                                 variant="caption"
                                 sx={{
@@ -1354,6 +1336,13 @@ export function CustomerInfoPage() {
                                 }}
                               >
                                 File no longer available
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Box sx={{ textAlign: 'center', p: 0.5 }}>
+                              <CircularProgress size={20} sx={{ color: 'grey.400' }} />
+                              <Typography variant="caption" sx={{ display: 'block', fontSize: '0.6rem', color: 'text.disabled', lineHeight: 1.2, mt: 0.5 }}>
+                                loading…
                               </Typography>
                             </Box>
                           )}
