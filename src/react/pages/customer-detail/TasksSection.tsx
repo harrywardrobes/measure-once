@@ -41,6 +41,31 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
   const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
 
+  // When the Tasks section enters the viewport, broadcast a task-changed event
+  // for this contact so the badge on the parent customer card re-fetches its
+  // open-task count.  This catches the case where a user leaves the page open
+  // for a long time and scrolls to a contact whose badge was never fetched (or
+  // was fetched before tasks changed).  The IntersectionObserver fires each
+  // time the section enters the viewport so repeated scrolls-away-and-back
+  // also refresh the badge.
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            broadcastTaskChanged(contactId);
+          }
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => { observer.disconnect(); };
+  }, [contactId]);
+
   // When the page is navigated to with the #tasks-section hash (e.g. from the
   // open-tasks badge on the customer card), scroll this section into view once
   // it mounts.  Uses a retry loop because tasks can load asynchronously and
@@ -236,7 +261,7 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <div id="tasks-section" className="mb-6">
+      <div id="tasks-section" ref={sectionRef} className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>Tasks</h3>
           {!isViewer && (
