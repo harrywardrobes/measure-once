@@ -244,7 +244,6 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:photo-reviews',                'narrative — integration test for photo-review routes'],
   ['test:design-visit',                 'narrative — full design-visit wizard + sign-off e2e'],
   ['test:visit-edit-cancel',            'narrative — PATCH + cancel confirmation e2e'],
-  ['test:dv-catalogue-image-upload',    'narrative — catalogue image upload flow e2e'],
   ['test:dv-catalogue-reorder',         'narrative — catalogue reorder arrow controls e2e'],
   ['test:sign-off-stale-link',          'narrative — superseded sign-off link e2e'],
   ['test:react-admin-tabs',             'narrative — React admin island smoke test'],

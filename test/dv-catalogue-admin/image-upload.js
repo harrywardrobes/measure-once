@@ -1,5 +1,28 @@
 'use strict';
 const { makeSkip } = require('../helpers/report');
+
+const PROBE_LABELS = [
+  // Page setup — skipped as a group when browser is unavailable
+  'admin page exposes switchTab + loadDvCatalogue',
+
+  // (S) Success path — create handle + upload PNG
+  '[S] click + Add handle opens the modal',
+  '[S] modal renders #dvie-name + #dvie-img-file + #dvie-save',
+  '[S] modal closes after successful save + upload',
+  '[S] no full page reload (window.__pageLoadToken preserved)',
+  '[S] new row in #dv-handles-wrap shows uploaded image src=/uploads/handles/...',
+  '[S] design_visit_handles.image_url is non-null in DB',
+  '[S] DB image_url matches the URL rendered on the page',
+
+  // (F) Failure path — image POST returns 500, modal stays open
+  '[F] re-open Edit modal for the seeded handle',
+  '[F] Edit modal renders inputs + #dvie-err',
+  '[F] modal stays open after failed image upload (#dvie-save still in DOM)',
+  '[F] visible error message mentions image upload failure',
+  '[F] Save button is re-enabled for retry after failure',
+  '[F] DB image_url is preserved (not overwritten) on failed upload',
+];
+
 // test/dv-catalogue-admin/image-upload.js
 //
 // End-to-end live test for the Design Visit Handle image-upload flow.
@@ -199,7 +222,9 @@ async function main() {
   );
 
   if (!puppeteer) {
-    skip('puppeteer is installed', 'puppeteer required', 'module not found');
+    for (const l of PROBE_LABELS) {
+      skip(l, 'puppeteer installed', 'puppeteer not installed');
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;
@@ -217,7 +242,9 @@ async function main() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
   } catch (e) {
-    skip('headless chromium launches', 'browser.launch() succeeds', `error: ${e.message}`);
+    for (const l of PROBE_LABELS) {
+      skip(l, 'browser launched', `browser launch failed: ${e.message}`);
+    }
     await writeReport(runId, findings);
     await cleanupAndExit(1);
     return;

@@ -2,17 +2,89 @@
 const { makeSkip } = require('../helpers/report');
 
 const PROBE_LABELS = [
+  // Page setup — skipped as a group when browser is unavailable
   'admin page exposes switchTab + loadDvCatalogue',
   'design-visit catalogue lists load (no "Loading…")',
-  '[handles] click + Add opens the modal',
-  '[handles] modal renders #dvie-name + #dvie-save',
-  '[furniture] click + Add opens the modal',
-  '[furniture] modal renders #dvie-name + #dvie-save',
-  '[door-styles] click + Add opens the modal',
-  '[door-styles] modal renders #dvie-name + #dvie-save',
+
+  // (H) Handle — add flow
+  '[H] click + Add opens the modal',
+  '[H] modal renders #dvie-name + #dvie-save',
+  '[H] Save button is disabled and shows "Saving…" while POST is in flight',
+  '[H] no full page reload (window.__pageLoadToken preserved)',
+  '[H] list at #dv-handles-wrap grew by ≥1 row after save',
+  '[H] new row shows the values entered in the modal',
   '[H] style dropdown value persisted in DB and returned by API',
-  '[H/edit] seeded handle row available for edit probe',
-  '[H/del] seeded handle row available for delete probe',
+
+  // (H) Handle — edit flow
+  '[H-edit] open editor via window fn',
+  '[H-edit] edit modal renders #dvie-name + #dvie-save',
+  '[H-edit] Save button reads "Save" (not "Add") in edit mode',
+  '[H-edit] modal pre-fills existing values',
+  '[H-edit] Save button is disabled and shows "Saving…" while PATCH is in flight',
+  '[H-edit] no full page reload (window.__pageLoadToken preserved)',
+  '[H-edit] list at #dv-handles-wrap reflects the edited values in place',
+  '[H-edit] DB row reflects the edit',
+
+  // (H) Handle — delete flow
+  '[H-del] window.deleteDvItem callable and wrap has rows',
+  '[H-del] DELETE /api/admin/catalog/handles/:id fired and returned 2xx',
+  '[H-del] row removed from #dv-handles-wrap (row count dropped)',
+  '[H-del] wrap no longer mentions the deleted item',
+  '[H-del] no full page reload (window.__pageLoadToken preserved)',
+  '[H-del] DB row is gone',
+  '[H-del] local handle image file unlinked by server',
+
+  // (F) Furniture range — add flow
+  '[F] click + Add opens the modal',
+  '[F] modal renders #dvie-name + #dvie-save',
+  '[F] Save button is disabled and shows "Saving…" while POST is in flight',
+  '[F] no full page reload (window.__pageLoadToken preserved)',
+  '[F] list at #dv-furniture-wrap grew by ≥1 row after save',
+  '[F] new row shows the values entered in the modal',
+
+  // (F) Furniture range — edit flow
+  '[F-edit] open editor via window fn',
+  '[F-edit] edit modal renders #dvie-name + #dvie-save',
+  '[F-edit] Save button reads "Save" (not "Add") in edit mode',
+  '[F-edit] modal pre-fills existing values',
+  '[F-edit] Save button is disabled and shows "Saving…" while PATCH is in flight',
+  '[F-edit] no full page reload (window.__pageLoadToken preserved)',
+  '[F-edit] list at #dv-furniture-wrap reflects the edited values in place',
+  '[F-edit] DB row reflects the edit',
+
+  // (F) Furniture range — delete flow
+  '[F-del] window.deleteDvItem callable and wrap has rows',
+  '[F-del] DELETE /api/admin/catalog/ranges/:id fired and returned 2xx',
+  '[F-del] row removed from #dv-furniture-wrap (row count dropped)',
+  '[F-del] wrap no longer mentions the deleted item',
+  '[F-del] no full page reload (window.__pageLoadToken preserved)',
+  '[F-del] DB row is gone',
+
+  // (D) Door style — add flow
+  '[D] click + Add opens the modal',
+  '[D] modal renders #dvie-name + #dvie-save',
+  '[D] Save button is disabled and shows "Saving…" while POST is in flight',
+  '[D] no full page reload (window.__pageLoadToken preserved)',
+  '[D] list at #dv-door-styles-wrap grew by ≥1 row after save',
+  '[D] new row shows the values entered in the modal',
+
+  // (D) Door style — edit flow
+  '[D-edit] open editor via window fn',
+  '[D-edit] edit modal renders #dvie-name + #dvie-save',
+  '[D-edit] Save button reads "Save" (not "Add") in edit mode',
+  '[D-edit] modal pre-fills existing values',
+  '[D-edit] Save button is disabled and shows "Saving…" while PATCH is in flight',
+  '[D-edit] no full page reload (window.__pageLoadToken preserved)',
+  '[D-edit] list at #dv-door-styles-wrap reflects the edited values in place',
+  '[D-edit] DB row reflects the edit',
+
+  // (D) Door style — delete flow
+  '[D-del] window.deleteDvItem callable and wrap has rows',
+  '[D-del] DELETE /api/admin/catalog/doors/:id fired and returned 2xx',
+  '[D-del] row removed from #dv-door-styles-wrap (row count dropped)',
+  '[D-del] wrap no longer mentions the deleted item',
+  '[D-del] no full page reload (window.__pageLoadToken preserved)',
+  '[D-del] DB row is gone',
 ];
 
 // test/dv-catalogue-admin/run.js
@@ -500,7 +572,7 @@ async function main() {
         return true;
       }, { type: spec.type, id: spec.targetId });
       record(
-        `[${label}/edit] open editor for '${spec.type}' id=${spec.targetId} via window fn`,
+        `[${label}-edit] open editor via window fn`,
         `window.openDv${spec.type === 'handle' ? 'Handle' : spec.type === 'furniture' ? 'Furniture' : 'DoorStyle'}Editor(${spec.targetId}) callable`,
         `opened=${opened}`,
         opened,
@@ -512,7 +584,7 @@ async function main() {
         return !!name && !!save;
       }, null, 6000);
       record(
-        `[${label}/edit] edit modal renders #dvie-name + #dvie-save`,
+        `[${label}-edit] edit modal renders #dvie-name + #dvie-save`,
         'modal inputs present',
         `ready=${!!modalReady}`,
         !!modalReady,
@@ -524,7 +596,7 @@ async function main() {
         return btn ? (btn.textContent || '').trim() : null;
       });
       record(
-        `[${label}/edit] Save button reads "Save" (not "Add") in edit mode`,
+        `[${label}-edit] Save button reads "Save" (not "Add") in edit mode`,
         'textContent === "Save"',
         `label=${JSON.stringify(saveLabel)}`,
         saveLabel === 'Save',
@@ -547,7 +619,7 @@ async function main() {
         ([k, v]) => prefill[k] === v,
       );
       record(
-        `[${label}/edit] modal pre-fills existing values`,
+        `[${label}-edit] modal pre-fills existing values`,
         `inputs match ${JSON.stringify(spec.expectedPrefill)}`,
         `got=${JSON.stringify(prefill)}`,
         prefillOk,
@@ -580,7 +652,7 @@ async function main() {
         return { disabled: btn.disabled, text: (btn.textContent || '').trim() };
       }, null, 3000);
       record(
-        `[${label}/edit] Save button is disabled and shows "Saving…" while PATCH is in flight`,
+        `[${label}-edit] Save button is disabled and shows "Saving…" while PATCH is in flight`,
         '#dvie-save.disabled === true && text === "Saving…"',
         `state=${JSON.stringify(inflight)}`,
         !!inflight && inflight.disabled === true && /Saving/i.test(inflight.text),
@@ -595,7 +667,7 @@ async function main() {
 
       const stillSameLoad = await page.evaluate(t => window.__pageLoadToken === t, pageLoadToken);
       record(
-        `[${label}/edit] no full page reload (window.__pageLoadToken preserved)`,
+        `[${label}-edit] no full page reload (window.__pageLoadToken preserved)`,
         `__pageLoadToken === "${pageLoadToken}"`,
         `preserved=${stillSameLoad}`,
         stillSameLoad === true,
@@ -608,7 +680,7 @@ async function main() {
       }, spec.wrapId, 6000);
       const rowOk = !!wrapState && spec.assertRow(wrapState.text);
       record(
-        `[${label}/edit] list at #${spec.wrapId} reflects the edited values in place`,
+        `[${label}-edit] list at #${spec.wrapId} reflects the edited values in place`,
         spec.assertExpected,
         wrapState ? `text-includes=${spec.assertObserved(wrapState.text)}` : 'no wrap state',
         rowOk,
@@ -617,7 +689,7 @@ async function main() {
       // DB-level assertion that the PATCH persisted.
       const dbRow = await spec.dbProbe();
       record(
-        `[${label}/edit] DB row reflects the edit`,
+        `[${label}-edit] DB row reflects the edit`,
         spec.dbExpectedText,
         `row=${JSON.stringify(dbRow)}`,
         !!dbRow && spec.dbExpected(dbRow),
@@ -636,7 +708,7 @@ async function main() {
     //   spec.dbProbe()       — async () returning the post-delete row (or
     //                          null) for the DB-gone assertion.
     async function runDeleteFlow(label, spec) {
-      console.log(`\n  [${label}/del] delete row id=${spec.targetId}`);
+      console.log(`\n  [${label}-del] delete row id=${spec.targetId}`);
 
       // Stub window.confirm so deleteDvItem() proceeds.  Re-installed every
       // probe in case a prior flow swapped it back.
@@ -654,7 +726,7 @@ async function main() {
         () => typeof window.deleteDvItem === 'function',
       );
       record(
-        `[${label}/del] window.deleteDvItem callable and wrap has rows`,
+        `[${label}-del] window.deleteDvItem callable and wrap has rows`,
         'window.deleteDvItem is a function and baselineRows > 0',
         `callable=${dvItemCallable} baselineRows=${baselineRows}`,
         dvItemCallable === true && baselineRows > 0,
@@ -695,14 +767,14 @@ async function main() {
       await page.setRequestInterception(false);
 
       record(
-        `[${label}/del] DELETE ${deleteUrl} fired and returned 2xx`,
+        `[${label}-del] DELETE ${spec.endpoint}/:id fired and returned 2xx`,
         `method=DELETE url ends with ${deleteUrl}, status 200`,
         `seen=${JSON.stringify(deleteSeen)}`,
         !!deleteSeen && deleteSeen.status >= 200 && deleteSeen.status < 300,
       );
 
       record(
-        `[${label}/del] row removed from #${spec.wrapId} (row count dropped)`,
+        `[${label}-del] row removed from #${spec.wrapId} (row count dropped)`,
         `row count < ${baselineRows}`,
         `state=${JSON.stringify(shrank)}`,
         !!shrank,
@@ -714,7 +786,7 @@ async function main() {
         return w ? (w.textContent || '') : '';
       }, spec.wrapId);
       record(
-        `[${label}/del] wrap no longer mentions "${spec.rowMarkerText}"`,
+        `[${label}-del] wrap no longer mentions the deleted item`,
         `wrap.textContent excludes "${spec.rowMarkerText}"`,
         `includes=${wrapText.includes(spec.rowMarkerText)}`,
         !wrapText.includes(spec.rowMarkerText),
@@ -722,7 +794,7 @@ async function main() {
 
       const stillSameLoad = await page.evaluate(t => window.__pageLoadToken === t, pageLoadToken);
       record(
-        `[${label}/del] no full page reload (window.__pageLoadToken preserved)`,
+        `[${label}-del] no full page reload (window.__pageLoadToken preserved)`,
         `__pageLoadToken === "${pageLoadToken}"`,
         `preserved=${stillSameLoad}`,
         stillSameLoad === true,
@@ -730,7 +802,7 @@ async function main() {
 
       const dbRow = await spec.dbProbe();
       record(
-        `[${label}/del] DB row is gone`,
+        `[${label}-del] DB row is gone`,
         'dbProbe() returns null',
         `row=${JSON.stringify(dbRow)}`,
         dbRow === null,
@@ -743,7 +815,7 @@ async function main() {
           !fs.existsSync(spec.assertLocalFileGone) ? true : null
         ), 4000, 100));
         record(
-          `[${label}/del] local handle image file unlinked by server`,
+          `[${label}-del] local handle image file unlinked by server`,
           `${spec.assertLocalFileGone} no longer exists`,
           `exists=${!fileGone}`,
           fileGone,
@@ -817,7 +889,7 @@ async function main() {
       });
     } else {
       record(
-        '[H/edit] seeded handle row available for edit probe',
+        '[H-edit] seeded handle row available for edit probe',
         'createdHandle is non-null after add flow',
         'add flow did not surface a handle row to edit',
         false,
@@ -840,7 +912,7 @@ async function main() {
         ));
       } catch (e) {
         record(
-          '[H/del] seed local handle image file on disk',
+          '[H-del] seed local handle image file on disk',
           `write ${handleImgPath}`,
           `error: ${e.message}`,
           false,
@@ -878,7 +950,7 @@ async function main() {
       });
     } else {
       record(
-        '[H/del] seeded handle row available for delete probe',
+        '[H-del] seeded handle row available for delete probe',
         'createdHandle is non-null after add flow',
         'add flow did not surface a handle row to delete',
         false,
@@ -943,7 +1015,7 @@ async function main() {
       });
     } else {
       record(
-        '[F/edit] seeded furniture row available for edit probe',
+        '[F-edit] seeded furniture row available for edit probe',
         'furniture row exists in DB after add flow',
         'add flow did not produce a furniture row to edit',
         false,
@@ -975,7 +1047,7 @@ async function main() {
       });
     } else {
       record(
-        '[F/del] seeded furniture row available for delete probe',
+        '[F-del] seeded furniture row available for delete probe',
         'furniture row exists in DB after add flow',
         'add flow did not produce a furniture row to delete',
         false,
@@ -1040,7 +1112,7 @@ async function main() {
       });
     } else {
       record(
-        '[D/edit] seeded door-style row available for edit probe',
+        '[D-edit] seeded door-style row available for edit probe',
         'door-style row exists in DB after add flow',
         'add flow did not produce a door-style row to edit',
         false,
@@ -1072,7 +1144,7 @@ async function main() {
       });
     } else {
       record(
-        '[D/del] seeded door-style row available for delete probe',
+        '[D-del] seeded door-style row available for delete probe',
         'door-style row exists in DB after add flow',
         'add flow did not produce a door-style row to delete',
         false,
