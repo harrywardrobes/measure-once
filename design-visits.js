@@ -245,6 +245,11 @@ async function getQbTokens() {
 // ── Per-user rate limiter for design visit create/submit ──────────────────────
 const DESIGN_VISIT_RATE_WINDOW_MS = 10 * 60 * 1000;
 const DESIGN_VISIT_RATE_LIMIT     = 20;
+
+// Maximum number of opaque photo keys the bulk resign endpoint will process in
+// a single request.  Keeps a large or adversarially crafted visit from
+// triggering hundreds of simultaneous object-storage downloads.
+const RESIGN_PHOTOS_MAX_KEYS = 100;
 const _designVisitRateMap = new Map();
 function checkDesignVisitRateLimit(userId) {
   const now = Date.now();
@@ -2320,6 +2325,13 @@ async function resignVisitPhotos(visitId, pool) {
     .map(r => r.storage_key)
     .filter(k => k && dvUploads.isOpaqueKey(k));
   if (opaqueKeys.length === 0) return {};
+  if (opaqueKeys.length > RESIGN_PHOTOS_MAX_KEYS) {
+    const err = new Error(
+      `Visit has ${opaqueKeys.length} photos; bulk resign is capped at ${RESIGN_PHOTOS_MAX_KEYS}`,
+    );
+    err.code = 'TOO_MANY_PHOTOS';
+    throw err;
+  }
   const results = await dvUploads.downloadOpaqueKeys(opaqueKeys);
   const urls = {};
   for (const { key, buf } of results) {
@@ -2361,6 +2373,9 @@ router.post('/api/design-visits/:id/photos/resign', isAuthenticated, requirePriv
     const urls = await resignVisitPhotos(visitId, pool);
     return res.json({ urls });
   } catch (e) {
+    if (e.code === 'TOO_MANY_PHOTOS') {
+      return res.status(400).json({ error: e.message });
+    }
     logger.error({ err: e.message }, '[design-visits] POST resign-photos error:');
     return res.status(500).json({ error: 'Could not re-sign photos' });
   }
