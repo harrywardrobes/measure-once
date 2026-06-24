@@ -1,0 +1,20 @@
+Add a "2-month active" filter to the Customers page, scoped to the "Priority first" sort only
+
+When the Customers page sort is "Priority first" (sort value priority), the list should only include customers that have been active in the last 2 months, where "active" means the HubSpot lastmodifieddate is within the last ~60 days. This must NOT affect any other sort option, and must NOT apply while the user has an active search query (search should always find all matching customers regardless of activity).
+
+Context — how the list works today:
+
+The Customers list is served by GET /api/contacts-all in server.js (around line 1634). It receives sort, q (search), priorityFirst=1, and an existing staleAfterDays param that already filters on lastmodifieddate (see the staleness filter block ~line 1707 — use it as the pattern/precedent for the date math and the new Date(raw).getTime() parsing).
+Note the client sends sort=newest to the server even when the UI sort is priority (it maps priority → newest and instead sends priorityFirst=1). So the server cannot rely on sort==='priority' — key the new filter off the priorityFirst flag.
+The React hook src/react/hooks/usePaginatedContacts.ts builds the query string (~line 307) and also contains an offline mirror of the server logic in filterSortPaginateCachedContacts (~line 137). Both the server and this offline mirror must apply the new filter identically so the offline cached view matches the online view.
+The page component is src/react/pages/CustomersPage.tsx, which passes priorityFirst: sortBy === 'priority' into the hook (~line 1083) and tracks search/sortBy state.
+Requirements:
+
+The 2-month-active filter applies only when priorityFirst is true (i.e. sort = "Priority first").
+The filter is disabled whenever there is a non-empty search query (q / search), even if the sort is "Priority first".
+"Active" = lastmodifieddate within the last 2 months. Decide on a single source-of-truth constant for the window (60 days is fine) and reuse it on both server and client. Contacts with a missing/unparseable lastmodifieddate should be treated the same way the existing staleAfterDays filter treats them (it keeps them — match that behavior unless there's a reason not to, and call out the choice).
+Other sorts (newest, name-asc, name-desc, etc.) must behave exactly as before — no activity filtering.
+Apply the filter in /api/contacts-all (server) AND in filterSortPaginateCachedContacts (offline mirror in the hook) so behavior is consistent online and offline. Make sure total/totalPages reflect the post-filter count.
+Before implementing: read the existing staleAfterDays block in server.js, the query-building and offline-filter code in usePaginatedContacts.ts, and how priorityFirst/sortBy flow from CustomersPage.tsx, so the new filter slots in consistently with existing patterns.
+
+Tests: add/extend tests covering: (a) priority sort hides contacts older than 2 months, (b) priority sort + search returns the older contacts again, (c) other sorts are unaffected. Mirror whatever test setup already exists for usePaginatedContacts / /api/contacts-all. Run the existing test suite and report results.
