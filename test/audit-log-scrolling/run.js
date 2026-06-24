@@ -45,13 +45,13 @@ require('dotenv').config();
 const { waitForSwitchTab, pollUntil } = require('../helpers/poll');
 const { findChromium } = require('../shared/find-chromium');
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 const PROBE_LABELS = [
-  '(A) initial rows load — first page of entries appears in #audit-feed',
+  '(A) initial 50 rows load — first page of entries appears in #audit-feed',
   '(B) Load more triggers next-page fetch — second API request is made',
   '(C) loading indicator appears on button while next page is fetching',
-  '(D) next batch of rows appends — row count doubles after load',
+  '(D) rows 51-100 append correctly — row count increases after load',
 ];
 
 function parseCookieKV(jar) {

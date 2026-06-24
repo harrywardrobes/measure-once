@@ -36,7 +36,7 @@ const ACTION_LABELS: Record<string, string> = {
   startup_migration:         'System startup migration',
 };
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 export function AdminAuditLogPage() {
   usePageTitle('Audit Log · Measure Once');
