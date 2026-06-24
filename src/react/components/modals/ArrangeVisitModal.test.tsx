@@ -767,4 +767,88 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
       expect(showToast.mock.calls[0][0]).toMatch(/email sent/i);
     });
   });
+
+  it('shows an inline error and keeps the modal open when /api/emails/send returns 500 after the fallback body loads', async () => {
+    const orig = window.fetch;
+
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/card-actions/arrange-visit') && !url.includes('outcome') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_INFO), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/email-templates/render') && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Template service unavailable' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/emails/send') && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Mail server rejected the request' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    // Wait for the call step
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "No answer" — template fetch returns 500, so the fallback body is populated
+    await user.click(screen.getByTestId('av-outcome-no-answer'));
+
+    // Wait for the email body field to appear with non-empty fallback content
+    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    await waitFor(() => {
+      expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
+    });
+
+    // Wait for the "Send email" button to become enabled (emailLoading=false)
+    await waitFor(() => {
+      expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
+    });
+
+    // Click "Send email" — /api/emails/send returns 500
+    await user.click(screen.getByTestId('av-email-send'));
+
+    // An inline error alert must appear with a meaningful message
+    await waitFor(() => {
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeTruthy();
+      // Should show the server-derived error or the generic fallback — either
+      // way the text must be non-empty so the user sees actionable feedback.
+      expect(alert.textContent?.trim()).not.toBe('');
+    });
+
+    // The modal must NOT close
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
