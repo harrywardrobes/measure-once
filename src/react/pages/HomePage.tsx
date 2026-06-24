@@ -35,8 +35,10 @@ import { readRecords } from '../lib/offlineDb';
 import { WorkflowDef } from '../lib/workflowConfig';
 import { useWorkflowData } from '../context/WorkflowDataContext';
 import {
-  HOME_TASK_ASSIGNEE_FILTER_KEY,
-  HOME_TASK_CONTACT_SEARCH_KEY,
+  HOME_TASK_ASSIGNEE_FILTER_PREFIX,
+  HOME_TASK_CONTACT_SEARCH_PREFIX,
+  HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY,
+  HOME_TASK_CONTACT_SEARCH_LEGACY_KEY,
 } from '../constants/localStorageKeys';
 
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
@@ -226,9 +228,12 @@ function TaskSection({
 }) {
   const [page, setPage] = React.useState(1);
 
+  const filterKey    = currentUserId ? `${HOME_TASK_ASSIGNEE_FILTER_PREFIX}${currentUserId}` : null;
+  const searchKey    = currentUserId ? `${HOME_TASK_CONTACT_SEARCH_PREFIX}${currentUserId}`  : null;
+
   const [assigneeFilter, setAssigneeFilter] = React.useState<AssigneeFilter>(() => {
     try {
-      const saved = localStorage.getItem(HOME_TASK_ASSIGNEE_FILTER_KEY);
+      const saved = filterKey ? localStorage.getItem(filterKey) : null;
       return saved === 'mine' ? 'mine' : 'all';
     } catch {
       return 'all';
@@ -237,30 +242,48 @@ function TaskSection({
 
   const [contactSearch, setContactSearch] = React.useState<string>(() => {
     try {
-      return localStorage.getItem(HOME_TASK_CONTACT_SEARCH_KEY) ?? '';
+      return (searchKey ? localStorage.getItem(searchKey) : null) ?? '';
     } catch {
       return '';
     }
   });
 
+  React.useEffect(() => {
+    try {
+      localStorage.removeItem(HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY);
+      localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_LEGACY_KEY);
+    } catch { /* ignore */ }
+  }, []);
+
+  React.useEffect(() => {
+    if (!filterKey || !searchKey) return;
+    try {
+      const savedFilter = localStorage.getItem(filterKey);
+      setAssigneeFilter(savedFilter === 'mine' ? 'mine' : 'all');
+      setContactSearch(localStorage.getItem(searchKey) ?? '');
+      setPage(1);
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserId]);
+
   const handleAssigneeFilter = (_: React.MouseEvent<HTMLElement>, val: AssigneeFilter | null) => {
     if (!val) return;
     setAssigneeFilter(val);
     setPage(1);
-    try { localStorage.setItem(HOME_TASK_ASSIGNEE_FILTER_KEY, val); } catch { /* ignore */ }
+    try { if (filterKey) localStorage.setItem(filterKey, val); } catch { /* ignore */ }
   };
 
   const handleContactSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setContactSearch(v);
     setPage(1);
-    try { localStorage.setItem(HOME_TASK_CONTACT_SEARCH_KEY, v); } catch { /* ignore */ }
+    try { if (searchKey) localStorage.setItem(searchKey, v); } catch { /* ignore */ }
   };
 
   const clearContactSearch = () => {
     setContactSearch('');
     setPage(1);
-    try { localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_KEY); } catch { /* ignore */ }
+    try { if (searchKey) localStorage.removeItem(searchKey); } catch { /* ignore */ }
   };
 
   const clearFilters = () => {
@@ -268,8 +291,8 @@ function TaskSection({
     setContactSearch('');
     setPage(1);
     try {
-      localStorage.removeItem(HOME_TASK_ASSIGNEE_FILTER_KEY);
-      localStorage.removeItem(HOME_TASK_CONTACT_SEARCH_KEY);
+      if (filterKey) localStorage.removeItem(filterKey);
+      if (searchKey) localStorage.removeItem(searchKey);
     } catch { /* ignore */ }
   };
 

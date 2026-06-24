@@ -120,10 +120,21 @@ export const DEPOSIT_INVOICE_DRAFT_PREFIX = 'mo-deposit-invoice-draft-';
 export const TASK_MODAL_DRAFT_PREFIX = 'mo-task-modal-draft-';
 
 // ── Home page task filters ─────────────────────────────────────────────────────
-/** "all" | "mine" — remembered across page visits */
-export const HOME_TASK_ASSIGNEE_FILTER_KEY = 'mo:home:task-assignee-filter';
-/** Contact name search string — remembered across page visits */
-export const HOME_TASK_CONTACT_SEARCH_KEY  = 'mo:home:task-contact-search';
+/**
+ * Prefix for the per-user assignee filter: `${HOME_TASK_ASSIGNEE_FILTER_PREFIX}${userId}`
+ * "all" | "mine" — remembered across page visits, scoped to the logged-in user.
+ */
+export const HOME_TASK_ASSIGNEE_FILTER_PREFIX = 'mo:home:task-assignee-filter:';
+/**
+ * Prefix for the per-user contact search: `${HOME_TASK_CONTACT_SEARCH_PREFIX}${userId}`
+ * Contact name search string — remembered across page visits, scoped to the logged-in user.
+ */
+export const HOME_TASK_CONTACT_SEARCH_PREFIX  = 'mo:home:task-contact-search:';
+
+/** @deprecated Unscoped keys superseded by the per-user prefixes above; kept for the one-off migration shim only. */
+export const HOME_TASK_ASSIGNEE_FILTER_LEGACY_KEY = 'mo:home:task-assignee-filter'; // ls-key-ok: migration shim — clearing the old unscoped key
+/** @deprecated Unscoped keys superseded by the per-user prefixes above; kept for the one-off migration shim only. */
+export const HOME_TASK_CONTACT_SEARCH_LEGACY_KEY  = 'mo:home:task-contact-search';  // ls-key-ok: migration shim — clearing the old unscoped key
 
 // ── Connect-services modal ─────────────────────────────────────────────────────
 /**
