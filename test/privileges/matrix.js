@@ -299,7 +299,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/hubspot/dev-mode',                     level: 'admin' },
   { method: 'POST',   path: '/api/admin/hubspot/dev-mode',                     level: 'admin', body: { devMode: false } },
   { method: 'GET',    path: '/api/admin/hubspot/priority-active-days',          level: 'admin' },
-  { method: 'POST',   path: '/api/admin/hubspot/priority-active-days',          level: 'admin', body: { value: 90 } },
+  { method: 'POST',   path: '/api/admin/hubspot/priority-active-days',          level: 'admin', body: { value: 7 } },
   { method: 'GET',    path: '/api/admin/server-env',                           level: 'admin' },
   { method: 'GET',    path: '/api/admin/search-settings',                      level: 'admin' },
   { method: 'PUT',    path: '/api/admin/search-settings',                      level: 'admin', body: {} },

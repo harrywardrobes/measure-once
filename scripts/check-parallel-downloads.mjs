@@ -76,6 +76,14 @@ const TARGETS = [
 // to avoid duplicate output.
 const AUTO_SCAN_FILES = [
   'customer-info.js',
+  // design-visit-uploads.js already calls downloadAsBytes once; add here so
+  // any future second (serial) call is caught automatically.
+  'design-visit-uploads.js',
+  // design-visits.js and photo-reviews.js have no downloadAsBytes calls today
+  // but are the most likely modules to gain batch downloads in future; enrol
+  // them now so the guard fires the moment a serial pattern is introduced.
+  'design-visits.js',
+  'photo-reviews.js',
 ];
 
 // The download helper name used in auto-scan and self-test.
