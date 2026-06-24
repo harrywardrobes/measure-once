@@ -9,9 +9,9 @@
  * immediately.  These tests verify that contract end-to-end.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -27,14 +27,20 @@ vi.mock('../../utils/broadcastUrgencyChanged', () => ({
   broadcastUrgencyChanged: vi.fn(),
 }));
 
-vi.mock('../../utils/broadcastTaskChanged', () => ({
-  broadcastTaskChanged: vi.fn(),
-}));
+vi.mock('../../utils/broadcastTaskChanged', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/broadcastTaskChanged')>();
+  return { ...actual, broadcastTaskChanged: vi.fn() };
+});
 
 import { TasksSection } from './TasksSection';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useConnectionToast } from '../../context/ConnectionToastContext';
 import type { CalendarTask } from './types';
+import {
+  subscribeTaskChanged,
+  TASK_CHANGED_WINDOW_EVENT,
+  type TaskChangedMessage,
+} from '../../utils/broadcastTaskChanged';
 
 const mockUsePrivilege    = usePrivilege    as ReturnType<typeof vi.fn>;
 const mockUseConnToast    = useConnectionToast as ReturnType<typeof vi.fn>;
@@ -240,6 +246,118 @@ describe('Task badge sync — adding a task', () => {
     await waitFor(() => {
       expect(screen.getByTestId('task-badge')).toHaveTextContent('2 open tasks');
     });
+  });
+});
+
+// ── Cross-tab wrapper ─────────────────────────────────────────────────────────
+// Mimics what CustomerDetailPage does: owns tasks state + subscribes to
+// task-changed broadcasts to refetch from the server.
+
+function WrapperWithCrossTabSync({
+  contactId,
+  initialTasks,
+}: {
+  contactId: string;
+  initialTasks: CalendarTask[];
+}) {
+  const [tasks, setTasks] = useState<CalendarTask[]>(initialTasks);
+  const openTaskCount = tasks.filter(t => t.task_status !== 'completed').length;
+
+  useEffect(() => {
+    return subscribeTaskChanged(({ contactId: changedId }) => {
+      if (changedId !== contactId) return;
+      window
+        .fetch(`/api/tasks?contactId=${contactId}`)
+        .then(r => r.json() as Promise<{ results?: CalendarTask[] }>)
+        .then(data => { setTasks(data.results || []); })
+        .catch(() => { /* non-fatal */ });
+    });
+  }, [contactId]);
+
+  return (
+    <div>
+      {openTaskCount > 0 && (
+        <span data-testid="task-badge">
+          {openTaskCount === 1 ? '1 open task' : `${openTaskCount} open tasks`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function fireCrossTabEvent(contactId: string) {
+  const msg: TaskChangedMessage = { contactId, ts: Date.now() };
+  window.dispatchEvent(new CustomEvent(TASK_CHANGED_WINDOW_EVENT, { detail: msg }));
+}
+
+// ── Cross-tab tests ───────────────────────────────────────────────────────────
+
+describe('Task badge sync — cross-tab broadcast', () => {
+  it('refetches tasks and updates the badge when broadcastTaskChanged fires for this contact', async () => {
+    const refreshedTask = makeTask('t-refreshed');
+
+    window.fetch = vi.fn(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request).url;
+      if (url.includes('/api/tasks')) {
+        return new Response(
+          JSON.stringify({ results: [refreshedTask] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response('Not found', { status: 404 });
+    }) as typeof fetch;
+
+    render(
+      <WrapperWithCrossTabSync contactId={CONTACT_ID} initialTasks={[]} />,
+    );
+
+    expect(screen.queryByTestId('task-badge')).toBeNull();
+
+    act(() => { fireCrossTabEvent(CONTACT_ID); });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('task-badge')).toHaveTextContent('1 open task');
+    });
+  });
+
+  it('ignores broadcasts for a different contact', async () => {
+    window.fetch = vi.fn() as typeof fetch;
+
+    render(
+      <WrapperWithCrossTabSync contactId={CONTACT_ID} initialTasks={[makeTask('t1')]} />,
+    );
+
+    expect(screen.getByTestId('task-badge')).toHaveTextContent('1 open task');
+
+    act(() => { fireCrossTabEvent('some-other-contact'); });
+
+    // fetch must not have been called
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(screen.getByTestId('task-badge')).toHaveTextContent('1 open task');
+  });
+
+  it('keeps the existing badge if the refetch fails', async () => {
+    window.fetch = vi.fn(async () =>
+      new Response('Server error', { status: 500 }),
+    ) as typeof fetch;
+
+    render(
+      <WrapperWithCrossTabSync
+        contactId={CONTACT_ID}
+        initialTasks={[makeTask('t1'), makeTask('t2')]}
+      />,
+    );
+
+    expect(screen.getByTestId('task-badge')).toHaveTextContent('2 open tasks');
+
+    act(() => { fireCrossTabEvent(CONTACT_ID); });
+
+    // After a failed fetch the badge must remain unchanged
+    await waitFor(() => {
+      expect(screen.getByTestId('task-badge')).toHaveTextContent('2 open tasks');
+    });
+    // The fetch was attempted
+    expect(window.fetch).toHaveBeenCalledTimes(1);
   });
 });
 

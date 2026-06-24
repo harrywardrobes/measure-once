@@ -31,6 +31,7 @@ import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } fro
 import { LEAD_STATUS_REMOVED_MESSAGE, GET, isGoogleAuthError } from '../utils/api';
 import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
+import { subscribeTaskChanged } from '../utils/broadcastTaskChanged';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -434,6 +435,17 @@ export function CustomerDetailPage() {
       void fetchLastAttempt();
     });
   }, [contactId, fetchLastAttempt]);
+
+  // ── Refresh tasks when a task changes in another tab/device ──────────────
+
+  useEffect(() => {
+    return subscribeTaskChanged(({ contactId: changedId }) => {
+      if (changedId !== contactId) return;
+      apiFetch<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${contactId}`)
+        .then(data => { setTasks(data.results || []); })
+        .catch(() => { /* non-fatal — keep existing tasks */ });
+    });
+  }, [contactId]);
 
   // ── Re-fetch emails when Google connects mid-session ───────────────────────
 
