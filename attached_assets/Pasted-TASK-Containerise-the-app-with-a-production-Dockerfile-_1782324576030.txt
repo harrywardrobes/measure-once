@@ -1,0 +1,89 @@
+TASK: Containerise the app with a production Dockerfile so it can run anywhere
+(Cloud Run, any container host) independently of Replit's build pipeline. This is
+ADDITIVE — do not remove or change .replit; we still deploy on Replit until the
+GCP cutover. Build artifacts must be produced at image-build time, not at boot.
+
+BACKGROUND (read before changing anything):
+- Runtime: Node 20. App entry is `node server.js` (this is also Replit's deploy
+  run command; it bypasses npm's prestart, so no build runs at boot).
+- Replit's build step is: `npm run build:react && npm run build:storybook`.
+  These generate gitignored artifacts the server serves as static assets:
+    public/react/      (build:react → main.js, self-mounting bundle + tokens.css)
+    public/sw.js       (build-sw.mjs, runs as part of build:react)
+    public/storybook/  (build:storybook → static Design System gallery, served
+                        at /storybook/)
+- build:react runs typecheck + vite build + bundle-size check; it needs devDeps.
+- Puppeteer/Chromium (replit.nix pkgs.chromium, scripts/ensure-chrome.mjs,
+  .puppeteerrc.cjs) is used ONLY by browser tests, never by the production
+  server. The runtime image must NOT contain Chromium, and `npm ci` during the
+  build must NOT download a browser.
+- The server binds 0.0.0.0 and honours process.env.PORT (Replit uses 5000).
+  Cloud Run injects PORT (usually 8080), so the app must keep reading PORT with a
+  sane fallback. Verify this in server.js and fix if it's hardcoded.
+- Config is entirely env-driven (DATABASE_URL, SESSION_SECRET, HUBSPOT_TOKEN,
+  GOOGLE_* OAuth, QB_*, GOOGLE_PLACES_API_KEY, APP_URL, ADMIN_EMAILS,
+  NODE_ENV, and the storage vars). NONE of these may be baked into the image.
+
+WHAT TO BUILD:
+1. A multi-stage Dockerfile at the repo root:
+   - Base image: node:20-bookworm-slim (pin the major; same as Replit's nodejs-20).
+   - Stage `builder`:
+       * Set ENV PUPPETEER_SKIP_DOWNLOAD=true (and CI=true) so npm ci does not
+         fetch Chromium.
+       * COPY package.json package-lock.json; run `npm ci` (incl. devDeps).
+       * COPY the rest of the source.
+       * Run `npm run build:react && npm run build:storybook` to produce
+         public/react, public/sw.js, public/storybook.
+   - Stage `runtime`:
+       * FROM node:20-bookworm-slim, NODE_ENV=production.
+       * Create and use a non-root user.
+       * COPY package.json package-lock.json; run `npm ci --omit=dev` (with
+         PUPPETEER_SKIP_DOWNLOAD=true) for a lean prod dependency set.
+       * COPY application source from builder (server.js, *.js, views/, public/,
+         migrations/, shared/, src/ as needed by runtime, etc.).
+       * COPY the built artifacts from builder: public/react, public/sw.js,
+         public/storybook.
+       * EXPOSE 8080. Do NOT hardcode PORT in the image — let the platform set it;
+         optionally default PORT=8080 for local `docker run`.
+       * CMD ["node", "server.js"].
+   Keep the final image small: no Chromium, no devDeps, no test/ or artifacts/.
+
+2. A .dockerignore that excludes at least: node_modules, .git, test/, artifacts/,
+   attached_assets/, .replit*, replit.nix, *.md docs not needed at runtime,
+   coverage/test-results, and local env files (.env). Make sure it does NOT
+   exclude migrations/, views/, shared/, or public/ source assets the server needs.
+
+3. Make storybook optional via a build ARG (e.g. INCLUDE_STORYBOOK=true default).
+   When false, skip `npm run build:storybook` and don't copy public/storybook —
+   this lets us slim the prod image later. Default true to preserve current
+   behaviour (the Design System is currently served at /storybook/).
+
+4. Migrations in a container: do NOT run them implicitly. Document (in a short
+   README section or comment) that schema is applied either by setting
+   RUN_MIGRATIONS_ON_BOOT=true (added in the earlier migrations task) or, preferred
+   for multi-instance hosts, by running `npm run db:migrate` as a one-off
+   pre-deploy step against DATABASE_URL. Do not enable either by default.
+
+5. Add an `engines` field to package.json pinning node ">=20 <21" for clarity
+   (does not change runtime, just documents intent).
+
+CONSTRAINTS:
+- Do not modify or delete .replit, replit.nix, or the Replit workflows. Replit
+  deploys must keep working unchanged.
+- No secrets, bucket names, tokens, or URLs baked into the image — env only.
+- The runtime image must not contain Chromium or devDependencies.
+- Do not change application behaviour or routes. The only server.js change
+  permitted is making the listen host/port Cloud Run-compatible (bind 0.0.0.0,
+  read process.env.PORT) IF it isn't already.
+
+ACCEPTANCE CRITERIA:
+- `docker build -t measure-once .` succeeds without downloading Chromium.
+- `docker run -p 8080:8080 -e PORT=8080 -e DATABASE_URL=... -e SESSION_SECRET=...
+  (plus the other required env vars) measure-once` starts the server, which
+  listens on 0.0.0.0:$PORT and serves the app, /storybook/, and the React bundle.
+- The runtime image contains public/react/main.js, public/sw.js, and (when
+  INCLUDE_STORYBOOK=true) public/storybook — i.e. artifacts came from the build
+  stage, not from git.
+- `docker history` / image size shows no Chromium layer and no devDependencies in
+  the runtime stage.
+- Replit deploy config is untouched and still valid.
