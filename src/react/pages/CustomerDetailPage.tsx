@@ -669,6 +669,7 @@ export function CustomerDetailPage() {
             return 'unpaid';
           })()}
           fromCache={contactFromCache}
+          openTaskCount={tasks.filter(t => t.task_status !== 'completed').length}
         />
       )}
 

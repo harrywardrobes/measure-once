@@ -24,6 +24,7 @@ interface Props {
   depositPaymentState?: DepositPaymentState;
   depositInvoiceLoading?: boolean;
   fromCache?: boolean;
+  openTaskCount?: number;
 }
 
 export function CustomerDetailHeader({
@@ -40,6 +41,7 @@ export function CustomerDetailHeader({
   depositPaymentState,
   depositInvoiceLoading,
   fromCache,
+  openTaskCount,
 }: Props) {
   const { isManager, isViewer } = usePrivilege();
   const canEdit = isManager;
@@ -188,6 +190,30 @@ export function CustomerDetailHeader({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+            {!!openTaskCount && (
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById('tasks-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                title={openTaskCount === 1 ? '1 open task' : `${openTaskCount} open tasks`}
+                style={{
+                  appearance: 'none',
+                  border: '1px solid #93c5fd',
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  padding: '2px 7px',
+                  borderRadius: 6,
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  lineHeight: 1.4,
+                  flexShrink: 0,
+                }}
+              >
+                {openTaskCount === 1 ? '1 open task' : `${openTaskCount} open tasks`}
+              </button>
+            )}
             {depositInvoiceId && (
               <DepositInvoiceBadge
                 depositInvoiceId={depositInvoiceId}
