@@ -20,9 +20,6 @@ const { makeSkip } = require('../helpers/report');
 //   (G) Clicking the Review button on a submitted card opens the card body
 //       (MuiCollapse transitions to the "entered" state); the expanded body
 //       renders the correct address and room-count text.
-//   (G4/G5) A separate submitted card with corrected_email and corrected_mobile
-//       set: after clicking Review, both correction strings appear in the
-//       expanded body with a non-zero bounding height.
 //   (G6a/G6b) A separate submitted card with room_notes set: after clicking
 //       Review, (G6a) the "Notes" section heading is visible with a non-zero
 //       bounding height, and (G6b) the exact room_notes string appears in the
@@ -72,8 +69,6 @@ const ROW_EXPIRED = {
   expires_at: PAST,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -93,8 +88,6 @@ const ROW_ACTIVE_WITH_LINK = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -114,34 +107,10 @@ const ROW_SUBMITTED = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: '12 Test Street',
   city: 'Testville',
   postcode: 'TE1 1ST',
   room_count: '2',
-  room_notes: null,
-  photo_keys: [],
-  photoUrls: [],
-  email_skipped_count: 0,
-  form_link: null,
-};
-
-// Row 5: submitted with corrected_email and corrected_mobile set — used by
-// probes G4/G5 to verify the Corrections section renders both values.
-const ROW_SUBMITTED_WITH_CORRECTIONS = {
-  id: 5,
-  created_at: new Date(NOW - 6 * 24 * 60 * 60 * 1000).toISOString(),
-  submitted_at: new Date(NOW - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  expires_at: FUTURE,
-  contact_name: 'Rail Test',
-  contact_email: 'rail@privtest.invalid',
-  corrected_email: 'corrected@example.com',
-  corrected_mobile: '07700900123',
-  address_line1: '5 Correction Road',
-  city: 'Fixtown',
-  postcode: 'FX2 2FX',
-  room_count: '1',
   room_notes: null,
   photo_keys: [],
   photoUrls: [],
@@ -158,8 +127,6 @@ const ROW_SUBMITTED_WITH_NOTES = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: '6 Notes Avenue',
   city: 'Notestown',
   postcode: 'NT3 3NT',
@@ -179,8 +146,6 @@ const ROW_ACTIVE_NO_LINK = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -203,8 +168,6 @@ const ROW_SKIP_NONZERO = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -225,8 +188,6 @@ const ROW_SKIP_ZERO = {
   expires_at: FUTURE,
   contact_name: 'Rail Test',
   contact_email: 'rail@privtest.invalid',
-  corrected_email: null,
-  corrected_mobile: null,
   address_line1: null,
   city: null,
   postcode: null,
@@ -502,13 +463,6 @@ function writeReport(runId) {
     '  enters; **(G2)** the address text "12 Test Street, Testville, TE1 1ST" is',
     '  visible with a non-zero bounding height; **(G3)** the room-count text',
     '  "2 rooms" is rendered in the expanded body.',
-    '- **(G4/G5) Corrections section renders corrected contact details**: an isolated',
-    '  page load with a submitted fixture row that has `corrected_email` and',
-    '  `corrected_mobile` set. After clicking Review on',
-    '  `[data-testid="submission-card-5"]`, **(G4)** the text',
-    '  "Email: corrected@example.com" is visible with a non-zero bounding height,',
-    '  and **(G5)** the text "Mobile: 07700900123" is visible with a non-zero',
-    '  bounding height inside the expanded Corrections section.',
     '- **(G6a/G6b) Notes section renders heading and room_notes text**: an isolated',
     '  page load with a submitted fixture row that has `room_notes` set to a',
     '  multi-word string. After clicking Review on',
@@ -603,8 +557,6 @@ async function main() {
     '(G) clicking Review button opens submitted card body',
     '(G) address "12 Test Street, Testville, TE1 1ST" visible in expanded card body',
     '(G) "2 rooms" text rendered in expanded card body',
-    '(G4) corrected_email "corrected@example.com" visible with non-zero height in expanded card body',
-    '(G5) corrected_mobile "07700900123" visible with non-zero height in expanded card body',
     '(G6a) "Notes" section heading visible with non-zero height in expanded card body',
     '(G6b) room_notes "Master bedroom has sloped ceiling on north wall" visible with non-zero height in expanded card body',
   ];
@@ -946,109 +898,6 @@ async function main() {
 
     await page.__ctx.close().catch(() => {});
 
-    // ── Probes G4/G5: corrected_email + corrected_mobile in card body ──────
-    console.log('\n  [G4/G5] Corrections section renders corrected contact details');
-
-    const pageG45 = await openDetailPage(
-      browser, adminClient.cookie, [ROW_SUBMITTED_WITH_CORRECTIONS],
-    );
-
-    // Click the Review button to expand submission-card-5.
-    const reviewBtnG45 = await pageG45.$('[data-testid="review-btn"]');
-
-    // Two-phase check for [data-testid="submission-card-body"] inside submission-card-5:
-    //   Phase 1 — confirm the element exists in the DOM (3 s timeout).
-    //             A timeout here means the testid was removed from the
-    //             component, not a timing/animation issue.
-    //   Phase 2 — wait for the element to have height > 0 (10 s timeout).
-    //             A timeout here is the usual animation/render delay.
-    let g45BodyPresent = null;
-    let g45BodyOpen = null;
-    if (reviewBtnG45) {
-      await reviewBtnG45.click();
-      g45BodyPresent = await pollPage(pageG45, () => {
-        const card = document.querySelector('[data-testid="submission-card-5"]');
-        if (!card) return null;
-        return card.querySelector('[data-testid="submission-card-body"]') ? 'found' : null;
-      }, 3000).catch(() => null);
-
-      if (g45BodyPresent) {
-        g45BodyOpen = await pollPage(pageG45, () => {
-          const card = document.querySelector('[data-testid="submission-card-5"]');
-          if (!card) return null;
-          const body = card.querySelector('[data-testid="submission-card-body"]');
-          if (!body) return null;
-          return body.getBoundingClientRect().height > 0 ? 'ok' : null;
-        }, 10000).catch(() => null);
-      }
-    }
-
-    let correctedEmailVisible = false;
-    let correctedMobileVisible = false;
-    if (g45BodyOpen) {
-      const g45State = await pageG45.evaluate(() => {
-        const card = document.querySelector('[data-testid="submission-card-5"]');
-        if (!card) return { emailFound: false, emailHeight: 0, mobileFound: false, mobileHeight: 0 };
-
-        let emailFound = false;
-        let emailHeight = 0;
-        let mobileFound = false;
-        let mobileHeight = 0;
-
-        const allEls = Array.from(card.querySelectorAll('*'));
-        for (const el of allEls) {
-          const text = (el.textContent || '').trim();
-          if (!emailFound && text === 'Email: corrected@example.com') {
-            const rect = el.getBoundingClientRect();
-            emailHeight = rect.height;
-            emailFound = true;
-          }
-          if (!mobileFound && text === 'Mobile: 07700900123') {
-            const rect = el.getBoundingClientRect();
-            mobileHeight = rect.height;
-            mobileFound = true;
-          }
-          if (emailFound && mobileFound) break;
-        }
-
-        return { emailFound, emailHeight, mobileFound, mobileHeight };
-      });
-
-      correctedEmailVisible  = g45State.emailFound  && g45State.emailHeight  > 0;
-      correctedMobileVisible = g45State.mobileFound && g45State.mobileHeight > 0;
-    }
-
-    record(
-      PROBE_LABELS[14],
-      'corrected_email "corrected@example.com" visible with non-zero height after Review',
-      correctedEmailVisible
-        ? 'corrected email found with non-zero height (correct)'
-        : g45BodyOpen
-          ? 'card body open but corrected_email text not found or zero height'
-          : g45BodyPresent
-            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
-            : !reviewBtnG45
-              ? 'review-btn not found'
-              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
-      correctedEmailVisible,
-    );
-    record(
-      PROBE_LABELS[15],
-      'corrected_mobile "07700900123" visible with non-zero height after Review',
-      correctedMobileVisible
-        ? 'corrected mobile found with non-zero height (correct)'
-        : g45BodyOpen
-          ? 'card body open but corrected_mobile text not found or zero height'
-          : g45BodyPresent
-            ? '[data-testid="submission-card-body"] did not become visible within 10 s'
-            : !reviewBtnG45
-              ? 'review-btn not found'
-              : '[data-testid="submission-card-body"] not found in DOM — testid may have been removed',
-      correctedMobileVisible,
-    );
-
-    await pageG45.__ctx.close().catch(() => {});
-
     // ── Probes G6a/G6b: "Notes" heading + room_notes text in card body ────
     console.log('\n  [G6a/G6b] Notes heading and room_notes text visible in expanded card body');
 
@@ -1123,7 +972,7 @@ async function main() {
     }
 
     record(
-      PROBE_LABELS[16],
+      PROBE_LABELS[14],
       '"Notes" section heading visible with non-zero height after Review',
       notesHeadingVisible
         ? '"Notes" heading found with non-zero height (correct)'
@@ -1137,7 +986,7 @@ async function main() {
       notesHeadingVisible,
     );
     record(
-      PROBE_LABELS[17],
+      PROBE_LABELS[15],
       'room_notes text visible with non-zero height after Review',
       roomNotesVisible
         ? 'room_notes text found with non-zero height (correct)'

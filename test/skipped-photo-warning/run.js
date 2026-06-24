@@ -104,8 +104,6 @@ function makeByContactBody(emailSkippedCount) {
       expires_at:          '2099-01-01T00:00:00Z',
       contact_name:        'Skipped PhotoTest',
       contact_email:       'skipped-photo@privtest.local',
-      corrected_email:     null,
-      corrected_mobile:    null,
       address_line1:       '1 Test Street',
       city:                'London',
       postcode:            'SW1A 1AA',
