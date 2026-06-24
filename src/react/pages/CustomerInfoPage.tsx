@@ -47,11 +47,12 @@ interface GenericFields {
 }
 
 interface DraftPayload extends FormData {
-  savedPhotoKeys?:      string[];
-  savedPhotoNames?:     string[];
-  savedPhotoUrls?:      string[];
-  savedPhotoExpiries?:  number[];
-  genericFields?:       GenericFields;
+  savedPhotoKeys?:          string[];
+  savedPhotoNames?:         string[];
+  savedPhotoUrls?:          string[];
+  savedPhotoExpiries?:      number[];
+  savedPhotoUnavailable?:   boolean[];
+  genericFields?:           GenericFields;
 }
 
 export interface UploadedPhoto {
@@ -121,10 +122,11 @@ function saveDraft(token: string, data: FormData, photos: UploadedPhoto[], gener
   try {
     const payload: DraftPayload = {
       ...data,
-      savedPhotoKeys:      photos.map(p => p.key),
-      savedPhotoNames:     photos.map(p => p.name),
-      savedPhotoUrls:      photos.map(p => p.previewUrl),
-      savedPhotoExpiries:  photos.map(p => getSignedUrlExpiry(p.previewUrl) ?? 0),
+      savedPhotoKeys:         photos.map(p => p.key),
+      savedPhotoNames:        photos.map(p => p.name),
+      savedPhotoUrls:         photos.map(p => p.previewUrl),
+      savedPhotoExpiries:     photos.map(p => getSignedUrlExpiry(p.previewUrl) ?? 0),
+      savedPhotoUnavailable:  photos.map(p => !!p.unavailable),
     };
     if (generic) payload.genericFields = generic;
     localStorage.setItem(lsKey(token), JSON.stringify(payload));
@@ -150,11 +152,23 @@ export function buildRestoredPhotos(
   names?: string[],
   urls?: string[],
   expiries?: number[],
+  unavailable?: boolean[],
 ): UploadedPhoto[] {
   const nowSec = Math.floor(Date.now() / 1000);
   return keys.map((k, i) => {
     const isPdf = k.split('?')[0].toLowerCase().endsWith('.pdf');
     const fallback = isPdf ? 'document.pdf' : 'photo';
+    // If this photo was previously flagged unavailable, restore that state
+    // immediately without checking the URL — the sign endpoint already failed.
+    if (unavailable?.[i]) {
+      return {
+        key:         k,
+        previewUrl:  '',
+        name:        names?.[i] || fallback,
+        isPdf,
+        unavailable: true,
+      };
+    }
     const storedUrl = urls?.[i] ?? '';
     const storedExp = expiries?.[i] ?? getSignedUrlExpiry(storedUrl) ?? 0;
     const isFresh =
@@ -177,9 +191,10 @@ export async function resignSavedPhotosAfterRestore(
   onResigned?: (photos: UploadedPhoto[]) => void,
 ): Promise<void> {
   if (!initialPhotos.length) return;
-  // Skip photos that already have a fresh signed URL from the draft.
-  const stalePhotos = initialPhotos.filter(p => !p.previewUrl);
-  if (!stalePhotos.length) return; // All photos are fresh — skip network round-trip
+  // Skip photos that already have a fresh signed URL, or that are already
+  // flagged unavailable from a previous restore (no point re-requesting them).
+  const stalePhotos = initialPhotos.filter(p => !p.previewUrl && !p.unavailable);
+  if (!stalePhotos.length) return; // All photos are fresh or unavailable — skip network round-trip
   try {
     const r = await fetch(`/api/customer-info/${encodeURIComponent(token)}/sign`, {
       method: 'POST',
@@ -478,7 +493,7 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries, draft.savedPhotoUnavailable);
             setPhotos(restored);
             const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
             draftFormData.roomCount = draft.roomCount || '1';
@@ -545,7 +560,7 @@ export function CustomerInfoPage() {
           setFormData(prev => ({ ...prev, ...draft, roomCount: draft.roomCount || '1' }));
           if (draft.genericFields) setGenericFields(draft.genericFields);
           if (draft.savedPhotoKeys?.length) {
-            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
+            const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries, draft.savedPhotoUnavailable);
             setPhotos(restored);
             const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
             draftFormData.roomCount = draft.roomCount || '1';
@@ -567,7 +582,7 @@ export function CustomerInfoPage() {
           roomCount: draft.roomCount || '1',
         }));
         if (draft.savedPhotoKeys?.length) {
-          const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries);
+          const restored = buildRestoredPhotos(draft.savedPhotoKeys, draft.savedPhotoNames, draft.savedPhotoUrls, draft.savedPhotoExpiries, draft.savedPhotoUnavailable);
           setPhotos(restored);
           const draftFormData: FormData = { structuredAddress: emptyAddress(), roomCount: '1', roomNotes: '', ...draft };
           draftFormData.roomCount = draft.roomCount || '1';

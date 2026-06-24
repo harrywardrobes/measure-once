@@ -690,3 +690,278 @@ describe('restore → re-sign → draft-persist integration', () => {
     expect(saved.genericFields).toEqual({ email: 'user@example.com', phone: '555-1234' });
   });
 });
+
+// ── savedPhotoUnavailable: buildRestoredPhotos ─────────────────────────────────
+
+describe('buildRestoredPhotos — savedPhotoUnavailable flag', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_SEC * 1000);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('restores unavailable:true immediately when the flag is set for that index', () => {
+    const [photo] = buildRestoredPhotos(
+      ['photos/gone.jpg'],
+      ['gone.jpg'],
+      [''],
+      [0],
+      [true],
+    );
+    expect(photo.unavailable).toBe(true);
+    expect(photo.previewUrl).toBe('');
+  });
+
+  it('does not set unavailable on photos where the flag is false', () => {
+    const freshExp = NOW_SEC + BUFFER_SEC + 1;
+    const url = `${PREVIEW_BASE}?exp=${freshExp}&sig=ok`;
+    const [photo] = buildRestoredPhotos(
+      ['photos/a.jpg'],
+      ['a.jpg'],
+      [url],
+      [freshExp],
+      [false],
+    );
+    expect(photo.unavailable).toBeFalsy();
+    expect(photo.previewUrl).toBe(url);
+  });
+
+  it('handles a mix: second photo unavailable, first photo fresh', () => {
+    const freshExp = NOW_SEC + BUFFER_SEC + 60;
+    const url = `${PREVIEW_BASE}?exp=${freshExp}&sig=ok`;
+    const photos = buildRestoredPhotos(
+      ['photos/ok.jpg', 'photos/gone.jpg'],
+      ['ok.jpg', 'gone.jpg'],
+      [url, ''],
+      [freshExp, 0],
+      [false, true],
+    );
+    expect(photos[0].previewUrl).toBe(url);
+    expect(photos[0].unavailable).toBeFalsy();
+    expect(photos[1].previewUrl).toBe('');
+    expect(photos[1].unavailable).toBe(true);
+  });
+
+  it('backward-compat: omitting the unavailable array leaves unavailable unset', () => {
+    const [photo] = buildRestoredPhotos(['photos/a.jpg'], ['a.jpg'], [''], [0]);
+    expect(photo.unavailable).toBeFalsy();
+  });
+});
+
+// ── savedPhotoUnavailable: resignSavedPhotosAfterRestore skips unavailable ────
+
+describe('resignSavedPhotosAfterRestore — skips already-unavailable photos', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('issues no fetch when the only photo is already unavailable', async () => {
+    const photos: UploadedPhoto[] = [
+      makePhoto({ previewUrl: '', unavailable: true }),
+    ];
+    await resignSavedPhotosAfterRestore('tok', photos, vi.fn());
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not include an unavailable photo in the sign request body', async () => {
+    let capturedBody: unknown;
+    fetchSpy.mockImplementationOnce(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(
+        JSON.stringify({ results: [{ key: 'photos/stale.jpg', url: '/api/customer-info-preview/abc/stale.jpg?exp=999&sig=new' }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+
+    const photos: UploadedPhoto[] = [
+      makePhoto({ key: 'photos/gone.jpg',  previewUrl: '', unavailable: true, name: 'gone.jpg' }),
+      makePhoto({ key: 'photos/stale.jpg', previewUrl: '', name: 'stale.jpg' }),
+    ];
+
+    await resignSavedPhotosAfterRestore('tok', photos, vi.fn());
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(capturedBody).toEqual({ keys: ['photos/stale.jpg'] });
+  });
+
+  it('preserves unavailable:true on the existing photo while the stale photo is re-signed', async () => {
+    const newUrl = '/api/customer-info-preview/abc/stale.jpg?exp=9999&sig=new';
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/stale.jpg', url: newUrl }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const photos: UploadedPhoto[] = [
+      makePhoto({ key: 'photos/gone.jpg',  previewUrl: '', unavailable: true, name: 'gone.jpg' }),
+      makePhoto({ key: 'photos/stale.jpg', previewUrl: '',                    name: 'stale.jpg' }),
+    ];
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(photos));
+    await resignSavedPhotosAfterRestore('tok', photos, setPhotos);
+
+    const updater = setPhotos.mock.calls[0][0] as (prev: UploadedPhoto[]) => UploadedPhoto[];
+    const result = updater(photos);
+    expect(result[0].unavailable).toBe(true);
+    expect(result[0].previewUrl).toBe('');
+    expect(result[1].previewUrl).toBe(newUrl);
+    expect(result[1].unavailable).toBeFalsy();
+  });
+});
+
+// ── savedPhotoUnavailable: full round-trip through localStorage ───────────────
+
+describe('restore → re-sign → draft-persist round-trip with savedPhotoUnavailable', () => {
+  const TOKEN  = 'test-token-unavail';
+  const LS_KEY = CUSTOMER_INFO_DRAFT_PREFIX + TOKEN;
+  const NOW_S  = 1_700_200_000;
+  const BUF    = 300;
+
+  function persistFreshPhotos(freshPhotos: UploadedPhoto[]) {
+    const existing: Record<string, unknown> = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      ...existing,
+      savedPhotoKeys:         freshPhotos.map(p => p.key),
+      savedPhotoNames:        freshPhotos.map(p => p.name),
+      savedPhotoUrls:         freshPhotos.map(p => p.previewUrl),
+      savedPhotoExpiries:     freshPhotos.map(p => {
+        if (!p.previewUrl.startsWith('/api/customer-info-preview/')) return 0;
+        try {
+          const qs  = p.previewUrl.split('?')[1] ?? '';
+          const exp = parseInt(new URLSearchParams(qs).get('exp') ?? '', 10);
+          return Number.isFinite(exp) ? exp : 0;
+        } catch { return 0; }
+      }),
+      savedPhotoUnavailable:  freshPhotos.map(p => !!p.unavailable),
+    }));
+  }
+
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW_S * 1000);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('persists savedPhotoUnavailable:true for a photo the server could not sign', async () => {
+    const staleExp = NOW_S + BUF - 60;
+    const staleUrl = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:         ['photos/p.jpg'],
+      savedPhotoNames:        ['p.jpg'],
+      savedPhotoUrls:         [staleUrl],
+      savedPhotoExpiries:     [staleExp],
+      savedPhotoUnavailable:  [false],
+    }));
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ results: [{ key: 'photos/p.jpg', url: null }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/p.jpg'], ['p.jpg'], [staleUrl], [staleExp], [false],
+    );
+    expect(restored[0].unavailable).toBeFalsy();
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUnavailable[0]).toBe(true);
+  });
+
+  it('on the next restore, unavailable photo is immediately flagged without a sign request', async () => {
+    const staleExp = NOW_S + BUF - 60;
+    const staleUrl = `/api/customer-info-preview/abc/p.jpg?exp=${staleExp}&sig=old`;
+
+    // Draft was previously written with the unavailable flag
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:         ['photos/p.jpg'],
+      savedPhotoNames:        ['p.jpg'],
+      savedPhotoUrls:         [staleUrl],
+      savedPhotoExpiries:     [staleExp],
+      savedPhotoUnavailable:  [true],
+    }));
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    // Simulate a page restore reading from localStorage
+    const draft = JSON.parse(localStorage.getItem(LS_KEY)!);
+    const restored = buildRestoredPhotos(
+      draft.savedPhotoKeys,
+      draft.savedPhotoNames,
+      draft.savedPhotoUrls,
+      draft.savedPhotoExpiries,
+      draft.savedPhotoUnavailable,
+    );
+
+    // buildRestoredPhotos should restore the flag immediately
+    expect(restored[0].unavailable).toBe(true);
+    expect(restored[0].previewUrl).toBe('');
+
+    // resignSavedPhotosAfterRestore should skip the network round-trip
+    await resignSavedPhotosAfterRestore(TOKEN, restored, vi.fn());
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('persists unavailable flag only for the failed photo; good photo gets fresh URL', async () => {
+    const staleExpA = NOW_S + BUF - 60;
+    const staleExpB = NOW_S + BUF - 30;
+    const staleUrlA = `/api/customer-info-preview/abc/a.jpg?exp=${staleExpA}&sig=old`;
+    const staleUrlB = `/api/customer-info-preview/abc/b.jpg?exp=${staleExpB}&sig=old`;
+    const freshUrlA = `/api/customer-info-preview/abc/a.jpg?exp=${NOW_S + 3600}&sig=new`;
+
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedPhotoKeys:         ['photos/a.jpg', 'photos/b.jpg'],
+      savedPhotoNames:        ['a.jpg', 'b.jpg'],
+      savedPhotoUrls:         [staleUrlA, staleUrlB],
+      savedPhotoExpiries:     [staleExpA, staleExpB],
+      savedPhotoUnavailable:  [false, false],
+    }));
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          results: [
+            { key: 'photos/a.jpg', url: freshUrlA },
+            { key: 'photos/b.jpg', url: null },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const restored = buildRestoredPhotos(
+      ['photos/a.jpg', 'photos/b.jpg'],
+      ['a.jpg', 'b.jpg'],
+      [staleUrlA, staleUrlB],
+      [staleExpA, staleExpB],
+      [false, false],
+    );
+
+    const setPhotos = vi.fn((updater: (prev: UploadedPhoto[]) => UploadedPhoto[]) => updater(restored));
+    await resignSavedPhotosAfterRestore(TOKEN, restored, setPhotos, persistFreshPhotos);
+
+    const saved = JSON.parse(localStorage.getItem(LS_KEY)!);
+    expect(saved.savedPhotoUrls[0]).toBe(freshUrlA);
+    expect(saved.savedPhotoUnavailable[0]).toBe(false);
+    expect(saved.savedPhotoUrls[1]).toBe('');
+    expect(saved.savedPhotoUnavailable[1]).toBe(true);
+  });
+});
