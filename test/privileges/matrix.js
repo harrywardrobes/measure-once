@@ -107,6 +107,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/users',                     level: 'member' },
 
   // ── self-or-admin (foreign id picked at runtime) ──────────────────────────
+  { method: 'GET',    path: '/api/users',                     level: 'member' },
   { method: 'GET',    path: '/api/users/__FOREIGN__/profile', level: 'self-or-admin' },
   // Photos are team-roster profile pictures intentionally visible to all
   // authenticated users (admin.html loads them for every team member).
@@ -127,8 +128,6 @@ const ROUTES = [
   { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
   { method: 'POST',   path: '/api/tasks',                     level: 'member',  body: {}, needsGoogle: true },
   { method: 'POST',   path: '/api/contacts/open-task-counts', level: 'member',  body: {}, needsGoogle: true },
-  { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
-  { method: 'POST',   path: '/api/tasks',                     level: 'member',  body: {}, needsGoogle: true },
   { method: 'PATCH',  path: '/api/tasks/0',                   level: 'member',  body: {}, needsHubspot: true },
   { method: 'DELETE', path: '/api/tasks/0',                   level: 'member',  needsHubspot: true },
   { method: 'POST',   path: '/api/emails/send',               level: 'member',  body: {}, needsGoogle: true },

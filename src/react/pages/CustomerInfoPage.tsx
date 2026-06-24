@@ -630,6 +630,34 @@ export function CustomerInfoPage() {
       if (truncated) {
         setUploadErr(`Only ${remaining} file${remaining === 1 ? '' : 's'} added — you've reached the ${MAX_PHOTOS} file limit.`);
       }
+      // Fire-and-forget: fetch signed URLs for the newly uploaded photos so
+      // the draft persists a URL that survives a page refresh (blob: URLs are
+      // revoked on unload, so without this the preview is blank on first restore).
+      void (async () => {
+        try {
+          const r2 = await fetch(`/api/customer-info/${encodeURIComponent(activeToken)}/sign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keys: newPhotos.map(p => p.key) }),
+          });
+          if (!r2.ok) return;
+          const d2 = await r2.json();
+          const byKey: Record<string, string | null> = {};
+          for (const result of d2.results as Array<{ key: string; url: string | null }>) {
+            byKey[result.key] = result.url;
+          }
+          // Replace blob: URLs with signed URLs in state — the draft auto-save
+          // effect will then persist the signed URLs to localStorage.
+          setPhotos(prev => prev.map(p => {
+            const signed = byKey[p.key];
+            if (!signed) return p;
+            return { ...p, previewUrl: signed };
+          }));
+        } catch {
+          // Graceful: blob: URL remains for this session; draft will re-sign on
+          // next restore via resignSavedPhotosAfterRestore.
+        }
+      })();
     } catch (e) {
       setUploadErr((e as Error).message);
     } finally {
