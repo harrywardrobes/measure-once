@@ -425,6 +425,53 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     vi.restoreAllMocks();
   });
 
+  it('disables the close button and shows no dialog while a not-proceeding outcome submit is in flight', async () => {
+    restoreFetch = mockFetch({ eventsItems: [] });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    // Wait for the call step to load (madeProgress=false initially)
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "Booked" to advance to the booked step — sets madeProgress=true
+    await user.click(screen.getByTestId('av-outcome-booked'));
+
+    // Click "Back" to return to the call step — madeProgress stays true
+    // hasUnsavedChanges = (madeProgress && step === 'call') = true
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /back/i })).toBeTruthy();
+    });
+    await user.click(screen.getByRole('button', { name: /back/i }));
+
+    // Back at call step with madeProgress=true; click "Not proceeding"
+    // handleOutcome('not_proceeding') sets submitting=true then hangs on sendOrQueue
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-not-proceeding')).toBeTruthy();
+    });
+    await user.click(screen.getByTestId('av-outcome-not-proceeding'));
+
+    // Close button must be disabled (disableClose=submitting) — locked state
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: /close/i })).toBeDisabled();
+    });
+
+    // No discard dialog should appear while locked
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('disables the close button and shows no dialog while a booking submit is in flight', async () => {
     seedDraft();
     restoreFetch = mockFetch({ eventsItems: [] });
