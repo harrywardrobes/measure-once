@@ -1,0 +1,86 @@
+TASK: Introduce a single storage-provider abstraction so the app no longer talks
+to @replit/object-storage directly from feature code. Add a Google Cloud Storage
+(GCS) backend behind an env flag, defaulting to the existing Replit backend so
+nothing changes until we flip it. This is a refactor + new backend — no behaviour
+change in the default (Replit) path.
+
+BACKGROUND (read before changing anything):
+- Object storage is used in two places today, inconsistently:
+  1. design-visit-uploads.js — already a clean wrapper. It lazily constructs
+     `new Client()` from @replit/object-storage in getClient() (cached, with a
+     friendly "bucket not configured" error), and uses uploadFromBytes(),
+     delete(name, {ignoreNotFound}), and downloadAsBytes(). It also owns HMAC
+     signed-URL helpers (signImageUrl/verifySignedUrl) — those are APP logic, NOT
+     storage, and must stay where they are.
+  2. customer-info.js — calls `const { Client } = require('@replit/object-storage')`
+     and `new Client()` INLINE in ~5 spots (around lines 209, 464, 1013, 1577,
+     1622), using downloadAsBytes() and uploadFromFilename(). This scattered
+     coupling is the main thing to remove.
+- The Replit SDK returns result objects shaped { ok, value, error } where value
+  for a download is an array like [Buffer]. Today every call site re-implements
+  the ok/value/404 unwrapping. The new abstraction should hide that.
+
+WHAT TO BUILD:
+1. Create a new module: storage.js (CommonJS, matching the project style).
+   It exposes a provider with a NORMALISED interface that throws on real errors
+   and returns plain values (no { ok, value } leakage):
+
+     async uploadBytes(name, buffer, opts?)      // opts.compress passthrough ok
+     async uploadFile(name, filePath)            // streams from disk
+     async downloadBytes(name)                   // returns Buffer, or null if 404
+     async deleteObject(name, { ignoreNotFound }) // resolves true, swallows 404
+       (Note: 404 handling must match today's semantics — downloads return null,
+        deletes succeed.)
+
+   Backend is chosen by env STORAGE_BACKEND ('replit' | 'gcs'), default 'replit'.
+   - Replit backend: wraps @replit/object-storage exactly as getClient() does
+     today (lazy, cached construction; map config errors to the same friendly
+     message). Translate the SDK's { ok, value, error } into the normalised
+     contract above.
+   - GCS backend: uses @google-cloud/storage (add it to dependencies). Bucket
+     name from env GCS_BUCKET; auth via Application Default Credentials (no keys
+     in code). Map: uploadBytes → file.save(buffer); uploadFile → bucket.upload(
+     filePath, { destination: name }); downloadBytes → file.download() (return
+     [0], treat code 404 as null); deleteObject → file.delete({ ignoreNotFound }).
+   Keep client construction lazy and cached so importing storage.js never throws
+   at module load (tests run with no bucket configured).
+
+2. Refactor design-visit-uploads.js to use storage.js instead of its own
+   getClient()/@replit/object-storage require. Preserve EVERYTHING else:
+   - the FRIENDLY_UPLOAD_MSG → 503 mapping for bucket/config errors,
+   - the opaque-key scheme (obj:<id>.<ext>) and object-name mapping,
+   - signImageUrl/verifySignedUrl HMAC logic (unchanged),
+   - downloadOpaqueKeys() MUST stay Promise.all-parallel (do not convert to a
+     serial loop — scripts/check-parallel-downloads.mjs enforces this; if the
+     downloaded-call name changes, update that script's config accordingly).
+
+3. Refactor customer-info.js: remove every inline
+   `require('@replit/object-storage')` / `new Client()` and route those reads/
+   writes through storage.js (downloadBytes / uploadFile). Preserve the existing
+   friendly storage-error handling (the /bucket|object storage/i → 503 mapping)
+   and the parallel-download behaviour.
+
+4. After refactor, @replit/object-storage must be imported in exactly ONE place:
+   the Replit backend inside storage.js. Grep the repo to confirm no other file
+   requires it.
+
+CONSTRAINTS:
+- Default path (STORAGE_BACKEND unset → 'replit') must behave identically to
+  today. Do not enable 'gcs' in any committed config.
+- Do not change the opaque-key format, the signed-URL HMAC scheme, DB columns, or
+  any migration.
+- Do not load full file bytes into memory where the code currently streams from
+  disk (uploadFile must stay stream-from-filename, not read-then-upload).
+- No credentials or bucket names hardcoded — env only.
+
+ACCEPTANCE CRITERIA:
+- @replit/object-storage is required in exactly one file (storage.js).
+- With STORAGE_BACKEND unset: design-visit photo upload/download/delete and
+  customer-info photo upload/download all work exactly as before.
+- With STORAGE_BACKEND=gcs and GCS_BUCKET set: the same operations target GCS
+  (verify against a test bucket if available; otherwise confirm the code path and
+  error mapping by unit-level inspection).
+- These suites pass: npm run test:photo-storage-errors,
+  test:customer-info-parallel-downloads, test:customer-info-email-attachments,
+  test:design-visit, and the parallel-download lint
+  (npm run test:parallel-downloads). Run npm run test:ci if practical.
