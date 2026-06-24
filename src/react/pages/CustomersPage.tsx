@@ -152,6 +152,7 @@ function readUrlState() {
     q: p.get('q') || '',
     stage: p.get('stage') || '',
     archived: p.get('archived') === '1',
+    showExcluded: p.get('showExcluded') === '1',
   };
 }
 
@@ -162,6 +163,7 @@ function writeUrlState(s: {
   q: string;
   stage: string;
   archived: boolean;
+  showExcluded: boolean;
 }) {
   const qs = new URLSearchParams();
   if (s.page > 1) qs.set('page', String(s.page));
@@ -170,6 +172,7 @@ function writeUrlState(s: {
   if (s.q) qs.set('q', s.q);
   if (s.stage) qs.set('stage', s.stage);
   if (s.archived) qs.set('archived', '1');
+  if (s.showExcluded) qs.set('showExcluded', '1');
   const str = qs.toString();
   history.replaceState(null, '', str ? '?' + str : location.pathname);
 }
@@ -944,7 +947,7 @@ export function CustomersPage(): React.ReactElement {
   const [search, setSearch] = React.useState<string>(initial.q);
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
-  const [showExcluded, setShowExcluded] = React.useState(false);
+  const [showExcluded, setShowExcluded] = React.useState<boolean>(initial.showExcluded);
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
@@ -1254,8 +1257,9 @@ export function CustomersPage(): React.ReactElement {
       q: search,
       stage: stageFilter,
       archived: showArchived,
+      showExcluded,
     });
-  }, [page, leadStatus, sortBy, search, stageFilter, showArchived]);
+  }, [page, leadStatus, sortBy, search, stageFilter, showArchived, showExcluded]);
 
   // Load lead statuses + counts on mount, then re-populate
   // the native select once the DOM element has been mounted.
