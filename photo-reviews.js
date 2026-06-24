@@ -85,16 +85,6 @@ async function ensurePhotoReviewOutcomesTable() {
   // Schema created by migrations; no data repairs needed.
 }
 
-// ── HubSpot helpers ───────────────────────────────────────────────────────────
-async function ensureLeadStatusExists(key, label) {
-  await pool.query(
-    `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
-     VALUES ($1, $2, 0, FALSE)
-     ON CONFLICT (key) DO NOTHING`,
-    [key, label]
-  );
-}
-
 // ── Send review outcome email ─────────────────────────────────────────────────
 async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
   const transport = createMailTransport();
