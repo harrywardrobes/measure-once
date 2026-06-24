@@ -303,6 +303,44 @@ gcloud storage hash "gs://$GCS_BUCKET/<some-object-name>"
 Confirm the destination object count matches the source listing and that
 sampled byte sizes/checksums agree before trusting the copy.
 
+### End-to-end retrieval check (through `storage.js`)
+
+The `gcloud storage hash` spot-checks above prove the bytes landed in the
+bucket, but **not** that the application can serve them back through its own
+storage abstraction once the GCS backend is active — that path can still break
+on a key-format mismatch or content/metadata regression a size check would miss.
+Run the read-only verification harness, `scripts/verify-objects.mjs`, to close
+that gap. It reads the **destination through `storage.js` with the GCS backend
+active** (exactly how the running app serves photos) and compares a random
+sample, byte-for-byte (SHA-256 + length), against the same object names read
+from the live Replit source.
+
+Run it from the **Replit shell** (so the *source* bucket is wired in via
+`.replit`). Point `storage.js` at the destination with `STORAGE_BACKEND=gcs` and
+`GCS_BUCKET=$GCS_BUCKET`; GCS reads use Application Default Credentials
+(`gcloud auth application-default login` or `$RUN_SA_EMAIL` impersonation).
+
+```bash
+# Verify a random sample from BOTH namespaces (customer-info-photos/ and
+# design-visit-images/ — the two distinct key formats), 10 objects each:
+STORAGE_BACKEND=gcs GCS_BUCKET="$GCS_BUCKET" npm run verify:objects
+
+# Larger sample per namespace, or scope to one namespace, or make it repeatable:
+STORAGE_BACKEND=gcs GCS_BUCKET="$GCS_BUCKET" node scripts/verify-objects.mjs --sample=25
+STORAGE_BACKEND=gcs GCS_BUCKET="$GCS_BUCKET" node scripts/verify-objects.mjs --prefix=customer-info-photos/
+STORAGE_BACKEND=gcs GCS_BUCKET="$GCS_BUCKET" node scripts/verify-objects.mjs --seed=42
+```
+
+The harness is **read-only** — it downloads from both buckets and compares; it
+never uploads, deletes, or mutates either bucket and does no DB access. It
+refuses to run unless `STORAGE_BACKEND=gcs` (the whole point is to exercise the
+GCS-served path) and exits non-zero if any sampled object is missing from GCS or
+differs from the source. The final line is a `checked / ok / missing / mismatch`
+summary per namespace plus a total. Treat a clean `VERIFICATION PASSED` across
+both namespaces as the concrete sign-off for object retrieval — richer than a
+`gcloud storage hash` spot-check because it goes through `storage.js`
+end-to-end.
+
 ---
 
 ## Phase 7 — Verification (no cutover)
