@@ -50,6 +50,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useToastContext } from '../../contexts/ToastContext';
 import { sendOrQueue } from '../../lib/offlineQueue';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
+import { openConnectModal } from '../../context/ConnectionToastContext';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -847,6 +848,103 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
       // way the text must be non-empty so the user sees actionable feedback.
       expect(alert.textContent?.trim()).not.toBe('');
     });
+
+    // The modal must NOT close
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('opens the reconnect modal and does not show the generic alert when /api/emails/send returns a 401 Google auth error', async () => {
+    const orig = window.fetch;
+
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/card-actions/arrange-visit') && !url.includes('outcome') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_INFO), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/email-templates/render') && method === 'POST') {
+        return new Response(JSON.stringify({ error: 'Template service unavailable' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/emails/send') && method === 'POST') {
+        return new Response(
+          JSON.stringify({ error: 'Not authenticated with Google', code: 'GOOGLE_AUTH' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const mockOpenConnectModal = openConnectModal as ReturnType<typeof vi.fn>;
+    mockOpenConnectModal.mockClear();
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    // Wait for the call step
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "No answer" — template fetch returns 500, fallback body is populated
+    await user.click(screen.getByTestId('av-outcome-no-answer'));
+
+    // Wait for the email body to appear with non-empty fallback content
+    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    await waitFor(() => {
+      expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
+    });
+
+    // Wait for the "Send email" button to become enabled (emailLoading=false)
+    await waitFor(() => {
+      expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
+    });
+
+    // Click "Send email" — /api/emails/send returns 401 GOOGLE_AUTH
+    await user.click(screen.getByTestId('av-email-send'));
+
+    // openConnectModal must have been called with 'google' as the first argument
+    await waitFor(() => {
+      expect(mockOpenConnectModal).toHaveBeenCalledWith(
+        'google',
+        expect.any(String),
+      );
+    });
+
+    // The GOOGLE_AUTH branch renders <GoogleAuthAlert /> — check for its
+    // "Reconnect Google" link text, which is absent from the generic error path.
+    await waitFor(() => {
+      expect(screen.getByText(/reconnect google/i)).toBeTruthy();
+    });
+
+    // The generic "Could not send email" / server-error text must NOT appear;
+    // only the Google reconnect alert is shown.
+    expect(screen.queryByText(/could not send email/i)).toBeNull();
+    expect(screen.queryByText(/mail server/i)).toBeNull();
 
     // The modal must NOT close
     expect(onClose).not.toHaveBeenCalled();
