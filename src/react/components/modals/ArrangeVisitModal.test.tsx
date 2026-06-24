@@ -502,4 +502,82 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('disables the close button and shows no dialog while a No-answer email send is in flight', async () => {
+    const orig = window.fetch;
+    // Custom fetch: resolve contact-info and email-template quickly;
+    // hang /api/emails/send so submitting=true can be observed.
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : (input as Request).url;
+      const method = (init?.method || 'GET').toUpperCase();
+
+      if (url.includes('/api/card-actions/arrange-visit') && !url.includes('outcome') && method === 'POST') {
+        return new Response(JSON.stringify(CONTACT_INFO), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/email-templates/render') && method === 'POST') {
+        return new Response(JSON.stringify({
+          subject: 'Test subject',
+          body_text: 'Test email body — non-empty so the send guard passes.',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url.includes('/api/emails/send') && method === 'POST') {
+        // Never resolves — keeps submitting=true indefinitely.
+        return new Promise<Response>(() => { /* intentionally hung */ });
+      }
+
+      return orig(input, init);
+    }) as typeof window.fetch;
+    restoreFetch = () => { window.fetch = orig; };
+
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <ArrangeVisitModal
+        handler={HANDLER}
+        ctx={CTX}
+        open
+        onClose={onClose}
+      />,
+    );
+
+    // Wait for the call step to load
+    await waitFor(() => {
+      expect(screen.getByTestId('av-outcome-no-answer')).toBeTruthy();
+    });
+
+    // Click "No answer" — navigates to the email step (step='email', madeProgress=true)
+    await user.click(screen.getByTestId('av-outcome-no-answer'));
+
+    // Wait for the send button to become enabled (emailLoading=false after template fetch)
+    await waitFor(() => {
+      expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
+    });
+
+    // Click "Send email" — handleEmailSent() sets submitting=true then hangs on /api/emails/send
+    await user.click(screen.getByTestId('av-email-send'));
+
+    // Close button must be disabled (disableClose=submitting) — locked state
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByRole('button', { name: /close/i })).toBeDisabled();
+    });
+
+    // No discard dialog should appear while locked
+    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
