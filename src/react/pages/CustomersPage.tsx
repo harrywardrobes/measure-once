@@ -1611,37 +1611,47 @@ export function CustomersPage(): React.ReactElement {
 
   // When a task is added or completed (from the customer detail page or any
   // other tab), re-fetch the open-task-count for just that one contact so the
-  // badge updates without a full page reload.
-  //
-  // A per-contact cooldown map (500 ms) prevents redundant fetches when the
-  // IntersectionObserver fires broadcastTaskChanged on every viewport entry —
-  // e.g. the user scrolling past the Tasks section repeatedly.  The first
-  // broadcast for a given contact fires immediately; subsequent ones within the
-  // cooldown window are dropped.
-  const taskChangedCooldownRef = React.useRef<Map<string, number>>(new Map());
-  const TASK_CHANGED_COOLDOWN_MS = 500;
+  // badge updates without a full page reload.  A 300ms debounce matches the
+  // pattern used in CustomerDetailPage so that rapid-fire broadcasts (e.g.
+  // the scroll-triggered IntersectionObserver crossing the threshold multiple
+  // times, or several broadcasts arriving in quick succession) collapse into a
+  // single network call per contact instead of hammering the API.
   React.useEffect(() => {
-    return subscribeTaskChanged(async ({ contactId }) => {
-      const now = Date.now();
-      const lastFetch = taskChangedCooldownRef.current.get(contactId) ?? 0;
-      if (now - lastFetch < TASK_CHANGED_COOLDOWN_MS) return;
-      taskChangedCooldownRef.current.set(contactId, now);
-      try {
-        const res = await fetch('/api/contacts/open-task-counts', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: [contactId] }),
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
-        const counts = data.openTaskCounts || {};
-        setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
-      } catch {
-        /* best-effort — stale count is acceptable on failure */
-      }
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const unsubscribe = subscribeTaskChanged(({ contactId }) => {
+      const existing = timers.get(contactId);
+      if (existing !== undefined) clearTimeout(existing);
+      timers.set(
+        contactId,
+        setTimeout(() => {
+          timers.delete(contactId);
+          fetch('/api/contacts/open-task-counts', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [contactId] }),
+          })
+            .then((res) => {
+              if (!res.ok) return;
+              return res.json() as Promise<{ openTaskCounts?: Record<string, number> }>;
+            })
+            .then((data) => {
+              if (!data) return;
+              const counts = data.openTaskCounts || {};
+              setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
+            })
+            .catch(() => {
+              /* best-effort — stale count is acceptable on failure */
+            });
+        }, 300),
+      );
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+      unsubscribe();
+    };
+  }, []);
 
   // Pre-fill the customer name cache so that clicking any contact from the
   // list shows the correct name in the browser tab immediately, even on a
