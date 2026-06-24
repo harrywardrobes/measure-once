@@ -1538,8 +1538,10 @@ export function CustomersPage(): React.ReactElement {
   }, [contactIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Best-effort open-task-count fetch for the visible page.  Fires whenever
-  // the set of visible contact IDs changes.  Falls back silently when Google
-  // Calendar is not connected (badge simply stays hidden).
+  // the set of visible contact IDs changes (e.g. pagination or filter change).
+  // All current contact IDs are always re-fetched — no already-seen skip — so
+  // that stale counts from a previous visit to the same page are replaced.
+  // Falls back silently when Google Calendar is not connected (badge stays hidden).
   React.useEffect(() => {
     if (!contactIdsKey) return;
     let cancelled = false;
@@ -1557,7 +1559,17 @@ export function CustomersPage(): React.ReactElement {
         const data = (await res.json()) as { openTaskCounts?: Record<string, number> };
         const counts = data.openTaskCounts || {};
         if (cancelled) return;
-        setOpenTaskCountMap((prev) => ({ ...prev, ...counts }));
+        // Replace the counts for every currently-visible contact ID so that a
+        // contact whose tasks were completed since the last fetch shows 0.
+        // Use an explicit loop over `ids` rather than a spread so only the
+        // current page's contacts are updated and stale values are never kept.
+        setOpenTaskCountMap((prev) => {
+          const next = { ...prev };
+          for (const id of ids) {
+            next[id] = counts[id] ?? 0;
+          }
+          return next;
+        });
       } catch {
         /* best-effort; badge simply won't appear */
       }
