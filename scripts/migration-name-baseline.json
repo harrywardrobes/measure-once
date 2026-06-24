@@ -60,5 +60,6 @@
   "1785500000000_design-visits-visit-notes",
   "1785600000000_survey-visits-visit-notes",
   "1785700000000_priority-sort-mode",
-  "1785800000000_drop-corrected-email-mobile"
+  "1785800000000_drop-corrected-email-mobile",
+  "1785900000000_drop-corrected-mobile-from-admin-notification-email"
 ]

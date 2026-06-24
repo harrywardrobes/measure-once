@@ -79,7 +79,7 @@ const TEMPLATE_DEFS = {
     label: 'Admin notification',
     description: 'Sent to admins when a customer submits their info form.',
     audience: 'team',
-    variables: ['customerName', 'customerEmail', 'address', 'rooms', 'notes', 'photoSummary', 'contactPhone', 'correctedMobile'],
+    variables: ['customerName', 'customerEmail', 'address', 'rooms', 'notes', 'photoSummary', 'contactPhone'],
     variableDescriptions: {
       customerName:     "Full name of the customer who submitted the form.",
       customerEmail:    "Email address of the customer.",
@@ -88,7 +88,6 @@ const TEMPLATE_DEFS = {
       notes:            "Free-text notes entered by the customer. Empty if they left the field blank.",
       photoSummary:     "A short line describing how many photos were uploaded, e.g. '3 photos uploaded.' Empty if no photos were attached.",
       contactPhone:     "Phone number submitted by the customer on the form (formatted). Empty when no phone was provided.",
-      correctedMobile:  "Mobile number the customer entered on the form (international display format), when it differs from what was on file. Empty when no correction was made.",
     },
     subject: 'New customer info submission – {{customerName}}',
     body_text: [
@@ -97,7 +96,6 @@ const TEMPLATE_DEFS = {
       'Customer:     {{customerName}}',
       'Email:        {{customerEmail}}',
       '{{contactPhone}}',
-      '{{correctedMobile}}',
       'Address:      {{address}}',
       'Rooms:        {{rooms}}',
       '',
@@ -112,7 +110,6 @@ const TEMPLATE_DEFS = {
       '  <tr><td><strong>Customer</strong></td><td>{{customerName}}</td></tr>',
       '  <tr><td><strong>Email</strong></td><td>{{customerEmail}}</td></tr>',
       '  {{contactPhone}}',
-      '  {{correctedMobile}}',
       '  <tr><td><strong>Address</strong></td><td>{{address}}</td></tr>',
       '  <tr><td><strong>Rooms</strong></td><td>{{rooms}}</td></tr>',
       '</table>',
@@ -615,7 +612,6 @@ const SAMPLE_VARS = {
     notes:           'Would like light flooring throughout. Allergic to strong adhesives.',
     photoSummary:    '3 photos uploaded.',
     contactPhone:    'Phone:        +44 7700 900456',
-    correctedMobile: 'Mobile:       +44 7700 900123',
   },
   customer_thank_you: {
     firstName: 'Jane',
