@@ -21,9 +21,14 @@ const pino = require('pino');
 const isProd = process.env.NODE_ENV === 'production';
 const level = process.env.LOG_LEVEL || (isProd ? 'info' : 'debug');
 
+const REDACT_PATHS = [
+  'password', 'password_hash', 'token', 'access_token', 'refresh_token',
+  'client_secret', 'tokenHash', 'rawToken',
+];
+
 let logger;
 if (isProd) {
-  logger = pino({ level });
+  logger = pino({ level, redact: { paths: REDACT_PATHS, censor: '[REDACTED]' } });
 } else {
   const pretty = require('pino-pretty');
   logger = pino(

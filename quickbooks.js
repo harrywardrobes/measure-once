@@ -333,6 +333,19 @@ router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   res.redirect(`${QB_AUTH_BASE}?${params}`);
 });
 
+// Permitted QB OAuth error codes (RFC 6749 + QB-specific).
+// Any other value from the query string is normalised to 'oauth_error'
+// so untrusted input never reaches the inline <script> block.
+const QB_ALLOWED_ERROR_CODES = new Set([
+  'access_denied', 'invalid_request', 'unauthorized_client',
+  'unsupported_response_type', 'invalid_scope', 'server_error',
+  'temporarily_unavailable', 'invalid_state', 'oauth_error',
+]);
+function sanitizeQbErrorCode(raw) {
+  const s = String(raw || '').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 64);
+  return QB_ALLOWED_ERROR_CODES.has(s) ? s : 'oauth_error';
+}
+
 // ── OAuth: callback ────────────────────────────────────────────────────────────
 router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (req, res) => {
   const { code, realmId, error, state } = req.query;
@@ -341,8 +354,9 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
   delete req.session.qbOAuthPopup;
 
   if (error) {
-    if (isPopup) return res.send(qbPopupPage('error', String(error)));
-    return res.redirect(`/?qb=error&reason=${encodeURIComponent(error)}`);
+    const safeCode = sanitizeQbErrorCode(error);
+    if (isPopup) return res.send(qbPopupPage('error', safeCode));
+    return res.redirect(`/?qb=error&reason=${encodeURIComponent(safeCode)}`);
   }
 
   const savedState = req.session.qbOAuthState;
@@ -364,7 +378,7 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
     res.redirect('/?qb=connected');
   } catch (e) {
     logger.error({ err: e.response?.data || e.message }, 'QB OAuth callback error:');
-    if (isPopup) return res.send(qbPopupPage('error', e.message));
+    if (isPopup) return res.send(qbPopupPage('error', 'server_error'));
     res.redirect('/?qb=error');
   }
 });
@@ -373,6 +387,9 @@ router.get('/auth/quickbooks/callback', isAuthenticated, requireAdmin, async (re
  * Returns a minimal HTML page for the popup/new-tab OAuth flow.
  * On success it posts { type: 'qb-connected' } to the opener then closes.
  * On error it posts { type: 'qb-error', reason } to the opener then closes.
+ *
+ * `reason` MUST be a pre-sanitized enum value from sanitizeQbErrorCode() —
+ * never pass raw query-string or error-message strings here.
  */
 function qbPopupPage(outcome, reason) {
   const message = outcome === 'connected'
