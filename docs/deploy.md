@@ -54,8 +54,16 @@ step 4.
 
 ## Step 2 — Migrate the staging database
 
-Through the Cloud SQL Auth Proxy (see [docs/staging-handoff.md](staging-handoff.md)
-Part B2 if the proxy isn't already running on port `15432`):
+Through the Cloud SQL Auth Proxy on port `15432`. If it isn't running, start it
+with ADC (preferred — credentials auto-refresh) rather than `--token` (expires
+after ~1 hour and causes `ECONNRESET`):
+
+```powershell
+C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-instance
+```
+
+See [docs/staging-handoff.md](staging-handoff.md) Part B2 for full proxy setup
+including the ADC refresh step. Then run migrations:
 
 ```powershell
 $pw = (Get-Content "$env:TEMP\mo_db_password.txt" -Raw).Trim()

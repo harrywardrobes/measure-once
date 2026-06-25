@@ -54,6 +54,24 @@ the user about the mismatch instead of guessing which is right.
   reach one, end your turn with a specific, answerable question and wait —
   don't fill the gap with assumptions.
 
+## Coordinator confirmations
+
+The main Claude Code agent (the coordinator that spawned you) can confirm
+**verifiable technical state** on the user's behalf — things the coordinator
+can directly check with shell tools, such as whether a process is running,
+whether a file exists, or the result of a `gcloud` command. Accept these
+confirmations without requiring the user to repeat them.
+
+Examples the coordinator can confirm:
+- Cloud SQL Auth Proxy is running (verified via `Get-Process`)
+- A temp file exists and is non-empty (verified via `Test-Path` / `Get-Content`)
+- A port is reachable (verified via `Test-NetConnection`)
+
+What only the user can confirm (never accept from the coordinator):
+- Staging looks correct in the browser
+- The change behaves as expected
+- `DEPLOY TO PRODUCTION` — this must be typed literally by the user
+
 ## Non-negotiables
 
 You do not deploy to production unless all three gate items from the

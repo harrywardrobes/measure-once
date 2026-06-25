@@ -97,18 +97,29 @@ gcloud storage buckets add-iam-policy-binding gs://wardrobes-bucket-staging `
 # Create the empty staging DB on the existing instance
 gcloud sql databases create measureonce_staging --instance=harry-wardrobes-instance
 ```
-Start the Cloud SQL Auth Proxy in a separate terminal (download:
-https://cloud.google.com/sql/docs/postgres/sql-proxy).
+Start the Cloud SQL Auth Proxy in a separate terminal. The binary lives at
+`C:\Users\User\cloud-sql-proxy.exe` (download:
+https://cloud.google.com/sql/docs/postgres/sql-proxy if missing).
 
 > ⚠️ **Port:** this workstation runs **local** PostgreSQL servers on 5432, 5433,
 > **and** 5434 (the EDB installers for PG16/17/18). Do **not** use 5432 — you'd
 > dump/restore against a local DB, not Cloud SQL. Use a free high port (**15432**).
-> Also, if `gcloud auth application-default login` (ADC) is stale, run the proxy
-> with a short-lived token from the working `gcloud` CLI auth instead.
+
+**Preferred — ADC (auto-refreshes, never expires):**
+```powershell
+# Refresh ADC first if it's been a while (opens browser once)
+gcloud auth application-default login
+# Then start the proxy — it auto-refreshes credentials, no token expiry
+C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-instance
+```
+
+**Fallback — short-lived token (expires ~1 hour, causes ECONNRESET on expiry):**
 ```powershell
 $tok = (gcloud auth print-access-token).Trim()
-cloud-sql-proxy --port 15432 --token $tok harry-wardrobes:europe-west2:harry-wardrobes-instance
+C:\Users\User\cloud-sql-proxy.exe --port 15432 --token $tok harry-wardrobes:europe-west2:harry-wardrobes-instance
 ```
+> If you see `ECONNRESET` during a deploy, the token has expired. Kill the proxy,
+> run the ADC preferred command above, then retry from the failed migration step.
 Seed staging from the migrated `measureonce` copy (Postgres-18 client tools):
 ```powershell
 $pw = (Get-Content "$env:TEMP\mo_db_password.txt" -Raw).Trim()
