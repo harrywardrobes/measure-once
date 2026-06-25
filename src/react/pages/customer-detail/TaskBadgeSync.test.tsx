@@ -19,7 +19,7 @@ vi.mock('../../hooks/usePrivilege', () => ({
   usePrivilege: vi.fn(),
 }));
 
-vi.mock('../../context/ConnectionToastContext', () => ({
+vi.mock('../../contexts/ConnectionToastContext', () => ({
   useConnectionToast: vi.fn(),
 }));
 
@@ -34,7 +34,7 @@ vi.mock('../../utils/broadcastTaskChanged', async (importOriginal) => {
 
 import { TasksSection } from './TasksSection';
 import { usePrivilege } from '../../hooks/usePrivilege';
-import { useConnectionToast } from '../../context/ConnectionToastContext';
+import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 import type { CalendarTask } from './types';
 import {
   subscribeTaskChanged,

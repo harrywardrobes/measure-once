@@ -118,8 +118,9 @@ Gmail/Calendar after you're logged in, not for signing in). On a fresh dev DB:
 1. On boot, the server seeds an admin `users` row for each address in
    `ADMIN_EMAILS` — but with **no password**.
 2. With `NODE_ENV=development` and no `TURNSTILE_SECRET_KEY`, the captcha check
-   is skipped, and with **no SMTP configured** the set-password link is printed
-   to the **server console** instead of emailed.
+   is skipped, and with **no SMTP configured** you can get the set-password link
+   printed to the **server console** by setting `LOG_SET_PASSWORD_LINK=true` in
+   your `.env` (see the Advanced section of `.env.example`).
 3. Trigger a link: on the login page click **Forgot password** and enter your
    admin email, or from another terminal:
    ```bash

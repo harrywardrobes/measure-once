@@ -23,6 +23,16 @@ if (!process.env.QB_TOKEN_ENCRYPTION_KEY) {
     'encrypted or decrypted. QuickBooks will appear disconnected until the secret is configured.',
   );
 }
+// Guard against non-sandbox QB calls in non-production environments.
+// Staging must always target the sandbox company; an absent or wrong
+// QB_ENVIRONMENT would silently write to the live QuickBooks account.
+if (process.env.NODE_ENV !== 'production' && process.env.QB_ENVIRONMENT !== 'sandbox') {
+  logger.warn(
+    '[quickbooks] QB_ENVIRONMENT is not "sandbox" in a non-production environment ' +
+    '— QuickBooks API calls will target the LIVE company. Set QB_ENVIRONMENT=sandbox ' +
+    'in your .env to prevent accidental writes to production data.',
+  );
+}
 
 // ── Per-user rate limiter for sensitive send actions (Postgres-backed) ──────────
 // Durable across restarts; safe in multi-instance deployments.

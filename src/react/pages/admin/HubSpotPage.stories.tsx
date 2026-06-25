@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { HubSpotPage } from '../pages/admin/HubSpotPage';
+import { HubSpotPage } from './HubSpotPage';
 
 const meta: Meta<typeof HubSpotPage> = {
   title: 'Admin/HubSpotPage',

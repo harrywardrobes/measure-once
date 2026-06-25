@@ -33,7 +33,7 @@ import { useDevMode } from '../hooks/useDevMode';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { readRecords } from '../lib/offlineDb';
 import { WorkflowDef } from '../lib/workflowConfig';
-import { useWorkflowData } from '../context/WorkflowDataContext';
+import { useWorkflowData } from '../contexts/WorkflowDataContext';
 import {
   HOME_TASK_ASSIGNEE_FILTER_PREFIX,
   HOME_TASK_CONTACT_SEARCH_PREFIX,

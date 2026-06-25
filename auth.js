@@ -3,7 +3,6 @@
 // keeps its shape (`{ claims: { sub, email, ... }, expires_at, privilege_level,
 // onboarding_status }`) so the rest of the app continues to work unchanged.
 const logger = require('./logger');
-const fs = require('fs');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
@@ -11,7 +10,7 @@ const { photoUploadLimiter } = require('./rate-limiters');
 const passport = require('passport');
 const connectPg = require('connect-pg-simple');
 const { Pool } = require('pg');
-const nodemailer = require('nodemailer');
+const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const zxcvbn = require('zxcvbn');
@@ -117,54 +116,6 @@ function escapeHtml(str) {
 }
 
 
-function createMailTransport() {
-  if (process.env.MAIL_TRANSPORT_THROW_OVERRIDE) {
-    return {
-      sendMail() {
-        return Promise.reject(new Error('MAIL_TRANSPORT_THROW_OVERRIDE: simulated send failure'));
-      },
-    };
-  }
-  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
-    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
-    return {
-      sendMail(opts) {
-        return new Promise((resolve, reject) => {
-          try {
-            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
-            resolve({ messageId: `override-${Date.now()}` });
-          } catch (e) { reject(e); }
-        });
-      },
-    };
-  }
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-}
-
-function appBaseUrl() {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
-  return `http://localhost:${process.env.PORT || 5000}`;
-}
-
-// Build a friendly "Measure Once <address>" From header so recipients see a
-// recognisable sender even when the underlying SMTP_FROM is a plain mailbox.
-// If SMTP_FROM is already in `Name <addr>` form we leave it as-is.
-function buildFromHeader() {
-  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-  if (!raw) return raw;
-  if (/</.test(raw)) return raw;
-  return `Measure Once <${raw}>`;
-}
-function buildReplyTo() {
-  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-}
-
 async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   const adminEmails = (process.env.ADMIN_EMAILS || '')
     .split(',').map(s => s.trim()).filter(Boolean);
@@ -215,8 +166,10 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
   const transport = createMailTransport();
   if (!transport) {
     logger.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.LOG_SET_PASSWORD_LINK === 'true' && process.env.NODE_ENV !== 'production') {
       logger.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
+    } else if (process.env.NODE_ENV !== 'production' && !process.env.LOG_SET_PASSWORD_LINK) {
+      logger.warn(`  Set-password link (manual delivery) — set LOG_SET_PASSWORD_LINK=true in .env to print the link here.`);
     }
     return;
   }
@@ -782,19 +735,19 @@ async function setupAuth(app) {
 
   // ── Login / logout ─────────────────────────────────────────────────────────
   app.post('/api/login', loginLimiter, async (req, res) => {
-    const email = (req.body?.email || '').trim().toLowerCase();
+    const rawEmail = req.body?.email;
+    const email = (typeof rawEmail === 'string' ? rawEmail : '').trim().toLowerCase();
     const password = req.body?.password;
-    if (!email || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || typeof password !== 'string' || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Please enter your email and password.' });
     }
     const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      const approved = await isEmailApproved(email);
-      const dbUser   = approved ? await getUserByEmail(email) : null;
-      // Always run bcrypt.compare to equalise response time regardless of
-      // whether the account exists or is approved (timing oracle mitigation).
-      const hashToCheck = dbUser?.password_hash || DUMMY_HASH;
+      // Run both DB lookups in parallel regardless of approval status so both
+      // paths take the same time (timing oracle mitigation).
+      const [approved, dbUser] = await Promise.all([isEmailApproved(email), getUserByEmail(email)]);
+      const hashToCheck = (approved && dbUser?.password_hash) || DUMMY_HASH;
       const normalOk = await bcrypt.compare(password, hashToCheck) && !!dbUser?.password_hash;
       if (!approved || !normalOk) {
         return res.status(401).json({ error: 'Invalid email or password.' });

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ScheduleVisitModal } from '../components/modals/ScheduleVisitModal';
-import { useConnectionToast } from '../context/ConnectionToastContext';
+import { ScheduleVisitModal } from './ScheduleVisitModal';
+import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 
 const ctx = {
   contactId: '12345',

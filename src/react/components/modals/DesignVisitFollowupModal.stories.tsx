@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { DesignVisitFollowupModal } from '../components/modals/DesignVisitFollowupModal';
+import { DesignVisitFollowupModal } from './DesignVisitFollowupModal';
 
 const handler = { id: 5, type: 'design_visit_followup', config: {}, bindings: [] };
 

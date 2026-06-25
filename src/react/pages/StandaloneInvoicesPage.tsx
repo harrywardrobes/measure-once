@@ -17,7 +17,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { usePrivilege } from '../hooks/usePrivilege';
-import { useConnectionCheck } from '../context/ConnectionToastContext';
+import { useConnectionCheck } from '../contexts/ConnectionToastContext';
 import { ContactsPagination } from '../components/ContactsPagination';
 import {
   InvoiceDetailDrawer,

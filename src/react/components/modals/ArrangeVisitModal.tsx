@@ -20,7 +20,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { GET, POST, PATCH, DELETE, ApiError, isGoogleAuthError, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
-import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
+import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { useToastContext } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';

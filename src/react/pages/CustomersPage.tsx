@@ -12,7 +12,7 @@ import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
-import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useConnectionCheck, useConnectionToast } from '../contexts/ConnectionToastContext';
 import { useToastContext } from '../contexts/ToastContext';
 import { usePaginatedContacts, PAGINATED_CONTACTS_PAGE_LIMIT } from '../hooks/usePaginatedContacts';
 import { ContactsPagination } from '../components/ContactsPagination';
@@ -69,7 +69,7 @@ import { getActionStripColors } from '../utils/actionStripColors';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
 import { WorkflowDef } from '../lib/workflowConfig';
-import { useWorkflowData } from '../context/WorkflowDataContext';
+import { useWorkflowData } from '../contexts/WorkflowDataContext';
 
 type LeadStatus = {
   key: string;

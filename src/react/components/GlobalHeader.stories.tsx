@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { GlobalHeader, ServiceStatusBadge } from './GlobalHeader';
-import type { ConnectionService, ServiceStatus } from '../context/ConnectionToastContext';
+import type { ConnectionService, ServiceStatus } from '../contexts/ConnectionToastContext';
 import { BRAND_COLORS } from '../theme';
 
 const meta: Meta<typeof GlobalHeader> = {

@@ -173,7 +173,7 @@ no effect on `public/storybook/` (the static build served by Express at
   Returns `{ privilegeLevel, isAdmin, isManager, isViewer }`.
 - **Vanilla-JS files:** call `getPrivilegeLevel()` (defined in `public/core.js`).
   It reads `window.__moHeaderUser || state.user` and defaults to `'member'`.
-- **Server route code:** call `getReqPrivilege(req)` (exported from `auth.js`).
+- **Server route code:** call `getRequestPrivilegeLevel(req)` (exported from `auth.js`).
   Returns `req.user?.privilege_level || 'member'` — the session-cached value.
   For route-level gating prefer `requireAdmin` / `requirePrivilege(minLevel)` /
   `requireManagerOrAdmin` (also in `auth.js`) — those re-query the database and

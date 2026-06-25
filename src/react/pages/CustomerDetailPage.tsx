@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { CP_RECENT_CUSTOMERS_PREFIX, CUSTOMER_ROOM_IDX_PREFIX } from '../constants/localStorageKeys';
 import { flushSync } from 'react-dom';
-import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
-import { useWorkflowData } from '../context/WorkflowDataContext';
+import { useConnectionCheck, useConnectionToast } from '../contexts/ConnectionToastContext';
+import { useWorkflowData } from '../contexts/WorkflowDataContext';
 import { CustomerDetailHeader } from './customer-detail/CustomerDetailHeader';
 import { RoomsTabs } from './customer-detail/RoomsTabs';
 import { TasksSection } from './customer-detail/TasksSection';

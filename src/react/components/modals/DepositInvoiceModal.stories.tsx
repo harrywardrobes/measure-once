@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { DepositInvoiceModal } from '../components/modals/DepositInvoiceModal';
+import { DepositInvoiceModal } from './DepositInvoiceModal';
 
 const handler = { id: 9, type: 'deposit_invoice_followup' as const, config: {}, bindings: [] };
 

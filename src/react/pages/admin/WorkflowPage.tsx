@@ -117,7 +117,7 @@ const SHARED_COMPONENTS = [
   },
   {
     name: 'WorkflowDataContext',
-    filePath: 'src/react/context/WorkflowDataContext.tsx',
+    filePath: 'src/react/contexts/WorkflowDataContext.tsx',
     role: 'Provides lead statuses and workflow definition across the app via React context',
   },
   {

@@ -23,7 +23,7 @@ import {
   openConnectModal,
   type ConnectionService,
   type ServiceStatus,
-} from '../context/ConnectionToastContext';
+} from '../contexts/ConnectionToastContext';
 import { SERVICE_DESCRIPTORS, SERVICE_KEYS, statusLabel, statusBadgeColor } from '../lib/connectionServices';
 import { BRAND_COLORS, SYNC_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';

@@ -8,7 +8,7 @@ vi.mock('../../contexts/ToastContext', () => ({
   useToast: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('../../context/ConnectionToastContext', () => ({
+vi.mock('../../contexts/ConnectionToastContext', () => ({
   openConnectModal: vi.fn(),
   useServiceStatuses: vi.fn(() => new Map()),
 }));
@@ -22,7 +22,7 @@ vi.mock('../../contexts/AuthContext', () => ({
 }));
 
 import { ContactCustomerModal } from './ContactCustomerModal';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 
 const CONTACT_ID = 'c-42';
 const CONTACT_DATA = {

@@ -15,7 +15,7 @@ import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, DELETE, isGoogleAuthError } from '../../utils/api';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { PlacesLocationField } from '../PlacesLocationField';

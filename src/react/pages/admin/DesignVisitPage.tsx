@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useConnectionCheck, useConnectionToast } from '../../context/ConnectionToastContext';
+import { useConnectionCheck, useConnectionToast } from '../../contexts/ConnectionToastContext';
 import {
   Box, Button, Card, CardContent, Divider, Stack, Typography,
 } from '@mui/material';

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { INVOICE_DRAFT_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { useBeforeUnloadGuard } from '../hooks/useBeforeUnloadGuard';
-import { useConnectionToast } from '../context/ConnectionToastContext';
+import { useConnectionToast } from '../contexts/ConnectionToastContext';
 import { ApiError } from '../utils/api';
 import { formatCurrency as _formatCurrency, formatQuickBooksDate as _formatQuickBooksDate } from '../utils/formatters';
 import { nowDate } from '../utils/dateDefaults';

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { AddressInput } from '../components/AddressInput';
+import { AddressInput } from './AddressInput';
 import { formatAddress, emptyAddress, type StructuredAddress } from '../../../shared/address';
 
 const meta: Meta<typeof AddressInput> = {

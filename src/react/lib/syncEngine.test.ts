@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Module mocks (must come before any imports that pull these in) ────────────
 
-vi.mock('../context/ConnectionToastContext', () => ({
+vi.mock('../contexts/ConnectionToastContext', () => ({
   openConnectModal: vi.fn(),
 }));
 
@@ -59,7 +59,7 @@ import {
   LEAD_STATUS_WINDOW_EVENT,
   type LeadStatusMessage,
 } from '../utils/broadcastLeadStatus';
-import { openConnectModal } from '../context/ConnectionToastContext';
+import { openConnectModal } from '../contexts/ConnectionToastContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

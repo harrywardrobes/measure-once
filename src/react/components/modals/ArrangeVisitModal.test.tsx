@@ -10,7 +10,7 @@ vi.mock('../../contexts/ToastContext', () => ({
   useToast: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('../../context/ConnectionToastContext', () => ({
+vi.mock('../../contexts/ConnectionToastContext', () => ({
   openConnectModal: vi.fn(),
   useServiceStatuses: vi.fn(() => new Map()),
 }));
@@ -50,7 +50,7 @@ import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useToastContext } from '../../contexts/ToastContext';
 import { sendOrQueue } from '../../lib/offlineQueue';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

@@ -55,7 +55,7 @@ import { InvoiceDetailDrawer, formatCurrency as formatCurrencyShared } from '../
 import { PageFilterBar } from '../components/PageFilterBar';
 import { StageTabGroup } from '../components/StageTabGroup';
 import { SortSelect } from '../components/SortSelect';
-import { useConnectionCheck, useConnectionToast } from '../context/ConnectionToastContext';
+import { useConnectionCheck, useConnectionToast } from '../contexts/ConnectionToastContext';
 import { useToast } from '../contexts/ToastContext';
 import { useProjectsData } from '../hooks/useProjectsData';
 import { ProjectsPageSkeleton } from '../components/PageLoadingSkeleton';

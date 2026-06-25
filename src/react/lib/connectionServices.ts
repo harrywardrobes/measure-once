@@ -3,7 +3,7 @@ import EventIcon from '@mui/icons-material/Event';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import StorageIcon from '@mui/icons-material/Storage';
 import type { ComponentType } from 'react';
-import type { ConnectionService, ServiceStatus } from '../context/ConnectionToastContext';
+import type { ConnectionService, ServiceStatus } from '../contexts/ConnectionToastContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

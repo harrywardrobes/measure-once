@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { GoogleEmail } from './types';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 
 interface Props {
   contactEmail: string;

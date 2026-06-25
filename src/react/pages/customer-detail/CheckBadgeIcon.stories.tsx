@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
-import { CheckBadgeIcon } from '../pages/customer-detail/CheckBadgeIcon';
+import { CheckBadgeIcon } from './CheckBadgeIcon';
 
 const meta: Meta<typeof CheckBadgeIcon> = {
   title: 'Customer Detail/CheckBadgeIcon',

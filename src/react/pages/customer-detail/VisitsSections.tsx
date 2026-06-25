@@ -15,7 +15,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { formatAddress, emptyAddress, type StructuredAddress } from '../../../../shared/address';
 import { usePrivilege } from '../../hooks/usePrivilege';

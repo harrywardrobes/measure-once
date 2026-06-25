@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { BulkContactActions } from '../components/BulkContactActions';
+import { BulkContactActions } from './BulkContactActions';
 import type { ContactSyncState } from '../hooks/useOfflineContactEntries';
 
 function makeMap(entries: Array<[string, ContactSyncState]>): Map<string, ContactSyncState> {

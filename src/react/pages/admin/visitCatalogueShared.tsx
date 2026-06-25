@@ -22,7 +22,7 @@ import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import { FileUploadField, UploadStatus } from '../../components/FileUploadField';
 import { GET, PATCH, POST, DELETE } from '../../utils/api';
-import { useConnectionToast } from '../../context/ConnectionToastContext';
+import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

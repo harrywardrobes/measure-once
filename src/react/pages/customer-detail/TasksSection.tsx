@@ -12,7 +12,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { CalendarTask } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
-import { useConnectionToast } from '../../context/ConnectionToastContext';
+import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 import { DOM_FLUSH_DELAY_MS } from '../../constants/timings';

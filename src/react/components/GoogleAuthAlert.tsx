@@ -2,7 +2,7 @@ import React from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import type { SxProps, Theme } from '@mui/material/styles';
-import { openConnectModal } from '../context/ConnectionToastContext';
+import { openConnectModal } from '../contexts/ConnectionToastContext';
 
 interface Props {
   sx?: SxProps<Theme>;

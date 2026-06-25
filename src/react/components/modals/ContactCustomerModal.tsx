@@ -13,7 +13,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError } from '../../utils/api';
-import { openConnectModal } from '../../context/ConnectionToastContext';
+import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';

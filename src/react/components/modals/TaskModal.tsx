@@ -17,7 +17,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
-import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
+import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { FullScreenModal } from './FullScreenModal';

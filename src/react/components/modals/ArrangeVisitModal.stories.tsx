@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
-import { ArrangeVisitModal } from '../components/modals/ArrangeVisitModal';
-import { useConnectionToast } from '../context/ConnectionToastContext';
+import { ArrangeVisitModal } from './ArrangeVisitModal';
+import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 
 const meta: Meta<typeof ArrangeVisitModal> = {
   title: 'Modals/ArrangeVisitModal',

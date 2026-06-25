@@ -11,19 +11,13 @@ import type {
   SurveyVisitWizardCtx,
   ExistingSurveyVisit,
 } from '../../components/SurveyVisitWizard';
+import { PendingEditActions } from './DesignVisitsList';
+import { sxHeader, sxHeaderLabel, sxItem, sxMeta, sxMetaSep, sxDate, sxText, sxSecondaryBtn, sxCachedBadge } from './visitCardStyles';
 
 const SurveyVisitWizardLazy = React.lazy(() =>
   import('../../components/SurveyVisitWizard').then(m => ({ default: m.SurveyVisitWizard })),
 );
 
-const sxHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 };
-const sxHeaderLabel: React.CSSProperties = { fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' };
-const sxItem: React.CSSProperties = { background: 'var(--paper)', border: '1px solid var(--stone)', borderRadius: 'var(--radius-lg)', padding: '11px 14px', boxShadow: 'var(--shadow-sm)' };
-const sxMeta: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 };
-const sxMetaSep: React.CSSProperties = { fontSize: '0.65rem', color: 'var(--ink-4)' };
-const sxDate: React.CSSProperties = { fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' };
-const sxText: React.CSSProperties = { fontSize: '0.875rem', color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' };
-const sxSecondaryBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-3)', fontSize: '0.75rem', border: '1px solid var(--stone)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '4px 10px' };
 const sxEditBtn: React.CSSProperties = { background: 'none', color: 'var(--ink-2)', fontSize: '0.75rem', border: '1px solid var(--stone)', borderRadius: 'var(--radius-md)', cursor: 'pointer', padding: '4px 10px' };
 
 export interface SurveyVisitServer {
@@ -179,50 +173,6 @@ function PendingRefundActions({ entries }: { entries: PendingSurveyVisitEntry[] 
 
   return (
     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-      <button style={sxSecondaryBtn} disabled={busy} onClick={handleRetry}>Retry</button>
-      <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }} disabled={busy} onClick={handleDiscard}>Discard</button>
-    </div>
-  );
-}
-
-/** Retry / Discard actions for a queued *edit* that failed to upload. */
-function PendingEditActions({ entry }: { entry: PendingSurveyVisitEntry }) {
-  const [busy, setBusy] = useState(false);
-
-  const handleRetry = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const engine = await import('../../lib/syncEngine');
-      await engine.retryEntry(entry.id);
-    } catch {
-      /* best-effort — the periodic flush will pick it up */
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, entry.id]);
-
-  const handleDiscard = useCallback(() => {
-    if (busy) return;
-    const doDiscard = async () => {
-      setBusy(true);
-      try {
-        const mod = await import('../../lib/offlineQueue');
-        await mod.removeEntry(entry.id);
-      } catch {
-        /* best-effort */
-      } finally {
-        setBusy(false);
-      }
-    };
-    window.showBottomConfirm(
-      "Discard this unsynced edit? The changes saved on this device will be lost — the visit's last synced copy on the server stays as it is.",
-      doDiscard,
-    );
-  }, [busy, entry.id]);
-
-  return (
-    <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
       <button style={sxSecondaryBtn} disabled={busy} onClick={handleRetry}>Retry</button>
       <button style={{ ...sxSecondaryBtn, color: 'var(--error)' }} disabled={busy} onClick={handleDiscard}>Discard</button>
     </div>
@@ -844,21 +794,7 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={sxHeaderLabel}>Survey visits</span>
             {fromCache && (
-              <span
-                data-testid="sv-cached-badge"
-                style={{
-                  fontSize: '0.6rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  color: 'var(--ink-3)',
-                  border: '1px solid var(--stone)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '1px 5px',
-                }}
-              >
-                Cached
-              </span>
+              <span data-testid="sv-cached-badge" style={sxCachedBadge}>Cached</span>
             )}
           </span>
           <BulkSurveyVisitActions entries={pendingEntries} />

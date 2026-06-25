@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { ContactSyncRecovery } from '../components/ContactSyncRecovery';
+import { ContactSyncRecovery } from './ContactSyncRecovery';
 
 const meta: Meta<typeof ContactSyncRecovery> = {
   title: 'Customers/ContactSyncRecovery',

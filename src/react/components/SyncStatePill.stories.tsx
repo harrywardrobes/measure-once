@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { SyncStatePill } from '../components/SyncStatePill';
+import { SyncStatePill } from './SyncStatePill';
 
 const meta: Meta<typeof SyncStatePill> = {
   title: 'Offline/SyncStatePill',

@@ -36,7 +36,7 @@ import {
 } from './offlineQueue';
 import { detectConflict, type ConflictDecision } from './conflictDetection';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
-import { openConnectModal } from '../context/ConnectionToastContext';
+import { openConnectModal } from '../contexts/ConnectionToastContext';
 
 
 // ── Tunables ────────────────────────────────────────────────────────────────────

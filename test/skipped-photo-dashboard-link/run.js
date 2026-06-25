@@ -270,7 +270,8 @@ async function main() {
     // This key looks valid (passes format validation) but is NOT in the
     // in-memory fake storage, so downloadAsBytes returns { ok: false } and
     // the code increments skippedCount — triggering the dashboard link.
-    const absentKey = `obj:ci_does_not_exist_${runId}.jpg`;
+    // Prefix is 18 chars so the total body (prefix + 6-char runId) = 24, matching CI_KEY_RE.
+    const absentKey = `obj:ci_not_in_fake_store_${runId}.jpg`;
     record('DASH-A.upload', true,
       `uploaded 1 real photo ${realKey}; absent key=${absentKey}`);
 

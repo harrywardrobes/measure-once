@@ -5,8 +5,8 @@ import { loadSearchSettings } from './lib/searchSettings';
 import { IslandErrorBoundary } from './components/IslandErrorBoundary';
 import { CardActionModalsHost } from './components/CardActionModalsHost';
 import { ConnectServicesModal } from './components/modals/ConnectServicesModal';
-import { ConnectionToastProvider, useConnectModal } from './context/ConnectionToastContext';
-import { WorkflowDataProvider } from './context/WorkflowDataContext';
+import { ConnectionToastProvider, useConnectModal } from './contexts/ConnectionToastContext';
+import { WorkflowDataProvider } from './contexts/WorkflowDataContext';
 import { openCardActionModal } from './utils/cardActionModalRegistry';
 import {
   PageLoadingSkeleton,

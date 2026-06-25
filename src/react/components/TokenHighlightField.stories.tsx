@@ -6,7 +6,7 @@ import Typography from '@mui/material/Typography';
 import {
   TokenHighlightField,
   type TokenHighlightFieldHandle,
-} from '../components/TokenHighlightField';
+} from './TokenHighlightField';
 
 const meta: Meta<typeof TokenHighlightField> = {
   title: 'Forms/TokenHighlightField',

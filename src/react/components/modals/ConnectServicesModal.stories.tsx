@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import Button from '@mui/material/Button';
-import { ConnectServicesModal } from '../components/modals/ConnectServicesModal';
+import { ConnectServicesModal } from './ConnectServicesModal';
 
 // ── Storybook note ─────────────────────────────────────────────────────────────
 //

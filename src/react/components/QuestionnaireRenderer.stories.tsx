@@ -7,7 +7,7 @@ import {
   missingRequired,
   type VisitQuestion,
   type AnswerMap,
-} from '../components/QuestionnaireRenderer';
+} from './QuestionnaireRenderer';
 
 const SAMPLE_QUESTIONS: VisitQuestion[] = [
   {

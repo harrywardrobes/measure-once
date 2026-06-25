@@ -3,8 +3,8 @@ import type { Meta, StoryObj } from '@storybook/react';
 import {
   AdminGroupedTabsBarInner,
   TAB_GROUPS,
-} from '../components/AdminGroupedTabsBar';
-import type { LegacyTab, GroupId } from '../components/AdminGroupedTabsBar';
+} from './AdminGroupedTabsBar';
+import type { LegacyTab, GroupId } from './AdminGroupedTabsBar';
 
 const meta: Meta<typeof AdminGroupedTabsBarInner> = {
   title: 'Admin/AdminGroupedTabsBar',

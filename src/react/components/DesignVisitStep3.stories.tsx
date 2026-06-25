@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { DesignVisitStep3 } from '../components/DesignVisitStep3';
+import { DesignVisitStep3 } from './DesignVisitStep3';
 import {
   DEMO_STEP1,
   DEMO_ROOMS,

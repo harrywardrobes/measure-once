@@ -13,7 +13,7 @@ import { FullScreenModal } from './modals/FullScreenModal';
 import { VisitWizardShell } from './VisitWizardShell';
 import { useToastContext } from '../contexts/ToastContext';
 import { LEAD_STATUS_REMOVED_MESSAGE, POST } from '../utils/api';
-import { openConnectModal } from '../context/ConnectionToastContext';
+import { openConnectModal } from '../contexts/ConnectionToastContext';
 import { formatAddress } from '../../../shared/address';
 import { broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import {

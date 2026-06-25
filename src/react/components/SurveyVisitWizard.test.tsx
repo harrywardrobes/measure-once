@@ -42,7 +42,7 @@ vi.mock('../contexts/ToastContext', () => ({
   useToast: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('../context/ConnectionToastContext', () => ({
+vi.mock('../contexts/ConnectionToastContext', () => ({
   openConnectModal: vi.fn(),
   useServiceStatuses: vi.fn(() => new Map()),
 }));

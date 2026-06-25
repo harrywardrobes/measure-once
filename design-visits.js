@@ -6,7 +6,7 @@ const express   = require('express');
 const crypto    = require('crypto');
 const axios     = require('axios').create({ timeout: 12000 });
 const { Pool }  = require('pg');
-const nodemailer = require('nodemailer');
+const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
 const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
@@ -107,46 +107,6 @@ const CATALOG_IMG = {
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
 
-// ── Utility helpers (mirrors auth.js private helpers) ─────────────────────────
-function appBaseUrl() {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
-  return `http://localhost:${process.env.PORT || 5000}`;
-}
-function buildFromHeader() {
-  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-  if (!raw) return raw;
-  if (/</.test(raw)) return raw;
-  return `Measure Once <${raw}>`;
-}
-function buildReplyTo() {
-  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-}
-function createMailTransport() {
-  // Test-only override so the integration suite can capture sendMail payloads
-  // without standing up a real SMTP server. When set, returns a fake transport
-  // that appends each JSON-serialised message to the named file. Never set in
-  // production.
-  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
-    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
-    return {
-      sendMail(opts) {
-        return new Promise((resolve, reject) => {
-          try {
-            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
-            resolve({ messageId: `override-${Date.now()}` });
-          } catch (e) { reject(e); }
-        });
-      },
-    };
-  }
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-}
 function hubspotApiBase() {
   // Test-only override so the integration suite can point HubSpot HTTP traffic
   // at a local mock server. Never set in production.

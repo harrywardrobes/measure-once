@@ -445,7 +445,8 @@ async function main() {
     const key3 = await uploadPhoto(BASE, token2, JPEG_BUF, 'image/jpeg', 'room3.jpg');
     // A key that looks valid (passes server-side validation) but is NOT in
     // the in-memory fake storage, so downloadAsBytes returns { ok: false }.
-    const absentKey = `obj:ci_does_not_exist_${runId}.jpg`;
+    // Prefix is 18 chars so the total body (prefix + 6-char runId) = 24, matching CI_KEY_RE.
+    const absentKey = `obj:ci_not_in_fake_store_${runId}.jpg`;
     record('ATT-2.upload', true, `uploaded 1 real photo ${key3}; absent key=${absentKey}`);
 
     const mailsBefore2 = readMailJsonl(mailFile).length;

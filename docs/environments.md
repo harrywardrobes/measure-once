@@ -130,9 +130,9 @@ Project parameters: `PROJECT_ID=harry-wardrobes`, `REGION=europe-west2`,
      --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-instance" \
      --allow-unauthenticated --port=5000 --cpu=1 --memory=512Mi \
      --min-instances=0 --max-instances=2 \
-     --set-env-vars="NODE_ENV=production,APP_URL=https://staging.harrywardrobes.co.uk,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket-staging,QB_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/quickbooks/callback,GOOGLE_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/google/callback" \
-     # QB_ENVIRONMENT comes from the shared QB_ENVIRONMENT secret (sandbox) — do NOT hardcode production here \
+     --set-env-vars="NODE_ENV=production,APP_URL=https://staging.harrywardrobes.co.uk,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket-staging,QB_ENVIRONMENT=sandbox,QB_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/quickbooks/callback,GOOGLE_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/google/callback" \
      --set-secrets="DATABASE_URL=DATABASE_URL_STAGING:latest,SESSION_SECRET=SESSION_SECRET_STAGING:latest,QB_TOKEN_ENCRYPTION_KEY=QB_TOKEN_ENCRYPTION_KEY_STAGING:latest,GOOGLE_TOKEN_ENCRYPTION_KEY=GOOGLE_TOKEN_ENCRYPTION_KEY_STAGING:latest,HUBSPOT_ACCESS_TOKEN=HUBSPOT_TOKEN:latest,QB_CLIENT_ID=QB_CLIENT_ID:latest,QB_CLIENT_SECRET=QB_CLIENT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASS=SMTP_PASS:latest"
+   # QB_ENVIRONMENT=sandbox (staging is not prod-verified) — never set to production here.
    ```
 
 6. **Map the domain** (prints the DNS records to add at Hostinger):

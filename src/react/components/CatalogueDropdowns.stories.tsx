@@ -6,7 +6,7 @@ import {
   CatalogueDropdowns,
   type CatalogueOption,
   type CatalogueSuggestion,
-} from '../components/CatalogueDropdowns';
+} from './CatalogueDropdowns';
 
 const DOOR_STYLES: CatalogueOption[] = [
   { id: 1, name: 'Shaker' },

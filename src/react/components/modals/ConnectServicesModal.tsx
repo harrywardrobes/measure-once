@@ -13,7 +13,7 @@ import {
   useServiceStatuses,
   useConnectionToast,
   type ConnectionService,
-} from '../../context/ConnectionToastContext';
+} from '../../contexts/ConnectionToastContext';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { SERVICE_DESCRIPTORS } from '../../lib/connectionServices';
 import { CONNECT_MODAL_SHOWN_KEY } from '../../constants/localStorageKeys';

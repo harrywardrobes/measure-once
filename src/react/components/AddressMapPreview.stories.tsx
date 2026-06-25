@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import { AddressMapPreview } from '../components/AddressMapPreview';
+import { AddressMapPreview } from './AddressMapPreview';
 import type { GoogleMapsConfig } from '../lib/googleMapsConfig';
 
 /**

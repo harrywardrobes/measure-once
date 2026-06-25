@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { OpenDealActionModal } from '../components/modals/OpenDealActionModal';
+import { OpenDealActionModal } from './OpenDealActionModal';
 
 const handler = { id: 7, type: 'open_deal' as const, config: {}, bindings: [] };
 

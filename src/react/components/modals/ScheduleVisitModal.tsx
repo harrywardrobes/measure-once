@@ -40,7 +40,7 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, PATCH, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
-import { openConnectModal, useServiceStatuses } from '../../context/ConnectionToastContext';
+import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';

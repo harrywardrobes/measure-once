@@ -7,7 +7,7 @@ const express    = require('express');
 const crypto     = require('crypto');
 const multer     = require('multer');
 const { Pool }   = require('pg');
-const nodemailer = require('nodemailer');
+const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
 const axios      = require('axios').create({ timeout: 12000 });
 const path       = require('path');
 const fs         = require('fs');
@@ -64,42 +64,6 @@ function pushSseEvent(payload) {
 // ── Config ────────────────────────────────────────────────────────────────────
 const LINK_TTL_DAYS = 28;
 
-// ── Utility helpers ───────────────────────────────────────────────────────────
-function appBaseUrl() {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
-  return `http://localhost:${process.env.PORT || 5000}`;
-}
-function buildFromHeader() {
-  const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-  if (!raw) return raw;
-  if (/</.test(raw)) return raw;
-  return `Measure Once <${raw}>`;
-}
-function buildReplyTo() {
-  return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-}
-function createMailTransport() {
-  if (process.env.MAIL_TRANSPORT_FILE_OVERRIDE) {
-    const fpath = process.env.MAIL_TRANSPORT_FILE_OVERRIDE;
-    return {
-      sendMail(opts) {
-        return new Promise((resolve, reject) => {
-          try {
-            fs.appendFileSync(fpath, JSON.stringify(opts) + '\n');
-            resolve({ messageId: `override-${Date.now()}` });
-          } catch (e) { reject(e); }
-        });
-      },
-    };
-  }
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
-  return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST,
-    port:   parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-    auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-}
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -423,7 +387,7 @@ async function isLeadStatusPastPhotos(currentStatus) {
 // Validates a customer-info object storage key.
 // Keys are generated as obj:ci_<24-char base64url>.<ext> — enforce that format
 // strictly so callers cannot probe storage paths outside the ci_ namespace.
-const CI_KEY_RE = /^obj:ci_[A-Za-z0-9_-]{16,64}\.(jpg|jpeg|png|webp|pdf)$/;
+const CI_KEY_RE = /^obj:ci_[A-Za-z0-9_-]{24}\.(jpg|jpeg|png|webp|pdf)$/;
 function isValidCiKey(k) {
   return typeof k === 'string' && CI_KEY_RE.test(k);
 }
@@ -1511,11 +1475,7 @@ router.post('/api/customer-info/:token/photos',
   // multer writes each file to the OS temp dir on disk — no heap buffering.
   _photoUpload.array('photos', MAX_PHOTO_FILES),
   async (req, res) => {
-    const rawFiles = req.files;
-    if (rawFiles != null && !Array.isArray(rawFiles)) {
-      return res.status(400).json({ error: 'Invalid files payload.' });
-    }
-    const files = rawFiles || [];
+    const files = req.files || [];
     const tempPaths = files.map(f => f.path);
 
     if (!files.length) {
