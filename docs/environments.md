@@ -11,13 +11,40 @@ and the exact steps to stand up and refresh **staging**
 | Database | local Postgres (seeded "pretend" data) | Cloud SQL **`measureonce_staging`** (isolated copy) | Neon *(today)* → Cloud SQL `measureonce` |
 | `NODE_ENV` | `development` | `production` | `production` |
 | Migrations | auto on boot | **deliberate** (`npm run db:migrate`), never on boot | deliberate, never on boot |
-| HubSpot / QB / SMTP | stubbed / off | **LIVE** (same portal/company/mailbox as prod) | LIVE |
+| HubSpot / SMTP | stubbed / off | **LIVE** (same portal/mailbox as prod) | LIVE |
+| QuickBooks | stubbed / off | **sandbox** (`QB_ENVIRONMENT=sandbox`; app not yet prod-verified) | sandbox until prod-verified, then live |
 | App "dev mode" | n/a | **ON** — confines contacts to `hw_test_user='true'` | OFF |
 | Object storage | local / dev bucket | `wardrobes-bucket-staging` | `wardrobes-bucket` |
 
 The point of staging: push the app, run it against a production-like copy of the
-data, and exercise **real** HubSpot / QuickBooks / email workflows — but only
-against **test contacts**, by keeping the app's dev mode ON.
+data, and exercise **real** HubSpot / email workflows (and **sandbox**
+QuickBooks) — but only against **test contacts**, by keeping the app's dev mode ON.
+
+---
+
+## Object storage layout (identical in every bucket)
+
+Photos live under two fixed top-level prefixes, split by who uploaded them:
+
+| Prefix | Written by | Source flow |
+|---|---|---|
+| `customer-info-photos/` | **customers** | the customer-info upload form (upload-photos-info) |
+| `visit-photos/` | **staff** | design **and** survey visit wizards |
+
+The prefixes are constructed in code — `customer-info.js` → `customer-info-photos/`,
+and `design-visit-uploads.js` (`STORAGE_PREFIX`) → `visit-photos/` (survey visits
+reuse the same uploader). `storage.js` writes this same layout into **whichever**
+bucket the environment points at (`wardrobes-bucket` for prod,
+`wardrobes-bucket-staging` for staging), so the structure is identical across
+environments. Only an opaque `obj:<id>.<ext>` key is stored in the DB; the prefix
+is reconstructed on read/write. (The HTTP route `/api/design-visit-images/` is
+internal plumbing, unrelated to the bucket folder name.)
+
+Both prefixes exist in `wardrobes-bucket` and are mirrored in
+`wardrobes-bucket-staging` as zero-byte folder placeholders, so the structure is
+visible even before any photo is uploaded. Staging starts with **no** photos (the
+seed clones the DB, not the bucket) — existing prod photos won't display in
+staging, which is expected.
 
 ---
 
@@ -104,7 +131,8 @@ Reuse the project parameters from [docs/gcp-cutover.md](gcp-cutover.md):
      --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-instance" \
      --allow-unauthenticated --port=5000 --cpu=1 --memory=512Mi \
      --min-instances=0 --max-instances=2 \
-     --set-env-vars="NODE_ENV=production,APP_URL=https://staging.harrywardrobes.co.uk,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket-staging,QB_ENVIRONMENT=production,QB_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/quickbooks/callback,GOOGLE_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/google/callback" \
+     --set-env-vars="NODE_ENV=production,APP_URL=https://staging.harrywardrobes.co.uk,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket-staging,QB_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/quickbooks/callback,GOOGLE_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/google/callback" \
+     # QB_ENVIRONMENT comes from the shared QB_ENVIRONMENT secret (sandbox) — do NOT hardcode production here \
      --set-secrets="DATABASE_URL=DATABASE_URL_STAGING:latest,SESSION_SECRET=SESSION_SECRET_STAGING:latest,QB_TOKEN_ENCRYPTION_KEY=QB_TOKEN_ENCRYPTION_KEY_STAGING:latest,GOOGLE_TOKEN_ENCRYPTION_KEY=GOOGLE_TOKEN_ENCRYPTION_KEY_STAGING:latest,HUBSPOT_ACCESS_TOKEN=HUBSPOT_TOKEN:latest,QB_CLIENT_ID=QB_CLIENT_ID:latest,QB_CLIENT_SECRET=QB_CLIENT_SECRET:latest,GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest,SMTP_HOST=SMTP_HOST:latest,SMTP_USER=SMTP_USER:latest,SMTP_PASS=SMTP_PASS:latest"
    ```
 
