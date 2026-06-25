@@ -25,3 +25,4 @@
 - [Privilege matrix run timing](privilege-matrix-run-timing.md) — test:privileges(:ci) full run exceeds 120s due to the trailing puppeteer smoke; the `matrix: N/N ok` line confirms new route rows pass before the timeout.
 - [Places loading=async callback](places-loading-async-callback.md) — with loading=async, Maps JS onload fires before importLibrary is ready; must use callback= URL param.
 - [Runtime dep vs devDep masking](runtime-dep-vs-devdep.md) — a runtime require() only present transitively via a devDep works in dev/Replit but crashes prod `npm ci --omit=dev` (e.g. zod); must be a direct dependency.
+- [SameSite cookie + Replit iframe](samesite-cookie-replit-iframe.md) — auth loops in the Replit preview (cross-origin iframe) need SameSite=None; Secure + express-session proxy:true; old Lax cookie needs a fresh login to upgrade.
