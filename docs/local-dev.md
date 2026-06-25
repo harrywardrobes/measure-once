@@ -65,8 +65,7 @@ you don't need to run `npm run db:migrate` by hand (though you can).
 
 ## 4. Object storage (photos)
 
-The default `replit` backend only authenticates inside Replit, so local dev uses
-**GCS**:
+storage.js talks to **GCS**. For local dev:
 
 ```bash
 gcloud auth application-default login
@@ -180,8 +179,7 @@ Production behaviour is unchanged. For this to work locally you must have
 - **`SESSION_SECRET is required`** on boot — set `SESSION_SECRET` in `.env`.
 - **DB / migration errors on boot** — wrong or unreachable `DATABASE_URL`, or
   you pointed it at a database you don't want migrated. Use a dev DB.
-- **Photo upload 503 / "Object storage is not configured"** — you're still on
-  the `replit` backend or haven't run
+- **Photo upload 503 / "Object storage is not configured"** — you haven't run
   `gcloud auth application-default login` / set `GCS_BUCKET`.
 - **Google/QuickBooks "disconnected"** — set `GOOGLE_TOKEN_ENCRYPTION_KEY` /
   `QB_TOKEN_ENCRYPTION_KEY` (tokens can't be encrypted/decrypted without them).

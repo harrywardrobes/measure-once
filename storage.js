@@ -1,134 +1,26 @@
 // storage.js — storage-provider abstraction for cloud object storage.
 //
 // Feature code (design-visit-uploads.js, customer-info.js) talks to this
-// module's normalised interface instead of any vendor SDK directly. The
-// active backend is chosen by the STORAGE_BACKEND env var:
-//   - 'replit' (default) → @replit/object-storage
-//   - 'gcs'              → @google-cloud/storage (Application Default Creds)
+// module's normalised interface instead of the @google-cloud/storage SDK
+// directly (Application Default Credentials — no keys in code).
 //
 // Normalised interface (all async, all throw on real errors and return plain
-// values — no SDK `{ ok, value }` envelopes leak out):
+// values — no SDK envelopes leak out):
 //   uploadBytes(name, buffer, opts?)        — opts.compress passthrough.
 //   uploadFile(name, filePath)              — streams from disk (no full read).
 //   downloadBytes(name)                     — Buffer, or null on 404.
 //   deleteObject(name, { ignoreNotFound })  — resolves true, swallows 404.
 //   objectExists(name)                      — boolean (header/metadata only).
 //
-// Client construction is lazy + cached per backend, so importing this module
-// never throws at load even with no bucket configured (tests run without one).
-// The init error is cached and re-thrown with a consistent, friendly
-// "not configured" message so callers can map it to a 503 via their own
+// Client construction is lazy + cached, so importing this module never throws
+// at load even with no bucket configured (tests run without one). The init
+// error is cached and re-thrown with a consistent, friendly "not configured"
+// message so callers can map it to a 503 via their own
 // `/bucket|object storage/i` checks.
 
 'use strict';
 
-const BACKEND = (process.env.STORAGE_BACKEND || 'replit').toLowerCase();
-
-// ── Replit Object Storage backend ────────────────────────────────────────────
-let _replitClient = null;
-let _replitInitTried = false;
-let _replitInitError = null;
-
-function getReplitClient() {
-  if (_replitInitTried) {
-    if (_replitInitError) throw _replitInitError;
-    return _replitClient;
-  }
-  _replitInitTried = true;
-  try {
-    const { Client } = require('@replit/object-storage');
-    _replitClient = new Client();
-    return _replitClient;
-  } catch (e) {
-    _replitInitError = new Error(
-      'Object Storage is not configured. Provision a bucket in the Replit ' +
-      'Object Storage pane (it will be wired in via .replit automatically), ' +
-      'then restart the server. Original error: ' + e.message
-    );
-    throw _replitInitError;
-  }
-}
-
-function _is404(code, message) {
-  return code === 404 || /not\s*found/i.test(String(message || ''));
-}
-
-const replitBackend = {
-  async uploadBytes(name, buffer, opts = {}) {
-    const client = getReplitClient();
-    const res = await client.uploadFromBytes(name, buffer, { compress: !!opts.compress });
-    if (res && res.ok === false) {
-      throw new Error('Object storage upload failed: ' + (res.error?.message || 'unknown'));
-    }
-  },
-
-  async uploadFile(name, filePath) {
-    const client = getReplitClient();
-    const res = await client.uploadFromFilename(name, filePath);
-    if (res && res.ok === false) {
-      throw new Error('Object storage upload failed: ' + (res.error?.message || 'unknown'));
-    }
-  },
-
-  async downloadBytes(name) {
-    const client = getReplitClient();
-    const res = await client.downloadAsBytes(name);
-    if (res && res.ok === false) {
-      if (_is404(res.error?.statusCode || res.error?.code, res.error?.message)) return null;
-      throw new Error('Object storage download failed: ' + (res.error?.message || 'unknown'));
-    }
-    // SDK returns { ok: true, value: [Buffer] }
-    const value = res?.value;
-    const buf = Array.isArray(value) ? value[0] : value;
-    return buf || null;
-  },
-
-  async deleteObject(name, { ignoreNotFound = false } = {}) {
-    const client = getReplitClient();
-    const res = await client.delete(name, { ignoreNotFound });
-    if (res && res.ok === false) {
-      if (ignoreNotFound && _is404(res.error?.statusCode || res.error?.code, res.error?.message)) {
-        return true;
-      }
-      throw new Error('Object storage delete failed: ' + (res.error?.message || 'unknown'));
-    }
-    return true;
-  },
-
-  async objectExists(name) {
-    const client = getReplitClient();
-    const res = await client.list({ prefix: name });
-    if (res && res.ok === false) {
-      throw new Error('Object storage list failed: ' + (res.error?.message || 'unknown'));
-    }
-    const objects = res?.value ?? res?.objects ?? [];
-    return objects.some(obj => (obj.name ?? obj.key ?? obj) === name);
-  },
-
-  async list(prefix) {
-    const client = getReplitClient();
-    const names = [];
-    let cursor;
-    do {
-      const opts = {};
-      if (prefix) opts.prefix = prefix;
-      if (cursor) opts.cursor = cursor;
-      const res = await client.list(opts);
-      if (res && res.ok === false) {
-        throw new Error('Object storage list failed: ' + (res.error?.message || 'unknown'));
-      }
-      const objects = res?.value ?? res?.objects ?? [];
-      for (const obj of objects) {
-        const name = obj.name ?? obj.key ?? obj;
-        if (typeof name === 'string') names.push(name);
-      }
-      cursor = res?.cursor ?? res?.nextCursor ?? null;
-    } while (cursor);
-    return names;
-  },
-};
-
-// ── Google Cloud Storage backend (dormant unless STORAGE_BACKEND=gcs) ─────────
+// ── Google Cloud Storage backend ───────────────────────────────────────────
 let _gcsBucket = null;
 let _gcsInitTried = false;
 let _gcsInitError = null;
@@ -205,16 +97,12 @@ const gcsBackend = {
   },
 };
 
-function getBackend() {
-  return BACKEND === 'gcs' ? gcsBackend : replitBackend;
-}
-
 module.exports = {
-  STORAGE_BACKEND: BACKEND,
-  uploadBytes: (...args) => getBackend().uploadBytes(...args),
-  uploadFile: (...args) => getBackend().uploadFile(...args),
-  downloadBytes: (...args) => getBackend().downloadBytes(...args),
-  deleteObject: (...args) => getBackend().deleteObject(...args),
-  objectExists: (...args) => getBackend().objectExists(...args),
-  list: (...args) => getBackend().list(...args),
+  STORAGE_BACKEND: 'gcs',
+  uploadBytes: (...args) => gcsBackend.uploadBytes(...args),
+  uploadFile: (...args) => gcsBackend.uploadFile(...args),
+  downloadBytes: (...args) => gcsBackend.downloadBytes(...args),
+  deleteObject: (...args) => gcsBackend.deleteObject(...args),
+  objectExists: (...args) => gcsBackend.objectExists(...args),
+  list: (...args) => gcsBackend.list(...args),
 };

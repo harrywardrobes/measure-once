@@ -56,7 +56,7 @@ const skip = makeSkip3(findings);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const MOCK_LINK = 'https://measureonce.replit.app/customer-info/testtoken123abc';
+const MOCK_LINK = 'https://measure.harrywardrobes.co.uk/customer-info/testtoken123abc';
 
 function makeContactBody(contactId) {
   return JSON.stringify({

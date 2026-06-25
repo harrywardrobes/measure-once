@@ -198,7 +198,7 @@ export function QuickBooksSettingsPage() {
             <Stack spacing={1.5}>
               <Alert severity="error">
                 QuickBooks cannot connect — the <strong>QB_TOKEN_ENCRYPTION_KEY</strong>{' '}
-                secret is not configured. Add it in Replit Secrets, then reconnect via
+                secret is not configured. Add it in Secret Manager, then reconnect via
                 the <em>Invoices</em> page.
               </Alert>
             </Stack>

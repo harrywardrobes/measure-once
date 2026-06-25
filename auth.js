@@ -149,8 +149,7 @@ function createMailTransport() {
 
 function appBaseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
-  if (process.env.REPLIT_DOMAINS) return `https://${process.env.REPLIT_DOMAINS.split(',')[0].trim()}`;
-  return 'https://measureonce.replit.app';
+  return `http://localhost:${process.env.PORT || 5000}`;
 }
 
 // Build a friendly "Measure Once <address>" From header so recipients see a
@@ -2584,7 +2583,7 @@ async function runConflictDigestIfDue() {
 
 function scheduleConflictDigest() {
   // Run an initial check shortly after boot so we catch a missed weekly window
-  // even after frequent Replit restarts.
+  // even after frequent container restarts.
   setTimeout(runConflictDigestIfDue, 60 * 1000);
   setInterval(runConflictDigestIfDue, CONFLICT_DIGEST_INTERVAL_MS);
 }

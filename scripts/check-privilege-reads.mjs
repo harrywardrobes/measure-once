@@ -2,7 +2,7 @@
 /**
  * check-privilege-reads.mjs
  *
- * Enforces the privilege-check convention documented in replit.md:
+ * Enforces the privilege-check convention documented in CLAUDE.md:
  *
  *   All privilege checks MUST go through the canonical helper for that surface:
  *     - React / TypeScript → usePrivilege()         (defined in src/react/hooks/usePrivilege.ts)
@@ -305,7 +305,7 @@ if (serverCount > 0) {
 
 console.error(
   'Fix (client): replace direct .privilege_level reads with usePrivilege() (React hook).\n' +
-  '              See the "Privilege checks" section in replit.md.\n' +
+  '              See the "Privilege checks" section in CLAUDE.md.\n' +
   'Fix (server): replace req.user?.privilege_level reads with getRequestPrivilegeLevel(req) (auth.js).\n' +
   '              For route-level gating prefer requireAdmin / requirePrivilege / requireManagerOrAdmin\n' +
   '              — those re-query the database and are always up-to-date after a privilege change.\n' +

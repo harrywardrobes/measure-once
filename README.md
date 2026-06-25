@@ -142,10 +142,8 @@ one of two ways:
   `DATABASE_URL` as a release/deploy step before the new app version starts.
   The script has no dev-only guards, so it works unchanged against production.
 
-When `RUN_MIGRATIONS_ON_BOOT` is unset and you are still on Replit, the
-production schema is applied by Replit's publish-time dev→prod schema diff
-instead. The rate-limit package's migration records are reconciled on every boot
-path regardless of the flag.
+The rate-limit package's migration records are reconciled on every boot path
+regardless of which option above is used.
 
 ---
 

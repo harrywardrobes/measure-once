@@ -7,7 +7,7 @@ import { CustomerInfoSubmissionsRail } from './CustomerInfoSubmissionsRail';
 
 const CONTACT_ID = 'contact-001';
 const MOCK_LINK =
-  'https://example.replit.app/customer-info/abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
+  'https://example.com/customer-info/abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
 
 const ACTIVE_SUBMISSION = {
   id: 1,

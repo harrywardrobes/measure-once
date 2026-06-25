@@ -79,7 +79,7 @@ async function main() {
 
   // Connect to the main database to issue DDL (CREATE/DROP DATABASE).
   // PostgreSQL allows this from any connected DB as long as the role has
-  // CREATEDB privilege (which Replit's managed Postgres grants by default).
+  // CREATEDB privilege.
   const admin = new Client({ connectionString: baseUrl });
   await admin.connect();
   await pruneOldTestDbs(admin);

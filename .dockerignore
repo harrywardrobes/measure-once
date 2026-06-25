@@ -5,11 +5,6 @@ node_modules
 .git
 .gitignore
 
-# Replit-specific config (deploys stay on Replit and are unaffected by Docker).
-.replit
-.replit_integration_files
-replit.nix
-
 # Local env / secrets — config is provided to the container via env vars only.
 .env
 .env.*
@@ -28,9 +23,8 @@ public/storybook/
 public/sw.js
 storybook-static/
 
-# Replit mockup sandbox + uploaded assets — not part of the production app.
+# Mockup sandbox — not part of the production app.
 artifacts/
-attached_assets/
 
 # Docs not needed at runtime.
 docs/

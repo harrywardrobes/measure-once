@@ -1,36 +1,45 @@
 'use strict';
-// In-memory @replit/object-storage stub used by the design-visit photo
+// In-memory @google-cloud/storage stub used by the design-visit photo
 // probes. Stores uploaded bytes in a module-level Map keyed by object name
-// (e.g. "visit-photos/<id>.png"). The shape mirrors the bits of the
-// real SDK that design-visit-uploads.js calls: `uploadFromBytes`,
-// `downloadAsBytes`, `delete` — each returns `{ ok: true, value? }` on
-// success and `{ ok: false, error: { ... } }` on failure.
+// (e.g. "visit-photos/<id>.png"). Mirrors the bits of the real SDK that
+// design-visit-uploads.js calls via storage.js's gcsBackend: bucket.file(name)
+// .save/.download/.delete — each resolves on success and throws on failure
+// (a 404-coded Error for "not found").
 
 const _bytes = new Map();
 
-class Client {
-  constructor() {}
+function notFoundError() {
+  const err = new Error('No such object.');
+  err.code = 404;
+  return err;
+}
 
-  async uploadFromBytes(name, buf /* , opts */) {
-    _bytes.set(String(name), Buffer.from(buf));
-    return { ok: true };
+class FakeFile {
+  constructor(name) { this._name = name; }
+
+  async save(buf) {
+    _bytes.set(String(this._name), Buffer.from(buf));
   }
 
-  async downloadAsBytes(name) {
-    const buf = _bytes.get(String(name));
-    if (!buf) {
-      return { ok: false, error: { statusCode: 404, message: 'not found' } };
-    }
-    return { ok: true, value: [buf] };
+  async download() {
+    const buf = _bytes.get(String(this._name));
+    if (!buf) throw notFoundError();
+    return [buf];
   }
 
-  async delete(name, opts) {
-    const had = _bytes.delete(String(name));
-    if (!had && !(opts && opts.ignoreNotFound)) {
-      return { ok: false, error: { statusCode: 404, message: 'not found' } };
-    }
-    return { ok: true };
+  async delete({ ignoreNotFound = false } = {}) {
+    const had = _bytes.delete(String(this._name));
+    if (!had && !ignoreNotFound) throw notFoundError();
   }
 }
 
-module.exports = { Client, __bytes: _bytes };
+class FakeBucket {
+  file(name) { return new FakeFile(name); }
+}
+
+class Storage {
+  constructor() {}
+  bucket(_name) { return new FakeBucket(); }
+}
+
+module.exports = { Storage, __bytes: _bytes };

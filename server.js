@@ -1125,8 +1125,8 @@ async function deleteGoogleTokens(userSub) {
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 const REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI ||
-  (process.env.REPLIT_DEV_DOMAIN
-    ? `https://${process.env.REPLIT_DEV_DOMAIN}/auth/google/callback`
+  (process.env.APP_URL
+    ? `${process.env.APP_URL.replace(/\/+$/, '')}/auth/google/callback`
     : `http://localhost:${PORT}/auth/google/callback`);
 
 
@@ -1377,8 +1377,6 @@ app.get('/api/hubspot/webhook-events', isAuthenticated, (req, res) => {
 
 function _getWebhookBaseUrl(req) {
   if (process.env.WEBHOOK_BASE_URL) return process.env.WEBHOOK_BASE_URL.replace(/\/$/, '');
-  const replitDomain = process.env.REPLIT_DEV_DOMAIN;
-  if (replitDomain) return `https://${replitDomain}`;
   return `${req.headers['x-forwarded-proto'] || req.protocol || 'https'}://${req.get('host')}`;
 }
 
@@ -8135,20 +8133,15 @@ async function cleanupStaleHubSpotCredentialRows() {
   // setup or any route handling.  A migration failure is fatal — the process must
   // not start serving against an unknown/partial schema.
   //
-  // In production, Replit's publish-time schema diff owns the production schema
-  // (it diffs dev→prod and applies the delta as part of every publish).  Running
-  // node-pg-migrate at boot would race the schema diff: migrations commit schema
-  // changes (e.g. drop a column) that the diff then also tries to apply, causing
-  // a "column/constraint does not exist" failure that aborts the publish.
-  // Skipping boot-time migrations in production eliminates that conflict; the
-  // schema is guaranteed to be up-to-date by the time the app starts because
-  // Replit applies the diff BEFORE the new app version is deployed.
-  //
-  // We are transitioning to migrations as the schema source of truth (in
-  // preparation for moving off Replit).  Setting RUN_MIGRATIONS_ON_BOOT=true
-  // opts production into running migrations at boot exactly as development does.
-  // When the flag is unset, production behaviour is unchanged (skip migrations,
-  // only self-heal the rate-limit records).
+  // Migrations are the sole source of truth for the schema. In production the
+  // default deploy path (docs/deploy.md) applies them with a pre-deploy
+  // `npm run db:migrate` against the target DATABASE_URL, before rolling out
+  // new instances — this avoids every instance racing to run migrations at
+  // boot on a multi-instance host (Cloud Run). Setting RUN_MIGRATIONS_ON_BOOT=true
+  // opts production into running migrations at boot exactly as development does
+  // instead (suited to single-instance hosts). When the flag is unset, production
+  // behaviour skips boot-time migrations and only self-heals the rate-limit
+  // records.
   if (process.env.NODE_ENV !== 'production' || process.env.RUN_MIGRATIONS_ON_BOOT === 'true') {
     try {
       await runMigrations();

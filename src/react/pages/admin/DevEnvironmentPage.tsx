@@ -12,7 +12,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
  * This panel is the single source of truth shown to admins for "what is
  * dev-only in here". Whenever you add a new dev-only feature to the admin
  * panel, you MUST add a matching entry to DEV_ONLY_FEATURES below. See the
- * "Dev-only admin features" convention in replit.md.
+ * "Dev-only admin features" convention in CLAUDE.md.
  */
 
 type DevFeatureAction =
@@ -40,7 +40,7 @@ const DEV_ONLY_FEATURES: Array<{
     ),
     action: {
       kind: 'copy',
-      value: 'curl -X POST "$REPLIT_DEV_DOMAIN/api/admin/test/seed-contacts-cache"',
+      value: 'curl -X POST "${APP_URL}/api/admin/test/seed-contacts-cache"',
       label: 'Copy curl snippet',
     },
   },
@@ -59,7 +59,7 @@ const DEV_ONLY_FEATURES: Array<{
     ),
     action: {
       kind: 'copy',
-      value: 'curl -X POST "$REPLIT_DEV_DOMAIN/api/admin/test/bust-contacts-cache"',
+      value: 'curl -X POST "${APP_URL}/api/admin/test/bust-contacts-cache"',
       label: 'Copy curl snippet',
     },
   },
@@ -79,7 +79,7 @@ const DEV_ONLY_FEATURES: Array<{
     ),
     action: {
       kind: 'copy',
-      value: 'curl -X POST "$REPLIT_DEV_DOMAIN/api/admin/test/bust-project-contacts-cache"',
+      value: 'curl -X POST "${APP_URL}/api/admin/test/bust-project-contacts-cache"',
       label: 'Copy curl snippet',
     },
   },
@@ -110,14 +110,14 @@ const DEV_ONLY_FEATURES: Array<{
     description: (
       <>
         <code className="adm-inline-code">runMigrations()</code> (node-pg-migrate) only runs when{' '}
-        <code className="adm-inline-code">NODE_ENV !== &apos;production&apos;</code>. In production the
-        schema is owned by Replit&apos;s publish-time dev→prod schema diff, which applies DDL changes
-        before the new app version starts. Running migrations at boot in production would race the
-        schema diff — migrations can drop a column or constraint before the diff&apos;s own DROP
-        statement runs, causing a &quot;does not exist&quot; failure that aborts the publish. Skipping
-        boot-time migrations in production eliminates that race. Data-seeding statements inside
-        migrations do not run in production; seed data is expected to already be present from the
-        original setup or handled with ON CONFLICT DO NOTHING guards.
+        <code className="adm-inline-code">NODE_ENV !== &apos;production&apos;</code>. In production,
+        migrations are applied by a pre-deploy <code className="adm-inline-code">npm run db:migrate</code>
+        step before new instances roll out (see docs/deploy.md). Running them again at boot would be
+        a no-op, but skipping is the safe default for multi-instance Cloud Run deployments. Set{' '}
+        <code className="adm-inline-code">RUN_MIGRATIONS_ON_BOOT=true</code> to opt into boot-time
+        migration runs. Data-seeding statements inside migrations do not run in production; seed data
+        is expected to already be present from the original setup or handled with ON CONFLICT DO
+        NOTHING guards.
       </>
     ),
   },

@@ -1,10 +1,8 @@
 # Deploying: staging → production
 
 This is the **routine deploy runbook** — how to ship a code change once the app
-is already live on GCP. For the one-time environment setup, see
-[docs/environments.md](environments.md) (concepts) and
-[docs/staging-handoff.md](staging-handoff.md) /
-[docs/gcp-cutover-execution.md](gcp-cutover-execution.md) (original stand-up).
+is already live on GCP. For environment concepts, see
+[docs/environments.md](environments.md) and [docs/staging-handoff.md](staging-handoff.md).
 This doc only covers the day-to-day path: build once, deploy to staging, verify,
 then promote the **same image** to production.
 

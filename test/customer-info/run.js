@@ -287,6 +287,9 @@ async function main() {
   process.env.HUBSPOT_ACCESS_TOKEN           = process.env.HUBSPOT_ACCESS_TOKEN || 'ci-test-fake-hs-token';
   process.env.PRIVTEST_USE_ADMIN_EMAILS      = '1';
   process.env.ADMIN_EMAILS                   = `admin-ci-${runId}@privtest.local`;
+  // Must be truthy so storage.js's getGcsBucket() proceeds to
+  // require('@google-cloud/storage'), which the preload stub intercepts.
+  process.env.GCS_BUCKET                     = 'fake-test-bucket';
 
   const harness = require('../privileges/harness');
   const { spawnServer, waitForServer, seedUsers, cleanupTestData,
@@ -300,7 +303,7 @@ async function main() {
   await cleanup(pool, contactIdC);
 
   const { child } = spawnServer({
-    nodeOptions: `--require ${stubPath}`,
+    nodeOptions: `--require "${stubPath.split(path.sep).join('/')}"`,
   });
 
   let exitCode = 1;

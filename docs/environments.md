@@ -7,8 +7,8 @@ and the exact steps to stand up and refresh **staging**
 | | **Development** | **Staging** | **Production** |
 |---|---|---|---|
 | URL | `localhost:5000` | `staging.harrywardrobes.co.uk` | `measure.harrywardrobes.co.uk` |
-| Runs on | your machine (`npm run dev`) | **GCP Cloud Run** (`measure-once-staging`) | Replit *(today)* → Cloud Run *(after cutover)* |
-| Database | local Postgres (seeded "pretend" data) | Cloud SQL **`measureonce_staging`** (isolated copy) | Neon *(today)* → Cloud SQL `measureonce` |
+| Runs on | your machine (`npm run dev`) | **GCP Cloud Run** (`measure-once-staging`) | **GCP Cloud Run** (`measure-once`) |
+| Database | local Postgres (seeded "pretend" data) | Cloud SQL **`measureonce_staging`** (isolated copy) | Cloud SQL **`measureonce`** |
 | `NODE_ENV` | `development` | `production` | `production` |
 | Migrations | auto on boot | **deliberate** (`npm run db:migrate`), never on boot | deliberate, never on boot |
 | HubSpot / SMTP | stubbed / off | **LIVE** (same portal/mailbox as prod) | LIVE |
@@ -83,8 +83,7 @@ filter plus its own database** — not sandboxing. Understand these sharp edges:
 
 ### Repo / cloud (operator — most done via `gcloud`, ADC)
 
-Reuse the project parameters from [docs/gcp-cutover.md](gcp-cutover.md):
-`PROJECT_ID=harry-wardrobes`, `REGION=europe-west2`,
+Project parameters: `PROJECT_ID=harry-wardrobes`, `REGION=europe-west2`,
 `SQL_INSTANCE=harry-wardrobes-instance`, runtime SA
 `wardrobes-run@harry-wardrobes.iam.gserviceaccount.com`.
 

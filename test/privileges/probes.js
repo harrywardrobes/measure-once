@@ -586,7 +586,7 @@ async function runProbes({ clients, users, pool, runId }) {
 
     // ── Successful admin lifecycle (the happy path) ──
     // Admin approves the request → server creates a users row with
-    // onboarding_status='more_info_required' (per replit.md). Then admin
+    // onboarding_status='more_info_required' (per CLAUDE.md). Then admin
     // resends the set-password link, force-resets, and revokes the user.
     // Each step asserts a concrete state change in the DB.
     const approveOk = await clients.admin.post(

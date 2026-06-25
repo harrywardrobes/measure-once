@@ -1,43 +1,51 @@
 'use strict';
-// In-memory @replit/object-storage stub for customer-info photo probes.
-// Mirrors the bits of the real SDK called by customer-info.js (via storage.js):
-//   uploadFromBytes, uploadFromFilename, downloadAsBytes, delete.
+// In-memory @google-cloud/storage stub for customer-info photo probes.
+// Mirrors the bits of the real SDK called by storage.js's gcsBackend:
+//   bucket.file(name).save/download/delete, bucket.upload (from disk).
 
 const fs = require('fs');
 
 const _bytes = new Map();
 
-class Client {
-  constructor() {}
+function notFoundError() {
+  const err = new Error('No such object.');
+  err.code = 404;
+  return err;
+}
 
-  async uploadFromBytes(name, buf) {
-    _bytes.set(String(name), Buffer.from(buf));
-    return { ok: true };
+class FakeFile {
+  constructor(name) { this._name = name; }
+
+  async save(buf) {
+    _bytes.set(String(this._name), Buffer.from(buf));
   }
 
-  async uploadFromFilename(name, filePath) {
-    // customer-info photo uploads stream from a temp file on disk via the
-    // SDK's uploadFromFilename. Mirror that here by reading the file into the
-    // in-memory store so a later downloadAsBytes returns the same bytes.
-    _bytes.set(String(name), fs.readFileSync(filePath));
-    return { ok: true };
+  async download() {
+    const buf = _bytes.get(String(this._name));
+    if (!buf) throw notFoundError();
+    return [buf];
   }
 
-  async downloadAsBytes(name) {
-    const buf = _bytes.get(String(name));
-    if (!buf) {
-      return { ok: false, error: { statusCode: 404, message: 'not found' } };
-    }
-    return { ok: true, value: [buf] };
-  }
-
-  async delete(name, opts) {
-    const had = _bytes.delete(String(name));
-    if (!had && !(opts && opts.ignoreNotFound)) {
-      return { ok: false, error: { statusCode: 404, message: 'not found' } };
-    }
-    return { ok: true };
+  async delete({ ignoreNotFound = false } = {}) {
+    const had = _bytes.delete(String(this._name));
+    if (!had && !ignoreNotFound) throw notFoundError();
   }
 }
 
-module.exports = { Client, __bytes: _bytes };
+class FakeBucket {
+  file(name) { return new FakeFile(name); }
+
+  async upload(filePath, { destination } = {}) {
+    // customer-info photo uploads stream from a temp file on disk via the
+    // SDK's bucket.upload. Mirror that here by reading the file into the
+    // in-memory store so a later download() returns the same bytes.
+    _bytes.set(String(destination), fs.readFileSync(filePath));
+  }
+}
+
+class Storage {
+  constructor() {}
+  bucket(_name) { return new FakeBucket(); }
+}
+
+module.exports = { Storage, __bytes: _bytes };

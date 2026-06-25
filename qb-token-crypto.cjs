@@ -3,7 +3,7 @@
 //
 // AES-256-GCM encrypt/decrypt helpers for QuickBooks OAuth tokens stored in
 // qb_tokens.  The symmetric key comes from the QB_TOKEN_ENCRYPTION_KEY
-// environment variable (a base64-encoded 32-byte secret set in Replit Secrets).
+// environment variable (a base64-encoded 32-byte secret set in Secret Manager).
 //
 // Wire format (base64url-encoded string):
 //   <12-byte IV> || <ciphertext> || <16-byte auth-tag>
@@ -22,7 +22,7 @@ function getKey() {
   if (!raw) {
     throw new Error(
       'QB_TOKEN_ENCRYPTION_KEY is not set. ' +
-      'Add a 32-byte base64 secret to Replit Secrets.',
+      'Add a 32-byte base64 secret to Secret Manager.',
     );
   }
   const key = Buffer.from(raw, 'base64');

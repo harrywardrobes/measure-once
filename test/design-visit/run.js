@@ -177,11 +177,15 @@ async function main() {
   console.log(`  Seeded users  admin=${users.admin.email}  member=${users.member.email}`);
 
   const { child, logBuf } = spawnServer({
-    // Stub @replit/object-storage so the upload + signed-image-serve probes
-    // run without a real Replit bucket. The preload hooks Module._resolve
+    // Stub @google-cloud/storage so the upload + signed-image-serve probes
+    // run without a real GCS bucket. The preload hooks Module._resolve
     // before server.js loads, so design-visit-uploads.js's lazy
-    // `require('@replit/object-storage')` resolves to an in-memory client.
-    nodeOptions: `--require ${path.resolve(__dirname, 'preload-object-storage-stub.js')}`,
+    // `require('@google-cloud/storage')` (via storage.js) resolves to an
+    // in-memory fake.
+    nodeOptions: `--require "${path.resolve(__dirname, 'preload-object-storage-stub.js').split(path.sep).join('/')}"`,
+    // Must be truthy so storage.js's getGcsBucket() proceeds to
+    // require('@google-cloud/storage') instead of short-circuiting.
+    extraEnv: { GCS_BUCKET: 'fake-test-bucket' },
   });
   let exited = false;
   child.on('exit', () => { exited = true; });
@@ -1123,10 +1127,10 @@ async function writeReport(runId, findings) {
     '  Re-using the consumed token returns 404. A POST with an unknown',
     '  `action` is rejected with 400.',
     '- **[PHOTO] Cloud-hosted room photos** — the spawned server preloads an',
-    '  in-memory `@replit/object-storage` stub (',
+    '  in-memory `@google-cloud/storage` stub (',
     '  `test/design-visit/fake-object-storage.js` via',
     '  `preload-object-storage-stub.js`) so the upload/serve probes run',
-    '  without a real Replit bucket. POST `/api/design-visits/uploads` with a',
+    '  without a real GCS bucket. POST `/api/design-visits/uploads` with a',
     '  1×1 PNG data URL must return an opaque `obj:<id>.png` storage key and a',
     '  signed `/api/design-visit-images/<key>?exp=&sig=<64-hex>` viewUrl.',
     '  Fetching that URL must return the PNG bytes with `Content-Type:',

@@ -48,7 +48,7 @@ const ACTIVE_SUBMISSION = {
   photo_keys: [],
   photoUrls: [],
   email_skipped_count: 0,
-  form_link: 'https://example.replit.app/customer-info/abc123',
+  form_link: 'https://example.com/customer-info/abc123',
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

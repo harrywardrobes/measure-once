@@ -9,7 +9,7 @@
  * so there is no file left for the guarded functions to drift back into.
  *
  * The script exits 0 unconditionally so that CI continues to pass without
- * requiring changes to the npm scripts or replit.md test table.
+ * requiring changes to the npm scripts or CLAUDE.md test table.
  */
 
 console.log(

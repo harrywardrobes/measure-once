@@ -6,7 +6,7 @@
  *    (typecheck + vite build + bundle-size check) so production starts with a
  *    verified, up-to-date bundle.
  *  - Subsequent runs (bundle already exists): skip the build entirely so
- *    Replit workflow restarts after server-side-only changes are instant.
+ *    process restarts after server-side-only changes are instant.
  *
  * Storybook: built automatically whenever public/storybook/ is absent, so the
  * Design System card works on a fresh checkout without a manual step.

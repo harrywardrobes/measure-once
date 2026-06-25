@@ -50,8 +50,8 @@ function getValidatedInvoiceId(rawId) {
 
 function getQuickBooksRedirectUri() {
   if (process.env.QB_REDIRECT_URI) return process.env.QB_REDIRECT_URI;
-  const domain = (process.env.REPLIT_DOMAINS || '').split(',')[0].trim();
-  return domain ? `https://${domain}/auth/quickbooks/callback` : '';
+  if (process.env.APP_URL) return `${process.env.APP_URL.replace(/\/+$/, '')}/auth/quickbooks/callback`;
+  return '';
 }
 
 // ── DB ─────────────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ async function persistTokens({ access_token, refresh_token, realm_id, expires_in
   } catch (encErr) {
     const msg =
       'QB_TOKEN_ENCRYPTION_KEY is missing or invalid — QuickBooks tokens cannot be stored. ' +
-      'Configure the secret in Replit Secrets and reconnect.';
+      'Configure the secret in Secret Manager and reconnect.';
     logger.error({ err: encErr.message }, `[quickbooks] persistTokens: ${msg}`);
     const err = new Error(msg);
     err.code = 'QB_KEY_MISSING';
@@ -316,7 +316,7 @@ function _createMailTransport() {
 // ── OAuth: start ───────────────────────────────────────────────────────────────
 router.get('/auth/quickbooks', isAuthenticated, requireAdmin, (req, res) => {
   if (!process.env.QB_CLIENT_ID) {
-    return res.status(503).send('QB_CLIENT_ID secret is not set. Add it in Replit Secrets.');
+    return res.status(503).send('QB_CLIENT_ID secret is not set. Add it in Secret Manager.');
   }
   const state = crypto.randomBytes(16).toString('hex');
   req.session.qbOAuthState = state;

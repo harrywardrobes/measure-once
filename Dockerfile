@@ -3,10 +3,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Measure Once — production container image
 #
-# Multi-stage build that produces a slim runtime image suitable for any
-# container host (Cloud Run, Fly, ECS, etc.), independent of Replit's build
-# pipeline. This is ADDITIVE: Replit deployment (.replit / replit.nix) remains
-# the source of truth until the GCP cutover and is untouched by this file.
+# Multi-stage build that produces a slim runtime image for Cloud Run.
 #
 # Build:
 #   docker build -t measure-once .

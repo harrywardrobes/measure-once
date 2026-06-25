@@ -1,6 +1,6 @@
 // design-visit-uploads.js — cloud-storage backend for design-visit room photos.
 //
-// New room photos are uploaded to Replit Object Storage. The DB only ever
+// New room photos are uploaded to Google Cloud Storage. The DB only ever
 // stores an opaque key of the shape `obj:<uuid>.<ext>`. Callers fetch the
 // bytes via short-lived HMAC-signed URLs served by
 // `GET /api/design-visit-images/:key`, so neither admin previews nor the

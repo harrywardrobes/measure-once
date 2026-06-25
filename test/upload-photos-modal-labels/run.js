@@ -64,7 +64,7 @@ const skip = makeSkip3(findings);
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-const MOCK_LINK     = 'https://measureonce.replit.app/customer-info/lbl-testtoken';
+const MOCK_LINK     = 'https://measure.harrywardrobes.co.uk/customer-info/lbl-testtoken';
 const FUTURE_EXPIRY = new Date(Date.now() + 14 * 86400000).toISOString();
 
 const FAKE_USER_OBJ = {

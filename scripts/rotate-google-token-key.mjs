@@ -9,7 +9,7 @@
 //   GOOGLE_TOKEN_ENCRYPTION_KEY_OLD  — the base64-encoded 32-byte key that was
 //                                      used when the tokens were originally saved
 //   GOOGLE_TOKEN_ENCRYPTION_KEY      — the new base64-encoded 32-byte key
-//   DATABASE_URL                     — PostgreSQL connection string (set by Replit)
+//   DATABASE_URL                     — PostgreSQL connection string
 //
 // Usage:
 //   GOOGLE_TOKEN_ENCRYPTION_KEY_OLD=<old-base64-key> \
@@ -162,7 +162,7 @@ async function main() {
   Deleted (unreadable):   ${deleted}
   Skipped:                ${skipped}
 ${isDryRun ? '\n(Dry run — no changes were committed.)' : ''}
-After rotation, update GOOGLE_TOKEN_ENCRYPTION_KEY in Replit Secrets to the new
+After rotation, update GOOGLE_TOKEN_ENCRYPTION_KEY in Secret Manager to the new
 value and restart the application. Remove GOOGLE_TOKEN_ENCRYPTION_KEY_OLD once
 you have confirmed the app is working correctly.`);
   } finally {

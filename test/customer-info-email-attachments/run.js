@@ -324,7 +324,7 @@ async function main() {
   await cleanupTestData(pool);
   await resetRateLimitStore(pool);
 
-  const { child } = spawnServer({ nodeOptions: `--require ${stubPath}` });
+  const { child } = spawnServer({ nodeOptions: `--require "${stubPath.split(path.sep).join('/')}"` });
   let exitCode = 1;
 
   try {

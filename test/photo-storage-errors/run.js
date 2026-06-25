@@ -24,7 +24,7 @@
 //
 // Override used:
 //   NODE_OPTIONS=--require .../preload-failing-storage-stub.js  — swaps the
-//     real @replit/object-storage SDK for a stub whose Client constructor
+//     real @google-cloud/storage SDK for a stub whose Storage constructor
 //     always throws "A bucket name is needed to use Cloud Storage."
 //
 // Usage:
@@ -231,6 +231,9 @@ async function main() {
   // Ensure SESSION_SECRET is set so the test can generate valid HMAC-signed
   // image URLs (same value is forwarded to the spawned server via ...process.env).
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || `ci-test-session-secret-${runId}`;
+  // Must be truthy so storage.js's getGcsBucket() proceeds to
+  // require('@google-cloud/storage'), which the preload stubs intercept.
+  process.env.GCS_BUCKET      = 'fake-test-bucket';
 
   const harness = require('../privileges/harness');
   const { spawnServer, waitForServer, seedUsers, cleanupTestData,
@@ -256,7 +259,7 @@ async function main() {
     // ── Phase 1: constructor-throws stub (STO-1, STO-2) ──────────────────────
     console.log('\n  --- Phase 1: constructor-throws stub ---');
     const stubPath1 = path.join(__dirname, 'preload-failing-storage-stub.js');
-    ({ child: child1 } = spawnServer({ nodeOptions: `--require ${stubPath1}` }));
+    ({ child: child1 } = spawnServer({ nodeOptions: `--require "${stubPath1.split(path.sep).join('/')}"` }));
 
     await waitForServer();
     console.log('  test server up (phase 1)');
@@ -385,7 +388,7 @@ async function main() {
     // ── Phase 2: uploadFromBytes ok:false stub (STO-3, STO-4) ────────────────
     console.log('\n  --- Phase 2: uploadFromBytes ok:false stub ---');
     const stubPath2 = path.join(__dirname, 'preload-failing-upload-storage-stub.js');
-    ({ child: child2 } = spawnServer({ nodeOptions: `--require ${stubPath2}` }));
+    ({ child: child2 } = spawnServer({ nodeOptions: `--require "${stubPath2.split(path.sep).join('/')}"` }));
 
     await waitForServer();
     console.log('  test server up (phase 2)');

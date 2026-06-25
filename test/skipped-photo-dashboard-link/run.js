@@ -249,7 +249,7 @@ async function main() {
   await resetRateLimitStore(pool);
   await cleanup(pool, contactId);
 
-  const { child } = spawnServer({ nodeOptions: `--require ${stubPath}` });
+  const { child } = spawnServer({ nodeOptions: `--require "${stubPath.split(path.sep).join('/')}"` });
   let exitCode = 1;
 
   try {

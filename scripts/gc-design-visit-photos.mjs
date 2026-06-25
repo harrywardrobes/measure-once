@@ -13,10 +13,8 @@
 //
 // Requirements:
 //   DATABASE_URL (or DATABASE_URL_TEST) must be set in the environment.
-//   The active storage backend (see STORAGE_BACKEND in storage.js) must be
-//   provisioned. On the default `replit` backend the Object Storage bucket is
-//   wired in via .replit automatically; under STORAGE_BACKEND=gcs the script
-//   auto-targets Google Cloud Storage instead.
+//   The GCS bucket (see storage.js) must be provisioned and GCS_BUCKET set,
+//   with Application Default Credentials available.
 //
 // Safety:
 //   The script only touches objects whose name starts with

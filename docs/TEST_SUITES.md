@@ -11,10 +11,8 @@ at an admin PostgreSQL connection before it is run.  The temp-database wrapper
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres npm run test:ci
 ```
 
-The Replit environment exposes this automatically via the built-in PostgreSQL
-integration.  When running locally or in another CI environment, set
-`DATABASE_URL` to any Postgres connection whose role has `CREATEDB` privilege
-before invoking the suite.
+Set `DATABASE_URL` to any Postgres connection whose role has `CREATEDB`
+privilege before invoking the suite.
 
 ---
 

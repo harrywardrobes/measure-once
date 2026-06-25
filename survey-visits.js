@@ -58,8 +58,7 @@ const router = express.Router();
 // ── Utility helpers (mirror design-visits.js private helpers) ─────────────────
 function appBaseUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, '');
-  if (process.env.REPLIT_DOMAINS) return `https://${process.env.REPLIT_DOMAINS.split(',')[0].trim()}`;
-  return 'https://measureonce.replit.app';
+  return `http://localhost:${process.env.PORT || 5000}`;
 }
 function buildFromHeader() {
   const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();

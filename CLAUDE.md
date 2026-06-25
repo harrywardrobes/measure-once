@@ -44,7 +44,8 @@ Project management dashboard (HubSpot CRM integration).
   admin Settings tab or at `/storybook/`.
 
 ## Google Places API
-- Secret: `GOOGLE_PLACES_API_KEY` must be present in Replit Secrets.
+- Secret: `GOOGLE_PLACES_API_KEY` must be present as an environment variable
+  (local `.env`) / Secret Manager secret (GCP).
 - The key requires **"Places API (New)"** and **"Maps JavaScript API"** enabled in Google Cloud Console. The legacy Places API is no longer used.
 - Five autocomplete surfaces: `customerInfo`, `designVisit`, `arrangeVisit`, `contactEdit`, `genericVisit`. All are toggled individually in the admin Google Maps settings page.
 
@@ -58,18 +59,16 @@ Project management dashboard (HubSpot CRM integration).
   boot before auth/session setup. By default this happens in **development only**
   (`NODE_ENV !== 'production'`); in production boot-time migrations are skipped
   unless `RUN_MIGRATIONS_ON_BOOT=true` is set.
-  - **Schema source of truth is transitioning to migrations** (in preparation
-    for moving off Replit). Two ways to apply the schema in production:
+  - **Migrations are the sole source of truth for schema** — there is no
+    publish-time dev→prod diff. Two ways to apply the schema in production:
     1. **Boot flag:** set `RUN_MIGRATIONS_ON_BOOT=true` so the server runs
        pending migrations at boot exactly as in development (fail-closed:
-       a migration error logs and exits the process). The flag is **not**
-       enabled in any committed config — set it manually at cutover.
+       a migration error logs and exits the process).
     2. **Pre-deploy command:** run `npm run db:migrate` against the production
        `DATABASE_URL` before deploying (no code changes needed — the script
-       has no dev-only guards).
-  - Today, with the flag unset, the production schema is still managed by
-    Replit's publish-time dev→prod diff. `ensureRateLimitMigrations()` runs on
-    every boot path regardless of the flag.
+       has no dev-only guards). This is the path used by docs/deploy.md.
+  - `ensureRateLimitMigrations()` runs on every boot path regardless of the
+    flag, keeping `@acpr/rate-limit-postgresql`'s own migration records intact.
 
 ## Database migrations
 - Apply: `npm run db:migrate` (also auto-runs on boot). Roll back one:
@@ -82,11 +81,13 @@ Project management dashboard (HubSpot CRM integration).
 - Isolated test DBs apply the full migration set via `scripts/with-test-db.js`;
   application code creates no schema at boot.
 
-## Replit Setup
-- Workflow: `Start application` runs `npm start`.
-- Server binds `0.0.0.0:5000` (`PORT` env override).
-- Deployment: VM target, `node server.js`.
-- Build step: `npm run build:react && npm run build:storybook`.
+## Deployment
+- Developed locally, hosted on Google Cloud Run. See
+  [docs/environments.md](docs/environments.md) (concepts) and
+  [docs/deploy.md](docs/deploy.md) (routine deploy runbook).
+- Server binds `0.0.0.0:5000` locally (`PORT` env override; Cloud Run sets
+  `PORT=8080`).
+- Container build (`Dockerfile`): `npm run build:react && npm run build:storybook`.
   - `build:react` → `public/react/main.js` (stable filename, self-mounting).
   - `build:storybook` → `public/storybook/`, served as static assets.
   - Both output dirs are gitignored.
@@ -143,7 +144,7 @@ no effect on `public/storybook/` (the static build served by Express at
 `/storybook/`) — run `npm run build:storybook` to refresh that.
 
 > **Note:** Both `npm start` (`prestart`) and `npm run dev` (`predev`) skip the
-> React build when `public/react/main.js` **already exists**, so Replit workflow
+> React build when `public/react/main.js` **already exists**, so process
 > restarts and nodemon restarts are instant for server-side-only changes.
 >
 > On a **clean checkout** (no bundle present) the two differ:

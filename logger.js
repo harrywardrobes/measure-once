@@ -8,7 +8,7 @@
 // - Production (NODE_ENV=production): one JSON object per line on stdout, ready
 //   for log aggregation in the deployment console.
 // - Development / tests: human-readable, colourised output via pino-pretty so
-//   the Replit workflow console stays easy to scan. A synchronous pretty stream
+//   the terminal stays easy to scan. A synchronous pretty stream
 //   is used (not a worker-thread transport) to avoid delaying process exit in
 //   short-lived test scripts.
 //

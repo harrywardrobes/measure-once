@@ -24,5 +24,4 @@
 - [design-visit E2E stale catalog tables](design-visit-e2e-stale-catalog-tables.md) — catalog rename/drop broke the E2E (table refs design_visit_handles/door_styles/furniture_ranges + 308-aliased admin paths that silently skip handlers, masking a server-crashing catalog PATCH bug).
 - [Privilege matrix run timing](privilege-matrix-run-timing.md) — test:privileges(:ci) full run exceeds 120s due to the trailing puppeteer smoke; the `matrix: N/N ok` line confirms new route rows pass before the timeout.
 - [Places loading=async callback](places-loading-async-callback.md) — with loading=async, Maps JS onload fires before importLibrary is ready; must use callback= URL param.
-- [Runtime dep vs devDep masking](runtime-dep-vs-devdep.md) — a runtime require() only present transitively via a devDep works in dev/Replit but crashes prod `npm ci --omit=dev` (e.g. zod); must be a direct dependency.
-- [SameSite cookie + Replit iframe](samesite-cookie-replit-iframe.md) — auth loops in the Replit preview (cross-origin iframe) need SameSite=None; Secure + express-session proxy:true; old Lax cookie needs a fresh login to upgrade.
+- [Runtime dep vs devDep masking](runtime-dep-vs-devdep.md) — a runtime require() only present transitively via a devDep works in dev but crashes prod `npm ci --omit=dev` (e.g. zod); must be a direct dependency.

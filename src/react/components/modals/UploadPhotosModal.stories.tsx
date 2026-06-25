@@ -37,7 +37,7 @@ const noEmailCtx: CardActionContext = {
   contactEmail: '',
 };
 
-const MOCK_LINK = 'https://measureonce.replit.app/customer-info/abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
+const MOCK_LINK = 'https://measure.harrywardrobes.co.uk/customer-info/abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
 const MOCK_TOKEN = 'abc123def456abc123def456abc123def456abc123def456abc123def456abc123';
 
 function Demo({
