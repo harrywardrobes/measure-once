@@ -14,6 +14,8 @@ const fs         = require('fs');
 const os         = require('os');
 const storage    = require('./storage');
 const { isAuthenticated, requirePrivilege, requireAdmin } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./shared/handler-outcomes.cjs');
@@ -419,6 +421,14 @@ async function isLeadStatusPastPhotos(currentStatus) {
   }
 }
 
+// Validates a customer-info object storage key.
+// Keys are generated as obj:ci_<24-char base64url>.<ext> — enforce that format
+// strictly so callers cannot probe storage paths outside the ci_ namespace.
+const CI_KEY_RE = /^obj:ci_[A-Za-z0-9_-]{16,64}\.(jpg|jpeg|png|webp|pdf)$/;
+function isValidCiKey(k) {
+  return typeof k === 'string' && CI_KEY_RE.test(k);
+}
+
 // ── Photo upload (multer → object storage) ───────────────────────────────────
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']);
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024; // 15 MB per file (client compresses to ≤1.5 MB before upload)
@@ -628,6 +638,22 @@ function checkTokenUploadRateLimit(tokenHash) {
   _uploadTokenLog.set(tokenHash, hits);
   return true;
 }
+
+// IP-level rate limit on anonymous draft creation: 5 per IP per hour.
+// Prevents bulk token minting that could be used for storage-exhaustion via uploads.
+const genericDraftLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PostgresStoreIndividualIP(
+    { connectionString: process.env.DATABASE_URL },
+    'ci_generic_draft'
+  ),
+  handler: (_req, res) => {
+    res.status(429).json({ error: 'Too many form requests from this IP. Please wait before trying again.' });
+  },
+});
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -929,7 +955,7 @@ router.post('/api/card-actions/upload-photos-and-info',
 
 // Public: create an anonymous generic draft row and return its token
 // POST /api/customer-info/draft
-router.post('/api/customer-info/draft', express.json({ limit: '1kb' }), async (req, res) => {
+router.post('/api/customer-info/draft', genericDraftLimiter, express.json({ limit: '1kb' }), async (req, res) => {
   const rawToken  = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   const expiresAt = new Date(Date.now() + LINK_TTL_DAYS * 24 * 60 * 60 * 1000);
@@ -1000,7 +1026,7 @@ router.post('/api/customer-info/:token/sign', express.json({ limit: '4kb' }), as
   // download) rather than downloadBytes (up to 15 MB per file) to keep this
   // cheap.
   const results = await Promise.all(keys.map(async key => {
-    if (typeof key !== 'string' || !key.startsWith('obj:ci_')) {
+    if (!isValidCiKey(key)) {
       return { key, url: null };
     }
     const storagePath = `customer-info-photos/${key.slice('obj:ci_'.length)}`;
@@ -1089,9 +1115,9 @@ router.post('/api/customer-info/:token', express.json({ limit: '1mb' }), async (
   const city = address.locality || '';
   const postcode = address.postalCode || '';
   const rawKeys = Array.isArray(photoKeys) ? photoKeys : [];
-  const badKey = rawKeys.find(k => typeof k !== 'string' || !k.startsWith('obj:ci_') || k.length <= 'obj:ci_'.length);
+  const badKey = rawKeys.find(k => !isValidCiKey(k));
   if (badKey !== undefined) {
-    return res.status(400).json({ error: 'Invalid photo key: all keys must start with obj:ci_.' });
+    return res.status(400).json({ error: 'Invalid photo key format.' });
   }
   const keys = rawKeys;
 

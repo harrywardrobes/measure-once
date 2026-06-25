@@ -17,6 +17,12 @@ const crypto = require('crypto');
 const zxcvbn = require('zxcvbn');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 
+// Dummy hash for constant-time comparison when email is not found/approved.
+// Keeps login response time uniform regardless of account state (timing oracle mitigation).
+// bcrypt.hashSync at work factor 10 produces a real valid hash the compare step
+// will fully evaluate, ensuring timing is consistent across all auth-rejection branches.
+const DUMMY_HASH = bcrypt.hashSync('_timing_placeholder_', 10);
+
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
@@ -210,7 +216,9 @@ async function sendSetPasswordEmail(email, token, { resend = false, reset = fals
   const transport = createMailTransport();
   if (!transport) {
     logger.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
-    logger.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
+    if (process.env.NODE_ENV !== 'production') {
+      logger.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
+    }
     return;
   }
   const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
@@ -783,19 +791,13 @@ async function setupAuth(app) {
     const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      if (!(await isEmailApproved(email))) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-      const dbUser = await getUserByEmail(email);
-      if (!dbUser) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
-      }
-      const normalOk = dbUser.password_hash && await bcrypt.compare(password, dbUser.password_hash);
-      if (!normalOk) {
-        // Return a uniform response for all auth failures — no distinction
-        // between unknown email, unapproved email, no-password-set, or wrong
-        // password — so the public login endpoint cannot be used to enumerate
-        // account existence or approval state.
+      const approved = await isEmailApproved(email);
+      const dbUser   = approved ? await getUserByEmail(email) : null;
+      // Always run bcrypt.compare to equalise response time regardless of
+      // whether the account exists or is approved (timing oracle mitigation).
+      const hashToCheck = dbUser?.password_hash || DUMMY_HASH;
+      const normalOk = await bcrypt.compare(password, hashToCheck) && !!dbUser?.password_hash;
+      if (!approved || !normalOk) {
         return res.status(401).json({ error: 'Invalid email or password.' });
       }
 

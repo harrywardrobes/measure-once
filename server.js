@@ -720,9 +720,7 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
             });
           };
 
-          // Only treat changes to pipeline fields on rooms that exist on BOTH
-          // sides as pipeline mutations. Room add/remove (and pure reorder of
-          // non-pipeline fields) remains a member-allowed CRUD operation.
+          // Check existing rooms for pipeline mutations.
           let pipelineChanged = false;
           const pairLen = Math.min(rooms.length, existingRooms.length);
           for (let i = 0; i < pairLen; i++) {
@@ -731,6 +729,16 @@ app.post('/api/contacts/:id/localdata', isAuthenticated, requirePrivilege('membe
             if ((a.stageKey || '') !== (b.stageKey || '')) { pipelineChanged = true; break; }
             if ((a.statusId || '') !== (b.statusId || '')) { pipelineChanged = true; break; }
             if (!sameCompleted(a.completedStatuses, b.completedStatuses)) { pipelineChanged = true; break; }
+          }
+          // Also check newly-appended rooms (indices beyond existingRooms.length).
+          // Members may only create rooms at the canonical initial pipeline state
+          // (stageKey 'sales', no statusId, no completedStatuses).
+          for (let i = existingRooms.length; i < rooms.length; i++) {
+            const a = rooms[i] || {};
+            const hasNonInitialStage = (a.stageKey || 'sales') !== 'sales';
+            const hasStatusId        = !!(a.statusId || '');
+            const hasCompleted       = Object.keys(a.completedStatuses || {}).length > 0;
+            if (hasNonInitialStage || hasStatusId || hasCompleted) { pipelineChanged = true; break; }
           }
           if (pipelineChanged) {
             return res.status(403).json({
@@ -1564,7 +1572,7 @@ function normalizeHubspotObjectId(id) {
   return encodeURIComponent(trimmed);
 }
 
-app.get('/api/deals', requireHubspotToken, async (req, res) => {
+app.get('/api/deals', isAuthenticated, requireManagerOrAdmin, requireHubspotToken, async (req, res) => {
   try {
     const r = await axios.get(`${HS}/crm/v3/objects/deals`, {
       headers: getHubSpotHeaders(),
@@ -1587,7 +1595,7 @@ app.get('/api/deals', requireHubspotToken, async (req, res) => {
   }
 });
 
-app.get('/api/deals/:id', requireHubspotToken, async (req, res) => {
+app.get('/api/deals/:id', isAuthenticated, requireManagerOrAdmin, requireHubspotToken, async (req, res) => {
   try {
     const safeDealId = normalizeHubspotObjectId(req.params.id);
     if (!safeDealId) {
@@ -1628,6 +1636,27 @@ app.patch('/api/deals/:id', isAuthenticated, requirePrivilege('member'), require
     }
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
+    }
+    // Financial-field gate: managers/admins only for amount, dealstage, pipeline.
+    // Members may still edit dealname, closedate, description.
+    const DEAL_FINANCIAL_FIELDS = ['amount', 'dealstage', 'pipeline'];
+    const touchesFinancialField = DEAL_FINANCIAL_FIELDS.some(
+      f => Object.prototype.hasOwnProperty.call(properties, f)
+    );
+    if (touchesFinancialField) {
+      try {
+        const userId = req.user?.claims?.sub;
+        const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
+        const level = ur.rows[0]?.privilege_level || 'member';
+        if (level !== 'manager' && level !== 'admin') {
+          return res.status(403).json({
+            message: 'Manager or admin privilege required to change deal financial fields.',
+            code: 'PIPELINE_EDIT_FORBIDDEN',
+          });
+        }
+      } catch {
+        return res.status(500).json({ error: 'Authorization check failed' });
+      }
     }
     const r = await hubspotRequestWithRetry('patch',
       `${HS}/crm/v3/objects/deals/${safeDealId}`,
@@ -2494,16 +2523,23 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
     if (Object.keys(properties).length === 0) {
       return res.status(400).json({ error: 'No valid properties to update.' });
     }
-    // Pipeline-field gate: only managers/admins may change hs_lead_status.
-    // Other contact fields remain editable at the route's base member level.
-    if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
+    // Privileged-field gate: managers/admins only for hs_lead_status and email.
+    // Email is gated because a member who can change the email and then trigger
+    // the customer-info bearer link would receive it in their own inbox
+    // (impersonation vector). Other contact fields remain member-editable.
+    const needsManagerForContact = ['hs_lead_status', 'email']
+      .some(f => Object.prototype.hasOwnProperty.call(properties, f));
+    if (needsManagerForContact) {
       try {
         const userId = req.user?.claims?.sub;
         const ur = await pool.query(`SELECT privilege_level FROM users WHERE id = $1`, [userId]);
         const level = ur.rows[0]?.privilege_level || 'member';
         if (level !== 'manager' && level !== 'admin') {
+          const isEmail = Object.prototype.hasOwnProperty.call(properties, 'email');
           return res.status(403).json({
-            message: 'Manager or admin privilege required to change lead status.',
+            message: isEmail
+              ? 'Manager or admin privilege required to change a contact email address.'
+              : 'Manager or admin privilege required to change lead status.',
             code: 'PIPELINE_EDIT_FORBIDDEN',
           });
         }
@@ -2585,7 +2621,7 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
 });
 
 // ── HubSpot: Notes (for checklist storage) ────────────────────────────────────
-app.get('/api/deals/:id/notes', requireHubspotToken, async (req, res) => {
+app.get('/api/deals/:id/notes', isAuthenticated, requireManagerOrAdmin, requireHubspotToken, async (req, res) => {
   try {
     const dealId = req.params.id;
     if (!/^\d+$/.test(dealId)) {
@@ -7325,7 +7361,7 @@ app.post('/api/card-actions/open-deal',
 // Fetches HubSpot contact props + deposit invoice from QB (via stored
 // deposit_invoice_id on design_visits).  Returns payment-state summary.
 app.post('/api/card-actions/deposit-invoice',
-  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  isAuthenticated, requireManagerOrAdmin, requireHubspotToken,
   async (req, res) => {
     const contactId = String(req.body?.contactId || '');
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
