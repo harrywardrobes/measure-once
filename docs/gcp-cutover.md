@@ -152,7 +152,7 @@ export RUN_SA=measure-once-run
 export RUN_SA_EMAIL="$RUN_SA@$PROJECT_ID.iam.gserviceaccount.com"
 export AR_REPO=measure-once           # Artifact Registry repo
 export SERVICE=measure-once           # Cloud Run service name
-export DOMAIN=handle.harrywardrobes.co.uk
+export DOMAIN=measure.harrywardrobes.co.uk
 ```
 
 Cloud SQL **must** be `POSTGRES_16` to match the Replit Postgres 16 source —

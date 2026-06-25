@@ -21,7 +21,7 @@
 // It samples both namespaces by default so the two distinct key formats are
 // each exercised:
 //   - customer-info-photos/   (customer-info submission photos)
-//   - design-visit-images/    (design-visit room images)
+//   - visit-photos/           (design + survey visit room images)
 //
 // This is the concrete check behind Phase 6/7 verification in
 // docs/gcp-migration.md — richer than a `gcloud storage hash` spot-check because
@@ -56,7 +56,7 @@ import crypto from 'crypto';
 
 const LOG = '[verify-objects]';
 
-const DEFAULT_NAMESPACES = ['customer-info-photos/', 'design-visit-images/'];
+const DEFAULT_NAMESPACES = ['customer-info-photos/', 'visit-photos/'];
 
 // ── Args ───────────────────────────────────────────────────────────────────
 const SAMPLE_ARG = process.argv.find(a => a.startsWith('--sample='));
