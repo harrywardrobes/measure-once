@@ -1511,7 +1511,11 @@ router.post('/api/customer-info/:token/photos',
   // multer writes each file to the OS temp dir on disk — no heap buffering.
   _photoUpload.array('photos', MAX_PHOTO_FILES),
   async (req, res) => {
-    const files = req.files || [];
+    const rawFiles = req.files;
+    if (rawFiles != null && !Array.isArray(rawFiles)) {
+      return res.status(400).json({ error: 'Invalid files payload.' });
+    }
+    const files = rawFiles || [];
     const tempPaths = files.map(f => f.path);
 
     if (!files.length) {
