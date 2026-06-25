@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "code-review": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "engineering/skills/code-review/SKILL.md",
+      "computedHash": "2b1ac29c8d03ecdd6dbb9d0ebc8cdb05965151bedceed36f262546785b3123bc"
+    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
