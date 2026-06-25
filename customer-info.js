@@ -1516,6 +1516,16 @@ router.post('/api/customer-info/:token/photos',
       return res.status(400).json({ error: 'Invalid files payload.' });
     }
     const files = rawFiles || [];
+    const filesAreValid = files.every((f) =>
+      f &&
+      typeof f === 'object' &&
+      typeof f.path === 'string' &&
+      f.path.length > 0 &&
+      typeof f.mimetype === 'string'
+    );
+    if (!filesAreValid) {
+      return res.status(400).json({ error: 'Invalid files payload.' });
+    }
     const tempPaths = files.map(f => f.path);
 
     if (!files.length) {
