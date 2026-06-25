@@ -28,6 +28,13 @@ const EXT_BY_MIME = {
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
 const SIGNED_URL_TTL_SEC = 60 * 60;        // 1 hour
 
+// Bucket folder for visit (design + survey) room photos. Kept separate from the
+// customer-uploaded `customer-info-photos/` folder so these higher-value staff
+// captures are easy to find. Only the opaque `obj:<id>.<ext>` key is stored in
+// the DB; this prefix is reconstructed on upload/download, so changing it is
+// purely forward-looking (no existing object is renamed).
+const STORAGE_PREFIX = 'visit-photos/';
+
 function isOpaqueKey(s) {
   return typeof s === 'string' && /^obj:[A-Za-z0-9_-]{16,}(\.[a-z0-9]{1,8})?$/.test(s);
 }
@@ -66,7 +73,7 @@ async function uploadFromDataUrl(dataUrl) {
   }
   const ext = EXT_BY_MIME[parsed.mime] || 'bin';
   const id  = crypto.randomBytes(18).toString('base64url');
-  const name = `design-visit-images/${id}.${ext}`;
+  const name = `${STORAGE_PREFIX}${id}.${ext}`;
   try {
     await storage.uploadBytes(name, parsed.buf, { compress: false });
   } catch (e) {
@@ -77,7 +84,7 @@ async function uploadFromDataUrl(dataUrl) {
 
 function _objectNameFromKey(key) {
   if (!isOpaqueKey(key)) return null;
-  return 'design-visit-images/' + key.slice('obj:'.length);
+  return STORAGE_PREFIX + key.slice('obj:'.length);
 }
 
 async function deleteOpaqueKey(key) {
