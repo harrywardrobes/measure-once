@@ -30,7 +30,7 @@ the Neon source, **PG18** to restore into Cloud SQL.
 | Artifact Registry repo | `measure-once` |
 | Cloud Run service | `measure-once` |
 | Service URL (rehearsal) | `https://measure-once-473090168235.europe-west2.run.app` |
-| Production domain | `handle.harrywardrobes.co.uk` |
+| Production domain | `measure.harrywardrobes.co.uk` |
 | Source (Neon) | Postgres 16 — pull current URL from Replit secrets at cutover |
 | PG16 tools | `C:\Program Files\PostgreSQL\16\bin\` |
 | PG18 tools | `C:\Program Files\PostgreSQL\18\bin\` |
@@ -40,11 +40,11 @@ the Neon source, **PG18** to restore into Cloud SQL.
 
 ## T‑minus 24h — prerequisites (do the day before)
 
-1. **Lower the DNS TTL** on `handle.harrywardrobes.co.uk` to **60s** at your DNS
+1. **Lower the DNS TTL** on `measure.harrywardrobes.co.uk` to **60s** at your DNS
    provider, so the flip propagates fast. (Must be done ≥24h ahead to take effect.)
 2. **Register production OAuth redirect URIs** in the consoles:
-   - Google OAuth client → `https://handle.harrywardrobes.co.uk/auth/google/callback`
-   - QuickBooks app → `https://handle.harrywardrobes.co.uk/auth/quickbooks/callback`
+   - Google OAuth client → `https://measure.harrywardrobes.co.uk/auth/google/callback`
+   - QuickBooks app → `https://measure.harrywardrobes.co.uk/auth/quickbooks/callback`
 3. **Have production integration values ready** to load into Secret Manager
    (current values are sandbox/safe): `HUBSPOT_ACCESS_TOKEN`, `QB_CLIENT_ID`,
    `QB_CLIENT_SECRET`, `QB_ENVIRONMENT` (→ `production`), `SMTP_*`, and any
@@ -336,7 +336,7 @@ gcloud run deploy measure-once `
   --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-instance" `
   --allow-unauthenticated `
   --port=8080 --cpu=1 --memory=512Mi --min-instances=0 --max-instances=4 `
-  --set-env-vars="NODE_ENV=production,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket,ADMIN_EMAILS=harry@harrywardrobes.co.uk,APP_URL=https://handle.harrywardrobes.co.uk,GOOGLE_REDIRECT_URI=https://handle.harrywardrobes.co.uk/auth/google/callback,QB_REDIRECT_URI=https://handle.harrywardrobes.co.uk/auth/quickbooks/callback" `
+  --set-env-vars="NODE_ENV=production,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket,ADMIN_EMAILS=harry@harrywardrobes.co.uk,APP_URL=https://measure.harrywardrobes.co.uk,GOOGLE_REDIRECT_URI=https://measure.harrywardrobes.co.uk/auth/google/callback,QB_REDIRECT_URI=https://measure.harrywardrobes.co.uk/auth/quickbooks/callback" `
   --set-secrets=$setSecrets
 ```
 Keep `RUN_MIGRATIONS_ON_BOOT` unset (boot logged "Skipping boot-time migrations"
@@ -361,19 +361,45 @@ relying on Google/QuickBooks login.
 
 ---
 
-## Step 10 — Domain mapping + DNS flip (workstation + DNS provider)
+## Step 10 — Public access + HTTPS load balancer + DNS flip (workstation + DNS provider)
+
+> ⚠️ Two org/region constraints (discovered standing up staging — see
+> docs/staging-handoff.md):
+> 1. **`gcloud run domain-mappings` returns 501 in europe-west2** — custom domains
+>    need an external HTTPS LB, not a domain mapping.
+> 2. **Public access is org-blocked** (`iam.allowedPolicyMemberDomains`). The
+>    project-scoped `allValues: ALLOW` override is already in place from staging;
+>    you still must grant `allUsers` invoker on the prod service.
 
 ```powershell
-gcloud beta run domain-mappings create --service=measure-once --domain=handle.harrywardrobes.co.uk --region=europe-west2
+# Make the prod service public (org override already set project-wide).
+gcloud run services add-iam-policy-binding measure-once --region=europe-west2 `
+  --member=allUsers --role=roles/run.invoker
+
+# External HTTPS LB for measure.harrywardrobes.co.uk (mirror of the staging-mo-* LB).
+gcloud compute addresses create prod-mo-ip --global
+gcloud compute network-endpoint-groups create prod-mo-neg --region=europe-west2 `
+  --network-endpoint-type=serverless --cloud-run-service=measure-once
+gcloud compute ssl-certificates create prod-mo-cert --global --domains=measure.harrywardrobes.co.uk
+gcloud compute backend-services create prod-mo-backend --global --load-balancing-scheme=EXTERNAL_MANAGED
+gcloud compute backend-services add-backend prod-mo-backend --global `
+  --network-endpoint-group=prod-mo-neg --network-endpoint-group-region=europe-west2
+gcloud compute url-maps create prod-mo-urlmap --default-service=prod-mo-backend
+gcloud compute target-https-proxies create prod-mo-proxy --url-map=prod-mo-urlmap --ssl-certificates=prod-mo-cert
+gcloud compute forwarding-rules create prod-mo-fr --global --address=prod-mo-ip --target-https-proxy=prod-mo-proxy --ports=443
+gcloud compute addresses describe prod-mo-ip --global --format="value(address)"   # the IP for DNS
 ```
-The command prints DNS records. Add/point them at your DNS provider. With the
-60s TTL from T‑24h, propagation is fast.
+At your DNS provider, point `measure` (**A record**) at the pre-built LB IP **35.201.85.79**. With the 60s TTL
+from T‑24h, propagation is fast; the managed cert issues 15–60 min after DNS
+resolves. **Pre-build the LB before the freeze** so only the DNS A-record flip and
+cert wait happen in-window (the cert can pre-provision if you point DNS ahead of
+the freeze, since the LB serves the existing site only once DNS moves).
 
 ---
 
 ## Step 11 — Smoke-test the live domain (the freeze ends when this passes)
 
-Once DNS resolves to Cloud Run, hit `https://handle.harrywardrobes.co.uk`:
+Once DNS resolves to Cloud Run, hit `https://measure.harrywardrobes.co.uk`:
 - Log in (cookies work now — real https), load dashboards, open a design visit.
 - **Open a customer-info submission photo** (served from `wardrobes-bucket` via GCS).
 - Send one real test email to an internal address; confirm one HubSpot read and one
