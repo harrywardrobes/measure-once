@@ -25,8 +25,8 @@ import { DuplicateCancelErrorAlert } from './DuplicateCancelErrorAlert';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { EmailComposer } from './EmailComposer';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -515,25 +515,16 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
             </Box>
           ) : (
             <>
-              <TextField
-                label="Subject"
-                value={emailSubject}
-                onChange={e => { setEmailSubject(e.target.value); setEmailError(''); }}
-                size="small"
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 300 } }}
-                data-testid="dvf-email-subject"
-              />
-              <TextField
-                label="Body"
-                value={emailBody}
-                onChange={e => { setEmailBody(e.target.value); setEmailError(''); }}
-                multiline
-                minRows={6}
-                size="small"
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 8000 } }}
-                data-testid="dvf-email-body"
+              <EmailComposer
+                subject={emailSubject}
+                onSubjectChange={v => { setEmailSubject(v); setEmailError(''); }}
+                body={emailBody}
+                onBodyChange={v => { setEmailBody(v); setEmailError(''); }}
+                recipientName={contactInfo?.contactName}
+                recipientEmail={contactInfo?.contactEmail}
+                bodyMinRows={6}
+                subjectMaxLength={300}
+                bodyMaxLength={8000}
               />
               <Typography variant="caption" color="text.secondary">
                 Sent from your connected Gmail account. Lead status will update to "Design Invited".

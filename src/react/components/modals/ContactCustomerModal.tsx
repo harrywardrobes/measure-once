@@ -4,14 +4,12 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Skeleton from '@mui/material/Skeleton';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { EmailComposer } from './EmailComposer';
 import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError } from '../../utils/api';
 import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
@@ -95,9 +93,6 @@ interface ContactData {
   historyAttemptLog: HistorySessionEntry[];
 }
 
-/** Body text colour for the email preview iframe (kept out of React style props). */
-const IFRAME_BODY_COLOR = '#111';
-
 const CALL_PRESETS = [
   'No answer, voicemail left',
   'No answer, no voicemail',
@@ -106,21 +101,6 @@ const CALL_PRESETS = [
   'No longer interested',
   'Wrong number',
 ];
-
-/**
- * Convert plain-text email body to HTML the way the server does:
- * each non-blank line becomes a <p> element, HTML-escaped.
- * Matches the send-path logic in server.js.
- */
-function bodyTextToHtml(text: string): string {
-  return text
-    .split('\n')
-    .map(l => {
-      if (l.trim() === '') return '';
-      return `<p>${l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')}</p>`;
-    })
-    .join('');
-}
 
 const METHOD_LABEL: Record<Method, string> = {
   call:     'Called',
@@ -192,29 +172,20 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [submitErrorRetry,   setSubmitErrorRetry]   = useState(false);
 
   // Email flow state
-  const [emailFlow,           setEmailFlow]           = useState<'idle' | 'preview' | 'sending'>('idle');
-  const [emailSubject,        setEmailSubject]        = useState('');
-  const [emailBody,           setEmailBody]           = useState('');
-  const [emailViewMode,       setEmailViewMode]       = useState<'edit' | 'preview'>('edit');
-  const [emailPreviewLoading, setEmailPreviewLoading] = useState(false);
-  const [emailPreviewError,   setEmailPreviewError]   = useState('');
-  const [emailPreviewHtml,    setEmailPreviewHtml]    = useState('');
-  const [emailFetchedBody,    setEmailFetchedBody]    = useState('');
-  const [emailFetchedSubject, setEmailFetchedSubject] = useState('');
-  // Stable template baseline — set only on initial load, never on refetch.
-  // Dirty detection compares against these so a preview refresh cannot clear
-  // unsaved-changes state.
+  const [emailFlow,            setEmailFlow]            = useState<'idle' | 'preview' | 'sending'>('idle');
+  const [emailSubject,         setEmailSubject]         = useState('');
+  const [emailBody,            setEmailBody]            = useState('');
+  // Stable template baseline — set once on initial load for unsaved-changes detection.
   const [emailTemplateSubject, setEmailTemplateSubject] = useState('');
   const [emailTemplateBody,    setEmailTemplateBody]    = useState('');
-  const [emailSubmitError,    setEmailSubmitError]    = useState('');
-  const [emailSubmitRetry,    setEmailSubmitRetry]    = useState(false);
-  const [emailSentConfirm,    setEmailSentConfirm]    = useState('');
+  const [emailSubmitError,     setEmailSubmitError]     = useState('');
+  const [emailSubmitRetry,     setEmailSubmitRetry]     = useState(false);
+  const [emailSentConfirm,     setEmailSentConfirm]     = useState('');
   const [logConfirm,          setLogConfirm]          = useState('');
 
   const autoCloseTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logConfirmTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const emailPreviewDebounceRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPostCloseActionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -258,34 +229,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
-  // Debounced preview refresh — fires 600 ms after body or subject stops
-  // changing while the user is in Preview mode. This ensures the iframe always
-  // shows the full branded footer even when the staff member has edited the text.
-  // Guard: skip when a fetch is already in flight (emailPreviewLoading) to
-  // avoid a double-fetch with the toggle handler's immediate call.
-  useEffect(() => {
-    if (
-      emailViewMode !== 'preview' ||
-      emailFlow === 'idle' ||
-      emailFlow === 'sending' ||
-      emailPreviewLoading ||
-      demo
-    ) return;
-    const bodyDirty    = emailBody.trim()    !== emailFetchedBody.trim();
-    const subjectDirty = emailSubject.trim() !== emailFetchedSubject.trim();
-    if (!bodyDirty && !subjectDirty) return;
-    if (emailPreviewDebounceRef.current) clearTimeout(emailPreviewDebounceRef.current);
-    emailPreviewDebounceRef.current = setTimeout(() => {
-      void refetchEmailHtml(emailSubject.trim(), emailBody.trim());
-    }, 600);
-    return () => {
-      if (emailPreviewDebounceRef.current) clearTimeout(emailPreviewDebounceRef.current);
-    };
-  // refetchEmailHtml is stable (defined in render scope) — listing only the
-  // values that should actually trigger a re-fetch.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emailBody, emailSubject, emailViewMode, emailFlow, emailPreviewLoading]);
-
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   function openNotePanel(method: Method) {
@@ -304,29 +247,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }
 
   function closeEmailFlow() {
-    if (emailPreviewDebounceRef.current) {
-      clearTimeout(emailPreviewDebounceRef.current);
-      emailPreviewDebounceRef.current = null;
-    }
     setEmailFlow('idle');
     setEmailSubject('');
     setEmailBody('');
-    setEmailViewMode('edit');
-    setEmailPreviewError('');
-    setEmailPreviewHtml('');
-    setEmailFetchedBody('');
-    setEmailFetchedSubject('');
     setEmailTemplateSubject('');
     setEmailTemplateBody('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
-    setEmailPreviewLoading(false);
   }
 
   async function openEmailPreview() {
     closeNotePanel();
     setEmailFlow('preview');
-    setEmailPreviewError('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
     setEmailSentConfirm('');
@@ -345,47 +277,27 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       return;
     }
 
-    setEmailPreviewLoading(true);
     try {
       const result = await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/email-preview`,
         {},
-      ) as { subject: string; text: string; html: string };
+      ) as { subject: string; text: string };
       setEmailSubject(result.subject || '');
       setEmailBody(result.text || '');
-      setEmailPreviewHtml(result.html || '');
-      setEmailFetchedBody(result.text || '');
-      setEmailFetchedSubject(result.subject || '');
-      // Stable baseline — set once here, never overwritten by refetch.
       setEmailTemplateSubject(result.subject || '');
       setEmailTemplateBody(result.text || '');
     } catch (e) {
       const err = e as ApiError;
-      setEmailPreviewError(err.message || 'Could not load email preview.');
-    } finally {
-      setEmailPreviewLoading(false);
+      setEmailSubmitError(err.message || 'Could not load email preview.');
     }
   }
 
-
-  async function refetchEmailHtml(subject: string, body: string) {
-    if (demo) return;
-    setEmailPreviewLoading(true);
-    setEmailPreviewError('');
-    try {
-      const result = await POST(
-        `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/email-preview`,
-        { subject, body },
-      ) as { subject: string; text: string; html: string };
-      setEmailPreviewHtml(result.html || '');
-      setEmailFetchedBody(body);
-      setEmailFetchedSubject(subject);
-    } catch (e) {
-      const err = e as ApiError;
-      setEmailPreviewError(err.message || 'Could not refresh email preview.');
-    } finally {
-      setEmailPreviewLoading(false);
-    }
+  async function fetchEmailPreviewHtml(subject: string, body: string): Promise<string> {
+    const result = await POST(
+      `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/email-preview`,
+      { subject, body },
+    ) as { html: string };
+    return result.html || '';
   }
 
   async function handleSendEmail() {
@@ -680,12 +592,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     <FullScreenModal
       open
       onClose={handleRequestClose}
-      // emailPreviewLoading covers both the initial template fetch and any
-      // subsequent preview refetch (e.g. after the user edits subject/body
-      // and toggles to Preview mode). Both paths set the same flag, so a
-      // single expression keeps the close button disabled whenever a
-      // preview fetch is in-flight.
-      disableClose={phase === 'advancing' || (emailFlow !== 'idle' && emailPreviewLoading)}
+      disableClose={phase === 'advancing' || emailFlow === 'sending'}
       title={titleStr}
       headerActions={
         demo ? <Chip label="Demo preview" size="small" color="info" variant="outlined" /> : undefined
@@ -803,190 +710,30 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                         {isOpen && isEmail && (
                           <Box
                             data-testid="email-preview-panel"
-                            sx={{
-                              mt: 1,
-                              pl: 1.5,
-                              borderLeft: '2px solid',
-                              borderColor: 'primary.main',
-                            }}
+                            sx={{ mt: 1, pl: 1.5, borderLeft: '2px solid', borderColor: 'primary.main' }}
                           >
                             {!contactEmailAddr ? (
                               <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
                                 No email address is on record for this contact. Add one in HubSpot before sending.
                               </Typography>
-                            ) : emailPreviewLoading ? (
-                              <Box sx={{ py: 0.5 }}>
-                                <Skeleton variant="rounded" width="100%" height={40} sx={{ mb: 1 }} />
-                                <Skeleton variant="rounded" width="100%" height={118} />
-                              </Box>
-                            ) : (
+                            ) : emailFlow !== 'idle' && (
                               <>
-                                {/* To: header + Edit/Preview toggle on the same row */}
-                                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 0.5, gap: 1 }}>
-                                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                                    To:{' '}
-                                    <strong>
-                                      {(contactData?.contactName || contactName)
-                                        ? `${contactData?.contactName || contactName} <${contactEmailAddr}>`
-                                        : contactEmailAddr}
-                                    </strong>
-                                  </Typography>
-                                  <ToggleButtonGroup
-                                    size="small"
-                                    exclusive
-                                    value={emailViewMode}
-                                    onChange={(_, v) => {
-                                      if (!v) return;
-                                      const next = v as 'edit' | 'preview';
-                                      setEmailViewMode(next);
-                                      if (next === 'preview' && !demo) {
-                                        const bodyDirty    = emailBody.trim()    !== emailFetchedBody.trim();
-                                        const subjectDirty = emailSubject.trim() !== emailFetchedSubject.trim();
-                                        if (bodyDirty || subjectDirty) {
-                                          if (emailPreviewDebounceRef.current) {
-                                            clearTimeout(emailPreviewDebounceRef.current);
-                                            emailPreviewDebounceRef.current = null;
-                                          }
-                                          void refetchEmailHtml(emailSubject.trim(), emailBody.trim());
-                                        }
-                                      }
-                                    }}
-                                    disabled={emailFlow === 'sending'}
-                                  >
-                                    <ToggleButton value="edit" sx={{ px: 1.25, py: 0.25, fontSize: '0.7rem' }}>
-                                      Edit
-                                    </ToggleButton>
-                                    <ToggleButton
-                                      value="preview"
-                                      data-testid="email-html-preview-toggle"
-                                      sx={{ px: 1.25, py: 0.25, fontSize: '0.7rem' }}
-                                    >
-                                      Preview
-                                    </ToggleButton>
-                                  </ToggleButtonGroup>
-                                </Box>
-
-                                {emailViewMode === 'edit' ? (
-                                  <>
-                                    <TextField
-                                      data-testid="email-preview-subject"
-                                      label="Subject"
-                                      size="small"
-                                      fullWidth
-                                      value={emailSubject}
-                                      onChange={(e) => setEmailSubject(e.target.value)}
-                                      disabled={emailFlow === 'sending'}
-                                      sx={{ mb: 1 }}
-                                    />
-                                    <TextField
-                                      data-testid="email-preview-body"
-                                      label="Body"
-                                      size="small"
-                                      multiline
-                                      minRows={4}
-                                      fullWidth
-                                      value={emailBody}
-                                      onChange={(e) => setEmailBody(e.target.value)}
-                                      disabled={emailFlow === 'sending'}
-                                      sx={{ mb: 0.75 }}
-                                    />
-                                  </>
-                                ) : (
-                                  /* HTML preview — mirrors what the recipient will see */
-                                  <Box sx={{ mb: 0.75 }}>
-                                    {/* Subject preview */}
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                                      Subject
-                                    </Typography>
-                                    <Box sx={{
-                                      px: 1.5, py: 0.75,
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      borderRadius: 1,
-                                      bgcolor: 'background.paper',
-                                      mb: 1,
-                                    }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                        {emailSubject.trim() || <em style={{ opacity: 0.5 }}>empty subject</em>}
-                                      </Typography>
-                                    </Box>
-                                    {/* Body HTML preview in sandboxed iframe */}
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.25 }}>
-                                      Body
-                                    </Typography>
-                                    <Box sx={{
-                                      border: '1px solid',
-                                      borderColor: 'divider',
-                                      borderRadius: 1,
-                                      overflow: 'hidden',
-                                      bgcolor: 'common.white',
-                                      position: 'relative',
-                                    }}>
-                                      {emailPreviewLoading && (
-                                        <Box sx={{
-                                          position: 'absolute', inset: 0,
-                                          display: 'flex', alignItems: 'center', gap: 1,
-                                          px: 2, py: 1.5,
-                                          bgcolor: 'rgba(255,255,255,0.75)',
-                                          zIndex: 1,
-                                        }}>
-                                          <CircularProgress size={16} />
-                                          <Typography variant="caption" color="text.secondary">Refreshing preview…</Typography>
-                                        </Box>
-                                      )}
-                                      <iframe
-                                        data-testid="email-html-preview-iframe"
-                                        title="Email HTML preview"
-                                        sandbox="allow-same-origin"
-                                        srcDoc={emailPreviewHtml || `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:14px;color:${IFRAME_BODY_COLOR};padding:12px 16px;margin:0;}p{margin:0 0 0.6em;}</style></head><body>${bodyTextToHtml(emailBody)}</body></html>`}
-                                        style={{ width: '100%', minHeight: 120, border: 'none', display: 'block' }}
-                                        onLoad={(e) => {
-                                          const iframe = e.currentTarget;
-                                          try {
-                                            const h = iframe.contentDocument?.body?.scrollHeight;
-                                            if (h && h > 0) iframe.style.height = `${h + 24}px`;
-                                          } catch (_) { /* cross-origin guard */ }
-                                        }}
-                                      />
-                                    </Box>
-                                    {/* Send / Cancel inline below the iframe so staff don't need to scroll */}
-                                    {!emailPreviewLoading && emailFlow === 'sending' && (
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                                        <CircularProgress size={14} />
-                                        <Typography variant="caption" color="text.secondary">Sending…</Typography>
-                                      </Box>
-                                    )}
-                                    {!emailPreviewLoading && emailFlow !== 'sending' && (
-                                      <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                                        <Button
-                                          data-testid="email-preview-send-btn-inline"
-                                          size="small"
-                                          variant="contained"
-                                          disabled={!emailSubject.trim() || !emailBody.trim()}
-                                          onClick={() => void handleSendEmail()}
-                                        >
-                                          Send Email
-                                        </Button>
-                                        <Button
-                                          size="small"
-                                          variant="text"
-                                          onClick={closeEmailFlow}
-                                        >
-                                          Cancel
-                                        </Button>
-                                      </Box>
-                                    )}
-                                  </Box>
-                                )}
-
-                                {emailPreviewError && (
-                                  <Alert severity="error" sx={{ mb: 0.75, py: 0 }}>{emailPreviewError}</Alert>
-                                )}
+                                <EmailComposer
+                                  subject={emailSubject}
+                                  onSubjectChange={setEmailSubject}
+                                  body={emailBody}
+                                  onBodyChange={setEmailBody}
+                                  fetchPreviewHtml={demo ? undefined : fetchEmailPreviewHtml}
+                                  disabled={emailFlow === 'sending'}
+                                  recipientName={contactData?.contactName || contactName}
+                                  recipientEmail={contactEmailAddr}
+                                  bodyMinRows={4}
+                                />
                                 {emailSubmitError === 'GOOGLE_AUTH' && (
-                                  <GoogleAuthAlert sx={{ mb: 0.5, py: 0 }} />
+                                  <GoogleAuthAlert sx={{ mt: 1, mb: 0.5, py: 0 }} />
                                 )}
                                 {emailSubmitError && emailSubmitError !== 'GOOGLE_AUTH' && (
-                                  <Typography variant="caption" color="error" sx={{ display: 'block', mb: 0.5 }}>
+                                  <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.75, mb: 0.5 }}>
                                     {emailSubmitError}
                                     {emailSubmitRetry && (
                                       <>
@@ -1014,28 +761,26 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                     )}
                                   </Typography>
                                 )}
-                                {emailViewMode === 'edit' && (
-                                  <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <Button
-                                      data-testid="email-preview-send-btn"
-                                      size="small"
-                                      variant="contained"
-                                      disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
-                                      onClick={() => void handleSendEmail()}
-                                      startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
-                                    >
-                                      Send Email
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      onClick={closeEmailFlow}
-                                      disabled={emailFlow === 'sending'}
-                                    >
-                                      Cancel
-                                    </Button>
-                                  </Box>
-                                )}
+                                <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                  <Button
+                                    data-testid="email-preview-send-btn"
+                                    size="small"
+                                    variant="contained"
+                                    disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
+                                    onClick={() => void handleSendEmail()}
+                                    startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
+                                  >
+                                    Send Email
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    variant="text"
+                                    onClick={closeEmailFlow}
+                                    disabled={emailFlow === 'sending'}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </Box>
                               </>
                             )}
                           </Box>

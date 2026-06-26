@@ -1733,6 +1733,8 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       }
       if (devModeEnabled) {
         contacts = contacts.filter(c => c.properties?.hw_test_user === 'true');
+      } else {
+        contacts = contacts.filter(c => c.properties?.hw_test_user !== 'true');
       }
     } catch (dbErr) {
       logger.warn({ err: dbErr.message }, '[contacts-all] could not read dev_mode_enabled:');
@@ -2262,13 +2264,16 @@ async function applyProjectContactsDevModeFilter(results) {
     const { rows: dmRows } = await pool.query(
       `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
     );
-    if (dmRows.length > 0 && dmRows[0].value === 'true') {
+    const devModeEnabled = dmRows.length > 0 && dmRows[0].value === 'true';
+    if (devModeEnabled) {
       return results.filter(c => c.properties?.hw_test_user === 'true');
+    } else {
+      return results.filter(c => c.properties?.hw_test_user !== 'true');
     }
   } catch (dbErr) {
     logger.warn({ err: dbErr.message }, '[project-contacts] could not read dev_mode_enabled:');
   }
-  return results;
+  return results.filter(c => c.properties?.hw_test_user !== 'true');
 }
 
 app.get('/api/project-contacts', async (req, res) => {
@@ -5505,14 +5510,22 @@ app.patch('/api/admin/email-templates/:key', isAuthenticated, requireAdmin, asyn
 // users (not admin-only) so in-product UIs can pre-populate editable email fields
 // from the admin-customisable template rather than a hardcoded client-side string.
 app.post('/api/email-templates/render', isAuthenticated, async (req, res) => {
-  const { key, vars } = req.body || {};
+  const { key, vars, body: customBody, subject: customSubject } = req.body || {};
   if (!TEMPLATE_KEYS.includes(key)) {
     return res.status(404).json({ error: 'Unknown email template key.' });
   }
   try {
     const template = await getEmailTemplate(key);
     if (!template) return res.status(404).json({ error: 'Template not found.' });
-    const rendered = renderEmail(template, { textVars: vars || {}, htmlVars: vars || {} });
+    const customBodyHtml = typeof customBody === 'string'
+      ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+      : null;
+    const effectiveTemplate = (typeof customBody === 'string' || typeof customSubject === 'string') ? {
+      ...template,
+      ...(typeof customBody    === 'string' ? { body_text: customBody, body_html: customBodyHtml } : {}),
+      ...(typeof customSubject === 'string' ? { subject:   customSubject                         } : {}),
+    } : template;
+    const rendered = renderEmail(effectiveTemplate, { textVars: vars || {}, htmlVars: vars || {} });
     res.json({ subject: rendered.subject, body_text: rendered.text, html: rendered.html });
   } catch (e) {
     logger.error({ err: e.message }, 'POST /api/email-templates/render error:');

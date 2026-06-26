@@ -1532,6 +1532,9 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
         const from      = buildFromHeader();
         const replyTo   = buildReplyTo();
         const firstName = (visit.contact_name || '').split(' ')[0] || 'there';
+        const customSubject  = typeof req.body?.emailSubject  === 'string' && req.body.emailSubject.trim()  ? req.body.emailSubject.trim()  : null;
+        const customPreamble = typeof req.body?.emailPreamble === 'string' && req.body.emailPreamble.trim() ? req.body.emailPreamble.trim() : null;
+        const preamble = customPreamble || 'Here\'s an updated link to view your survey summary and sign off.';
         const grandTotal = rooms.reduce((s, r) => s + r.unit_price_pence * r.unit_count, 0);
         const roomRows = rooms.map(r => {
           const total = r.unit_price_pence * r.unit_count;
@@ -1549,11 +1552,11 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
         await transport.sendMail({
           from, replyTo,
           to: visit.contact_email,
-          subject: `Your survey visit — ${visit.contact_name || ''}`,
+          subject: customSubject || `Your survey visit — ${visit.contact_name || ''}`,
           text: [
             `Hi ${firstName},`,
             '',
-            'Here\'s an updated link to view your survey summary and sign off.',
+            preamble,
             '',
             '--- Room Breakdown ---',
             roomRowsText,
@@ -1573,7 +1576,7 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
 <body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
   <h1 style="font-size:1.4rem;margin-bottom:4px;">Your survey visit summary</h1>
   <p style="color:#6b7280;margin-top:0;">Hi ${_esc(firstName)},</p>
-  <p>Here's an updated link to view your survey summary and sign off.</p>
+  <p>${_esc(preamble)}</p>
   <table style="width:100%;border-collapse:collapse;margin:20px 0;">
     <thead>
       <tr style="background:#f3f4f6;">
@@ -1624,6 +1627,96 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
   } catch (e) {
     logger.error({ err: e.message }, '[survey-visits] POST resend-signoff error:');
     res.status(500).json({ error: 'Could not resend sign-off email.' });
+  }
+});
+
+// POST /api/survey-visits/:id/signoff-email-preview
+// Returns a rendered preview of the sign-off email (subject + HTML) for
+// display in the EmailComposer before sending. The sign-off URL is replaced
+// with a placeholder so the preview never contains a real token.
+router.post('/api/survey-visits/:id/signoff-email-preview', isAuthenticated, requireAdmin, async (req, res) => {
+  const visitId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(visitId)) return res.status(400).json({ error: 'Invalid visit id' });
+  try {
+    const vr = await pool.query(
+      `SELECT sv.*, svh.name AS handle_name, svfr.name AS furniture_range_name
+       FROM survey_visits sv
+       LEFT JOIN catalog_handles   svh  ON svh.id  = sv.handle_id
+       LEFT JOIN catalog_ranges    svfr ON svfr.id = sv.furniture_range_id
+       WHERE sv.id = $1`, [visitId]
+    );
+    if (!vr.rows.length) return res.status(404).json({ error: 'Visit not found' });
+    const visit = vr.rows[0];
+
+    const rr = await pool.query(
+      `SELECT svr.*, ds.name AS door_style_name
+       FROM survey_visit_rooms svr
+       LEFT JOIN catalog_door_styles ds ON ds.id = svr.door_style_id
+       WHERE svr.survey_visit_id = $1
+       ORDER BY svr.id`, [visitId]
+    );
+    const rooms = rr.rows;
+
+    const firstName  = (visit.contact_name || '').split(' ')[0] || 'there';
+    const customSubject  = typeof req.body?.emailSubject  === 'string' && req.body.emailSubject.trim()  ? req.body.emailSubject.trim()  : null;
+    const customPreamble = typeof req.body?.emailPreamble === 'string' && req.body.emailPreamble.trim() ? req.body.emailPreamble.trim() : null;
+    const preamble    = customPreamble || 'Here\'s an updated link to view your survey summary and sign off.';
+    const subject     = customSubject  || `Your survey visit — ${visit.contact_name || ''}`;
+    const grandTotal  = rooms.reduce((s, r) => s + r.unit_price_pence * r.unit_count, 0);
+    const previewUrl  = '#preview-link';
+    const roomRows    = rooms.map(r => {
+      const total = r.unit_price_pence * r.unit_count;
+      return `<tr>
+        <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">${_esc(r.room_name)}</td>
+        <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">${_esc(r.door_style_name || '—')}</td>
+        <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:right;">£${penceToGbp(total)}</td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
+  <h1 style="font-size:1.4rem;margin-bottom:4px;">Your survey visit summary</h1>
+  <p style="color:#6b7280;margin-top:0;">Hi ${_esc(firstName)},</p>
+  <p>${_esc(preamble)}</p>
+  <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+    <thead>
+      <tr style="background:#f3f4f6;">
+        <th style="text-align:left;padding:8px 12px;font-size:.85rem;">Room</th>
+        <th style="text-align:left;padding:8px 12px;font-size:.85rem;">Style</th>
+        <th style="text-align:right;padding:8px 12px;font-size:.85rem;">Total</th>
+      </tr>
+    </thead>
+    <tbody>${roomRows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="padding:8px 12px;font-weight:600;">Estimate total</td>
+        <td style="padding:8px 12px;font-weight:600;text-align:right;">£${penceToGbp(grandTotal)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  ${visit.visit_notes ? `<div style="margin:20px 0;padding:14px 16px;background:#f9fafb;border-left:3px solid #e5e7eb;border-radius:4px;">
+    <p style="margin:0 0 6px;font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">Visit Notes</p>
+    <p style="margin:0;white-space:pre-line;font-size:.9rem;">${_esc(visit.visit_notes)}</p>
+  </div>` : ''}
+  <div style="text-align:center;margin:28px 0;">
+    <a href="${previewUrl}"
+       style="display:inline-block;background:#8B2BFF;color:#fff;padding:14px 32px;
+              border-radius:8px;text-decoration:none;font-weight:600;font-size:1rem;">
+      See Your Survey &amp; Sign Off
+    </a>
+  </div>
+  <p style="font-size:.82rem;color:#6b7280;">
+    This link is personal to you and expires in 7 days.
+    If you have questions, reply to this email.
+  </p>
+</body>
+</html>`;
+    res.json({ subject, preamble, html });
+  } catch (e) {
+    logger.error({ err: e.message }, '[survey-visits] POST signoff-email-preview error:');
+    res.status(500).json({ error: 'Could not generate email preview.' });
   }
 });
 

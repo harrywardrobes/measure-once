@@ -152,8 +152,8 @@ export const PRIORITY_ACTIVE_DAYS = 60;
  * Apply the active search box, lead-status / stage filters, sort order, and
  * pagination to a set of cached customer records client-side. Mirrors the
  * server-side logic in `/api/contacts-all` so the offline experience matches
- * the online one. (Dev-mode / staleness filters are server-only concerns and
- * intentionally omitted here.)
+ * the online one. (Staleness filter is a server-only concern and omitted here;
+ * hw_test_user exclusion is applied below to match server behaviour.)
  */
 export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
@@ -161,6 +161,9 @@ export function filterSortPaginateCachedContacts(
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
   const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, limit, priorityFirst, prioritySortMode } = params;
   let list = cached;
+
+  // Always exclude HubSpot test users from the customer-facing view.
+  list = list.filter((c) => c.properties?.hw_test_user !== 'true');
 
   // Mirror the server-side excluded_from_sales filter: hide excluded contacts
   // by default unless showExcluded is true or the caller is explicitly

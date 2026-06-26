@@ -1,6 +1,5 @@
 {/* AccessRequestGate.mdx — component documentation */}
-import { Meta, Canvas } from '@storybook/blocks';
-import * as AccessRequestGateStories from './AccessRequestGate.stories';
+import { Meta } from '@storybook/blocks';
 
 <Meta title="Features/AccessRequestGate/Guide" />
 
@@ -45,9 +44,3 @@ to protect the endpoint from automated submissions.
 it behind an `isAuthenticated` check in the parent.
 
 ---
-
-<Canvas of={AccessRequestGateStories.FormView} />
-<Canvas of={AccessRequestGateStories.ConfirmedView} />
-<Canvas of={AccessRequestGateStories.EmailConflictView} />
-<Canvas of={AccessRequestGateStories.PendingView} />
-<Canvas of={AccessRequestGateStories.AlreadyApprovedView} />

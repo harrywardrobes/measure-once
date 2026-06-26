@@ -23,6 +23,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
 import { FullScreenModal } from './FullScreenModal';
+import { EmailComposer } from './EmailComposer';
 
 const resendCooldownExpiry = new Map<string, number>();
 
@@ -56,6 +57,7 @@ type Phase =
   | 'revoking-confirm'
   | 'generating'
   | 'ready'
+  | 'email-preview'
   | 'sent';
 
 function CopyLinkField({ url }: { url: string }) {
@@ -136,6 +138,13 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const sendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState('');
   const [copyAndClosing, setCopyAndClosing] = useState(false);
+
+  // Email preview state
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailError, setEmailError] = useState('');
+  // Whether the preview is for a resend (true) or a new send (false)
+  const emailIsResendRef = useRef(false);
 
   // AbortController ref so we can cancel in-flight generate-link requests
   // (e.g. if the user clicks Cancel while generation is running).
@@ -276,9 +285,52 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     };
   }, [open, demo, ctx.contactId, checkStatus]);
 
-  async function handleSend() {
+  async function fetchEmailPreviewHtml(subject: string, body: string): Promise<string> {
+    const token = generatedLink?.token || linkStatus?.token ||
+      (linkStatus?.formLink ? linkStatus.formLink.split('/').pop() : undefined);
+    const r = await fetch(
+      `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/upload-link-email-preview`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, subject, body }),
+      }
+    );
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not load preview');
+    return (d.html as string) || '';
+  }
+
+  function openEmailPreview(isResend: boolean) {
+    if (demo) return;
+    emailIsResendRef.current = isResend;
+    setEmailSubject('');
+    setEmailBody('');
+    setEmailError('');
+    // Fetch the default template to populate the composer
+    const token = generatedLink?.token || linkStatus?.token ||
+      (linkStatus?.formLink ? linkStatus.formLink.split('/').pop() : undefined);
+    fetch(
+      `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/upload-link-email-preview`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }
+    )
+      .then(r => r.json())
+      .then((d: { subject?: string; text?: string; error?: string }) => {
+        setEmailSubject(d.subject || '');
+        setEmailBody(d.text || '');
+      })
+      .catch(() => { /* Non-fatal — composer starts empty */ });
+    setPhase('email-preview');
+  }
+
+  async function handleSendConfirmed() {
     if (demo) return;
     setError('');
+    setEmailError('');
     setSubmitting(true);
     try {
       const r = await fetch('/api/card-actions/upload-photos-and-info', {
@@ -287,6 +339,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         body: JSON.stringify({
           contactId: ctx.contactId,
           ...(generatedLink ? { token: generatedLink.token } : {}),
+          emailSubject: emailSubject.trim() || undefined,
+          emailBody:    emailBody.trim()    || undefined,
         }),
       });
       const d = await r.json();
@@ -297,34 +351,34 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
       sendCooldownRef.current = setTimeout(() => setSendCooldown(false), 3000);
     } catch (e) {
-      setError((e as Error).message);
+      setEmailError((e as Error).message);
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleResend() {
+  async function handleResendConfirmed() {
     if (demo) return;
-    // Derive token: prefer the explicit field; fall back to extracting the
-    // last path segment of formLink (same logic the server uses).
     const token =
       linkStatus?.token ||
       (linkStatus?.formLink ? linkStatus.formLink.split('/').pop() : '');
     if (!token) {
-      showToast(
-        'Cannot re-send: link token is unavailable. Try generating a new link.',
-        true,
-      );
+      showToast('Cannot re-send: link token is unavailable. Try generating a new link.', true);
       return;
     }
     setResending(true);
+    setEmailError('');
     try {
       const r = await fetch(
         `/api/customer-info/by-contact/${encodeURIComponent(ctx.contactId)}/resend`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify({
+            token,
+            emailSubject: emailSubject.trim() || undefined,
+            emailBody:    emailBody.trim()    || undefined,
+          }),
         }
       );
       const d = await r.json();
@@ -338,8 +392,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         setResendCooldown(false);
         resendCooldownExpiry.delete(ctx.contactId);
       }, 3000);
+      setPhase('confirming');
     } catch (e) {
-      showToast((e as Error).message || 'Could not re-send email', true);
+      setEmailError((e as Error).message);
     } finally {
       setResending(false);
     }
@@ -397,6 +452,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
     setPhase('checking');
     setError('');
+    setEmailSubject('');
+    setEmailBody('');
+    setEmailError('');
     setGeneratedLink(null);
     setLinkError('');
     setCheckError('');
@@ -418,6 +476,8 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         ? 'Link no longer valid'
         : phase === 'revoking-confirm'
         ? 'Revoke this link?'
+        : phase === 'email-preview'
+        ? (emailIsResendRef.current ? 'Preview resend email' : 'Preview email before sending')
         : generatedLink?.isResend
         ? 'Resend photo upload link'
         : 'Send photo upload link';
@@ -528,6 +588,25 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 1 }}>
           <CircularProgress size={18} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>Generating link…</Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'email-preview') {
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <EmailComposer
+            subject={emailSubject}
+            onSubjectChange={setEmailSubject}
+            body={emailBody}
+            onBodyChange={setEmailBody}
+            fetchPreviewHtml={fetchEmailPreviewHtml}
+            disabled={submitting || resending}
+            recipientName={ctx.contactName || undefined}
+            recipientEmail={ctx.contactEmail || undefined}
+            bodyMinRows={6}
+            sendError={emailError || undefined}
+          />
         </Stack>
       );
     }
@@ -653,11 +732,10 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             <DemoActionTooltip demo={demo}>
               <Button
                 data-testid="cah-resend-link"
-                onClick={handleResend}
-                disabled={resending || resendCooldown || demo}
-                startIcon={resending ? <CircularProgress size={16} color="inherit" /> : undefined}
+                onClick={() => openEmailPreview(true)}
+                disabled={resendCooldown || demo}
               >
-                {resending ? 'Sending…' : resendCooldown ? 'Sent' : 'Re-send link'}
+                {resendCooldown ? 'Sent' : 'Re-send link'}
               </Button>
             </DemoActionTooltip>
             <DemoActionTooltip demo={demo}>
@@ -737,12 +815,35 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       return <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>;
     }
 
+    if (phase === 'email-preview') {
+      const isResend = emailIsResendRef.current;
+      const busy = submitting || resending;
+      return (
+        <>
+          <Button onClick={() => setPhase(isResend ? 'confirming' : 'ready')} disabled={busy} data-testid="cah-cancel">
+            Back
+          </Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              variant="contained"
+              onClick={isResend ? handleResendConfirmed : handleSendConfirmed}
+              disabled={busy || demo || !emailSubject.trim()}
+              startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined}
+              data-testid="cah-primary"
+            >
+              {busy ? 'Sending…' : isResend ? 'Re-send email' : 'Send email'}
+            </Button>
+          </DemoActionTooltip>
+        </>
+      );
+    }
+
     if (phase === 'sent') {
       return <Button variant="contained" onClick={handleClose}>Done</Button>;
     }
 
     // ready
-    const sendLabel = generatedLink?.isResend ? 'Resend email' : 'Send email';
+    const sendLabel = generatedLink?.isResend ? 'Preview & resend' : 'Preview & send';
     return (
       <>
         <Button onClick={handleClose} disabled={submitting || copyAndClosing} data-testid="cah-cancel">Cancel</Button>
@@ -771,12 +872,11 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         <DemoActionTooltip demo={demo}>
           <Button
             variant="contained"
-            onClick={handleSend}
-            disabled={submitting || sendCooldown || !!linkError || copyAndClosing || demo}
-            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
+            onClick={() => openEmailPreview(false)}
+            disabled={sendCooldown || !!linkError || copyAndClosing || demo}
             data-testid="cah-primary"
           >
-            {submitting ? 'Sending…' : sendCooldown ? 'Sent' : sendLabel}
+            {sendCooldown ? 'Sent' : sendLabel}
           </Button>
         </DemoActionTooltip>
       </>

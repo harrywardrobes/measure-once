@@ -35,6 +35,7 @@ import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { EmailComposer } from './EmailComposer';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_DEPOSIT_INVOICE } from './demoData';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -671,28 +672,16 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
             <Typography variant="body2" color="text.secondary">Loading template…</Typography>
           </Box>
         ) : (
-          <>
-            <TextField
-              label="Subject"
-              value={reminderSubject}
-              onChange={e => setReminderSubject(e.target.value)}
-              fullWidth
-              size="small"
-            />
-            <TextField
-              label="Body"
-              value={reminderBody}
-              onChange={e => setReminderBody(e.target.value)}
-              fullWidth
-              multiline
-              minRows={6}
-              size="small"
-            />
-          </>
+          <EmailComposer
+            subject={reminderSubject}
+            onSubjectChange={setReminderSubject}
+            body={reminderBody}
+            onBodyChange={setReminderBody}
+            recipientName={loaderData?.contactName || ctxContactName}
+            recipientEmail={loaderData?.contactEmail || ctx.contactEmail}
+            bodyMinRows={6}
+          />
         )}
-        <Typography variant="caption" color="text.secondary">
-          Sending to: <strong>{loaderData?.contactEmail || ctx.contactEmail}</strong>
-        </Typography>
       </Stack>
     );
   }
@@ -767,29 +756,19 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
                 Could not load template — enter the email text manually.
               </Alert>
             )}
-            <TextField
-              label="Subject"
-              value={declineEmailSubject}
-              onChange={e => setDeclineEmailSubject(e.target.value)}
-              fullWidth
-              size="small"
-              slotProps={{ htmlInput: { maxLength: 300 } }}
-            />
-            <TextField
-              label="Body"
-              value={declineEmailBody}
-              onChange={e => setDeclineEmailBody(e.target.value)}
-              fullWidth
-              multiline
-              minRows={6}
-              size="small"
-              slotProps={{ htmlInput: { maxLength: 8000 } }}
+            <EmailComposer
+              subject={declineEmailSubject}
+              onSubjectChange={setDeclineEmailSubject}
+              body={declineEmailBody}
+              onBodyChange={setDeclineEmailBody}
+              recipientName={loaderData?.contactName || ctxContactName}
+              recipientEmail={loaderData?.contactEmail || undefined}
+              bodyMinRows={6}
+              subjectMaxLength={300}
+              bodyMaxLength={8000}
             />
           </>
         )}
-        <Alert severity="info" sx={{ py: 0.25 }}>
-          Sending to: <strong>{loaderData?.contactEmail || '(no email on record)'}</strong>
-        </Alert>
       </Stack>
     );
   }

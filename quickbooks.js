@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { encrypt: qbEncrypt, tryDecrypt: qbTryDecrypt } = require('./qb-token-crypto.cjs');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
-const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { getEmailTemplate, renderEmail, escapeHtml } = require('./email-templates');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 
 // Status values derived from the outcome registry — keeps them in sync with
@@ -1078,11 +1078,13 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
     const contactId = String(req.params.contactId || '');
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
 
-    const estimateIds  = (req.body?.estimateIds || [])
+    const estimateIds   = (req.body?.estimateIds || [])
       .map(id => String(id).trim()).filter(id => /^\d+$/.test(id));
-    const sendThankYou = req.body?.sendThankYou === true;
-    const contactEmail = String(req.body?.contactEmail || '').trim() || null;
-    const contactName  = String(req.body?.contactName  || '').trim() || '';
+    const sendThankYou  = req.body?.sendThankYou === true;
+    const contactEmail  = String(req.body?.contactEmail || '').trim() || null;
+    const contactName   = String(req.body?.contactName  || '').trim() || '';
+    const customSubject = typeof req.body?.emailSubject === 'string' ? req.body.emailSubject.trim() || null : null;
+    const customBody    = typeof req.body?.emailBody    === 'string' ? req.body.emailBody.trim()    || null : null;
 
     const steps = {
       estimatesDeclined: false,
@@ -1180,9 +1182,17 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
             steps.emailAlreadySent = true;
           } else {
             try {
-              const template = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'decline'));
+              const template  = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'decline'));
               const firstName = contactName.split(' ')[0] || 'there';
-              const rendered  = renderEmail(template, { textVars: { firstName } });
+              const customBodyHtml = customBody !== null
+                ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+                : null;
+              const effectiveTemplate = (customSubject !== null || customBody !== null) ? {
+                ...template,
+                ...(customBody    !== null ? { body_text: customBody, body_html: customBodyHtml } : {}),
+                ...(customSubject !== null ? { subject:   customSubject }                         : {}),
+              } : template;
+              const rendered  = renderEmail(effectiveTemplate, { textVars: { firstName } });
               const transport = _createMailTransport();
               if (transport) {
                 const replyTo = _buildReplyTo();

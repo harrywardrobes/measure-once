@@ -1,5 +1,15 @@
 import React, { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { EmailComposer } from '../../components/modals/EmailComposer';
 import { fmtDesignVisitWhen } from './types';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import { useOfflineSurveyVisitEntries, type PendingSurveyVisitEntry } from '../../hooks/useOfflineSurveyVisitEntries';
@@ -631,6 +641,11 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
   const [editError, setEditError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [resendBusyId, setResendBusyId] = useState<number | null>(null);
+  const [resendDialog, setResendDialog] = useState<{ visitId: number; contactName: string; contactEmail: string } | null>(null);
+  const [resendEmailSubject, setResendEmailSubject] = useState('');
+  const [resendEmailBody, setResendEmailBody] = useState('');
+  const [resendDialogBusy, setResendDialogBusy] = useState(false);
+  const [resendDialogError, setResendDialogError] = useState<string | null>(null);
 
   // Refetch when a queued entry drains so the server card replaces the pending card.
   const prevIdsRef = useRef<Set<number>>(new Set());
@@ -683,33 +698,64 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
     window.showBottomConfirm('Delete this survey visit? This cannot be undone.', doDelete);
   }, [isAdmin, onRefresh]);
 
-  const handleResendSignoff = useCallback(async (id: number) => {
+  const handleResendSignoff = useCallback((id: number) => {
     if (!isAdmin) return;
-    setResendBusyId(id);
-    setActionError(null);
+    const visit = serverVisits.find(v => v.id === id);
+    if (!visit) return;
+    setResendEmailSubject(`Your survey visit — ${visit.contact_name || ''}`);
+    setResendEmailBody("Here's an updated link to view your survey summary and sign off.");
+    setResendDialogBusy(false);
+    setResendDialogError(null);
+    setResendDialog({ visitId: id, contactName: visit.contact_name, contactEmail: visit.contact_email });
+  }, [isAdmin, serverVisits]);
+
+  const fetchResendPreviewHtml = useCallback(async (subject: string, body: string): Promise<string> => {
+    if (!resendDialog) return '';
+    const r = await fetch(`/api/survey-visits/${resendDialog.visitId}/signoff-email-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailSubject: subject, emailPreamble: body }),
+    });
+    if (!r.ok) throw new Error(`Preview failed: ${r.status}`);
+    const data = await r.json() as { html: string };
+    return data.html || '';
+  }, [resendDialog]);
+
+  const confirmResend = useCallback(async () => {
+    if (!resendDialog) return;
+    const { visitId, contactEmail } = resendDialog;
+    setResendDialogBusy(true);
+    setResendDialogError(null);
     try {
-      const r = await fetch(`/api/survey-visits/${id}/resend-signoff`, { method: 'POST' });
+      const r = await fetch(`/api/survey-visits/${visitId}/resend-signoff`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emailSubject:  resendEmailSubject.trim() || undefined,
+          emailPreamble: resendEmailBody.trim()    || undefined,
+        }),
+      });
       if (!r.ok) {
         const body = await r.json().catch(() => ({})) as { error?: string };
         throw new Error(body.error || `${r.status}`);
       }
       const data = await r.json() as { emailSent?: boolean };
+      setResendDialog(null);
       if (data.emailSent === false) {
         setActionError('Sign-off link refreshed, but no email was sent — email is not configured in your settings.');
         onRefresh?.();
       } else {
-        const email = serverVisits.find(v => v.id === id)?.contact_email;
-        const dest = email ? ` to ${email}` : '';
+        const dest = contactEmail ? ` to ${contactEmail}` : '';
         showToast(`Sign-off email resent${dest}.`);
         onRefresh?.();
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'error';
-      setActionError(`Could not resend sign-off email: ${msg}`);
+      setResendDialogError(msg);
     } finally {
-      setResendBusyId(null);
+      setResendDialogBusy(false);
     }
-  }, [isAdmin, onRefresh, serverVisits, showToast]);
+  }, [resendDialog, resendEmailSubject, resendEmailBody, onRefresh, showToast]);
 
   const openWizardForEdit = useCallback(async (visitId: number) => {
     if (editBusy) return;
@@ -842,6 +888,43 @@ export function SurveyVisitsList({ contactId, serverVisits = [], serverLoading, 
           <p style={{ fontSize: '0.78rem', color: 'var(--error)', marginTop: 4 }}>{editError}</p>
         )}
       </div>
+
+      {/* Resend sign-off email — preview & edit dialog */}
+      <Dialog open={resendDialog !== null} onClose={() => !resendDialogBusy && setResendDialog(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Resend sign-off email</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              Edit the email below before sending. The room breakdown will appear in the email body.
+            </Typography>
+            <EmailComposer
+              subject={resendEmailSubject}
+              onSubjectChange={setResendEmailSubject}
+              body={resendEmailBody}
+              onBodyChange={setResendEmailBody}
+              fetchPreviewHtml={fetchResendPreviewHtml}
+              disabled={resendDialogBusy}
+              recipientName={resendDialog?.contactName}
+              recipientEmail={resendDialog?.contactEmail}
+              bodyMinRows={3}
+            />
+            {resendDialogError && (
+              <Box sx={{ color: 'error.main', fontSize: '0.82rem' }}>{resendDialogError}</Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResendDialog(null)} disabled={resendDialogBusy}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={resendDialogBusy || !resendEmailSubject.trim()}
+            onClick={() => void confirmResend()}
+            startIcon={resendDialogBusy ? <CircularProgress size={14} color="inherit" /> : undefined}
+          >
+            Send
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

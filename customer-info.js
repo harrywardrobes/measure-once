@@ -120,7 +120,21 @@ async function ensureResendLogTable() {
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────
-async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
+
+/** Render the customer invite email template with variable substitution. */
+async function renderCustomerInviteEmail(maskedEmail, formLink) {
+  const tmpl = await getEmailTemplate(INVITE_TEMPLATE_KEY);
+  return renderEmail(tmpl, {
+    textVars: { maskedEmail, formLink },
+    htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
+  });
+}
+
+/**
+ * Send the customer invite email. Pass customSubject/customBody to override
+ * the template (used when staff edited the email before sending).
+ */
+async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink, customSubject, customBody) {
   const transport = createMailTransport();
   if (!transport) {
     logger.warn('[customer-info] SMTP not configured — skipping invite email.');
@@ -129,19 +143,26 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const tmpl = await getEmailTemplate(INVITE_TEMPLATE_KEY);
-  const { subject, text, html } = renderEmail(tmpl, {
-    textVars: { maskedEmail, formLink },
-    htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
-  });
+  let subject, text, html;
+  if (customSubject != null || customBody != null) {
+    const tmpl = await getEmailTemplate(INVITE_TEMPLATE_KEY);
+    const customBodyHtml = customBody != null
+      ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+      : null;
+    const effectiveTmpl = {
+      ...tmpl,
+      ...(customBody    != null ? { body_text: customBody,    body_html: customBodyHtml } : {}),
+      ...(customSubject != null ? { subject: customSubject } : {}),
+    };
+    ({ subject, text, html } = renderEmail(effectiveTmpl, {
+      textVars: { maskedEmail, formLink },
+      htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
+    }));
+  } else {
+    ({ subject, text, html } = await renderCustomerInviteEmail(maskedEmail, formLink));
+  }
   try {
-    await transport.sendMail({
-      from, replyTo,
-      to:      contactEmail,
-      subject,
-      text,
-      html,
-    });
+    await transport.sendMail({ from, replyTo, to: contactEmail, subject, text, html });
     logger.info(`[customer-info] Invite email sent to ${contactEmail}`);
   } catch (err) {
     logger.error({ err: err.message }, '[customer-info] Failed to send invite email:');
@@ -809,6 +830,71 @@ router.post('/api/customer-info/by-contact/:contactId/generate-link',
   }
 );
 
+// Authenticated: preview the customer invite email before sending.
+// POST /api/customer-info/by-contact/:contactId/upload-link-email-preview
+// Body: { token?, subject?, body? }
+// Returns: { subject, text, html }
+router.post('/api/customer-info/by-contact/:contactId/upload-link-email-preview',
+  isAuthenticated,
+  requirePrivilege('member'),
+  async (req, res) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!cid || !/^\d+$/.test(cid)) {
+      return res.status(400).json({ error: 'Invalid contactId.' });
+    }
+    const preToken     = req.body && typeof req.body.token   === 'string' ? req.body.token   : null;
+    const customSubject = req.body && typeof req.body.subject === 'string' ? req.body.subject : null;
+    const customBody    = req.body && typeof req.body.body    === 'string' ? req.body.body    : null;
+    try {
+      // Resolve masked email and form link from existing token or DB
+      let maskedEmail = null;
+      let formLink    = null;
+      if (preToken) {
+        const tokenHash = crypto.createHash('sha256').update(preToken).digest('hex');
+        const { rows } = await pool.query(
+          `SELECT masked_email, form_link FROM customer_info_submissions
+           WHERE token_hash = $1 AND contact_id = $2 LIMIT 1`,
+          [tokenHash, cid]
+        );
+        if (rows.length) { maskedEmail = rows[0].masked_email; formLink = rows[0].form_link; }
+      }
+      if (!maskedEmail) {
+        const { rows } = await pool.query(
+          `SELECT masked_email, form_link FROM customer_info_submissions
+           WHERE contact_id = $1 AND expires_at > NOW() AND submitted_at IS NULL
+           ORDER BY created_at DESC LIMIT 1`,
+          [cid]
+        );
+        if (rows.length) { maskedEmail = rows[0].masked_email; formLink = rows[0].form_link; }
+      }
+      maskedEmail = maskedEmail || '***@example.com';
+      formLink    = formLink    || `${appBaseUrl()}/customer-info/[link]`;
+
+      const tmpl = await getEmailTemplate(INVITE_TEMPLATE_KEY);
+      const customBodyHtml = customBody != null
+        ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+        : null;
+      const effectiveTmpl = {
+        ...tmpl,
+        ...(customBody    != null ? { body_text: customBody, body_html: customBodyHtml } : {}),
+        ...(customSubject != null ? { subject: customSubject } : {}),
+      };
+      const rendered = renderEmail(effectiveTmpl, {
+        textVars: { maskedEmail, formLink },
+        htmlVars: { maskedEmail: escapeHtml(maskedEmail), formLink: escapeHtml(formLink) },
+      });
+      if (!effectiveTmpl.body_html || !effectiveTmpl.body_html.trim()) {
+        rendered.html = rendered.text.split('\n')
+          .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('');
+      }
+      res.json(rendered);
+    } catch (err) {
+      logger.error({ err: err.message }, '[customer-info] upload-link-email-preview error:');
+      res.status(500).json({ error: 'Could not render email preview.' });
+    }
+  }
+);
+
 // Authenticated: send invite link to customer
 // POST /api/card-actions/upload-photos-and-info
 // Body: { contactId, token? } — if token provided, sends email for that pre-generated link
@@ -816,11 +902,15 @@ router.post('/api/card-actions/upload-photos-and-info',
   isAuthenticated,
   requirePrivilege('member'),
   async (req, res) => {
-    const { contactId, token: preToken } = req.body;
+    const { contactId, token: preToken, emailSubject: customSubject, emailBody: customBody } = req.body;
     if (!contactId || typeof contactId !== 'string' || !/^\d+$/.test(String(contactId).trim())) {
       return res.status(400).json({ error: 'contactId is required.' });
     }
     const cid = String(contactId).trim();
+    const emailOverride = {
+      subject: typeof customSubject === 'string' ? customSubject : undefined,
+      body:    typeof customBody    === 'string' ? customBody    : undefined,
+    };
 
     if (!checkStaffSendCooldown(cid)) {
       return res.status(429).json({ error: 'Email was just sent for this contact. Please wait before sending again.' });
@@ -841,7 +931,7 @@ router.post('/api/card-actions/upload-photos-and-info',
         }
         const row = rows[0];
         const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
-        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, emailOverride.subject, emailOverride.body);
         return res.status(200).json({ ok: true });
       }
 
@@ -906,7 +996,7 @@ router.post('/api/card-actions/upload-photos-and-info',
         uploadClient.release();
       }
 
-      await sendCustomerInviteEmail(email, maskEmail(email), formLink);
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink, emailOverride.subject, emailOverride.body);
 
       res.status(201).json({ ok: true });
     } catch (err) {
@@ -1637,7 +1727,9 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
       });
     }
 
-    const preToken = req.body && typeof req.body.token === 'string' ? req.body.token : null;
+    const preToken      = req.body && typeof req.body.token   === 'string' ? req.body.token   : null;
+    const customSubject = req.body && typeof req.body.emailSubject === 'string' ? req.body.emailSubject : undefined;
+    const customBody    = req.body && typeof req.body.emailBody    === 'string' ? req.body.emailBody    : undefined;
 
     try {
       // If a pre-generated token is provided, use it — no new DB row
@@ -1663,7 +1755,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
             [formLink, tokenHash]
           );
         }
-        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink);
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, customSubject, customBody);
         logger.info(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
         return res.json({ ok: true });
       }
@@ -1728,7 +1820,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
         staffResendClient.release();
       }
 
-      await sendCustomerInviteEmail(email, maskEmail(email), formLink);
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink, customSubject, customBody);
 
       logger.info(`[customer-info] Resent invite link for contact ${cid}`);
       res.json({ ok: true });

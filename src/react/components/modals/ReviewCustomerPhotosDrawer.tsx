@@ -24,6 +24,7 @@ import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmatio
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { EmailComposer } from './EmailComposer';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DEMO_SUBMISSION, DEMO_TOOLTIP } from './demoData';
 
@@ -600,26 +601,16 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Not Suitable — confirmation step */}
           {step === 'not_suitable' && (
             <Stack spacing={2}>
-              <Typography variant="body2" color="text.secondary">
-                Review and edit the email below before sending. The email will be sent to{' '}
-                <strong>{emailDisplay || 'the customer'}</strong>.
-              </Typography>
-              <TextField
-                label="Subject"
-                value={emailSubject}
-                onChange={e => setEmailSubject(e.target.value)}
-                size="small"
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 500 } }}
-              />
-              <TextField
-                label="Message"
-                value={emailBody}
-                onChange={e => setEmailBody(e.target.value)}
-                multiline
-                minRows={8}
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 5000 } }}
+              <EmailComposer
+                subject={emailSubject}
+                onSubjectChange={setEmailSubject}
+                body={emailBody}
+                onBodyChange={setEmailBody}
+                recipientName={submission?.contactName || undefined}
+                recipientEmail={emailDisplay || undefined}
+                bodyMinRows={8}
+                subjectMaxLength={500}
+                bodyMaxLength={5000}
               />
               {submitError && (
                 <Alert severity="error">{submitError}</Alert>
@@ -630,10 +621,6 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Rough Estimate — confirmation step */}
           {step === 'rough_estimate' && (
             <Stack spacing={2}>
-              <Typography variant="body2" color="text.secondary">
-                Enter a price range and review the email below before sending. The email will be sent to{' '}
-                <strong>{emailDisplay || 'the customer'}</strong>.
-              </Typography>
               <TextField
                 label="Price range (e.g. £2,500–£3,500)"
                 value={priceRange}
@@ -644,22 +631,16 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
                 slotProps={{ htmlInput: { maxLength: 200 } }}
                 helperText="This will appear in the email body above."
               />
-              <TextField
-                label="Subject"
-                value={emailSubject}
-                onChange={e => setEmailSubject(e.target.value)}
-                size="small"
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 500 } }}
-              />
-              <TextField
-                label="Message"
-                value={emailBody}
-                onChange={e => setEmailBody(e.target.value)}
-                multiline
-                minRows={8}
-                fullWidth
-                slotProps={{ htmlInput: { maxLength: 5000 } }}
+              <EmailComposer
+                subject={emailSubject}
+                onSubjectChange={setEmailSubject}
+                body={emailBody}
+                onBodyChange={setEmailBody}
+                recipientName={submission?.contactName || undefined}
+                recipientEmail={emailDisplay || undefined}
+                bodyMinRows={8}
+                subjectMaxLength={500}
+                bodyMaxLength={5000}
               />
               {submitError && (
                 <Alert severity="error">{submitError}</Alert>

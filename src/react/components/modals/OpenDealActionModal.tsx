@@ -27,7 +27,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
-import RefreshIcon from '@mui/icons-material/Refresh';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -38,6 +37,7 @@ import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import { leadStatusLabelFor, leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
+import { EmailComposer } from './EmailComposer';
 import { ModalContactHeader } from './ModalContactHeader';
 import { PaymentHistory } from '../PaymentHistory';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -228,7 +228,9 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
     loading: boolean;
     error: boolean;
   }>({ subject: '', bodyText: '', html: '', loading: false, error: false });
-  const [declineEmailRefreshCount, setDeclineEmailRefreshCount] = useState(0);
+  // Editable email content for the decline step (populated from the preview when loaded)
+  const [declineEmailSubject, setDeclineEmailSubject] = useState('');
+  const [declineEmailBody,    setDeclineEmailBody]    = useState('');
 
   // Email preview state (accept confirm step)
   const [depositEmailPreview, setDepositEmailPreview] = useState<{ subject: string; html: string; text: string } | null>(null);
@@ -261,11 +263,14 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
     if (!demo) saveDraft({ step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou });
   }, [step, selectedEstimateId, otherEstimateIdsToDecline, estimateIdsToDeclineOnDecline, sendThankYou]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch live decline email preview when the step becomes visible (or refresh is triggered)
+  // Fetch decline email template when the step becomes visible (or refresh is triggered).
+  // Populates the editable composer fields from the template on first load.
   useEffect(() => {
     if (step !== 'decline_email') return;
     if (demo) {
       setDeclineEmailPreview({ ...DEMO_DECLINE_EMAIL_PREVIEW, loading: false, error: false });
+      setDeclineEmailSubject(DEMO_DECLINE_EMAIL_PREVIEW.subject);
+      setDeclineEmailBody(DEMO_DECLINE_EMAIL_PREVIEW.bodyText);
       return;
     }
     let cancelled = false;
@@ -278,13 +283,15 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
       .then(data => {
         if (cancelled) return;
         setDeclineEmailPreview({ subject: data.subject, bodyText: data.body_text, html: data.html || '', loading: false, error: false });
+        setDeclineEmailSubject(prev => prev || data.subject || '');
+        setDeclineEmailBody(prev    => prev || data.body_text || '');
       })
       .catch(() => {
         if (cancelled) return;
         setDeclineEmailPreview({ subject: '', bodyText: '', html: '', loading: false, error: true });
       });
     return () => { cancelled = true; };
-  }, [step, contactData, declineEmailRefreshCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, contactData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Demo-mode synthetic state for non-hub steps ────────────────────────────
   useEffect(() => {
@@ -463,6 +470,8 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
           sendThankYou:  shouldSendThankYou,
           contactEmail:  contactData?.contactEmail || '',
           contactName:   contactData?.contactName || ctxContactName || '',
+          ...(shouldSendThankYou && declineEmailSubject.trim() ? { emailSubject: declineEmailSubject.trim() } : {}),
+          ...(shouldSendThankYou && declineEmailBody.trim()    ? { emailBody:    declineEmailBody.trim()    } : {}),
         }
       );
       broadcastLeadStatusChange(contactId, { hs_lead_status: result.hs_lead_status });
@@ -957,78 +966,44 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
     );
   }
 
+  async function fetchDeclineEmailPreviewHtml(subject: string, body: string): Promise<string> {
+    const firstName = contactData?.contactName?.split(' ')[0] || '';
+    const data = await POST<{ html: string }>(
+      '/api/email-templates/render',
+      { key: STAFF_EMAIL_TEMPLATE_KEY.open_deal_declined_thank_you, vars: { firstName }, subject, body },
+    );
+    return data.html || '';
+  }
+
   function renderDeclineEmail() {
-    const { subject, bodyText, html, loading: emailLoading, error: previewError } = declineEmailPreview;
+    const { loading: emailLoading, error: previewError } = declineEmailPreview;
     return (
       <Stack spacing={2}>
         {renderContactHeader()}
         <Typography variant="body2" color="text.secondary" sx={{ pt: 0.5 }}>
           Would you like to send the customer a brief thank-you email?
         </Typography>
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.75 }}>
-            <Typography variant="caption" color="text.secondary">
-              Email the customer will receive:
-            </Typography>
-            <Tooltip title="Refresh preview">
-              <span>
-                <IconButton
-                  size="small"
-                  disabled={emailLoading}
-                  onClick={() => setDeclineEmailRefreshCount(c => c + 1)}
-                  sx={{ ml: 0.5, p: 0.25 }}
-                  aria-label="Refresh email preview"
-                >
-                  {emailLoading
-                    ? <CircularProgress size={13} />
-                    : <RefreshIcon sx={{ fontSize: 15 }} />}
-                </IconButton>
-              </span>
-            </Tooltip>
+        {emailLoading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+            <CircularProgress size={14} />
+            <Typography variant="caption">Loading template…</Typography>
           </Box>
-          {emailLoading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', py: 1 }}>
-              <CircularProgress size={14} />
-              <Typography variant="caption">Loading preview…</Typography>
-            </Box>
-          )}
-          {!emailLoading && !previewError && (subject || html || bodyText) && (
-            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflow: 'hidden', bgcolor: 'background.paper' }}>
-              <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-                <Typography variant="caption" color="text.secondary">Subject: </Typography>
-                <Typography variant="caption" sx={{ fontWeight: 500 }}>{subject || <em>no subject</em>}</Typography>
-              </Box>
-              {html ? (
-                <iframe
-                  title="Decline thank-you email preview"
-                  sandbox="allow-same-origin"
-                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:sans-serif;font-size:13px;color:#1a1a1a;padding:12px 16px;margin:0;line-height:1.5;}p{margin:0 0 8px;}</style></head><body>${html}</body></html>`}
-                  style={{ width: '100%', minHeight: 80, border: 'none', display: 'block' }}
-                  onLoad={(e) => {
-                    const iframe = e.currentTarget;
-                    try {
-                      // reflow-ok: fires once per iframe load (not a hot path); sizes the iframe to its content height.
-                      const h = iframe.contentDocument?.body?.scrollHeight;
-                      if (h && h > 0) iframe.style.height = `${h + 24}px`;
-                    } catch (_) { /* cross-origin guard */ }
-                  }}
-                />
-              ) : (
-                <Box sx={{ px: 1.5, py: 1, fontFamily: 'monospace', fontSize: '0.8rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {bodyText}
-                </Box>
-              )}
-            </Box>
-          )}
-          {!emailLoading && previewError && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-              Preview unavailable — email will still be sent.
-            </Typography>
-          )}
-        </Box>
-        <Alert severity="info" sx={{ py: 0.25 }}>
-          Sending to: <strong>{contactData?.contactEmail || '(no email on record)'}</strong>
-        </Alert>
+        ) : previewError ? (
+          <Alert severity="warning" sx={{ py: 0.25 }}>
+            Could not load template — enter the email text manually.
+          </Alert>
+        ) : (
+          <EmailComposer
+            subject={declineEmailSubject}
+            onSubjectChange={setDeclineEmailSubject}
+            body={declineEmailBody}
+            onBodyChange={setDeclineEmailBody}
+            fetchPreviewHtml={demo ? undefined : fetchDeclineEmailPreviewHtml}
+            recipientName={contactData?.contactName}
+            recipientEmail={contactData?.contactEmail || undefined}
+            bodyMinRows={6}
+          />
+        )}
       </Stack>
     );
   }
