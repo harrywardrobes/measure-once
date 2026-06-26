@@ -122,6 +122,24 @@ const DEV_ONLY_FEATURES: Array<{
     ),
   },
   {
+    name: 'HubSpot dev mode — default ON at startup',
+    location: 'server.js — startup IIFE',
+    description: (
+      <>
+        When <code className="adm-inline-code">NODE_ENV !== &apos;production&apos;</code>, the server
+        inserts{' '}
+        <code className="adm-inline-code">dev_mode_enabled = &apos;true&apos;</code> into{' '}
+        <code className="adm-inline-code">app_settings</code> on first boot (
+        <code className="adm-inline-code">INSERT … ON CONFLICT DO NOTHING</code>). This ensures a
+        fresh local database defaults to dev mode ON — mirroring the guarantee that{' '}
+        <code className="adm-inline-code">npm run staging:safety-reset</code> provides for staging —
+        so real HubSpot contacts are never accidentally exposed on localhost. Toggling dev mode OFF
+        from the Dev tab above is preserved across restarts once the row exists; only a genuinely
+        absent row is initialised.
+      </>
+    ),
+  },
+  {
     name: 'HubSpot webhook — signature verification bypass',
     location: 'Settings tab → HubSpot Webhooks panel / POST /api/hubspot/webhook',
     description: (
