@@ -136,11 +136,11 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
       _fire(service, 'disconnected');
       // If the token exists but can't be decrypted (key rotation), open the
       // modal immediately with a targeted message so users know to reconnect.
-      if (code === 'TOKEN_UNREADABLE' || code === 'KEY_MISSING') {
+      // KEY_MISSING means the encryption key is not configured at all — the
+      // connect flow won't work until an admin sets it up, so don't prompt.
+      if (code === 'TOKEN_UNREADABLE') {
         const unreadableMessage = service === 'quickbooks'
-          ? code === 'KEY_MISSING'
-            ? 'QuickBooks cannot connect — the encryption key (QB_TOKEN_ENCRYPTION_KEY) is not configured. Set the secret in Secret Manager, then reconnect.'
-            : 'Your QuickBooks connection needs to be refreshed — please reconnect to restore invoice access.'
+          ? 'Your QuickBooks connection needs to be refreshed — please reconnect to restore invoice access.'
           : 'Your Google connection needs to be refreshed — please reconnect to restore Calendar and Gmail access.';
         openConnectModal(service, unreadableMessage);
       }

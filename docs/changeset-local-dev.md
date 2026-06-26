@@ -10,7 +10,7 @@ additive (new files / dev tooling / docs).
 | File | Type | Prod impact |
 |---|---|---|
 | `auth.js` | edit | none (gated on `NODE_ENV`) |
-| `package-lock.json` | regenerate | none (fixes installs outside Replit) |
+| `package-lock.json` | regenerate | none (fixes installs in standard environments) |
 | `README.md` | edit | none (docs) |
 | `package.json` | edit | none (adds a dev script) |
 | `.env.example` | new | none |
@@ -57,7 +57,7 @@ with:
   });
 ```
 
-Behaviour: with `NODE_ENV=production` (Replit), cookie stays `secure:true` /
+Behaviour: with `NODE_ENV=production` (Cloud Run), cookie stays `secure:true` /
 `sameSite:'none'` — unchanged. Any other env gets `secure:false` /
 `sameSite:'lax'` so `http://localhost` login works. Do **not** change
 `app.set('trust proxy', 1)` or the session store.
@@ -66,8 +66,8 @@ Behaviour: with `NODE_ENV=production` (Replit), cookie stays `secure:true` /
 
 ## 2. `package-lock.json` — regenerate against the public npm registry (REGENERATE)
 
-The committed lockfile resolves every package from `http://package-firewall.replit.local/...`,
-which only exists inside Replit, so `npm install` hangs/404s on any other machine.
+The lockfile was previously pinned to an internal package mirror that is no
+longer accessible, so `npm install` hung or 404'd on standard machines.
 Regenerate it from the public registry:
 
 ```bash
@@ -76,8 +76,7 @@ rm -rf node_modules
 PUPPETEER_SKIP_DOWNLOAD=true npm install --registry=https://registry.npmjs.org/
 ```
 
-Commit the regenerated `package-lock.json`. It still works on Replit (Replit can
-resolve public npm), and unblocks local installs.
+Commit the regenerated `package-lock.json` to unblock local installs.
 
 ---
 
@@ -177,9 +176,8 @@ ADMIN_EMAILS=harry@harrywardrobes.co.uk
 # Object storage (photos)
 # -----------------------------------------------------------------------------
 # Backends (storage.js getBackend()):
-#   replit (default) — @replit/object-storage; ONLY works inside Replit.
-#   gcs              — Google Cloud Storage via Application Default Credentials.
-# For local dev use gcs:
+#   gcs — Google Cloud Storage via Application Default Credentials.
+# For local dev:
 #   1. gcloud auth application-default login
 #   2. set GCS_BUCKET to a bucket you can read/write.
 STORAGE_BACKEND=gcs
@@ -454,7 +452,7 @@ git commit -m "Enable local development against cloud services
 - auth.js: gate session cookie secure/sameSite on NODE_ENV so http://localhost
   login works; production behaviour unchanged.
 - Regenerate package-lock.json against the public npm registry (was pinned to
-  Replit's internal package-firewall.replit.local).
+  an internal package mirror no longer accessible).
 - Add .env.example, docs/local-dev.md, and scripts/pull-dev-secrets.mjs
   (npm run pull-secrets) for the local dev loop.
 - Fix stale README references (folder name, HUBSPOT_ACCESS_TOKEN, port 5000)."

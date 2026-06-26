@@ -18,7 +18,7 @@
 // set_updated_at_and_bump_version() trigger (defined in the sync-readiness
 // migration). All DDL is guarded (IF NOT EXISTS / DROP TRIGGER IF EXISTS) so
 // the migration survives a full re-run against an arbitrary historical schema
-// (Replit publish-time dev->prod diff replays migrations on boot).
+// (the prior deploy pipeline's dev→prod diff replays migrations on boot).
 
 exports.shorthands = undefined;
 

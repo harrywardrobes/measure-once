@@ -1,7 +1,6 @@
-// Email/password auth — replaces the prior Replit OIDC integration.
-// Sessions are still managed by passport + connect-pg-simple, and req.user
-// keeps its shape (`{ claims: { sub, email, ... }, expires_at, privilege_level,
-// onboarding_status }`) so the rest of the app continues to work unchanged.
+// Email/password auth (bcrypt + Passport session in PostgreSQL).
+// req.user shape: `{ claims: { sub, email, ... }, expires_at, privilege_level,
+// onboarding_status }`
 const logger = require('./logger');
 const session = require('express-session');
 const rateLimit = require('express-rate-limit');

@@ -1,31 +1,31 @@
 'use strict';
-// Restore legacy catalogue stub tables on dev to unblock Replit publish-time
-// schema diff.
+// Restore legacy catalogue stub tables on dev to unblock the prior deploy
+// pipeline's publish-time schema diff.
 //
 // Root cause of the publish failure:
 //   1783100000000_catalog-tables.js dropped design_visit_door_styles,
 //   design_visit_furniture_ranges, and design_visit_handles on dev and
 //   re-pointed three FKs to the new catalog_* tables.  Those old tables still
-//   exist on prod.
+//   existed on prod.
 //
-//   Replit's publish-time dev→prod diff sees the tables missing on dev and
-//   generates:
+//   The prior deploy pipeline's dev→prod schema diff saw the tables missing on
+//   dev and generated:
 //     DROP TABLE design_visit_door_styles       CASCADE
 //     DROP TABLE design_visit_furniture_ranges  CASCADE
 //     DROP TABLE design_visit_handles           CASCADE
 //
-//   Each CASCADE implicitly removes the FK constraints that reference those
+//   Each CASCADE implicitly removed the FK constraints that referenced those
 //   tables (design_visit_rooms_door_style_id_fkey,
 //   design_visits_furniture_range_id_fkey, design_visits_handle_id_fkey).
-//   The diff ALSO generates explicit ALTER TABLE … DROP CONSTRAINT statements
+//   The diff ALSO generated explicit ALTER TABLE … DROP CONSTRAINT statements
 //   for those same FKs (to handle the FK target change →catalog_*).  Because
 //   the CASCADE already removed the constraints, the explicit DROP CONSTRAINT
-//   fails with "constraint does not exist", and the whole publish rolls back.
+//   failed with "constraint does not exist", and the whole publish rolled back.
 //
 // Fix:
 //   Recreate the three tables as empty stubs on dev, matching prod's schema
-//   exactly.  Now both sides have the tables → Replit skips the DROP TABLE
-//   CASCADE entirely → the FK retarget is handled by the explicit
+//   exactly.  Now both sides have the tables → the schema diff skips the DROP
+//   TABLE CASCADE entirely → the FK retarget is handled by the explicit
 //   DROP CONSTRAINT (succeeds) + ADD CONSTRAINT →catalog_* (succeeds).
 
 exports.shorthands = undefined;

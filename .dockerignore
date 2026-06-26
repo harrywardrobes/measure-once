@@ -23,9 +23,6 @@ public/storybook/
 public/sw.js
 storybook-static/
 
-# Mockup sandbox — not part of the production app.
-artifacts/
-
 # Docs not needed at runtime.
 docs/
 *.md
