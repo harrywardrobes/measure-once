@@ -122,20 +122,19 @@ const DEV_ONLY_FEATURES: Array<{
     ),
   },
   {
-    name: 'HubSpot dev mode — default ON at startup',
+    name: 'HubSpot dev mode — forced ON at every startup',
     location: 'server.js — startup IIFE',
     description: (
       <>
         When <code className="adm-inline-code">NODE_ENV !== &apos;production&apos;</code>, the server
-        inserts{' '}
-        <code className="adm-inline-code">dev_mode_enabled = &apos;true&apos;</code> into{' '}
-        <code className="adm-inline-code">app_settings</code> on first boot (
-        <code className="adm-inline-code">INSERT … ON CONFLICT DO NOTHING</code>). This ensures a
-        fresh local database defaults to dev mode ON — mirroring the guarantee that{' '}
-        <code className="adm-inline-code">npm run staging:safety-reset</code> provides for staging —
-        so real HubSpot contacts are never accidentally exposed on localhost. Toggling dev mode OFF
-        from the Dev tab above is preserved across restarts once the row exists; only a genuinely
-        absent row is initialised.
+        forces{' '}
+        <code className="adm-inline-code">dev_mode_enabled = &apos;true&apos;</code> in{' '}
+        <code className="adm-inline-code">app_settings</code> on <strong>every</strong> startup (
+        <code className="adm-inline-code">INSERT … ON CONFLICT DO UPDATE SET value = &apos;true&apos;</code>
+        ). This guarantees the dev-mode banner is always visible on localhost and real HubSpot
+        contacts are never accidentally exposed — even if dev mode was toggled OFF during the
+        previous session. Turning dev mode OFF via the Dev tab above takes effect immediately but is
+        reset on the next server restart.
       </>
     ),
   },

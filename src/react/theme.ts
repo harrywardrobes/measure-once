@@ -235,6 +235,76 @@ export const theme: Theme = createTheme({
         variant: 'outlined',
       },
     },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: RADIUS.sm,
+          fontWeight: 600,
+        },
+        label: {
+          fontSize: '0.72rem',
+          letterSpacing: '0.01em',
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: RADIUS.sm,
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderWidth: 1,
+          },
+        },
+        notchedOutline: {
+          borderColor: BRAND_COLORS.stone,
+        },
+      },
+    },
+    MuiCard: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        root: {
+          border: `1px solid ${BRAND_COLORS.stone}`,
+          borderRadius: RADIUS.md,
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: RADIUS.md,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        },
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: { borderRadius: RADIUS.sm },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: { borderRadius: RADIUS.xs, fontSize: '0.72rem' },
+      },
+    },
+    MuiMenu: {
+      styleOverrides: {
+        paper: {
+          borderRadius: RADIUS.sm,
+          border: `1px solid ${BRAND_COLORS.stone}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+        },
+      },
+    },
+    MuiAutocomplete: {
+      styleOverrides: {
+        paper: {
+          borderRadius: RADIUS.sm,
+          border: `1px solid ${BRAND_COLORS.stone}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+        },
+      },
+    },
   },
 });
 

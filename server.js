@@ -8168,20 +8168,18 @@ async function cleanupStaleHubSpotCredentialRows() {
     process.exit(1);
   }
 
-  // In development, ensure dev_mode_enabled defaults to ON so a fresh database
-  // never exposes real HubSpot contacts on localhost. Uses INSERT … ON CONFLICT
-  // DO NOTHING so an admin's explicit toggle (via the Dev tab) is preserved
-  // across restarts. Mirrors the guarantee that staging:safety-reset provides
-  // for the staging environment.
+  // In development, force dev_mode_enabled ON on every startup so real HubSpot
+  // contacts are never accidentally exposed on localhost. Uses DO UPDATE so an
+  // existing row (e.g. previously toggled OFF) is reset to true on each restart.
   if (process.env.NODE_ENV !== 'production') {
     try {
       await pool.query(
         `INSERT INTO app_settings (key, value) VALUES ('dev_mode_enabled', 'true')
-         ON CONFLICT (key) DO NOTHING`
+         ON CONFLICT (key) DO UPDATE SET value = 'true'`
       );
-      logger.info('  HubSpot dev mode defaulted ON (development)');
+      logger.info('  HubSpot dev mode forced ON (development)');
     } catch (e) {
-      logger.warn({ err: e.message }, '  Could not set dev_mode_enabled default — contacts may show without filter');
+      logger.warn({ err: e.message }, '  Could not set dev_mode_enabled — contacts may show without filter');
     }
   }
 
