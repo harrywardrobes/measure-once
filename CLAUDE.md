@@ -76,6 +76,14 @@ Project management dashboard (HubSpot CRM integration).
   `npm run db:migrate:create -- name`.
 - Migrations use raw SQL (`pgm.sql`). Never edit an applied/merged migration —
   add a new one. Order is the numeric timestamp prefix.
+- **Renaming migration files:** if a file is renamed (timestamp or slug
+  changed), add an entry to `MIGRATION_RENAMES` in `db-migrate.js` — omitting
+  it causes a `checkOrder` boot failure on every database that applied the
+  migration under the old name. See the inline comments in `db-migrate.js`
+  (~lines 23–60) for the entry format and cascade rules.
+- **`public.migrations`** is owned by `@acpr/rate-limit-postgresql` — never
+  drop or truncate it (it tracks the package's internal SQL migrations, not
+  app migrations). `ensureRateLimitMigrations()` self-heals it on every boot.
 - New sync-relevant tables must carry `updated_at` + `version` + the auto-update
   trigger (see `migrations/*_sync-readiness.js`).
 - Isolated test DBs apply the full migration set via `scripts/with-test-db.js`;
@@ -167,6 +175,37 @@ no effect on `public/storybook/` (the static build served by Express at
   HTML page. All shared app styles live in `public/app-styles.css`.
   (`public/style.css` has been retired and deleted.)
 - Icons: named imports from `@mui/icons-material`, no inline `<svg>` in React.
+- **Bundle size gate:** `scripts/check-bundle-sizes.mjs` enforces a ~40kB gzip
+  cap on the always-loaded `public/react/main.js`. Any static import reachable
+  from `main.tsx` lands in this bundle — keep `offlineDb.ts` and its `idb` dep
+  out via dynamic `await import('./offlineDb')`. After adding a new dependency,
+  run `npm run build:react` to confirm the gate still passes.
+- **Admin tabs are separate, non-unmounting React roots.** Each `#tab-*` panel
+  in the admin view is mounted as its own `createRoot` and never unmounts, so
+  a shared React context/provider would create one live instance per opened tab
+  (duplicate SSE connections, stale-data banners on wrong pages). Use a
+  **module-level cache** (memoised promise) instead — see `fetchWorkflowCached()`
+  in `lib/workflowConfig.ts`. Only full-page board roots get `WorkflowDataProvider`.
+- **MUI v6 gotchas:**
+  - Stack layout props (`alignItems`, `flexWrap`, `direction`, `justifyContent`,
+    etc.) must go inside `sx={{}}` — the responsive shorthand prop system was
+    removed in v6.
+  - To attach `data-testid` to a Drawer/Dialog paper slot, use a `ref` callback
+    (`ref: (el) => { if (el) el.setAttribute('data-testid', 'id'); }`) inside
+    `slotProps.paper` — MUI v6 `SlotProps` types don't accept arbitrary data
+    attributes directly and TypeScript rejects them with TS2353.
+
+## Shared modules (CJS/ESM boundary)
+Modules consumed by both the Node.js CJS server (`require()`) and the Vite/React
+bundle (`import`) live in `shared/` as a paired set:
+- `shared/<name>.ts` — canonical TypeScript/ESM source; imported by `.tsx`/`.ts` via Vite.
+- `shared/<name>.cjs` — CJS mirror; required by server-side Node.js modules.
+
+Server-side callers must use the **explicit `.cjs` extension**
+(`require('./shared/<name>.cjs')`). Never use the bare name — Vite resolves `.js`
+before `.ts`, so a co-located `.js` file breaks Rollup's named-export detection.
+Add a drift-guard test if the two files must agree on critical contracts (see
+`test/card-action-handlers/drift-guard.js`).
 
 ## Privilege checks
 - **React components:** use `usePrivilege()` from `src/react/hooks/usePrivilege.ts`.
@@ -253,14 +292,3 @@ has `qb_estimate_id`, the pipeline fetches that estimate and:
 
 See **[docs/TEST_SUITES.md](docs/TEST_SUITES.md)** for the full suite reference,
 harness notes, and the isolated temp-database wrapper documentation.
-
-## React island conventions
-- Material UI is the standard component framework; every mount is wrapped
-  in `AppThemeProvider`. See `src/react/README.md` and `src/react/ICONS.md`.
-- Mounts are declared in `src/react/main.tsx`. Brand tokens (palette, stage
-  colours, radii, typography) live in `src/react/theme.ts` — the canonical
-  source of design tokens. CSS custom-property tokens are generated into
-  `public/tokens.css` by `scripts/generate-tokens-css.mjs` and loaded by every
-  HTML page. All shared app styles live in `public/app-styles.css`.
-  (`public/style.css` has been retired and deleted.)
-- Icons: named imports from `@mui/icons-material`, no inline `<svg>` in React.
