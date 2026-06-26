@@ -96,8 +96,8 @@ async function runProbes({ clients, users, pool, runId }) {
       // whether the email exists, so there is no enumeration leak. Accept 400.
       const c = makeClient(null);
       const r = await c.post('/api/forgot-password', { email: users.viewer.email });
-      await record('password-flow', 'forgot-password always returns 200 (no enumeration)',
-        'status=200 (or 400 when captcha active — uniform rejection, no enumeration leak)',
+      await record('password-flow', 'forgot-password returns 200 for approved email (or 400 when captcha active)',
+        'status=200 (or 400 when captcha active — uniform captcha rejection)',
         `status=${r.status}`,
         'medium', r.status === 200 || r.status === 400);
       // Verify the reset-token mechanism directly via DB (bypassing the captcha gate).
@@ -120,7 +120,7 @@ async function runProbes({ clients, users, pool, runId }) {
     } else {
       const c = makeClient(null);
       const r = await c.post('/api/forgot-password', { email: users.viewer.email });
-      await record('password-flow', 'forgot-password always returns 200 (no enumeration)',
+      await record('password-flow', 'forgot-password returns 200 for approved email',
         'status=200', `status=${r.status}`,
         'medium', r.status === 200);
 

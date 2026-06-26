@@ -849,10 +849,9 @@ async function setupAuth(app) {
   });
 
   // ── Public: forgot-password ────────────────────────────────────────────────
-  // Always returns 200 with the same response shape regardless of whether the
-  // email is on the approved list, so attackers can't use it to enumerate
-  // accounts. Rate-limited via accessRequestLimiter (same 5/hr/IP cap as the
-  // request-access endpoint).
+  // Rate-limited via accessRequestLimiter (same 5/hr/IP cap as request-access).
+  // Returns 404 when the email is not on the approved list so the UI can
+  // direct the user to request access instead of silently doing nothing.
   app.post('/api/forgot-password', accessRequestLimiter, async (req, res) => {
     const email = (req.body?.email || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -869,10 +868,11 @@ async function setupAuth(app) {
         } catch (mailErr) {
           logger.error({ err: mailErr.message }, '  Failed to issue/send password reset email:');
         }
+        return res.json({ ok: true });
       } else {
         logger.info(`  Password reset requested for unknown email: ${email}`);
+        return res.status(404).json({ error: 'not_found' });
       }
-      res.json({ ok: true });
     } catch (e) {
       logger.error({ err: e.message }, 'forgot-password failed:');
       res.json({ ok: true });

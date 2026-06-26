@@ -177,6 +177,7 @@ function LoginPageInner() {
   const [forgotConfirmed, setForgotConfirmed] = React.useState(false);
   const [forgotConfirmEmail, setForgotConfirmEmail] = React.useState('');
   const [forgotBusy, setForgotBusy] = React.useState(false);
+  const [forgotNotFound, setForgotNotFound] = React.useState(false);
 
   const [reqName, setReqName] = React.useState('');
   const [reqEmail, setReqEmail] = React.useState('');
@@ -194,6 +195,7 @@ function LoginPageInner() {
       if (forgotEmail && !loginEmail) setLoginEmail(forgotEmail);
       if (reqEmail && !loginEmail) setLoginEmail(reqEmail);
       setForgotConfirmed(false);
+      setForgotNotFound(false);
       setForgotEmail('');
       setForgotMsg(null);
     } else if (next === 'forgot') {
@@ -253,6 +255,8 @@ function LoginPageInner() {
       if (r.ok) {
         setForgotConfirmEmail(forgotEmail.trim());
         setForgotConfirmed(true);
+      } else if (r.status === 404) {
+        setForgotNotFound(true);
       } else if (r.status === 429) {
         setForgotMsg({ text: 'Too many requests — please try again later.', ok: false });
       } else {
@@ -314,7 +318,27 @@ function LoginPageInner() {
           Enter your email and we&apos;ll send you a link to set a new password.
         </Typography>
         {forgotMsg && <AuthAlert msg={forgotMsg.text} severity={forgotMsg.ok ? 'success' : 'error'} />}
-        {forgotConfirmed ? (
+        {forgotNotFound ? (
+          <>
+            <Alert severity="error" sx={{ mb: 2.5 }}>
+              We don&apos;t recognise <strong>{forgotEmail}</strong>. Try a different email, or request access if you don&apos;t have an account yet.
+            </Alert>
+            <Stack spacing={1.5}>
+              <Button
+                fullWidth variant="outlined"
+                onClick={() => { setForgotNotFound(false); setForgotEmail(''); setForgotMsg(null); resetWidget('forgot'); }}
+              >
+                Try a different email
+              </Button>
+              <Button
+                fullWidth variant="text"
+                onClick={() => { const e = forgotEmail; setForgotNotFound(false); if (!reqEmail) setReqEmail(e); setView('request'); }}
+              >
+                Request access
+              </Button>
+            </Stack>
+          </>
+        ) : forgotConfirmed ? (
           <>
             <Alert severity="success" icon={<CheckCircleOutlinedIcon />} sx={{ mb: 2.5 }}>
               An email has been sent to <strong>{forgotConfirmEmail}</strong>. Please check your inbox and follow the link to reset your password.

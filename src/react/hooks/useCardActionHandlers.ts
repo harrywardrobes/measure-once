@@ -54,8 +54,13 @@ export function lookupHandlerInIndex(
 ): CardActionHandlerData | null {
   const sKey = String(stageKey || '').toLowerCase();
   const lsKey = String(leadStatusKey || '').toLowerCase();
+  if (lsKey) {
+    // Contact has a lead status: only match an exact stage+LS binding.
+    // Do NOT fall back to stage-default or global — those slots are for
+    // contacts with no lead status assigned.
+    return byLabel[`${sKey}|${lsKey}`] || null;
+  }
   return (
-    byLabel[`${sKey}|${lsKey}`] ||
     byLabel[`${sKey}|`] ||
     byLabel[NORMALIZED_GLOBAL_SLOT_KEY] ||
     null
