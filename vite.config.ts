@@ -65,6 +65,11 @@ export default defineConfig({
       '/api': 'http://localhost:5000',
     },
   },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'esnext',
+    },
+  },
   build: {
     outDir: resolve(__dirname, 'public/react'),
     emptyOutDir: true,
