@@ -1,152 +1,107 @@
-# Harry Wardrobes — Project Dashboard
+# Measure Once — Project Dashboard
 
-A project management web app that uses HubSpot as the backend and connects Gmail and Google Calendar into a single view.
+A bespoke CRM and project management app for Harry Wardrobes. Integrates with HubSpot (contacts and deals), QuickBooks (invoices), Google (email, calendar, auth), and WhatsApp into a single workflow.
 
 ## Features
 
-- **Kanban board** — all HubSpot deals shown across your pipeline stages
-- **Stage checklists** — per-stage task lists built from your workflow (editable)
-- **Move deals** — change a deal's stage without leaving the app
-- **Email threads** — see Gmail conversations for each customer
-- **Calendar** — view and create Google Calendar events per project
-- **Send emails** — compose and send from within the app
-- **Checklist persistence** — task completion saved back to HubSpot notes
+- **Customers** — browse, search, filter, and create contacts; track lead status and urgency
+- **Projects** — manage deal stages across the full installation pipeline (sales → design → survey → order → workshop → installation → aftercare)
+- **Design visits & surveys** — schedule visits, capture questionnaire submissions, customer sign-off
+- **Trades** — create and approve trade cost items; audit history and conflict resolution
+- **Invoicing** — view and filter QuickBooks invoices per customer or across all projects
+- **Tasks & calendar** — create tasks with deadlines and assignees; create Google Calendar events
+- **WhatsApp** — send and receive messages per customer from within the app
+- **Ideas** — team feature requests with voting and comments
+- **Admin** — team management, role-based permissions, custom nav, card actions, workflow automation, email templates, audit log, HubSpot / QuickBooks / Google Maps config
 
 ---
 
 ## Setup
 
-> **Developing locally against the cloud services?** See
-> [docs/local-dev.md](docs/local-dev.md) for the full local dev loop (dev DB,
-> GCS storage, OAuth redirect registration, the local-login cookie behaviour).
+> **Local development?** See [docs/local-dev.md](docs/local-dev.md) for the full local dev loop (dev DB, GCS storage, OAuth redirect registration, local-login cookie behaviour).
 
 ### 1. Install dependencies
+
 ```bash
-cd measure-once
-# Skip the Puppeteer Chromium download (only needed for PDF/browser test flows):
 PUPPETEER_SKIP_DOWNLOAD=true npm install
 ```
 
 ### 2. Configure environment
+
 ```bash
 cp .env.example .env
 ```
-Then fill in your keys (see below).
 
-### 3. HubSpot Private App token
-1. Go to **HubSpot → Settings → Integrations → Private Apps**
-2. Create a new Private App
-3. Add these scopes:
-   - `crm.objects.deals.read` / `write`
-   - `crm.objects.contacts.read`
-   - `crm.objects.notes.read` / `write`
-   - `crm.pipelines.orders.read`
-4. Copy the token into `.env` as `HUBSPOT_ACCESS_TOKEN`
+Fill in your keys (HubSpot token, Google OAuth credentials, database URL, etc.).
 
-### 4. Google OAuth (Gmail + Calendar)
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a project → Enable **Gmail API** and **Google Calendar API**
-3. Go to **APIs & Services → Credentials → Create OAuth 2.0 Client ID**
-4. Application type: **Web application**
-5. Add authorised redirect URI: `http://localhost:5000/auth/google/callback`
-6. Copy Client ID and Client Secret into `.env`
+### 3. HubSpot Private App
 
-### 5. HubSpot Pipeline stages
-Name your HubSpot deal pipeline stages to match your workflow:
-- Sales
-- Design Visit
-- Survey
-- Order
-- Workshop
-- Packing
-- Delivery
-- Installation
-- Aftercare
+1. **HubSpot → Settings → Integrations → Private Apps** — create a new app
+2. Add scopes: `crm.objects.deals.read/write`, `crm.objects.contacts.read`, `crm.objects.notes.read/write`, `crm.pipelines.orders.read`
+3. Copy the token into `.env` as `HUBSPOT_ACCESS_TOKEN`
 
-The app will match stages by name automatically.
+### 4. Google OAuth (email + calendar)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) — enable **Gmail API** and **Google Calendar API**
+2. Create an OAuth 2.0 Client ID (Web application)
+3. Add authorised redirect URI: `http://localhost:5000/auth/google/callback`
+4. Copy Client ID and Client Secret into `.env`
 
 ---
 
 ## Running locally
+
+Two terminals for the fastest dev loop with Hot Module Replacement:
+
 ```bash
-npm run dev    # with auto-reload
-# or
-npm start      # production
+# Terminal 1 — Express API server
+npm run dev
+
+# Terminal 2 — Vite dev server with HMR (open on port 5173)
+npm run dev:react
 ```
 
-Open [http://localhost:5000](http://localhost:5000)
+Or use a single terminal with auto-rebuild on save (open on port 5000):
+
+```bash
+npm run dev          # Terminal 1
+npm run watch:react  # Terminal 2 — rebuilds on save, reload manually
+```
+
+---
+
+## Building
+
+```bash
+npm run build:react      # full build — typecheck + Vite + bundle-size check
+npm run typecheck        # TypeScript check only
+```
 
 ---
 
 ## Database migrations
 
-The schema is built and upgraded entirely by ordered, versioned migration files
-in `migrations/` using [`node-pg-migrate`](https://salsita.github.io/node-pg-migrate/).
-There are no `ensureXTable()`/`CREATE TABLE` calls scattered through the app any
-more — `runMigrations()` (in `db-migrate.js`) runs every pending migration on
-boot, before auth/session setup, so the database is always current.
-
-Migrations use raw SQL (`pgm.sql`) so the project's plain `pg` query style is
-preserved end to end.
+Schema is owned entirely by versioned migration files in `migrations/` — no `CREATE TABLE` calls in app code. Migrations run automatically on boot in development.
 
 ```bash
-# Apply all pending migrations (also runs automatically on boot)
-npm run db:migrate
-
-# Roll back the most recent migration
-npm run db:migrate:down
-
-# Roll back then re-apply the most recent migration (handy while iterating)
-npm run db:migrate:redo
-
-# Scaffold a new migration file in migrations/
-npm run db:migrate:create -- my_change_name
+npm run db:migrate                        # apply all pending migrations
+npm run db:migrate:down                   # roll back the most recent migration
+npm run db:migrate:redo                   # roll back then re-apply the most recent
+npm run db:migrate:create -- my_change    # scaffold a new migration file
 ```
 
-Guidelines:
-- Migrations are immutable once merged — never edit an applied migration; add a
-  new one to change the schema.
-- Keep them ordered (the numeric timestamp prefix defines run order) and
-  idempotent-safe where practical (`IF NOT EXISTS`, etc.).
-- New sync-relevant tables should carry `updated_at` + `version` columns and the
-  auto-update trigger (see `migrations/*_sync-readiness.js` for the pattern).
-- Tests that spin up isolated databases apply the full migration set via
-  `scripts/with-test-db.js`; no schema is created at boot by application code.
+Never edit an applied migration — add a new one to change the schema.
 
 ---
 
-## Deploying to a server
+## Deployment
 
-The app is a standard Node.js/Express app. Deploy to any host that supports Node.js (Railway, Render, DigitalOcean, etc.).
+The app runs on **Google Cloud Run**. See [docs/deploy.md](docs/deploy.md) for the full deploy runbook and [docs/environments.md](docs/environments.md) for environment concepts.
 
-When deploying:
-1. Set all env vars on your hosting platform
-2. Update `GOOGLE_REDIRECT_URI` to your production domain, e.g.:
-   `https://crm.harrywwardrobes.co.uk/auth/google/callback`
-3. Add that URI to your Google OAuth client's authorised redirect URIs
-4. Set `PORT` if your host requires a specific port
+Before deploying, apply any pending migrations against the production database:
 
-### Production schema
+```bash
+npm run db:migrate   # run against production DATABASE_URL
+```
 
-The production schema is owned by the migration files in `migrations/` (we are
-transitioning to migrations as the single schema source of truth). Apply them in
-one of two ways:
-
-- **Boot-time flag:** set `RUN_MIGRATIONS_ON_BOOT=true` in the production
-  environment. The server then runs all pending migrations at boot, before
-  serving requests, exactly as it does in development. A migration failure is
-  fatal — it is logged and the process exits (fail-closed) so the app never
-  serves against a partial schema. This flag is intentionally **not** committed
-  to any config or `.env` file; set it manually at cutover.
-- **Pre-deploy command:** run `npm run db:migrate` against the production
-  `DATABASE_URL` as a release/deploy step before the new app version starts.
-  The script has no dev-only guards, so it works unchanged against production.
-
-The rate-limit package's migration records are reconciled on every boot path
-regardless of which option above is used.
-
----
-
-## Editing your workflow checklists
-
-Click any deal → **Checklist** tab → **Edit tasks** to customise the task list for any stage. Changes are saved to `workflow.json` and apply to all future deals in that stage.
+Or set `RUN_MIGRATIONS_ON_BOOT=true` in the Cloud Run environment to apply migrations automatically at boot (fail-closed — a migration error exits the process).
