@@ -2,8 +2,8 @@
 // Drop two orphan tables that were never created by the app's own migration
 // system and have no application code references:
 //
-//   db_editor_audit — created by the old Replit DB editor integration; zero rows.
-//   migrations      — the Replit javascript_database integration's own tracker;
+//   db_editor_audit — created by the old database editor integration; zero rows.
+//   migrations      — a legacy third-party database integration's own tracker;
 //                     the app uses pgmigrations exclusively via node-pg-migrate.
 
 exports.shorthands = undefined;

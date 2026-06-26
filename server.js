@@ -310,7 +310,7 @@ app.get('/customer-info/:token', (req, res) => {
   });
 });
 
-// Public auth pages (no Replit/OIDC anymore — email + password handled in-app).
+// Public auth pages — email + password handled in-app.
 app.get('/login', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.render('login', {

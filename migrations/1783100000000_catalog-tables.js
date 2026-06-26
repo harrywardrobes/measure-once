@@ -15,7 +15,7 @@
 //
 // All steps are guarded (to_regclass / pg_constraint checks / IF [NOT] EXISTS)
 // so the migration survives a full re-run against an arbitrary historical
-// schema (Replit publish-time dev->prod diff replays migrations on boot).
+// schema (the prior deploy pipeline's dev→prod diff replays migrations on boot).
 
 exports.shorthands = undefined;
 

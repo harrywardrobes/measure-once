@@ -243,8 +243,8 @@ Add a drift-guard test if the two files must agree on critical contracts (see
   Run standalone or via `npm run test:ci`.
 
 ## Authentication
-Email + password via `auth.js` (bcrypt + Passport session in PostgreSQL — no
-Replit OIDC). Public pages: `/login`, `/set-password`, `/onboarding`. Key API:
+Email + password via `auth.js` (bcrypt + Passport session in PostgreSQL).
+Public pages: `/login`, `/set-password`, `/onboarding`. Key API:
 - `POST /api/login`, `POST /api/logout`, `GET /api/auth/user`
 - `GET /api/set-password/validate?token=…`, `POST /api/set-password`
 - `POST /api/onboarding/complete`
