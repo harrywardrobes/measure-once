@@ -55,9 +55,9 @@ const rootTokens = {
   ),
 
   /* ── Shadows ─────────────────────────────────────────────────────────────── */
-  '--shadow-sm': '0 1px 3px rgba(30,24,14,0.10), 0 1px 2px rgba(30,24,14,0.06)',
-  '--shadow-md': '0 4px 12px rgba(30,24,14,0.12), 0 2px 4px rgba(30,24,14,0.08)',
-  '--shadow-lg': '0 8px 24px rgba(30,24,14,0.14), 0 4px 8px rgba(30,24,14,0.08)',
+  '--shadow-sm': '0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.08)',
+  '--shadow-md': '0 2px 4px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.10)',
+  '--shadow-lg': '0 4px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.12)',
 
   /* ── Radius (auto-derived from RADIUS in theme.ts) ───────────────────────
    *  key → --radius-<key>  e.g. xl → --radius-xl, 2xl → --radius-2xl       */
@@ -80,13 +80,13 @@ const rootTokens = {
 
   /* ── Neutral / semantic surface tokens ───────────────────────────────────── */
   '--surface-card':     '#ffffff',
-  '--surface-muted':    '#f8f7f4',
+  '--surface-muted':    '#f5f4f2',
   '--surface-soft':     '#f9fafb',
-  '--border-soft':      '#e7e5e0',
-  '--border-strong':    '#d6d3d1',
-  '--shadow-card-xs':   '0 1px 3px rgba(0,0,0,.04)',
-  '--shadow-card-sm':   '0 2px 6px rgba(0,0,0,.06)',
-  '--shadow-modal':     '0 20px 60px rgba(0,0,0,0.25)',
+  '--border-soft':      '#e2e1df',
+  '--border-strong':    '#d4d3d0',
+  '--shadow-card-xs':   '0 1px 2px rgba(0,0,0,.04)',
+  '--shadow-card-sm':   '0 2px 6px rgba(0,0,0,.05)',
+  '--shadow-modal':     '0 8px 32px rgba(0,0,0,0.18)',
   '--overlay-scrim':    'rgba(0,0,0,0.45)',
 
   /* ── Status colours (auto-derived from STATUS_COLORS in theme.ts) ───────── */

@@ -425,12 +425,12 @@ body.has-viewer-banner .app-body { top: calc(var(--header-h) + var(--banner-h));
 .lead-substatus-chip {
   display: inline-block;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 0.7rem;
   font-weight: 600;
   background: var(--paper-deep);
   color: var(--ink-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--stone);
   line-height: 1.4;
 }
 .lead-substatus-chip.lsb-clickable        { cursor: pointer; }
@@ -761,8 +761,8 @@ input.token-overlay {
   width: 100%;
   max-width: 560px;
   background: #fff; /* hex-color-ok: plain white modal background */
-  border-radius: 14px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
   overflow: hidden;
   max-height: calc(100vh - 80px);
   display: flex;
@@ -773,7 +773,7 @@ input.token-overlay {
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--ink-6);
+  border-bottom: 1px solid var(--stone);
   flex-shrink: 0;
 }
 .cp-search-icon { color: var(--ink-3); flex-shrink: 0; }
@@ -794,9 +794,9 @@ input.token-overlay {
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--ink-3);
-  background: var(--ink-6);
-  border: 1px solid var(--ink-5);
-  border-radius: 4px;
+  background: var(--stone-light);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-sm);
   padding: 2px 7px;
 }
 .cp-results {
@@ -835,8 +835,8 @@ input.token-overlay {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ink-6);
-  border-radius: 8px;
+  background: var(--stone-light);
+  border-radius: var(--radius-sm);
   color: var(--plum);
   flex-shrink: 0;
 }
@@ -848,7 +848,7 @@ input.token-overlay {
   justify-content: center;
   background: var(--orchid);
   color: #fff; /* hex-color-ok: plain white text on orchid */
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -1065,8 +1065,8 @@ input.token-overlay {
 .modal-overlay.hidden { display: none; }
 .modal {
   background: var(--paper);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
   width: 100%; max-width: 640px;
   padding: 24px;
   max-height: 90vh; overflow-y: auto;
@@ -1171,8 +1171,8 @@ input.token-overlay {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 10px;
   background: #fff; /* hex-color-ok: plain white action row */
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--stone);
+  border-radius: var(--radius-sm);
   user-select: none;
   transition: opacity var(--mo-transition-fast), background var(--mo-transition-snap);
 }
@@ -1242,7 +1242,7 @@ input.token-overlay {
   font-weight: 600; color: var(--ink-3);
   font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
 }
-.admin-page .adm-tr  { border-bottom: 1px solid var(--border); }
+.admin-page .adm-tr  { border-bottom: 1px solid var(--stone-light); }
 .admin-page .adm-tr--alt { background: var(--paper); }
 .admin-page .adm-td  { padding: 7px 8px; }
 .admin-page .adm-td--right   { text-align: right; }
@@ -1280,9 +1280,9 @@ input.token-overlay {
 
 /* Modal scrim children (the inner white card) */
 .admin-page .adm-modal-card {
-  background: #fff; /* hex-color-ok: plain white modal card */ border-radius: 12px; padding: 20px;
+  background: #fff; /* hex-color-ok: plain white modal card */ border-radius: var(--radius-md); padding: 20px;
   width: 100%; max-width: 500px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+  box-shadow: var(--shadow-modal);
   max-height: 90vh; overflow: auto;
 }
 .admin-page .adm-modal-card--narrow { max-width: 440px; padding: 22px 24px; }
@@ -1313,7 +1313,7 @@ input.token-overlay {
 }
 .admin-page .adm-ca-block {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  padding: 8px 14px; border-bottom: 1px solid var(--stone-light);
 }
 .admin-page .adm-ca-block-title { font-size: .85rem; color: var(--ink-1); flex-shrink: 0; white-space: nowrap; }
 .admin-page .adm-ca-block-title.is-null { font-style: italic; }
@@ -1328,7 +1328,7 @@ input.token-overlay {
 }
 .admin-page .adm-ca-sub-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 5px 0; border-top: 1px dashed var(--border);
+  padding: 5px 0; border-top: 1px dashed var(--stone);
 }
 .admin-page .adm-ca-sub-row--new { background: var(--status-warning-light-bg); }
 .admin-page .adm-ca-sub-arrows {
@@ -1346,8 +1346,8 @@ input.token-overlay {
   padding: 4px 0 4px 7px;
   font-size: .78rem; font-family: var(--font-mono); color: var(--ink-3);
   background: #f3f4f6; /* hex-color-ok: gray-100 prefix chip; no exact token */
-  border: 1px solid var(--border); border-right: none;
-  border-radius: 6px 0 0 6px;
+  border: 1px solid var(--stone); border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
   line-height: 1.4; user-select: none;
 }
 .admin-page .adm-ca-sub-key {
@@ -1357,7 +1357,7 @@ input.token-overlay {
 }
 .admin-page .adm-ca-sub-key--has-prefix {
   flex: 0 0 90px;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .admin-page .adm-ca-sub-input {
   flex: 1; padding: 4px 7px; font-size: .78rem;
@@ -1376,8 +1376,8 @@ input.token-overlay {
 /* Conflict-resolution modal rows (admin Action handlers tab) */
 .admin-page .adm-conflict-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border: 1px solid var(--border);
-  border-radius: 8px; background: #fafaf7; /* hex-color-ok: warm off-white; no exact token */
+  padding: 10px 12px; border: 1px solid var(--stone);
+  border-radius: var(--radius-sm); background: #fafaf9; /* hex-color-ok: near-white; no exact token */
 }
 .admin-page .adm-conflict-row-body { flex: 1; min-width: 0; }
 .admin-page .adm-conflict-row-title {
@@ -1397,7 +1397,7 @@ input.token-overlay {
 .admin-page .adm-modal-card--wide {
   max-width: 560px;
   background: var(--surface-card);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-modal);
 }
 .admin-page .adm-modal-label--sm { margin: 8px 0 4px; }
@@ -1407,18 +1407,18 @@ input.token-overlay {
 }
 .admin-page .adm-type-desc {
   margin-top: 8px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--stone); border-radius: var(--radius-sm);
   background: var(--paper);
   font-size: .78rem; color: var(--ink-2);
   line-height: 1.5; white-space: pre-line;
 }
 .admin-page .adm-info-amber {
-  margin-top: 4px; padding: 6px 10px; border-radius: 6px;
+  margin-top: 4px; padding: 6px 10px; border-radius: var(--radius-sm);
   background: var(--status-warning-bg); border: 1px solid #fcd34d; /* hex-color-ok: amber-300 border; no exact token */
   font-size: .75rem; color: var(--status-warning-text); line-height: 1.5;
 }
 .admin-page .adm-info-blue {
-  margin-top: 8px; padding: 7px 10px; border-radius: 6px;
+  margin-top: 8px; padding: 7px 10px; border-radius: var(--radius-sm);
   background: var(--status-info-light-bg); border: 1px solid #bfdbfe; /* hex-color-ok: blue-200 border; no exact token */
   font-size: .75rem; color: var(--status-info-light-text); line-height: 1.5;
 }
@@ -1428,7 +1428,7 @@ input.token-overlay {
 }
 .admin-page .adm-conflict-box {
   margin-top: 12px; padding: 10px 12px;
-  border: 1px solid var(--status-warning-border); border-radius: 8px;
+  border: 1px solid var(--status-warning-border); border-radius: var(--radius-sm);
   background: var(--status-warning-light-bg);
 }
 .admin-page .adm-conflict-box-head {
@@ -1441,7 +1441,7 @@ input.token-overlay {
 .admin-page .adm-btn-conflict { font-size: .78rem; padding: 4px 12px; }
 .admin-page .adm-btn-conflict--primary {
   background: var(--stage-survey-bg); color: #fff; /* hex-color-ok: plain white text on amber button */
-  border: none; border-radius: 6px; cursor: pointer;
+  border: none; border-radius: var(--radius-sm); cursor: pointer;
 }
 
 /* Audit log + misc admin helpers */
@@ -1465,7 +1465,7 @@ input.token-overlay {
   font-size: .76rem; color: var(--ink-2); line-height: 1.5;
 }
 .admin-page .adm-handler-summary {
-  border: 1px solid #d8c7f5; /* hex-color-ok: light violet border; no exact token */ border-radius: 8px;
+  border: 1px solid #d8c7f5; /* hex-color-ok: light violet border; no exact token */ border-radius: var(--radius-sm);
   padding: 8px 10px; background: #f7f2ff; /* hex-color-ok: very light violet; no exact token */
 }
 .admin-page .adm-handler-summary-head {
@@ -1497,7 +1497,7 @@ input.token-overlay {
 .admin-page .adm-handlers-group { border-top: 1px solid var(--stone-light); }
 .admin-page .adm-handlers-group-head {
   padding: 7px 12px; font-size: .74rem; font-weight: 600;
-  color: var(--ink-3); background: #fafaf7; /* hex-color-ok: warm off-white; no exact token */
+  color: var(--ink-3); background: var(--surface-muted);
   text-transform: uppercase; letter-spacing: .04em;
 }
 .admin-page .adm-handlers-table {
@@ -1505,7 +1505,7 @@ input.token-overlay {
 }
 .admin-page .adm-handlers-stage {
   margin-bottom: 18px;
-  border: 1px solid var(--border); border-radius: var(--radius);
+  border: 1px solid var(--stone); border-radius: var(--radius-sm);
   overflow: hidden;
 }
 .admin-page .adm-handlers-stage-head {
@@ -1566,13 +1566,13 @@ input.token-overlay {
 .admin-page .adm-cab-fix-btn {
   flex: 0 0 auto; font-size: .78rem; padding: 4px 12px;
   background: var(--stage-survey-bg); color: #fff; /* hex-color-ok: plain white text on amber button */
-  border: none; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  border: none; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
 }
 
 /* Dev-environment banner inline code (DevEnvironmentPage.tsx) */
 .admin-page .adm-devenv-banner-code {
   font-family: var(--font-mono);
-  background: #fef08a; /* hex-color-ok: yellow-200 code highlight; no exact token */ padding: 1px 4px; border-radius: 3px;
+  background: #fef08a; /* hex-color-ok: yellow-200 code highlight; no exact token */ padding: 1px 4px; border-radius: var(--radius-sm);
 }
 
 /* DV catalogue — drag handles, thumbnails, previews */
@@ -1584,13 +1584,13 @@ input.token-overlay {
 .admin-page .adm-dv-actions-th { width: 52px; }
 .admin-page .adm-dv-thumb {
   width: 32px; height: 32px; object-fit: contain;
-  border-radius: 4px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); border: 1px solid var(--stone);
 }
 .admin-page .adm-dv-thumb-empty { color: var(--ink-4); }
 .admin-page .adm-dv-preview-wrap { margin-bottom: 6px; }
 .admin-page .adm-dv-preview {
   max-height: 80px; max-width: 160px;
-  border-radius: 6px; border: 1px solid var(--border); object-fit: contain;
+  border-radius: var(--radius-sm); border: 1px solid var(--stone); object-fit: contain;
 }
 .admin-page .adm-field-file   { font-size: .85rem; padding: 4px; }
 .admin-page .adm-field-resize { font-size: .85rem; resize: vertical; }

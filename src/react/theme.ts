@@ -23,11 +23,11 @@ import { createTheme, type Theme } from '@mui/material/styles';
 
 // ── Brand colour scales ────────────────────────────────────────────────
 export const BRAND_COLORS = {
-  paper:           '#F6F1E7',
-  paperDeep:       '#EDE5D4',
-  stone:           '#D9D2C2',
-  stoneLight:      '#E8E3D8',
-  stoneDeep:       '#B8AE99',
+  paper:           '#f5f4f2',
+  paperDeep:       '#ebebea',
+  stone:           '#d4d3d0',
+  stoneLight:      '#e5e4e2',
+  stoneDeep:       '#b0afac',
   orchid:          '#8B2BFF',
   orchidDeep:      '#6A12D9',
   orchidPress:     '#7a1fe0',
@@ -37,12 +37,12 @@ export const BRAND_COLORS = {
   orchidTintHover: '#E0D8FF',
   plum:            '#200842',
   plumLight:       '#3d0f7a',
-  pageBackground:  '#f8f7f4',
+  pageBackground:  '#f5f4f2',
   walnut:          '#8A5A3B',
-  ink1:            '#141413',
-  ink2:            '#3C3A34',
-  ink3:            '#6B6860',
-  ink4:            '#97927F',
+  ink1:            '#141414',
+  ink2:            '#3a3a3a',
+  ink3:            '#686868',
+  ink4:            '#999999',
 } as const;
 
 // ── Neutral grey scale (Tailwind-compatible, for UI surface colours) ───
@@ -159,13 +159,13 @@ export const ACTION_STRIP_DRAFT_COLORS = {
 
 // ── Radius scale (drives --radius-* CSS custom properties via AppThemeProvider) ─
 export const RADIUS = {
-  xs:   2,
-  sm:   4,
-  md:   6,
-  lg:   8,
-  xl:   10,
-  '2xl': 12,
-  '3xl': 14,
+  xs:   1,
+  sm:   2,
+  md:   3,
+  lg:   3,
+  xl:   4,
+  '2xl': 4,
+  '3xl': 4,
   pill: 999,
 } as const;
 

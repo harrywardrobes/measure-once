@@ -18,11 +18,11 @@
   --nav-h:    calc(64px + env(safe-area-inset-bottom));
 
   /* ── Brand colours ───────────────────────────────────────────────────────── */
-  --paper:             #F6F1E7;
-  --paper-deep:        #EDE5D4;
-  --stone:             #D9D2C2;
-  --stone-light:       #E8E3D8;
-  --stone-deep:        #B8AE99;
+  --paper:             #f5f4f2;
+  --paper-deep:        #ebebea;
+  --stone:             #d4d3d0;
+  --stone-light:       #e5e4e2;
+  --stone-deep:        #b0afac;
   --orchid:            #8B2BFF;
   --orchid-deep:       #6A12D9;
   --orchid-press:      #7a1fe0;
@@ -32,26 +32,26 @@
   --orchid-tint-hover: #E0D8FF;
   --plum:              #200842;
   --plum-light:        #3d0f7a;
-  --page-background:   #f8f7f4;
+  --page-background:   #f5f4f2;
   --walnut:            #8A5A3B;
-  --ink-1:             #141413;
-  --ink-2:             #3C3A34;
-  --ink-3:             #6B6860;
-  --ink-4:             #97927F;
+  --ink-1:             #141414;
+  --ink-2:             #3a3a3a;
+  --ink-3:             #686868;
+  --ink-4:             #999999;
 
   /* ── Shadows ─────────────────────────────────────────────────────────────── */
-  --shadow-sm:  0 1px 3px rgba(30,24,14,0.10), 0 1px 2px rgba(30,24,14,0.06);
-  --shadow-md:  0 4px 12px rgba(30,24,14,0.12), 0 2px 4px rgba(30,24,14,0.08);
-  --shadow-lg:  0 8px 24px rgba(30,24,14,0.14), 0 4px 8px rgba(30,24,14,0.08);
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:  0 2px 4px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg:  0 4px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.12);
 
   /* ── Radius ──────────────────────────────────────────────────────────────── */
-  --radius-xs:         2px;
-  --radius-sm:         4px;
-  --radius-md:         6px;
-  --radius-lg:         8px;
-  --radius-xl:         10px;
-  --radius-2xl:        12px;
-  --radius-3xl:        14px;
+  --radius-xs:         1px;
+  --radius-sm:         2px;
+  --radius-md:         3px;
+  --radius-lg:         3px;
+  --radius-xl:         4px;
+  --radius-2xl:        4px;
+  --radius-3xl:        4px;
   --radius-pill:       999px;
 
   /* ── Z-index ladder ──────────────────────────────────────────────────────── */
@@ -81,13 +81,13 @@
 
   /* ── Neutral / semantic surface tokens ───────────────────────────────────── */
   --surface-card:     #ffffff;
-  --surface-muted:    #f8f7f4;
+  --surface-muted:    #f5f4f2;
   --surface-soft:     #f9fafb;
-  --border-soft:      #e7e5e0;
-  --border-strong:    #d6d3d1;
-  --shadow-card-xs:   0 1px 3px rgba(0,0,0,.04);
-  --shadow-card-sm:   0 2px 6px rgba(0,0,0,.06);
-  --shadow-modal:     0 20px 60px rgba(0,0,0,0.25);
+  --border-soft:      #e2e1df;
+  --border-strong:    #d4d3d0;
+  --shadow-card-xs:   0 1px 2px rgba(0,0,0,.04);
+  --shadow-card-sm:   0 2px 6px rgba(0,0,0,.05);
+  --shadow-modal:     0 8px 32px rgba(0,0,0,0.18);
   --overlay-scrim:    rgba(0,0,0,0.45);
 
   /* ── Status colours (auto-derived from STATUS_COLORS in theme.ts) ───────── */
