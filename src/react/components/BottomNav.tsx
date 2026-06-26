@@ -2,15 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePrefs } from '../hooks/usePrefs';
 import Box from '@mui/material/Box';
-import BottomNavigation from '@mui/material/BottomNavigation';
-import BottomNavigationAction from '@mui/material/BottomNavigationAction';
 import Divider from '@mui/material/Divider';
-import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIconWrapper from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import { useTheme, type Theme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 import TuneIcon from '@mui/icons-material/Tune';
 import HomeIcon from '@mui/icons-material/Home';
 import { NavCustomiseDialog } from './NavCustomiseDialog';
@@ -24,42 +18,44 @@ import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import {
+  NAV_HEIGHT,
+  ITEM_WIDTH,
+  NavBar,
+  NavBottomNavigation,
+  NavAction,
+  NavDrawer,
+  DrawerHandle,
+  DrawerHandleContainer,
+  NavListItemButton,
+  OverflowListItem,
+  NavListItemText,
+  NavListItemIcon,
+  SkeletonContainer,
+  SkeletonItem,
+  SkeletonIcon,
+  SkeletonLabel,
+} from './BottomNav.styles';
+import type { Theme } from '@mui/material/styles';
 
 /**
  * Bottom navigation bar rendered as a React/MUI island into
- * `#app-bottom-nav-mount` on every non-admin page. Built on MUI's
- * `BottomNavigation` + `BottomNavigationAction` so each tab shows a
- * Material icon above its label and uses MUI's built-in selected state.
+ * `#app-bottom-nav-mount` on every non-admin page.
  *
  * Integration points preserved from the previous implementation:
- *
  * - Outer element is `<nav class="bottom-nav" id="main-content">` so
- *   the window-ui-smoke test selector (`nav.bottom-nav#main-content`)
- *   still matches. No CSS in app-styles.css backs this class; MUI sx
- *   owns all layout and colour.
- * - Each rendered action's root element keeps `id="bnav-<key>"` so the
- *   imperative capability gating in `public/core.js` and
- *   `public/admin.html` (which toggles `style.display` by element id)
- *   still works without errors. Drawer items also get their id.
- * - Privilege-gated tabs are conditionally rendered based on the user's
- *   privilege level from `usePrivilege` — no DOM mutation needed.
+ *   the window-ui-smoke test selector (`nav.bottom-nav#main-content`) matches.
+ * - Each rendered action's root element keeps `id="bnav-<key>"` for
+ *   imperative capability gating in `public/core.js`.
+ * - Privilege-gated tabs are conditionally rendered based on `usePrivilege`.
  *
  * Layout:
- * - When the number of visible items fits directly (<= FIT_THRESHOLD), every
- *   item is rendered as a primary tab and there is no "More" button or drawer.
- * - Only when there are more visible items than the threshold does the
- *   primary/overflow split apply: primary tabs (determined by the user's job
- *   role via GET /api/nav-role-config, falling back to __default__) stay in the
- *   bar and the rest move under a "More" button.
- * - The "More" button only ever appears when there is at least one overflow
- *   item.
- * - The managerOnly visibility filter always applies: tabs a user cannot
- *   access are never shown regardless of the role config.
- * - Tapping "More" opens a bottom Drawer listing overflow tabs; "More" shows
- *   as selected when the active page is in the overflow set.
- * - Per-item widths are fixed so the count changing never reflows existing
- *   tabs, and a fixed-height skeleton is shown until auth/config resolve so the
- *   bar paints once in its final shape (no post-load jank).
+ * - When visible items fit directly (<= FIT_THRESHOLD) every item is a primary
+ *   tab and there is no "More" button or drawer.
+ * - When there are more visible items than the threshold the primary/overflow
+ *   split applies: primary tabs stay in the bar, the rest go under "More".
+ * - A fixed-height skeleton is shown until auth/config resolve so the bar
+ *   paints once in its final shape (no post-load jank).
  */
 export type NavItem = {
   key: string;
@@ -74,23 +70,15 @@ export type NavItem = {
 export const NAV: NavItem[] = [
   { key: 'home',      href: '/',          label: 'Home',      Icon: HomeIcon,             IconOutlined: HomeOutlinedIcon },
   { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
-  { key: 'projects', href: '/projects', label: 'Projects', Icon: SquareFootIcon,    IconOutlined: SquareFootOutlinedIcon },
-  { key: 'survey',   href: '/survey',   label: 'Survey',   Icon: AssignmentIcon,    IconOutlined: AssignmentOutlinedIcon },
-  { key: 'invoices', href: '/invoices', label: 'Invoices', Icon: ReceiptLongIcon,   IconOutlined: ReceiptLongOutlinedIcon,   managerOnly: true },
+  { key: 'projects',  href: '/projects',  label: 'Projects',  Icon: SquareFootIcon,       IconOutlined: SquareFootOutlinedIcon },
+  { key: 'survey',    href: '/survey',    label: 'Survey',    Icon: AssignmentIcon,       IconOutlined: AssignmentOutlinedIcon },
+  { key: 'invoices',  href: '/invoices',  label: 'Invoices',  Icon: ReceiptLongIcon,      IconOutlined: ReceiptLongOutlinedIcon, managerOnly: true },
 ];
 
 const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'projects'];
 const BAR_SIZE = 3;
-// When the number of currently-visible nav items is at or below this, every
-// item is shown directly as a primary tab and the "More" overflow split is
-// bypassed entirely (no "More" button, no drawer). The primary/overflow split
-// only kicks in when there are more visible items than will comfortably fit.
 const FIT_THRESHOLD = 4;
-// Fixed per-item footprint so MUI's default `flex: 1` distribution does not
-// re-flow existing tabs when the visible item count changes (e.g. the
-// manager-only Invoices tab appearing after auth resolves). Each item keeps
-// its position; a new item simply appears at the end without shifting others.
-const ITEM_WIDTH = 80;
+const VALID_NAV_KEYS = new Set(NAV.map((n) => n.key));
 
 function accentFor(key: string, theme: Theme): string {
   if (key === 'projects') return theme.palette.stage.order.bg;
@@ -105,8 +93,6 @@ function matchPath(pathname: string): string | false {
   return prefix ? prefix.key : false;
 }
 
-const VALID_NAV_KEYS = new Set(NAV.map((n) => n.key));
-
 async function loadRoleNavConfig(): Promise<string[] | null> {
   try {
     const r = await fetch('/api/nav-role-config', { headers: { Accept: 'application/json' } });
@@ -116,10 +102,6 @@ async function loadRoleNavConfig(): Promise<string[] | null> {
       role?: string | null;
       default_is_customized?: boolean;
     };
-    // When the user has no job_role the API falls back to the __default__ config.
-    // If the admin has customised __default__ (default_is_customized=true) we
-    // honour it; otherwise fall back to privilege-level-aware defaults so that
-    // uncustomised deployments behave exactly as before.
     if (!data.role && !data.default_is_customized) return null;
     const keys = data.primary_keys;
     if (
@@ -148,52 +130,28 @@ function parseNavKeys(raw: unknown): string[] | null {
   return null;
 }
 
-/**
- * Fixed-height placeholder shown while the auth/config state is still
- * resolving. It reserves the exact bar height so the page never shifts and the
- * real tabs paint once in their final shape instead of popping in/out. The
- * placeholder items use the same fixed width as the real tabs so the layout is
- * visually continuous across the skeleton → final transition.
- */
+// ── Skeleton ───────────────────────────────────────────────────────────────────
+
 function NavSkeleton({ count }: { count: number }) {
   return (
-    <Box
-      aria-hidden="true"
-      data-testid="bottom-nav-skeleton"
-      sx={{
-        width: '100%',
-        maxWidth: { xs: 'none', sm: 640 },
-        height: 64,
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-    >
+    <SkeletonContainer aria-hidden="true" data-testid="bottom-nav-skeleton">
       {Array.from({ length: Math.max(count, 1) }).map((_, i) => (
-        <Box
-          key={i}
-          sx={{
-            flex: '0 0 auto',
-            width: ITEM_WIDTH,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 0.75,
-          }}
-        >
-          <Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: 'divider', opacity: 0.6 }} />
-          <Box sx={{ width: 40, height: 8, borderRadius: 1, bgcolor: 'divider', opacity: 0.6 }} />
-        </Box>
+        <SkeletonItem key={i}>
+          <SkeletonIcon />
+          <SkeletonLabel />
+        </SkeletonItem>
       ))}
-    </Box>
+    </SkeletonContainer>
   );
 }
+
+// ── BottomNav ──────────────────────────────────────────────────────────────────
 
 export function BottomNav() {
   const theme = useTheme();
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--bottom-nav-height', '64px');
+    document.documentElement.style.setProperty('--bottom-nav-height', `${NAV_HEIGHT}px`);
     return () => {
       document.documentElement.style.removeProperty('--bottom-nav-height');
     };
@@ -205,38 +163,23 @@ export function BottomNav() {
     typeof window === 'undefined' ? false : matchPath(window.location.pathname),
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-
   const [primaryKeys, setPrimaryKeys] = useState<string[]>(DEFAULT_PRIMARY_KEYS);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
 
-  // visibleNav and defaultPrimaryKeys are computed here (before the ref) so
-  // that defaultPrimaryKeysRef always holds a role-aware value that the async
-  // loadRoleNavConfig callback can read even if isManager resolved late.
   const visibleNav = NAV.filter((n) => {
     if (n.adminOnly) return false;
     if (n.managerOnly) return isManager;
     return true;
   });
-  // Role-aware fallback used when the API returns no saved config (or when
-  // the user has no job_role and the admin has NOT customised the __default__
-  // layout — customised defaults are honoured directly).
-  // Both managers and non-managers default to DEFAULT_PRIMARY_KEYS.
-  // Filtered to actually-visible items.
+
   const defaultPrimaryKeys = DEFAULT_PRIMARY_KEYS
     .filter((k) => visibleNav.some((n) => n.key === k));
 
-  // Always reflects the latest defaultPrimaryKeys so the prefs-load callback
-  // can use it even if isManager resolved after the effect ran.
   const defaultPrimaryKeysRef = useRef(defaultPrimaryKeys);
   defaultPrimaryKeysRef.current = defaultPrimaryKeys;
 
-  // Tracks whether a real saved config came from the API (vs role-aware
-  // defaults). Used by the isManager-change effect below to decide whether
-  // to re-apply defaults when the privilege level resolves late.
   const apiConfigFoundRef = useRef(false);
-  // Mirrors the configLoaded state in a ref so the isManager-change effect
-  // can read the latest value without being listed as a dependency.
   const configLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -252,21 +195,16 @@ export function BottomNav() {
   }, []);
 
   useEffect(() => {
-    if (prefsLoading) return; // Wait for prefs to be available before reading nav_primary_keys
+    if (prefsLoading) return;
     let cancelled = false;
     loadRoleNavConfig().then((roleKeys) => {
       if (cancelled) return;
-      // User personal prefs take priority over role config.
       const userPrefs = parseNavKeys(prefs.nav_primary_keys);
       const keys = userPrefs ?? roleKeys;
       if (keys) {
         setPrimaryKeys(keys);
         apiConfigFoundRef.current = true;
       } else {
-        // No saved pref — use role-aware defaults. Reading from the ref
-        // captures the current value of isManager even when it resolved
-        // asynchronously after this effect started (e.g. bootstrap() races
-        // the React mount and isManager was false at mount time).
         setPrimaryKeys(defaultPrimaryKeysRef.current);
         apiConfigFoundRef.current = false;
       }
@@ -277,12 +215,6 @@ export function BottomNav() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefsLoading]);
 
-  // Re-apply role-aware defaults when the privilege level resolves after the
-  // initial config load.  This handles the common race: the config fetch
-  // completes while isManager is still false (bootstrap() hasn't fired yet),
-  // so the member defaults get written; when mo:user later fires and isManager
-  // becomes true we need to correct the primary keys — but only when no
-  // explicit saved config was returned by the API.
   useEffect(() => {
     if (configLoadedRef.current && !apiConfigFoundRef.current) {
       setPrimaryKeys(defaultPrimaryKeysRef.current);
@@ -294,10 +226,6 @@ export function BottomNav() {
     ? primaryKeys.filter((k) => visibleNav.some((n) => n.key === k))
     : DEFAULT_PRIMARY_KEYS.filter((k) => visibleNav.some((n) => n.key === k));
 
-  // When every visible item fits directly we skip the primary/overflow split
-  // entirely: all items become primary tabs and there is no "More" button or
-  // drawer. The split (and "More") only returns when there are more visible
-  // items than the fit threshold.
   const allFit = visibleNav.length <= FIT_THRESHOLD;
 
   const barItems = allFit
@@ -307,20 +235,10 @@ export function BottomNav() {
     ? []
     : visibleNav.filter((n) => !resolvedPrimaryKeys.includes(n.key));
 
-  // "More" only ever appears when there is at least one overflow item.
   const hasOverflow = overflowItems.length > 0;
-
-  // The nav is ready to render its final layout once we know the user's
-  // privilege (which determines the visible item set). When the items don't all
-  // fit we additionally wait for the role/pref config that decides the
-  // primary/overflow split. Until then we render a fixed-height skeleton so the
-  // bar paints once in its final shape — no tabs popping in/out or reflowing
-  // after first paint.
   const navReady = !privLoading && (allFit || configLoaded);
-
   const activeInOverflow = value !== false && overflowItems.some((n) => n.key === value);
   const moreSelected = activeInOverflow || drawerOpen;
-
   const barValue = activeInOverflow ? '__more__' : (value || false);
 
   const handleCustomiseSave = useCallback((keys: string[]) => {
@@ -329,64 +247,25 @@ export function BottomNav() {
     void patchPref('nav_primary_keys', keys);
   }, [patchPref]);
 
-  const actionSx = {
-    color: 'text.secondary',
-    px: 0.5,
-    // Fixed footprint (no `flex: 1` growth) so each tab keeps a stable width
-    // and position regardless of how many items are in the bar.
-    flex: '0 0 auto',
-    minWidth: ITEM_WIDTH,
-    maxWidth: ITEM_WIDTH,
-    '& .MuiBottomNavigationAction-label': {
-      fontWeight: 600,
-      letterSpacing: '0.02em',
-      textTransform: 'uppercase',
-      fontSize: { xs: '0.65rem', sm: '0.7rem' },
-    },
-    '& .MuiBottomNavigationAction-label.Mui-selected': {
-      fontSize: { xs: '0.65rem', sm: '0.7rem' },
-    },
-  } as const;
-
   return (
     <>
-      <Box
+      <NavBar
         component="nav"
         id="main-content"
         className="bottom-nav"
-        sx={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          bgcolor: 'background.paper',
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          zIndex: (t) => t.zIndex.appBar,
-          pb: 'env(safe-area-inset-bottom)',
-          display: 'flex',
-          justifyContent: 'center',
-          overflowY: 'hidden',
-        }}
       >
         {navReady ? (
-          <BottomNavigation
+          <NavBottomNavigation
             value={barValue}
             showLabels
             onChange={() => { /* anchor navigation handles routing */ }}
-            sx={{
-              width: '100%',
-              maxWidth: { xs: 'none', sm: 640 },
-              height: 64,
-              bgcolor: 'transparent',
-            }}
           >
             {barItems.map((n) => {
               const accent = accentFor(n.key, theme);
               const isSelected = value === n.key;
               const IconComponent = isSelected ? n.Icon : n.IconOutlined;
               return (
-                <BottomNavigationAction
+                <NavAction
                   key={n.key}
                   id={`bnav-${n.key}`}
                   value={n.key}
@@ -395,21 +274,13 @@ export function BottomNav() {
                   label={n.label}
                   icon={<IconComponent />}
                   data-selected={isSelected ? 'true' : undefined}
-                  sx={{
-                    ...actionSx,
-                    '&.Mui-selected': {
-                      color: accent,
-                      borderTop: '2px solid',
-                      borderTopColor: accent,
-                      paddingTop: 'calc(6px - 2px)',
-                    },
-                  }}
+                  $accent={accent}
                 />
               );
             })}
 
             {hasOverflow && (
-              <BottomNavigationAction
+              <NavAction
                 key="more"
                 id="bnav-more"
                 value="__more__"
@@ -420,62 +291,31 @@ export function BottomNav() {
                   e.preventDefault();
                   setDrawerOpen((prev) => !prev);
                 }}
-                sx={{
-                  ...actionSx,
-                  '&.Mui-selected': {
-                    color: theme.palette.primary.main,
-                    borderTop: '2px solid',
-                    borderTopColor: theme.palette.primary.main,
-                    paddingTop: 'calc(6px - 2px)',
-                  },
-                }}
+                $accent={theme.palette.primary.main}
               />
             )}
-          </BottomNavigation>
+          </NavBottomNavigation>
         ) : (
           <NavSkeleton count={visibleNav.length} />
         )}
-      </Box>
+      </NavBar>
 
-      <Drawer
+      <NavDrawer
         anchor="bottom"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        sx={{
-          zIndex: (t) => t.zIndex.appBar + 1,
-          '& .MuiDrawer-paper': {
-            borderTopLeftRadius: 12,
-            borderTopRightRadius: 12,
-            pb: 'env(safe-area-inset-bottom)',
-          },
-        }}
         slotProps={{ paper: { ref: (el: HTMLElement | null) => { if (el) el.setAttribute('data-testid', 'bottom-nav-drawer-paper'); } } }}
       >
-        <Box
-          sx={{
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'center',
-            pt: 1,
-            pb: 0.5,
-          }}
-        >
-          <Box
-            sx={{
-              width: 40,
-              height: 4,
-              borderRadius: 999,
-              bgcolor: 'divider',
-            }}
-          />
-        </Box>
+        <DrawerHandleContainer>
+          <DrawerHandle />
+        </DrawerHandleContainer>
         <List disablePadding sx={{ pb: 1 }}>
           {overflowItems.map((n) => {
             const accent = accentFor(n.key, theme);
             const isSelected = value === n.key;
             const IconComponent = isSelected ? n.Icon : n.IconOutlined;
             return (
-              <ListItemButton
+              <OverflowListItem
                 key={n.key}
                 id={`bnav-${n.key}`}
                 component="a"
@@ -483,77 +323,31 @@ export function BottomNav() {
                 selected={isSelected}
                 data-selected={isSelected ? 'true' : undefined}
                 onClick={() => setDrawerOpen(false)}
-                sx={{
-                  py: 1.5,
-                  px: 2.5,
-                  '&.Mui-selected': {
-                    bgcolor: 'transparent',
-                    color: accent,
-                  },
-                  '&.Mui-selected .MuiListItemIcon-root': {
-                    color: accent,
-                  },
-                  '&.Mui-selected .MuiListItemText-primary': {
-                    color: accent,
-                    fontWeight: 700,
-                  },
-                }}
+                $accent={accent}
               >
-                <ListItemIconWrapper
-                  sx={{
-                    minWidth: 40,
-                    color: isSelected ? accent : 'text.secondary',
-                  }}
-                >
+                <NavListItemIcon>
                   <IconComponent />
-                </ListItemIconWrapper>
-                <ListItemText
-                  primary={n.label}
-                  slotProps={{
-                    primary: {
-                      style: {
-                        fontWeight: isSelected ? 700 : 600,
-                        fontSize: '0.95rem',
-                        letterSpacing: '0.02em',
-                        textTransform: 'uppercase',
-                        color: isSelected ? accent : theme.palette.text.secondary,
-                      },
-                    },
-                  }}
-                />
-              </ListItemButton>
+                </NavListItemIcon>
+                <NavListItemText primary={n.label} />
+              </OverflowListItem>
             );
           })}
           {isManager && (
             <>
               <Divider sx={{ mx: 2, my: 0.5 }} />
-              <ListItemButton
+              <NavListItemButton
                 data-testid="nav-customise-button"
                 onClick={() => { setDrawerOpen(false); setCustomiseOpen(true); }}
-                sx={{ py: 1.5, px: 2.5 }}
               >
-                <ListItemIconWrapper sx={{ minWidth: 40, color: 'text.secondary' }}>
+                <NavListItemIcon>
                   <TuneIcon />
-                </ListItemIconWrapper>
-                <ListItemText
-                  primary="Customise navigation"
-                  slotProps={{
-                    primary: {
-                      style: {
-                        fontWeight: 600,
-                        fontSize: '0.95rem',
-                        letterSpacing: '0.02em',
-                        textTransform: 'uppercase',
-                        color: theme.palette.text.secondary,
-                      },
-                    },
-                  }}
-                />
-              </ListItemButton>
+                </NavListItemIcon>
+                <NavListItemText primary="Customise navigation" />
+              </NavListItemButton>
             </>
           )}
         </List>
-      </Drawer>
+      </NavDrawer>
 
       <NavCustomiseDialog
         open={customiseOpen}

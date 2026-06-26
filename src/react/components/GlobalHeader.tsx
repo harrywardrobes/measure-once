@@ -1,11 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
-import AppBar from '@mui/material/AppBar';
-import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Avatar from '@mui/material/Avatar';
-import Badge from '@mui/material/Badge';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
@@ -25,14 +21,27 @@ import {
   type ServiceStatus,
 } from '../contexts/ConnectionToastContext';
 import { SERVICE_DESCRIPTORS, SERVICE_KEYS, statusLabel, statusBadgeColor } from '../lib/connectionServices';
-import { BRAND_COLORS, SYNC_COLORS } from '../theme';
+import { BRAND_COLORS } from '../theme';
 import { getShortcut } from '../lib/getShortcut';
+import {
+  GlobalAppBar,
+  GlobalToolbar,
+  HeaderIconButton,
+  SearchButton,
+  SearchButtonLabel,
+  ProfileButton,
+  StatusBadgeRoot,
+  StatusIconBox,
+  StatusDotBadge,
+  ReconnectLabel,
+  OfflinePillRoot,
+  OfflinePillLabel,
+  ProfileBadge,
+} from './GlobalHeader.styles';
 
 export type { CurrentUser as HeaderUser } from '../hooks/useCurrentUser';
 
-// Lazy-loaded so the offline-queue hook + its icons stay out of main.js.
 const SyncPill = lazy(() => import('./SyncPill'));
-// Lazy-loaded too — surfaces persisted offline sync conflicts for review.
 const ConflictsReview = lazy(() => import('./ConflictsReview'));
 
 declare global {
@@ -60,33 +69,7 @@ function resolveInitials(user: CurrentUser): string {
     .toUpperCase() || '?';
 }
 
-const ICON_BTN_SX = {
-  width: 32,
-  height: 32,
-  borderRadius: '8px',
-  color: 'rgba(255,255,255,0.7)',
-  bgcolor: 'rgba(255,255,255,0.08)',
-  border: '1px solid rgba(255,255,255,0.12)',
-  '&:hover': { bgcolor: 'rgba(255,255,255,0.14)', color: 'common.white' },
-  '&:active': { bgcolor: 'rgba(255,255,255,0.2)' },
-} as const;
-
-const ICON_BTN_ACTIVE_SX = {
-  bgcolor: 'rgba(255,255,255,0.18)',
-  borderColor: 'rgba(255,255,255,0.35)',
-  color: 'common.white',
-} as const;
-
-// ── Service status icon config ─────────────────────────────────────────────────
-// Derived from the central SERVICE_DESCRIPTORS registry in connectionServices.ts.
-// Adding a new integration only requires one new ServiceDescriptor entry there.
-
-const CHECKING_PULSE_KEYFRAMES = {
-  '@keyframes mo-status-pulse': {
-    '0%, 100%': { opacity: 1 },
-    '50%':      { opacity: 0.3 },
-  },
-};
+// ── Service status badge ───────────────────────────────────────────────────────
 
 interface ServiceStatusBadgeProps {
   service: ConnectionService;
@@ -118,78 +101,32 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
 
   return (
     <Tooltip title={onClick ? `${tip} — click to manage connections` : tip}>
-      <Box
+      <StatusBadgeRoot
         component={onClick ? 'button' : 'span'}
         onClick={onClick}
         aria-label={onClick ? `${ariaLabel} — manage service connections` : ariaLabel}
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 0.5,
-          position: 'relative',
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          cursor: onClick ? 'pointer' : 'default',
-          borderRadius: '8px',
-          '&:focus-visible': onClick
-            ? { outline: '2px solid rgba(255,255,255,0.5)', outlineOffset: 2 }
-            : undefined,
-        }}
+        clickable={!!onClick}
       >
-        <Badge
+        <StatusDotBadge
           variant="dot"
           overlap="circular"
           anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-          sx={{
-            ...CHECKING_PULSE_KEYFRAMES,
-            '& .MuiBadge-dot': {
-              backgroundColor: badgeColor,
-              border: `1.5px solid ${BRAND_COLORS.plum}`,
-              width: 8,
-              height: 8,
-              minWidth: 8,
-              borderRadius: '50%',
-              ...(isChecking && {
-                animation: 'mo-status-pulse 1.4s ease-in-out infinite',
-              }),
-            },
-          }}
+          $isChecking={isChecking}
+          $dotColor={badgeColor}
+          $dotBorderColor={BRAND_COLORS.plum}
         >
-          <Box
+          <StatusIconBox
             data-testid="service-status-icon"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 28,
-              height: 28,
-              borderRadius: '8px',
-              color: iconColor,
-              bgcolor: 'rgba(255,255,255,0.08)',
-              border: `1px solid ${borderColor}`,
-            }}
+            $iconColor={iconColor}
+            $borderColor={borderColor}
           >
             <Icon fontSize="small" />
-          </Box>
-        </Badge>
+          </StatusIconBox>
+        </StatusDotBadge>
         {showReconnectLabel && (
-          <Box
-            component="span"
-            aria-hidden="true"
-            sx={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.04em',
-              lineHeight: 1,
-              color: '#fca5a5', // hex-color-ok: error label tint, matches status icon tint
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Reconnect
-          </Box>
+          <ReconnectLabel aria-hidden="true">Reconnect</ReconnectLabel>
         )}
-      </Box>
+      </StatusBadgeRoot>
     </Tooltip>
   );
 }
@@ -199,32 +136,16 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
 export function OfflinePill() {
   return (
     <Tooltip title="You're offline — showing saved data. Changes can't be sent until you reconnect.">
-      <Box
+      <OfflinePillRoot
         component="span"
         role="status"
         aria-live="polite"
         aria-label="Offline — showing saved data"
         data-testid="offline-pill"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 0.5,
-          height: 28,
-          px: 1,
-          borderRadius: '8px',
-          color: SYNC_COLORS.pending.color,
-          bgcolor: SYNC_COLORS.pending.bg,
-          border: `1px solid ${SYNC_COLORS.pending.border}`,
-          fontSize: 11,
-          fontWeight: 600,
-          letterSpacing: '0.03em',
-          lineHeight: 1,
-          whiteSpace: 'nowrap',
-        }}
       >
         <CloudOffIcon fontSize="small" />
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Offline</Box>
-      </Box>
+        <OfflinePillLabel>Offline</OfflinePillLabel>
+      </OfflinePillRoot>
     </Tooltip>
   );
 }
@@ -241,8 +162,6 @@ export function GlobalHeader() {
 
   usePrivilegeSync();
 
-  // Fire connection checks on every page, even when no page component calls useConnectionCheck.
-  // The dedup/cooldown logic in ConnectionToastContext prevents double-firing.
   useEffect(() => {
     checkServicesOnMount().catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,35 +222,14 @@ export function GlobalHeader() {
   };
 
   return (
-    <AppBar
-      data-testid="global-header"
-      position="fixed"
-      elevation={0}
-      sx={{
-        bgcolor: BRAND_COLORS.plum,
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        pt: 'env(safe-area-inset-top)',
-        zIndex: (t) => t.zIndex.appBar,
-      }}
-    >
-      <Toolbar
-        disableGutters
-        sx={{
-          minHeight: 64,
-          height: 64,
-          px: 1.5,
-          gap: 1,
-          maxWidth: 640,
-          width: '100%',
-          mx: 'auto',
-        }}
-      >
+    <GlobalAppBar data-testid="global-header" position="fixed" elevation={0}>
+      <GlobalToolbar disableGutters>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, minWidth: 0 }}>
           {showBack && (
             <Tooltip title="Back">
-              <IconButton aria-label="Go back" onClick={onBack} sx={ICON_BTN_SX} size="small">
+              <HeaderIconButton aria-label="Go back" onClick={onBack} size="small">
                 <ArrowBackIcon fontSize="small" />
-              </IconButton>
+              </HeaderIconButton>
             </Tooltip>
           )}
           <Box
@@ -351,33 +249,20 @@ export function GlobalHeader() {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-          {/* Pending-sync indicator — appears whenever offline edits are queued,
-              syncing, or failed; independent of the online/offline pill below. */}
           <Suspense fallback={null}>
             <SyncPill />
           </Suspense>
-          {/* Sync-conflict review — appears only while there are persisted
-              conflicts from offline edits that overwrote newer server data. */}
           <Suspense fallback={null}>
             <ConflictsReview />
           </Suspense>
-          {/* When offline, the per-service badges are meaningless (every check
-              would fail), so show a single Offline pill instead. */}
+
           {!online ? (
             <Box sx={{ display: 'flex', alignItems: 'center', mr: 0.25 }}>
               <OfflinePill />
             </Box>
           ) : (
-            /* Service status icons — visible with checking/ok/error/warning states.
-               Each icon is a clickable button that opens the ConnectServicesModal
-               pre-highlighting that service. */
             <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5,
-                mr: 0.25,
-              }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.25 }}
               role="group"
               aria-label="Service status"
             >
@@ -393,113 +278,74 @@ export function GlobalHeader() {
           )}
 
           <Tooltip title={`Search (${kbdHint})`}>
-            <IconButton
+            <SearchButton
               aria-label={`Search (${kbdHint})`}
               onClick={onSearch}
               size="small"
-              sx={{
-                ...ICON_BTN_SX,
-                width: 'auto',
-                px: { xs: 0.75, sm: 1.125 },
-                gap: 0.625,
-              }}
             >
               <SearchIcon fontSize="small" />
-              <Box
-                component="span"
-                aria-hidden="true"
-                sx={{
-                  display: { xs: 'none', sm: 'inline' },
-                  fontSize: 11,
-                  fontWeight: 500,
-                  opacity: 0.65,
-                  letterSpacing: '0.03em',
-                  lineHeight: 1,
-                }}
-              >
-                {kbdHint}
-              </Box>
-            </IconButton>
+              <SearchButtonLabel aria-hidden="true">{kbdHint}</SearchButtonLabel>
+            </SearchButton>
           </Tooltip>
 
           <Tooltip title="Customers">
-            <IconButton
+            <HeaderIconButton
               component="a"
               href="/customers"
               aria-label="Customers"
               size="small"
-              sx={{ ...ICON_BTN_SX, ...(customersActive ? ICON_BTN_ACTIVE_SX : {}) }}
+              navActive={customersActive}
             >
               <PeopleAltIcon fontSize="small" />
-            </IconButton>
+            </HeaderIconButton>
           </Tooltip>
 
           {isAdmin && (
             <Tooltip title="Admin panel">
-              <IconButton
+              <HeaderIconButton
                 component="a"
                 href="/admin"
                 aria-label="Admin panel"
                 size="small"
-                sx={{ ...ICON_BTN_SX, ...(adminActive ? ICON_BTN_ACTIVE_SX : {}) }}
+                navActive={adminActive}
               >
                 <ShieldIcon fontSize="small" />
-              </IconButton>
+              </HeaderIconButton>
             </Tooltip>
           )}
 
           {isAdmin && (
             <Tooltip title="Design system">
-              <IconButton
+              <HeaderIconButton
                 component="a"
                 href="/storybook/"
                 aria-label="Design system"
                 size="small"
-                sx={{ ...ICON_BTN_SX, ...(storybookActive ? ICON_BTN_ACTIVE_SX : {}) }}
+                navActive={storybookActive}
               >
                 <AutoStoriesIcon fontSize="small" />
-              </IconButton>
+              </HeaderIconButton>
             </Tooltip>
           )}
 
           {user && (
             <Tooltip title="Profile">
-              <IconButton
+              <ProfileButton
                 component="a"
                 href="/profile"
                 aria-label="Open profile"
                 size="small"
-                sx={{
-                  p: 0,
-                  width: 30,
-                  height: 30,
-                  bgcolor: 'rgba(255,255,255,0.15)',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' },
-                  ...(profileActive ? { outline: '2px solid rgba(255,255,255,0.35)' } : {}),
-                }}
+                navActive={profileActive}
               >
-                <Badge
+                <ProfileBadge
                   color="error"
                   variant="dot"
                   invisible={!isAdmin || pendingCount <= 0}
                   overlap="circular"
                   anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-                  sx={{
-                    '& .MuiBadge-dot': {
-                      border: `1.5px solid ${BRAND_COLORS.plum}`,
-                      width: 8,
-                      height: 8,
-                      minWidth: 8,
-                      borderRadius: '50%',
-                    },
-                  }}
                 >
                   {photoSrc ? (
-                    <Avatar
-                      src={photoSrc}
-                      alt=""
-                      sx={{ width: 30, height: 30 }}
-                    />
+                    <Avatar src={photoSrc} alt="" sx={{ width: 30, height: 30 }} />
                   ) : (
                     <Avatar
                       sx={{
@@ -515,13 +361,13 @@ export function GlobalHeader() {
                       {initials}
                     </Avatar>
                   )}
-                </Badge>
-              </IconButton>
+                </ProfileBadge>
+              </ProfileButton>
             </Tooltip>
           )}
         </Box>
-      </Toolbar>
-    </AppBar>
+      </GlobalToolbar>
+    </GlobalAppBar>
   );
 }
 

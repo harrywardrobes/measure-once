@@ -37,7 +37,7 @@ runGenerator();
 console.log('[watch-react] Starting vite build --watch…');
 const vite = spawn(
   process.execPath,
-  ['node_modules/.bin/vite', 'build', '--watch'],
+  ['node_modules/vite/bin/vite.js', 'build', '--watch'],
   { stdio: 'inherit', cwd: ROOT }
 );
 
