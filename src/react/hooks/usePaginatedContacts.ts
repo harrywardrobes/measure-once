@@ -20,6 +20,8 @@ export type PaginatedContact = {
     measure_once_rooms?: string;
     /** HubSpot timestamp (ISO string) of the last time this contact was contacted. */
     notes_last_contacted?: string;
+    /** Set to 'true' on HubSpot test contacts; excluded from customer-facing views. */
+    hw_test_user?: string;
   };
 };
 
