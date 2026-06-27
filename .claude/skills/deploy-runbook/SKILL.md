@@ -127,6 +127,10 @@ gcloud run services describe measure-once-staging --region=europe-west2 `
    ```
    The output must say either the migration(s) applied cleanly or
    `No migrations to run!`. Anything else — stop, don't deploy.
+   > **Instance restore check:** if the staging database was recently restored
+   > from a SQL export (e.g. Cloud SQL instance migration), the `pgmigrations`
+   > table may be behind the current codebase. `npm run db:migrate` here will
+   > catch and apply any gap. Never skip this step after a restore.
 
 5. **Deploy to staging** — run Step 3's `gcloud run deploy measure-once-staging`
    with `$IMAGE`. Confirm the new revision is serving 100% traffic.
@@ -186,6 +190,11 @@ Only once all three are explicitly satisfied, continue to section 4.
    npm run db:migrate
    ```
    Same bar: clean success or `No migrations to run!`, nothing else.
+   > **Instance restore check:** if the production database was recently restored
+   > from a SQL export (e.g. Cloud SQL instance migration), the `pgmigrations`
+   > table reflects the source's history and may be behind the current codebase.
+   > `npm run db:migrate` here will close any gap. Skipping it causes immediate
+   > 500 errors on requests that touch a column added by the missing migration.
 
 3. **Deploy to production** — Step 5's `gcloud run deploy measure-once`,
    reusing `$IMAGE` from the staging build that was actually verified — never a

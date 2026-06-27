@@ -122,6 +122,14 @@ $env:DATABASE_URL = "postgres://app:$pw@127.0.0.1:15432/measureonce"
 npm run db:migrate
 ```
 
+> **After a Cloud SQL instance restore or export/import:** the restored
+> `pgmigrations` table reflects the migration history of the *source* database
+> at the time of export, which may be behind the current codebase. Running
+> `npm run db:migrate` here will apply any missing migrations before the new
+> image starts serving traffic. Skipping this step causes immediate 500 errors
+> on the first request that touches a column or table added by the missing
+> migration. The same applies to the staging database — run Step 2 first.
+
 ---
 
 ## Step 5 — Deploy the same image to production
