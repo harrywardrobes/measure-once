@@ -339,9 +339,10 @@ export function CardActionsPage() {
             <Box>
               <Typography variant="h6">Card action labels</Typography>
               <Typography variant="body2" color="text.secondary">
-                The bottom strip on Sales &amp; Survey cards. A single global row covers contacts
-                with no lead status, followed by per-stage rows for each configured lead status.
-                Rows mirror the Lead Statuses table order and refresh automatically when renamed.
+                The bottom strip on customer cards. Contacts with no lead status appear in the
+                Sales stage tab — their action label is set via the No Lead Status row inside the
+                Sales section. Per-stage rows follow for each configured lead status and refresh
+                automatically when renamed.
               </Typography>
             </Box>
             <Button variant="contained" onClick={saveAllCardActionLabels} sx={{ flexShrink: 0 }}>Save</Button>
@@ -355,33 +356,36 @@ export function CardActionsPage() {
               </Box>
             ) : (
               <>
-                {/* ── Global "No lead status" block ──────────────────────── */}
-                <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`${GLOBAL_NULL_STAGE_KEY}-${reloadKey}`}>
-                  <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
-                  <span className="adm-text-muted-xs" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    no <code>hs_lead_status</code>
-                  </span>
-                  <input type="text" className="field ca-default-input adm-ca-default-input"
-                    maxLength={128}
-                    data-kind="ls-default"
-                    data-stage={GLOBAL_NULL_STAGE_KEY}
-                    data-status={GLOBAL_NULL_STATUS_KEY}
-                    data-original={globalNull.defaultLabel}
-                    defaultValue={globalNull.defaultLabel}
-                    placeholder="(Action label)"
-                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                  />
-                  <HandlerBadges stageKey={GLOBAL_NULL_STAGE_KEY} statusKey={GLOBAL_NULL_STATUS_KEY} handlers={handlers} />
-                  {resolvedSlots.has(`ls:${GLOBAL_NULL_STAGE_KEY}:${GLOBAL_NULL_STATUS_KEY}`) && (
-                    <span className="ca-resolved-pill" style={{
-                      display: 'inline-flex', alignItems: 'center',
-                      padding: '1px 8px', marginLeft: 6,
-                      background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
-                      borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
-                      lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
-                    }}>✓ Resolved</span>
-                  )}
-                </div>
+                {/* Global null block: shown here only when no Sales stage is configured.
+                    When Sales exists it renders as the first row inside that accordion. */}
+                {!stages.some(s => s.key === 'sales') && (
+                  <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`${GLOBAL_NULL_STAGE_KEY}-${reloadKey}`}>
+                    <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
+                    <span className="adm-text-muted-xs" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      no <code>hs_lead_status</code>
+                    </span>
+                    <input type="text" className="field ca-default-input adm-ca-default-input"
+                      maxLength={128}
+                      data-kind="ls-default"
+                      data-stage={GLOBAL_NULL_STAGE_KEY}
+                      data-status={GLOBAL_NULL_STATUS_KEY}
+                      data-original={globalNull.defaultLabel}
+                      defaultValue={globalNull.defaultLabel}
+                      placeholder="(Action label)"
+                      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                    />
+                    <HandlerBadges stageKey={GLOBAL_NULL_STAGE_KEY} statusKey={GLOBAL_NULL_STATUS_KEY} handlers={handlers} />
+                    {resolvedSlots.has(`ls:${GLOBAL_NULL_STAGE_KEY}:${GLOBAL_NULL_STATUS_KEY}`) && (
+                      <span className="ca-resolved-pill" style={{
+                        display: 'inline-flex', alignItems: 'center',
+                        padding: '1px 8px', marginLeft: 6,
+                        background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
+                        borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                        lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                      }}>✓ Resolved</span>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Per-stage accordion sections ────────────────────────── */}
                 {!stages.length ? (
@@ -390,10 +394,11 @@ export function CardActionsPage() {
                   const colors = STAGE_COLORS[stage.key];
                   const borderColor = colors?.bg ?? '#8B2BFF';
                   const count = stage.statuses.length;
+                  const isSales = stage.key === 'sales';
                   return (
                     <Accordion
                       key={stage.key}
-                      defaultExpanded={false}
+                      defaultExpanded={isSales}
                       disableGutters
                       variant="outlined"
                       sx={{
@@ -411,7 +416,37 @@ export function CardActionsPage() {
                         </Box>
                       </AccordionSummary>
                       <AccordionDetails sx={{ p: 0 }}>
-                        {stage.statuses.length === 0 ? (
+                        {/* No lead status row: lives inside Sales because no-status contacts
+                            appear in the Sales stage tab on the customers page. */}
+                        {isSales && (
+                          <div className="adm-ca-block adm-ca-block--global-null" data-ls-block={globalNull.key} data-testid="ca-default-row-global" key={`${GLOBAL_NULL_STAGE_KEY}-${reloadKey}`}>
+                            <strong className="adm-ca-block-title is-null">{globalNull.label}</strong>
+                            <span className="adm-text-muted-xs" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+                              no <code>hs_lead_status</code>
+                            </span>
+                            <input type="text" className="field ca-default-input adm-ca-default-input"
+                              maxLength={128}
+                              data-kind="ls-default"
+                              data-stage={GLOBAL_NULL_STAGE_KEY}
+                              data-status={GLOBAL_NULL_STATUS_KEY}
+                              data-original={globalNull.defaultLabel}
+                              defaultValue={globalNull.defaultLabel}
+                              placeholder="(Action label)"
+                              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                            />
+                            <HandlerBadges stageKey={GLOBAL_NULL_STAGE_KEY} statusKey={GLOBAL_NULL_STATUS_KEY} handlers={handlers} />
+                            {resolvedSlots.has(`ls:${GLOBAL_NULL_STAGE_KEY}:${GLOBAL_NULL_STATUS_KEY}`) && (
+                              <span className="ca-resolved-pill" style={{
+                                display: 'inline-flex', alignItems: 'center',
+                                padding: '1px 8px', marginLeft: 6,
+                                background: STATUS_COLORS.successDeep.bg, color: STATUS_COLORS.successDeep.text,
+                                borderRadius: 999, fontSize: '.7rem', fontWeight: 600,
+                                lineHeight: 1.5, whiteSpace: 'nowrap', verticalAlign: 'middle',
+                              }}>✓ Resolved</span>
+                            )}
+                          </div>
+                        )}
+                        {stage.statuses.length === 0 && !isSales ? (
                           <div className="adm-ca-empty"><em>No lead statuses configured for this stage yet.</em></div>
                         ) : stage.statuses.map(ls => (
                           <div key={`${ls.key}-${reloadKey}`} className="adm-ca-block" data-ls-block={ls.key} data-testid="ca-default-row">

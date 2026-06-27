@@ -4,13 +4,17 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { EmailComposer } from './EmailComposer';
-import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError } from '../../utils/api';
+import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError, postFormData } from '../../utils/api';
 import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { relativeTime } from '../../utils/formatters';
@@ -40,6 +44,8 @@ interface Props {
   contactMobile?: string;
   onClose: () => void;
   demo?: boolean;
+  /** When true, the email composer opens automatically as soon as contact data loads. */
+  openEmail?: boolean;
 }
 
 type Phase =
@@ -136,7 +142,7 @@ const DEMO_CONTACT_DATA: ContactData = {
   historyAttemptLog: [],
 };
 
-export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo }: Props) {
+export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo, openEmail }: Props) {
   const { user: currentUser } = useAuth();
 
   const [phase, setPhase] = useState<Phase>(demo ? 'contact' : 'loading');
@@ -182,6 +188,9 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [emailSubmitRetry,     setEmailSubmitRetry]     = useState(false);
   const [emailSentConfirm,     setEmailSentConfirm]     = useState('');
   const [logConfirm,          setLogConfirm]          = useState('');
+  const [emailAttachments,     setEmailAttachments]     = useState<File[]>([]);
+  const [emailConfirmOpen,     setEmailConfirmOpen]     = useState(false);
+  const openEmailTriggeredRef = useRef(false);
 
   const autoCloseTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -229,6 +238,16 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
+  // Auto-open email composer when the modal is launched via clicking an email chip.
+  useEffect(() => {
+    if (openEmail && phase === 'contact' && !openEmailTriggeredRef.current) {
+      openEmailTriggeredRef.current = true;
+      void openEmailPreview();
+    }
+  // openEmailPreview is stable (defined in function body); phase is the only reactive dep here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   const anyTicked = callAttempted || emailSent || whatsappSent;
 
   function openNotePanel(method: Method) {
@@ -254,6 +273,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     setEmailTemplateBody('');
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
+    setEmailAttachments([]);
+    setEmailConfirmOpen(false);
   }
 
   async function openEmailPreview() {
@@ -310,9 +331,13 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     setEmailSubmitError('');
     setEmailSubmitRetry(false);
     try {
-      const result = await POST(
+      const fd = new FormData();
+      fd.append('subject', emailSubject.trim());
+      fd.append('body', emailBody.trim());
+      emailAttachments.forEach(f => fd.append('attachments', f));
+      const result = await postFormData(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/send-email`,
-        { subject: emailSubject.trim(), body: emailBody.trim() },
+        fd,
       ) as {
         call_attempted: boolean;
         email_sent: boolean;
@@ -728,6 +753,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                   recipientName={contactData?.contactName || contactName}
                                   recipientEmail={contactEmailAddr}
                                   bodyMinRows={4}
+                                  attachments={emailAttachments}
+                                  onAttachmentsChange={demo ? undefined : setEmailAttachments}
                                 />
                                 {emailSubmitError === 'GOOGLE_AUTH' && (
                                   <GoogleAuthAlert sx={{ mt: 1, mb: 0.5, py: 0 }} />
@@ -767,7 +794,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                                     size="small"
                                     variant="contained"
                                     disabled={emailFlow === 'sending' || !emailSubject.trim() || !emailBody.trim()}
-                                    onClick={() => void handleSendEmail()}
+                                    onClick={() => setEmailConfirmOpen(true)}
                                     startIcon={emailFlow === 'sending' ? <CircularProgress size={14} color="inherit" /> : undefined}
                                   >
                                     Send Email
@@ -1226,6 +1253,45 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       onDiscard={handleDiscard}
       onKeepEditing={handleKeepEditing}
     />
+
+    <Dialog
+      open={emailConfirmOpen}
+      onClose={() => setEmailConfirmOpen(false)}
+      maxWidth="xs"
+      fullWidth
+    >
+      <DialogTitle>Send email?</DialogTitle>
+      <DialogContent>
+        <Stack spacing={0.5}>
+          <Typography variant="body2">
+            <strong>To:</strong> {(() => {
+              const addr = contactData?.contactEmail || contactEmail;
+              const name_ = contactData?.contactName || contactName;
+              return name_ ? `${name_} <${addr}>` : addr;
+            })()}
+          </Typography>
+          <Typography variant="body2">
+            <strong>Subject:</strong> {emailSubject.trim()}
+          </Typography>
+          {emailAttachments.length > 0 && (
+            <Typography variant="body2">
+              <strong>Attachments:</strong> {emailAttachments.length} file{emailAttachments.length !== 1 ? 's' : ''}
+              {' '}({emailAttachments.map(f => f.name).join(', ')})
+            </Typography>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setEmailConfirmOpen(false)}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={() => { setEmailConfirmOpen(false); void handleSendEmail(); }}
+          data-testid="email-send-confirm-btn"
+        >
+          Send
+        </Button>
+      </DialogActions>
+    </Dialog>
 
     {taskModalOpen && (
       <Suspense fallback={null}>

@@ -285,7 +285,7 @@ export const DEMO_SURVEY_ROOM_ANSWERS: AnswerMap[] = [
 /**
  * Structural type for the demo photo-review submission.
  * Kept in sync with the private `Submission` interface in
- * ReviewCustomerPhotosDrawer so the cast there is safe.
+ * ReviewCustomerPhotosModal so the cast there is safe.
  */
 export interface DemoSubmissionData {
   id: number;

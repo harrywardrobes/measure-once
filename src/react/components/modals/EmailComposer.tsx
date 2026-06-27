@@ -12,12 +12,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Typography from '@mui/material/Typography';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 
 function bodyTextToHtml(text: string): string {
   return text
@@ -44,6 +47,10 @@ export interface EmailComposerProps {
   subjectMaxLength?: number;
   /** External error message shown below the composer (e.g. send failure). */
   sendError?: string;
+  /** Files attached to this email. */
+  attachments?: File[];
+  /** Called when the attachment list changes (add or remove). */
+  onAttachmentsChange?: (files: File[]) => void;
 }
 
 export function EmailComposer({
@@ -59,7 +66,28 @@ export function EmailComposer({
   bodyMaxLength,
   subjectMaxLength,
   sendError,
+  attachments = [],
+  onAttachmentsChange,
 }: EmailComposerProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!onAttachmentsChange) return;
+    const incoming = Array.from(e.target.files || []);
+    if (!incoming.length) return;
+    const merged = [...attachments, ...incoming];
+    onAttachmentsChange(merged);
+    // Reset so re-selecting the same file triggers onChange again.
+    e.target.value = '';
+  }
+
+  function removeAttachment(index: number) {
+    if (!onAttachmentsChange) return;
+    onAttachmentsChange(attachments.filter((_, i) => i !== index));
+  }
+
+  const totalBytes = attachments.reduce((s, f) => s + f.size, 0);
+  const oversized = totalBytes > 20 * 1024 * 1024;
   const [viewMode, setViewMode] = useState<'edit' | 'preview'>('edit');
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -174,6 +202,45 @@ export function EmailComposer({
             disabled={disabled}
             slotProps={{ htmlInput: bodyMaxLength ? { maxLength: bodyMaxLength } : {} }}
           />
+          {onAttachmentsChange && (
+            <Box>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handleFileInputChange}
+              />
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AttachFileIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled}
+                sx={{ mb: attachments.length ? 1 : 0 }}
+              >
+                Attach file
+              </Button>
+              {attachments.length > 0 && (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {attachments.map((file, i) => (
+                    <Chip
+                      key={i}
+                      label={file.name}
+                      size="small"
+                      variant="outlined"
+                      onDelete={disabled ? undefined : () => removeAttachment(i)}
+                    />
+                  ))}
+                </Box>
+              )}
+              {oversized && (
+                <Alert severity="warning" sx={{ mt: 0.75, py: 0 }}>
+                  Total attachment size exceeds 20 MB — the email may be rejected by the recipient's server.
+                </Alert>
+              )}
+            </Box>
+          )}
         </>
       ) : (
         /* Preview mode */

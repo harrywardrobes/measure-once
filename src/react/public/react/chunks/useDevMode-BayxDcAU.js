@@ -1,0 +1,2 @@
+import{r as d}from"./vendor-react-C4VoMJum.js";function r({enabled:t}){const[c,n]=d.useState(!1);return d.useEffect(()=>{if(!t)return;let a=!1;fetch("/api/admin/hubspot/dev-mode",{headers:{Accept:"application/json"}}).then(e=>e.ok?e.json():null).then(e=>{!a&&e&&typeof e.devMode=="boolean"&&n(e.devMode)}).catch(()=>{});let o=null;try{o=new BroadcastChannel("dev_mode_changed"),o.onmessage=e=>{typeof e.data?.devMode=="boolean"&&n(e.data.devMode)}}catch{}return()=>{a=!0,o?.close()}},[t]),{devMode:c}}export{r as u};
+//# sourceMappingURL=useDevMode-BayxDcAU.js.map

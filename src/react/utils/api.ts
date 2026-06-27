@@ -77,6 +77,30 @@ export function isGoogleAuthError(e: unknown): boolean {
   return code === 'GOOGLE_AUTH' || code === 'GOOGLE_ERROR';
 }
 
+export async function postFormData<T = unknown>(path: string, formData: FormData): Promise<T> {
+  const r = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: formData,
+    // No Content-Type — browser sets multipart/form-data with boundary automatically
+  });
+  if (r.status === 401) {
+    const data = await r.json().catch(() => ({} as Record<string, string>));
+    if (data.code === 'GOOGLE_AUTH' || data.code === 'GOOGLE_ERROR') {
+      throw new ApiError(data.error || 'Google authentication required', data.code, 401);
+    }
+    throw new ApiError('Unauthorized', 'UNAUTHORIZED', 401);
+  }
+  const data = await r.json().catch(() => ({} as Record<string, unknown>));
+  if (!r.ok) {
+    const msg = (data as { error?: string; message?: string }).error
+      || (data as { message?: string }).message
+      || `HTTP ${r.status}`;
+    throw new ApiError(msg, (data as { code?: string }).code, r.status);
+  }
+  return data as T;
+}
+
 /**
  * The canonical user-facing message shown when a 422 LEAD_STATUS_REMOVED
  * response is received. Use this constant everywhere rather than hard-coding

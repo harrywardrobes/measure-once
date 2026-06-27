@@ -25,3 +25,27 @@ export function openCardActionModal(
     console.warn('[cardActionModalRegistry] No modal host registered yet');
   }
 }
+
+export interface DirectContactModalParams {
+  contactId: string;
+  contactName: string;
+  contactEmail: string;
+  contactPhone?: string;
+  contactMobile?: string;
+  openEmail?: boolean;
+}
+
+type OpenDirectContactModalFn = (params: DirectContactModalParams) => void;
+let _directOpener: OpenDirectContactModalFn | null = null;
+
+export function registerDirectContactModalOpener(fn: OpenDirectContactModalFn): void {
+  _directOpener = fn;
+}
+
+export function openDirectContactModal(params: DirectContactModalParams): void {
+  if (_directOpener) {
+    _directOpener(params);
+  } else {
+    console.warn('[cardActionModalRegistry] No direct contact modal opener registered yet');
+  }
+}

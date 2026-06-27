@@ -66,8 +66,8 @@ import { DesignVisitFollowupModal } from '../../components/modals/DesignVisitFol
 import { ContactCustomerModal } from '../../components/modals/ContactCustomerModal';
 import { OpenDealActionModal } from '../../components/modals/OpenDealActionModal';
 import { DesignVisitWizard } from '../../components/DesignVisitWizard';
-const ReviewCustomerPhotosDrawer = React.lazy(() =>
-  import('../../components/modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
+const ReviewCustomerPhotosModal = React.lazy(() =>
+  import('../../components/modals/ReviewCustomerPhotosModal').then(m => ({ default: m.ReviewCustomerPhotosModal }))
 );
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 
@@ -1083,7 +1083,7 @@ function WorkflowDemoModalHost({
     case 'review_customer_photos':
       return (
         <React.Suspense fallback={null}>
-          <ReviewCustomerPhotosDrawer handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />
+          <ReviewCustomerPhotosModal handler={handler} ctx={DEMO_CTX} open onClose={onClose} demo />
         </React.Suspense>
       );
     case 'open_deal':

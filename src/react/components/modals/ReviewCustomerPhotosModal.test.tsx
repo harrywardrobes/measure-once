@@ -28,7 +28,7 @@ vi.mock('../../lib/offlineQueue', () => ({
   })),
 }));
 
-import { ReviewCustomerPhotosDrawer } from './ReviewCustomerPhotosDrawer';
+import { ReviewCustomerPhotosModal } from './ReviewCustomerPhotosModal';
 import { sendOrQueue } from '../../lib/offlineQueue';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ const CTX = {
   contactEmail: 'd@example.com',
 };
 
-const HANDLER = { id: 8, type: 'review_customer_photos', config: {} } as Parameters<typeof ReviewCustomerPhotosDrawer>[0]['handler'];
+const HANDLER = { id: 8, type: 'review_customer_photos', config: {} } as Parameters<typeof ReviewCustomerPhotosModal>[0]['handler'];
 
 // ── Fetch mock ────────────────────────────────────────────────────────────────
 
@@ -88,9 +88,9 @@ function mockFetch(opts: { submitHangs?: boolean } = {}): () => void {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function renderDrawer(onClose = vi.fn()) {
+function renderModal(onClose = vi.fn()) {
   return render(
-    <ReviewCustomerPhotosDrawer
+    <ReviewCustomerPhotosModal
       handler={HANDLER}
       ctx={CTX}
       open
@@ -118,7 +118,7 @@ async function navigateToNotSuitable(user: ReturnType<typeof userEvent.setup>) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('ReviewCustomerPhotosDrawer — discard guard: clean state closes immediately', () => {
+describe('ReviewCustomerPhotosModal — discard guard: clean state closes immediately', () => {
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -130,7 +130,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: clean state closes immed
     restoreFetch = mockFetch();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    renderDrawer(onClose);
+    renderModal(onClose);
     await waitForReviewStep();
 
     // On the review step: emailSubject='', emailBody='', priceRange='' → hasUnsavedChanges=false
@@ -142,7 +142,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: clean state closes immed
   });
 });
 
-describe('ReviewCustomerPhotosDrawer — discard guard: dirty state shows dialog', () => {
+describe('ReviewCustomerPhotosModal — discard guard: dirty state shows dialog', () => {
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -154,7 +154,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: dirty state shows dialog
     restoreFetch = mockFetch();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    renderDrawer(onClose);
+    renderModal(onClose);
     await navigateToNotSuitable(user);
 
     // emailBody is pre-filled with the default not-suitable template → hasUnsavedChanges=true
@@ -169,7 +169,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: dirty state shows dialog
     restoreFetch = mockFetch();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    renderDrawer(onClose);
+    renderModal(onClose);
     await navigateToNotSuitable(user);
 
     const dialog = screen.getByRole('dialog', { name: /not suitable/i });
@@ -189,7 +189,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: dirty state shows dialog
     restoreFetch = mockFetch();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    renderDrawer(onClose);
+    renderModal(onClose);
     await navigateToNotSuitable(user);
 
     const dialog = screen.getByRole('dialog', { name: /not suitable/i });
@@ -201,7 +201,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: dirty state shows dialog
   });
 });
 
-describe('ReviewCustomerPhotosDrawer — discard guard: isLocked suppresses prompt', () => {
+describe('ReviewCustomerPhotosModal — discard guard: isLocked suppresses prompt', () => {
   let restoreFetch: () => void;
 
   afterEach(() => {
@@ -216,7 +216,7 @@ describe('ReviewCustomerPhotosDrawer — discard guard: isLocked suppresses prom
     );
     const onClose = vi.fn();
     const user = userEvent.setup();
-    renderDrawer(onClose);
+    renderModal(onClose);
     await navigateToNotSuitable(user);
 
     // Click "Confirm not suitable" — sendOrQueue hangs → submitting=true → isLocked=true

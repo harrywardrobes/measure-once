@@ -19,8 +19,8 @@ const ArrangeVisitModal = React.lazy(() =>
 const ContactCustomerModal = React.lazy(() =>
   import('./modals/ContactCustomerModal').then(m => ({ default: m.ContactCustomerModal }))
 );
-const ReviewCustomerPhotosDrawer = React.lazy(() =>
-  import('./modals/ReviewCustomerPhotosDrawer').then(m => ({ default: m.ReviewCustomerPhotosDrawer }))
+const ReviewCustomerPhotosModal = React.lazy(() =>
+  import('./modals/ReviewCustomerPhotosModal').then(m => ({ default: m.ReviewCustomerPhotosModal }))
 );
 const DesignVisitFollowupModal = React.lazy(() =>
   import('./modals/DesignVisitFollowupModal').then(m => ({ default: m.DesignVisitFollowupModal }))
@@ -33,7 +33,7 @@ const DepositInvoiceModal = React.lazy(() =>
 );
 import { broadcastDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { broadcastContactAttemptLogged } from '../utils/broadcastContactAttempt';
-import { registerCardActionModalOpener } from '../utils/cardActionModalRegistry';
+import { registerCardActionModalOpener, registerDirectContactModalOpener } from '../utils/cardActionModalRegistry';
 import type { CardActionHandlerData } from '../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../utils/dispatchCardActionHandler';
 import type { ExistingVisit } from './DesignVisitWizard';
@@ -49,7 +49,7 @@ type ModalState =
   | { type: 'upload_photos_and_info';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'review_customer_photos';        handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'arrange_visit';                 handler: CardActionHandlerData; ctx: CardActionContext }
-  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string; contactPhone?: string; contactMobile?: string }
+  | { type: 'contact_customer';              contactId: string; contactName: string; contactEmail: string; contactPhone?: string; contactMobile?: string; openEmail?: boolean }
   | { type: 'design_visit_followup';         handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'open_deal';                     handler: CardActionHandlerData; ctx: CardActionContext }
   | { type: 'deposit_invoice_followup';      handler: CardActionHandlerData; ctx: CardActionContext };
@@ -111,6 +111,9 @@ export function CardActionModalsHost() {
 
   useEffect(() => {
     registerCardActionModalOpener(openModal);
+    registerDirectContactModalOpener(({ contactId, contactName, contactEmail, contactPhone, contactMobile, openEmail }) => {
+      setModal({ type: 'contact_customer', contactId, contactName, contactEmail, contactPhone, contactMobile, openEmail });
+    });
   }, [openModal]);
 
   function close() {
@@ -168,7 +171,7 @@ export function CardActionModalsHost() {
       )}
       {modal.type === 'review_customer_photos' && (
         <React.Suspense fallback={null}>
-          <ReviewCustomerPhotosDrawer handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+          <ReviewCustomerPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
         </React.Suspense>
       )}
       {modal.type === 'arrange_visit' && (
@@ -184,6 +187,7 @@ export function CardActionModalsHost() {
             contactEmail={modal.contactEmail}
             contactPhone={modal.contactPhone}
             contactMobile={modal.contactMobile}
+            openEmail={modal.openEmail}
             onClose={close}
           />
         </React.Suspense>

@@ -19,6 +19,9 @@ import {
   broadcastCustomerInfoLinkChanged,
   subscribeCustomerInfoLinkChanged,
 } from '../../utils/broadcastCustomerInfoLink';
+import { POST, LEAD_STATUS_REMOVED_MESSAGE } from '../../utils/api';
+import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
+import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
 import { useToast } from '../../contexts/ToastContext';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
@@ -58,7 +61,10 @@ type Phase =
   | 'generating'
   | 'ready'
   | 'email-preview'
-  | 'sent';
+  | 'sent'
+  | 'no_response_confirm'
+  | 'advancing'
+  | 'done';
 
 function CopyLinkField({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -138,6 +144,9 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const sendCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState('');
   const [copyAndClosing, setCopyAndClosing] = useState(false);
+  const [advanceError, setAdvanceError] = useState('');
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Email preview state
   const [emailSubject, setEmailSubject] = useState('');
@@ -420,6 +429,29 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     }
   }
 
+  async function handleConfirmNoResponse() {
+    if (demo) return;
+    setPhase('advancing');
+    setAdvanceError('');
+    try {
+      const res = await POST(
+        `/api/card-actions/contact-customer/${encodeURIComponent(ctx.contactId)}/advance-status`,
+        { currentLeadStatus: null, target: CONTACT_CUSTOMER_KEY.no_response },
+      ) as { setsLeadStatus?: string | null } | undefined;
+      setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
+      setPhase('done');
+      autoCloseTimerRef.current = setTimeout(() => handleClose(), 1500);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === 'LEAD_STATUS_REMOVED') {
+        setAdvanceError(LEAD_STATUS_REMOVED_MESSAGE);
+      } else {
+        setAdvanceError(err.message || 'Could not update status.');
+      }
+      setPhase('no_response_confirm');
+    }
+  }
+
   function handleManualUpload(url: string) {
     if (demo) return;
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -444,12 +476,14 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   useEffect(() => () => {
     if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
     if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
+    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
   }, []);
 
   function handleClose() {
     generateAbortRef.current?.abort();
     if (resendCooldownRef.current) clearTimeout(resendCooldownRef.current);
     if (sendCooldownRef.current) clearTimeout(sendCooldownRef.current);
+    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
     setPhase('checking');
     setError('');
     setEmailSubject('');
@@ -464,13 +498,21 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     setResending(false);
     setResendCooldown(false);
     setSendCooldown(false);
+    setAdvanceError('');
+    setConfirmMessage('');
     onClose();
   }
 
   // ── Title ────────────────────────────────────────────────────────────────────
 
   const title =
-    phase === 'confirming'
+    phase === 'no_response_confirm'
+      ? 'Mark as No Response?'
+      : phase === 'advancing'
+      ? 'Updating status…'
+      : phase === 'done'
+      ? 'Done'
+      : phase === 'confirming'
       ? 'Active link exists'
       : phase === 'revoked-elsewhere'
         ? 'Link no longer valid'
@@ -628,6 +670,36 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
             </Stack>
           )}
         </Stack>
+      );
+    }
+
+    if (phase === 'no_response_confirm') {
+      return (
+        <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+          <Typography variant="body2">
+            This will advance the lead status to <strong>No Response</strong>.
+          </Typography>
+          {advanceError && (
+            <Alert severity="error">{advanceError}</Alert>
+          )}
+        </Stack>
+      );
+    }
+
+    if (phase === 'advancing') {
+      return (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', py: 1 }}>
+          <CircularProgress size={18} />
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>Updating status…</Typography>
+        </Stack>
+      );
+    }
+
+    if (phase === 'done') {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          {confirmMessage || 'Contact record updated.'}
+        </Typography>
       );
     }
 
@@ -838,6 +910,33 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       );
     }
 
+    if (phase === 'no_response_confirm') {
+      return (
+        <>
+          <Button onClick={() => setPhase('ready')} data-testid="cah-cancel">Cancel</Button>
+          <DemoActionTooltip demo={demo}>
+            <Button
+              onClick={handleConfirmNoResponse}
+              variant="contained"
+              color="warning"
+              disabled={demo}
+              data-testid="cah-confirm-no-response"
+            >
+              Confirm
+            </Button>
+          </DemoActionTooltip>
+        </>
+      );
+    }
+
+    if (phase === 'advancing') {
+      return null;
+    }
+
+    if (phase === 'done') {
+      return <Button variant="contained" onClick={handleClose}>Done</Button>;
+    }
+
     if (phase === 'sent') {
       return <Button variant="contained" onClick={handleClose}>Done</Button>;
     }
@@ -847,6 +946,17 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     return (
       <>
         <Button onClick={handleClose} disabled={submitting || copyAndClosing} data-testid="cah-cancel">Cancel</Button>
+        <DemoActionTooltip demo={demo}>
+          <Button
+            onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
+            variant="outlined"
+            color="warning"
+            disabled={demo}
+            data-testid="cah-no-response"
+          >
+            No Response
+          </Button>
+        </DemoActionTooltip>
         {generatedLink?.formLink && !linkError && (
           <>
             <Button
@@ -898,7 +1008,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       }
       footer={renderActions()}
     >
-      {phase !== 'sent' && (
+      {phase !== 'sent' && phase !== 'done' && phase !== 'advancing' && (
         <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} />
       )}
       {renderContent()}

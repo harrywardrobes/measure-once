@@ -531,7 +531,7 @@ async function userIdExists(id) {
 async function isEmailApproved(email) {
   if (!email) return false;
   const lower = email.toLowerCase();
-  const r = await pool.query('SELECT 1 FROM allowed_emails WHERE email = $1', [lower]);
+  const r = await pool.query('SELECT 1 FROM allowed_emails WHERE email = $1 AND archived_at IS NULL', [lower]);
   return r.rowCount > 0;
 }
 
@@ -1401,10 +1401,20 @@ async function setupAuth(app) {
         }
       }
 
+      // Check if this email is already on the list (active or archived) before inserting.
+      const existing = await client.query(
+        `SELECT archived_at FROM allowed_emails WHERE email = $1`, [email]
+      );
+      if (existing.rowCount > 0) {
+        await client.query('ROLLBACK');
+        if (existing.rows[0].archived_at) {
+          return res.status(409).json({ error: 'This email belongs to an archived team member. Restore them from the Archived Users section instead.' });
+        }
+        return res.status(409).json({ error: 'This email is already on the approved list.' });
+      }
       const r = await client.query(
         `INSERT INTO allowed_emails (email, note, metadata)
          VALUES ($1, $2, $3::jsonb)
-         ON CONFLICT (email) DO NOTHING
          RETURNING email, approved_at, note, metadata`,
         [email, note, metaJson]
       );
@@ -1441,7 +1451,8 @@ async function setupAuth(app) {
   app.get('/api/admin/allowed', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const r = await pool.query(
-        `SELECT email, approved_at, note, metadata, pending_profile_updates, conflict_created_at FROM allowed_emails ORDER BY approved_at DESC`
+        `SELECT email, approved_at, note, metadata, pending_profile_updates, conflict_created_at
+         FROM allowed_emails WHERE archived_at IS NULL ORDER BY approved_at DESC`
       );
       res.json(r.rows);
     } catch (e) {
@@ -1449,17 +1460,63 @@ async function setupAuth(app) {
     }
   });
 
-  app.delete('/api/admin/allowed/:email', isAuthenticated, requireAdmin, async (req, res) => {
+  app.get('/api/admin/allowed/archived', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const r = await pool.query(
+        `SELECT email, approved_at, archived_at, note, metadata FROM allowed_emails
+         WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`
+      );
+      res.json(r.rows);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Archive a team member: sets archived_at, invalidates sessions, marks user as archived.
+  // Uses PATCH so the record is preserved and restorable.
+  app.patch('/api/admin/allowed/:email/archive', isAuthenticated, requireAdmin, async (req, res) => {
     try {
       const email = req.params.email.toLowerCase();
-      const del = await pool.query(`DELETE FROM allowed_emails WHERE email = $1`, [email]);
-      if (del.rowCount > 0) {
+      const upd = await pool.query(
+        `UPDATE allowed_emails SET archived_at = NOW() WHERE email = $1 AND archived_at IS NULL RETURNING email`,
+        [email]
+      );
+      if (upd.rowCount > 0) {
         const adminEmail = req.user?.claims?.email || req.user?.email || null;
-        await logAdminAction(adminEmail, 'revoke_allowed_email', email, null);
-        // Immediately invalidate all active sessions for the revoked user so they
-        // cannot continue using the application until the session naturally expires.
+        await logAdminAction(adminEmail, 'archive_team_member', email, null);
+        await pool.query(
+          `UPDATE users SET onboarding_status = 'archived', updated_at = NOW() WHERE LOWER(email) = $1`,
+          [email]
+        );
+        // Invalidate active sessions for the archived user immediately.
         await pool.query(
           `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
+          [email]
+        );
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // Restore an archived team member.
+  app.patch('/api/admin/allowed/:email/restore', isAuthenticated, requireAdmin, async (req, res) => {
+    try {
+      const email = req.params.email.toLowerCase();
+      const upd = await pool.query(
+        `UPDATE allowed_emails SET archived_at = NULL WHERE email = $1 AND archived_at IS NOT NULL RETURNING email`,
+        [email]
+      );
+      if (upd.rowCount > 0) {
+        const adminEmail = req.user?.claims?.email || req.user?.email || null;
+        await logAdminAction(adminEmail, 'restore_team_member', email, null);
+        // Restore the user to active if they have a password set, otherwise back to more_info_required.
+        await pool.query(
+          `UPDATE users
+           SET onboarding_status = CASE WHEN password_hash IS NOT NULL THEN 'active' ELSE 'more_info_required' END,
+               updated_at = NOW()
+           WHERE LOWER(email) = $1`,
           [email]
         );
       }
@@ -1665,7 +1722,7 @@ async function setupAuth(app) {
       const r = await pool.query(
         `SELECT id, first_name, last_name, email, profile_image_url, job_role,
                 (custom_photo IS NOT NULL) AS has_custom_photo
-         FROM users ORDER BY first_name ASC, last_name ASC LIMIT 200`
+         FROM users WHERE onboarding_status != 'archived' ORDER BY first_name ASC, last_name ASC LIMIT 200`
       );
       res.json(r.rows.map(u => ({
         id:              u.id,
@@ -1693,6 +1750,7 @@ async function setupAuth(app) {
                 ae.note, ae.metadata, ae.pending_profile_updates, ae.conflict_created_at
          FROM users u
          LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+         WHERE u.onboarding_status != 'archived'
          ORDER BY u.created_at DESC LIMIT 500`
       );
       res.json(r.rows.map(u => ({ ...u, isAdmin: isAdminEmail(u.email) })));
@@ -1711,6 +1769,7 @@ async function setupAuth(app) {
          FROM users u
          JOIN allowed_emails ae ON LOWER(u.email) = ae.email
          WHERE ae.pending_profile_updates IS NOT NULL
+           AND ae.archived_at IS NULL
            AND COALESCE(ae.conflict_created_at, u.updated_at, u.created_at) < NOW() - ($1 || ' days')::INTERVAL`,
         [staleDays]
       );

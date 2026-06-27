@@ -602,7 +602,10 @@ export function StagesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {nullRow && (
+                    {/* No Status row: show at top only if there is no SALES stage group.
+                        When SALES exists it renders inside that group (contacts with no
+                        status appear in the Sales stage tab). */}
+                    {nullRow && !stageGroups.some(g => g.stage === 'SALES') && (
                       <NullStatusRow
                         key={`${nullRow.key}-${reloadKey}`}
                         status={nullRow}
@@ -613,6 +616,7 @@ export function StagesPage() {
                       const colors = ck ? STAGE_COLORS[ck] : null;
                       const stageLabel = STAGE_OPTIONS.find(o => o.value === stage)?.label ?? (stage || 'No stage assigned');
                       const rowBg = colors ? colors.light : '#f9fafb';
+                      const isSales = stage === 'SALES';
                       return (
                         <React.Fragment key={stage ?? '__none__'}>
                           <tr>
@@ -629,6 +633,12 @@ export function StagesPage() {
                               {stageLabel}
                             </td>
                           </tr>
+                          {isSales && nullRow && (
+                            <NullStatusRow
+                              key={`${nullRow.key}-${reloadKey}`}
+                              status={nullRow}
+                            />
+                          )}
                           {items.map((s, i) => (
                             <StatusRow
                               key={`${s.key}-${reloadKey}`}

@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, AlertTitle, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress,
-  Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl,
+  Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl,
   Grid, InputLabel, Link, MenuItem, Select, Skeleton, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DifferenceIcon from '@mui/icons-material/Difference';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import UnarchiveIcon from '@mui/icons-material/Unarchive';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import {
   api, toast, fmtDate, fmtDateShort, fmtRelativeAge, emitAdminChange, onAdminChange,
   setTeamCount, setConflictBadge, PRIVILEGE_LEVELS, PRIVILEGE_LABEL,
@@ -38,10 +42,17 @@ type Allowed = {
   email: string;
   note?: string;
   approved_at?: string;
-
   metadata?: Record<string, string>;
   conflict_created_at?: string;
   pending_profile_updates?: Record<string, ProfileConflict> | null;
+};
+
+type ArchivedAllowed = {
+  email: string;
+  note?: string;
+  approved_at?: string;
+  archived_at?: string;
+  metadata?: Record<string, string>;
 };
 
 type JobRole = { name: string; privilege_level?: string }; // privilege-read-ok: data field managed by admin
@@ -130,6 +141,10 @@ export function AdminTeamPage() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);
+  const [archivedAllowed, setArchivedAllowed] = useState<ArchivedAllowed[]>([]);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<Allowed | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
@@ -150,9 +165,10 @@ export function AdminTeamPage() {
 
   async function load() {
     try {
-      const [u, a, r, q, digestSettings] = await Promise.all([
+      const [u, a, archived, r, q, digestSettings] = await Promise.all([
         api<User[]>('GET', '/api/admin/users'),
         api<Allowed[]>('GET', '/api/admin/allowed'),
+        api<ArchivedAllowed[]>('GET', '/api/admin/allowed/archived'),
         api<JobRole[]>('GET', '/api/admin/job-roles'),
         api<AccessRequest[]>('GET', '/api/admin/requests'),
         api<{ staleDays?: number }>('GET', '/api/admin/conflict-digest-settings').catch(() => ({})),
@@ -164,6 +180,7 @@ export function AdminTeamPage() {
       const userList = Array.isArray(u) ? u : [];
       setUsers(userList);
       setAllowed(Array.isArray(a) ? a : []);
+      setArchivedAllowed(Array.isArray(archived) ? archived : []);
       setJobRoles(Array.isArray(r) ? r : []);
       setRequests(Array.isArray(q) ? q : []);
       setTeamCount(userList.length);
@@ -234,11 +251,25 @@ export function AdminTeamPage() {
     }
   }
 
-  async function handleRevoke(email: string) {
-    if (!confirm('Revoke access for ' + email + '?')) return;
+  async function confirmArchive() {
+    if (!archiveTarget) return;
+    setArchiveBusy(true);
     try {
-      await api('DELETE', '/api/admin/allowed/' + encodeURIComponent(email));
-      toast('Access revoked');
+      await api('PATCH', `/api/admin/allowed/${encodeURIComponent(archiveTarget.email)}/archive`);
+      toast('Team member archived');
+      setArchiveTarget(null);
+      emitAdminChange('team');
+    } catch (e: unknown) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function handleRestore(email: string) {
+    try {
+      await api('PATCH', `/api/admin/allowed/${encodeURIComponent(email)}/restore`);
+      toast('Team member restored');
       emitAdminChange('team');
     } catch (e: unknown) {
       toast(e instanceof Error ? e.message : String(e), true);
@@ -897,7 +928,15 @@ export function AdminTeamPage() {
                           ) : null}
                         </TableCell>
                         <TableCell align="right">
-                          <Button size="small" color="error" variant="outlined" onClick={() => handleRevoke(a.email)}>Revoke</Button>
+                          <Button
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                            startIcon={<ArchiveIcon />}
+                            onClick={() => setArchiveTarget(a)}
+                          >
+                            Archive
+                          </Button>
                         </TableCell>
                       </TableRow>
                     );
@@ -906,6 +945,108 @@ export function AdminTeamPage() {
               </Table>
             </TableContainer>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Archive confirmation dialog */}
+      <Dialog open={!!archiveTarget} onClose={() => !archiveBusy && setArchiveTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ArchiveIcon color="warning" fontSize="small" />
+          Archive team member?
+        </DialogTitle>
+        <DialogContent>
+          {archiveTarget && (() => {
+            const m = archiveTarget.metadata || {};
+            const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || archiveTarget.email;
+            return (
+              <Typography variant="body2">
+                <strong>{name}</strong> will immediately lose access to Measure Once and their
+                sessions will be signed out. Their record will be kept under{' '}
+                <strong>Archived Users</strong> and can be restored at any time.
+              </Typography>
+            );
+          })()}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setArchiveTarget(null)} disabled={archiveBusy}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            startIcon={archiveBusy ? <CircularProgress size={16} color="inherit" /> : <ArchiveIcon />}
+            onClick={confirmArchive}
+            disabled={archiveBusy}
+          >
+            Archive
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Archived Users */}
+      <Card variant="outlined">
+        <CardContent>
+          <Button
+            variant="text"
+            size="small"
+            endIcon={archivedExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            onClick={() => setArchivedExpanded(v => !v)}
+            sx={{ mb: archivedExpanded ? 2 : 0, textTransform: 'none', color: 'text.secondary' }}
+          >
+            <Typography variant="h6" component="span" sx={{ color: 'text.secondary', mr: 1 }}>Archived Users</Typography>
+            <Chip size="small" label={archivedAllowed.length} />
+          </Button>
+          <Collapse in={archivedExpanded}>
+            {archivedAllowed.length === 0 ? (
+              <Typography variant="body2" color="text.disabled">No archived team members.</Typography>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name / Email</TableCell>
+                      <TableCell>Note</TableCell>
+                      <TableCell>Approved</TableCell>
+                      <TableCell>Archived</TableCell>
+                      <TableCell align="right" />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {archivedAllowed.map((a) => {
+                      const m = a.metadata || {};
+                      const name = [m.first_name, m.last_name].filter(Boolean).join(' ');
+                      return (
+                        <TableRow key={a.email} sx={{ opacity: 0.7 }}>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>{name || a.email}</Typography>
+                            {name && <Typography variant="caption" color="text.secondary">{a.email}</Typography>}
+                          </TableCell>
+                          <TableCell>
+                            <Chip size="small" label={a.note || '—'} variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">{fmtDate(a.approved_at)}</Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">{fmtDate(a.archived_at)}</Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="success"
+                              startIcon={<UnarchiveIcon />}
+                              onClick={() => handleRestore(a.email)}
+                            >
+                              Restore
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Collapse>
         </CardContent>
       </Card>
 

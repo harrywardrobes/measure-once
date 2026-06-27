@@ -138,7 +138,7 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClose, demo }: Props) {
+export function ReviewCustomerPhotosModal({ handler: _handler, ctx, open, onClose, demo }: Props) {
   const [step, setStep] = useState<Step>('loading');
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [fetchError, setFetchError] = useState('');
@@ -335,28 +335,20 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
     'Review customer photos';
 
   const titleNode = (
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        {(step === 'not_suitable' || step === 'rough_estimate') && (
-          <IconButton
-            size="small"
-            onClick={() => { setStep('review'); setSubmitError(''); }}
-            aria-label="Back"
-            sx={{ ml: -0.5 }}
-          >
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-        )}
-        <Typography variant="h4" component="h2" sx={{ wordBreak: 'break-word' }}>
-          {titleStr}
-        </Typography>
-      </Box>
-      {step === 'review' && submission && (
-        <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25 }}>
-          {contactDisplay}
-          {emailDisplay ? ` · ${emailDisplay}` : ''}
-        </Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      {(step === 'not_suitable' || step === 'rough_estimate') && (
+        <IconButton
+          size="small"
+          onClick={() => { setStep('review'); setSubmitError(''); }}
+          aria-label="Back"
+          sx={{ ml: -0.5 }}
+        >
+          <ArrowBackIcon fontSize="small" />
+        </IconButton>
       )}
+      <Typography variant="h4" component="h2" sx={{ wordBreak: 'break-word' }}>
+        {titleStr}
+      </Typography>
     </Box>
   );
 
@@ -450,13 +442,6 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
       }
       footer={footerNode || undefined}
     >
-          <ModalContactHeader
-            name={submission?.contactName ?? ctx.contactName}
-            email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
-            phone={ctx.contactPhone}
-            mobile={ctx.contactMobile}
-          />
-
           {/* Loading / fetch error */}
           {step === 'loading' && (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 6, gap: 2 }}>
@@ -497,6 +482,12 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Review step */}
           {step === 'review' && submission && (
             <Stack spacing={2.5}>
+              <ModalContactHeader
+                name={submission.contactName ?? ctx.contactName}
+                email={submission.contactEmail ?? ctx.contactEmail ?? undefined}
+                phone={ctx.contactPhone}
+                mobile={ctx.contactMobile}
+              />
               {fromCache && (
                 <Alert severity="info" data-testid="review-photos-offline-banner">
                   You&apos;re offline — showing saved data from your last visit. This submission may be out of date.
@@ -601,6 +592,12 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Not Suitable — confirmation step */}
           {step === 'not_suitable' && (
             <Stack spacing={2}>
+              <ModalContactHeader
+                name={submission?.contactName ?? ctx.contactName}
+                email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
+                phone={ctx.contactPhone}
+                mobile={ctx.contactMobile}
+              />
               <EmailComposer
                 subject={emailSubject}
                 onSubjectChange={setEmailSubject}
@@ -621,6 +618,12 @@ export function ReviewCustomerPhotosDrawer({ handler: _handler, ctx, open, onClo
           {/* Rough Estimate — confirmation step */}
           {step === 'rough_estimate' && (
             <Stack spacing={2}>
+              <ModalContactHeader
+                name={submission?.contactName ?? ctx.contactName}
+                email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
+                phone={ctx.contactPhone}
+                mobile={ctx.contactMobile}
+              />
               <TextField
                 label="Price range (e.g. £2,500–£3,500)"
                 value={priceRange}

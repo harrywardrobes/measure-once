@@ -198,7 +198,7 @@ describe('broadcastLeadStatusAfterReplay — arrange-visit same-tab delivery', (
   });
 
   it('accepts customerId as the contact identifier (photo-review / design-visit path)', async () => {
-    // ReviewCustomerPhotosDrawer and GenericVisitEditModal use `customerId`
+    // ReviewCustomerPhotosModal and GenericVisitEditModal use `customerId`
     // instead of `contactId` — the engine must bridge both.
     mockGetEntries.mockResolvedValue([
       makeEntry({

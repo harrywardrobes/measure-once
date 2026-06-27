@@ -323,8 +323,8 @@ export const HANDLER_COMPONENT_META: Record<HandlerType, HandlerComponentMeta> =
     filePath:  'src/react/components/modals/UploadPhotosModal.tsx',
   },
   review_customer_photos: {
-    component: 'ReviewCustomerPhotosDrawer',
-    filePath:  'src/react/components/modals/ReviewCustomerPhotosDrawer.tsx',
+    component: 'ReviewCustomerPhotosModal',
+    filePath:  'src/react/components/modals/ReviewCustomerPhotosModal.tsx',
   },
   arrange_visit: {
     component: 'ArrangeVisitModal',

@@ -210,7 +210,7 @@ function surfaceConflict(entry: QueueEntry): void {
  * future modal that changes lead status.
  *
  * The contact ID is read from `body.contactId` (ArrangeVisitModal,
- * ReviewCustomerPhotosDrawer) or `body.customerId` (GenericVisitEditModal),
+ * ReviewCustomerPhotosModal) or `body.customerId` (GenericVisitEditModal),
  * both of which hold the HubSpot contact ID.
  */
 function broadcastLeadStatusAfterReplay(entry: QueueEntry, data: unknown): void {

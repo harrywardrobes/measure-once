@@ -22,6 +22,11 @@ function getGmailClient(auth) {
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const multer = require('multer');
+const _emailAttachUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 },
+});
 const logger = require('./logger');
 const { runMigrations, ensureRateLimitMigrations } = require('./db-migrate');
 const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('./google-token-crypto.cjs');
@@ -1846,6 +1851,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
         }
         contacts = contacts.filter(c => {
           const ls = c.properties?.hs_lead_status || '';
+          if (!ls && stageParam === 'sales') return true; // No status → include in sales
           const contactStage = statusStageMap.get(ls) || '';
           return contactStage === stageParam;
         });
@@ -1985,14 +1991,16 @@ function _invalidateLeadStatusCountsCache() {
 
 // Helper: filter a contacts array to those that have at least one room in
 // the given stage. Mirrors the logic used in /api/contacts-all.
+// The sales stage also includes contacts with no rooms (no status assigned yet).
 function _filterContactsByStage(contacts, stageParam) {
   if (!stageParam) return contacts;
+  const isSales = stageParam === 'sales';
   return contacts.filter(c => {
     const roomsJson = c.properties?.measure_once_rooms;
-    if (!roomsJson) return false;
+    if (!roomsJson) return isSales; // No rooms → treat as sales (unassigned)
     try {
       const rooms = JSON.parse(roomsJson);
-      if (!Array.isArray(rooms)) return false;
+      if (!Array.isArray(rooms) || !rooms.length) return isSales;
       return rooms.some(r => (r.stageKey || 'sales') === stageParam);
     } catch {
       return false;
@@ -4152,6 +4160,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireAdmin, async (req,
         `SELECT u.id, u.email, u.first_name, u.last_name, ae.metadata
            FROM users u
            LEFT JOIN allowed_emails ae ON LOWER(u.email) = ae.email
+           WHERE u.onboarding_status != 'archived'
            ORDER BY u.created_at DESC LIMIT 500`
       );
       for (const row of r.rows) {
@@ -4170,7 +4179,7 @@ app.get('/api/admin/phone-directory', isAuthenticated, requireAdmin, async (req,
         `SELECT ae.email, ae.metadata
            FROM allowed_emails ae
            LEFT JOIN users u ON LOWER(u.email) = ae.email
-          WHERE u.id IS NULL`
+          WHERE u.id IS NULL AND ae.archived_at IS NULL`
       );
       for (const row of a.rows) {
         const m = row.metadata || {};
@@ -6999,6 +7008,7 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
 // Returns the same response shape as /attempts.
 app.post('/api/card-actions/contact-customer/:contactId/send-email',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  _emailAttachUpload.array('attachments', 10),
   async (req, res) => {
     const contactId = req.params.contactId;
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
@@ -7029,6 +7039,11 @@ app.post('/api/card-actions/contact-customer/:contactId/send-email',
         .split('\n')
         .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
         .join('');
+      const attachments = (req.files || []).map(f => ({
+        filename:    f.originalname,
+        content:     f.buffer,
+        contentType: f.mimetype,
+      }));
       await transport.sendMail({
         from:    _buildFromHeader(),
         ...(replyTo ? { replyTo } : {}),
@@ -7036,6 +7051,7 @@ app.post('/api/card-actions/contact-customer/:contactId/send-email',
         subject,
         text:    body,
         html:    html || body,
+        ...(attachments.length ? { attachments } : {}),
       });
 
       const userId   = req.user?.id;

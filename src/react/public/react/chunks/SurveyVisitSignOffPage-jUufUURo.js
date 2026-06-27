@@ -1,0 +1,2 @@
+import{j as t}from"./vendor-react-C4VoMJum.js";import{DesignVisitSignOffPage as r,SURVEY_SIGNOFF_CONFIG as o}from"./DesignVisitSignOffPage-l4O9vp7S.js";import"./vendor-mui-icons-DoPs9hmd.js";import"./vendor-mui-awwlyDiv.js";import"./vendor-emotion-Cftixcl1.js";import"../main.js";function g({embedded:i}={}){return t.jsx(r,{embedded:i,config:o})}export{g as SurveyVisitSignOffPage,g as default};
+//# sourceMappingURL=SurveyVisitSignOffPage-jUufUURo.js.map

@@ -86,6 +86,8 @@ export interface LeadStatusPickerProps {
   onClose: () => void;
   contactId: string;
   currentStatus: string;
+  /** Called with the selected status key ('' to clear). When provided, skips window.quickSetLeadStatus. */
+  onSelect?: (statusKey: string) => void;
 }
 
 export function LeadStatusPicker({
@@ -94,6 +96,7 @@ export function LeadStatusPicker({
   onClose,
   contactId,
   currentStatus,
+  onSelect,
 }: LeadStatusPickerProps) {
   const [loading, setLoading] = useState(false);
   const [liveStatus, setLiveStatus] = useState(currentStatus);
@@ -142,6 +145,7 @@ export function LeadStatusPicker({
 
   const handleSelect = (statusKey: string) => {
     onClose();
+    if (onSelect) { onSelect(statusKey); return; }
     const w = window as unknown as WindowGlobals;
     if (typeof w.quickSetLeadStatus === 'function') {
       w.quickSetLeadStatus(contactId, statusKey);
@@ -150,6 +154,7 @@ export function LeadStatusPicker({
 
   const handleClear = () => {
     onClose();
+    if (onSelect) { onSelect(''); return; }
     const w = window as unknown as WindowGlobals;
     if (typeof w.quickSetLeadStatus === 'function') {
       w.quickSetLeadStatus(contactId, '');

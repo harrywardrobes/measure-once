@@ -1,0 +1,2 @@
+import{j as s}from"./vendor-react-C4VoMJum.js";function g({checked:e,onChange:t,title:o,disabled:a,className:n}){const c=["ss-toggle",n].filter(Boolean).join(" ");return s.jsxs("label",{className:c,title:o,children:[s.jsx("input",{type:"checkbox",checked:e,disabled:a,onChange:l=>t?.(l.target.checked)}),s.jsx("span",{className:"ss-toggle-track"})]})}export{g as T};
+//# sourceMappingURL=Toggle-DqKK0p8R.js.map

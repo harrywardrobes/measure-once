@@ -6,9 +6,10 @@ import { formatCurrency, relativeTime } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
-import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { subscribeLeadStatusChange, broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeCustomerInfoLinkChanged } from '../utils/broadcastCustomerInfoLink';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { openDirectContactModal } from '../utils/cardActionModalRegistry';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
@@ -70,6 +71,8 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { buildActivityTooltipContent, formatActivityRow } from '../utils/activityTooltip';
 import { WorkflowDef } from '../lib/workflowConfig';
 import { useWorkflowData } from '../contexts/WorkflowDataContext';
+import { sendOrQueue } from '../lib/offlineQueue';
+import { LeadStatusPicker } from '../components/pickers/LeadStatusPicker';
 
 type LeadStatus = {
   key: string;
@@ -168,7 +171,12 @@ function readUrlState() {
   }
   let stage = p.get('stage') || '';
   if (!stage) {
-    try { stage = sessionStorage.getItem(CUSTOMERS_STAGE_KEY) || ''; } catch { /* ignore */ }
+    try {
+      const saved = sessionStorage.getItem(CUSTOMERS_STAGE_KEY) || '';
+      // '__all__' is stored when the user explicitly picks "All" so the default
+      // doesn't override their choice on the next visit.
+      stage = saved === '__all__' ? '' : (saved || 'sales');
+    } catch { /* ignore */ }
   }
   return {
     page: Math.max(1, parseInt(p.get('page') || '1', 10) || 1),
@@ -695,6 +703,62 @@ function CustomerCard({
   // ── Inline copy-link for upload_photos_and_info (manager/admin only) ─────────
   const { isManager, isAdmin } = usePrivilege();
   const isManagerOrAdmin = isManager || isAdmin;
+
+  // ── Lead status inline picker ─────────────────────────────────────────────────
+  const { showToastWithAction, showToast } = useToastContext();
+  const [pickerAnchor, setPickerAnchor] = useState<HTMLElement | null>(null);
+  const prevStatusRef = useRef<string>('');
+
+  const handleLeadStatusChipClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    prevStatusRef.current = contact.properties?.hs_lead_status || '';
+    setPickerAnchor(e.currentTarget);
+  }, [contact.properties?.hs_lead_status]);
+
+  const handleLeadStatusSelect = useCallback((newStatus: string) => {
+    const prevStatus = prevStatusRef.current;
+    if (newStatus === prevStatus) return;
+
+    broadcastLeadStatusChange(contact.id, { hs_lead_status: newStatus });
+
+    void sendOrQueue({
+      area: 'customer',
+      label: `Lead status → ${newStatus}`,
+      method: 'PATCH',
+      url: `/api/contacts/${encodeURIComponent(contact.id)}`,
+      body: { hs_lead_status: newStatus },
+      dedupeKey: `contact:${contact.id}:lead-status`,
+    }).then(res => {
+      if (!res.queued && !res.ok) {
+        const d = res.data as { code?: string } | undefined;
+        if (d?.code === 'LEAD_STATUS_REMOVED') {
+          broadcastLeadStatusChange(contact.id, { hs_lead_status: prevStatus });
+          showToast(LEAD_STATUS_REMOVED_MESSAGE, true);
+        }
+      }
+    }).catch(() => {});
+
+    const newLabel = newStatus ? (statusMap.get(newStatus)?.label || newStatus) : 'cleared';
+    showToastWithAction(
+      newStatus ? `Lead status updated to "${newLabel}"` : 'Lead status cleared',
+      {
+        label: 'Undo',
+        onClick: () => {
+          broadcastLeadStatusChange(contact.id, { hs_lead_status: prevStatus });
+          void sendOrQueue({
+            area: 'customer',
+            label: `Lead status → ${prevStatus || 'clear'} (undo)`,
+            method: 'PATCH',
+            url: `/api/contacts/${encodeURIComponent(contact.id)}`,
+            body: { hs_lead_status: prevStatus },
+            dedupeKey: `contact:${contact.id}:lead-status`,
+          }).catch(() => {});
+        },
+      },
+      { duration: 5000 },
+    );
+  }, [contact.id, statusMap, showToast, showToastWithAction]);
   const [stripHovered, setStripHovered] = useState(false);
   const [activeLinkUrl, setActiveLinkUrl] = useState<string | null>(null);
   const [linkFetchState, setLinkFetchState] = useState<'idle' | 'fetching' | 'done'>('idle');
@@ -755,17 +819,6 @@ function CustomerCard({
     actionStageKey,
     primaryStageKey,
   });
-
-  const activitySummary: string | null = (() => {
-    if (dispatchingAction || !actionLabel) return null;
-    if (lastAttempt?.at) {
-      const { line1, line2 } = formatActivityRow(lastAttempt, relativeTime(lastAttempt.at));
-      return `${line1} · ${line2}`;
-    }
-    const fallbackDate = contact.properties?.notes_last_contacted;
-    if (fallbackDate) return `Last contacted ${relativeTime(fallbackDate)}`;
-    return null;
-  })();
 
   const handleActionClick = useCallback(
     async (e: React.MouseEvent) => {
@@ -872,7 +925,25 @@ function CustomerCard({
               </Box>
             </Typography>
             <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
-              {email ? <Chip label={email} size="small" variant="outlined" /> : null}
+              {email ? (
+                <Chip
+                  label={email}
+                  size="small"
+                  variant="outlined"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openDirectContactModal({
+                      contactId: String(contact.id),
+                      contactName: name,
+                      contactEmail: email,
+                      contactPhone: phone || undefined,
+                      openEmail: true,
+                    });
+                  }}
+                  sx={{ cursor: 'pointer' }}
+                />
+              ) : null}
               {phone ? <Chip label={phone} size="small" variant="outlined" /> : null}
               {customerNum ? (
                 <Chip label={customerNum} size="small" color="secondary" variant="outlined" />
@@ -883,7 +954,14 @@ function CustomerCard({
           {/* Right column — lead status, QB badge */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'flex-start', [CCARD_CQ]: { alignItems: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
-            {lsLabel ? <Chip label={lsLabel} size="small" color="primary" variant="outlined" /> : null}
+            <Chip
+              label={lsLabel || (isManagerOrAdmin ? 'Set status' : 'No status')}
+              size="small"
+              color={lsLabel ? 'primary' : 'default'}
+              variant="outlined"
+              onClick={isManagerOrAdmin ? handleLeadStatusChipClick : undefined}
+              sx={isManagerOrAdmin ? { cursor: 'pointer' } : undefined}
+            />
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
             {depositInvoice && (
               <DepositInvoiceBadge
@@ -927,38 +1005,7 @@ function CustomerCard({
         }}
       >
         <Typography component="div" sx={{ color: actionTextColor, fontWeight: 600, fontSize: '0.78rem', minWidth: 0 }}>
-          {handler && (dispatchingAction ? 'Opening…' : (
-            activitySummary ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  [CCARD_CQ]: { flexDirection: 'row', alignItems: 'baseline' },
-                }}
-              >
-                <Tooltip
-                  title={buildActivityTooltipContent(lastAttempt ?? null, contact.properties?.notes_last_contacted)}
-                  arrow
-                  placement="bottom"
-                  enterDelay={200}
-                >
-                  <Box
-                    component="span"
-                    sx={{ fontWeight: 500, opacity: 0.6, fontSize: '0.72rem' }}
-                  >
-                    {activitySummary}
-                    <Box
-                      component="span"
-                      sx={{ display: 'none', mx: '4px', [CCARD_CQ]: { display: 'inline' } }}
-                    >
-                      ·
-                    </Box>
-                  </Box>
-                </Tooltip>
-                <Box component="span">{actionLabel}</Box>
-              </Box>
-            ) : actionLabel
-          ))}
+          {handler && (dispatchingAction ? 'Opening…' : actionLabel)}
         </Typography>
         {handler && (dispatchingAction ? (
           <CircularProgress size={12} sx={{ color: actionTextColor }} />
@@ -1038,6 +1085,17 @@ function CustomerCard({
       )}
 
       {syncStatus === 'failed' && <ContactSyncRecovery failedIds={failedIds} />}
+
+      {isManagerOrAdmin && (
+        <LeadStatusPicker
+          anchorEl={pickerAnchor}
+          open={Boolean(pickerAnchor)}
+          onClose={() => setPickerAnchor(null)}
+          contactId={contact.id}
+          currentStatus={contact.properties?.hs_lead_status || ''}
+          onSelect={handleLeadStatusSelect}
+        />
+      )}
     </Card>
   );
 }
@@ -1104,6 +1162,11 @@ export function CustomersPage(): React.ReactElement {
   // ── Counts state ────────────────────────────────────────────────────────────
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
+
+  // ── Global lead-status counts (stage tab bar totals) ─────────────────────────
+  // Always fetched without a stage filter so each tab shows the full count for
+  // that stage regardless of which tab is currently active.
+  const [globalLsCounts, setGlobalLsCounts] = React.useState<Record<string, number>>({});
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [customersPageSize, setCustomersPageSize] = React.useState<number>(PAGINATED_CONTACTS_PAGE_LIMIT);
   const [prioritySortMode, setPrioritySortMode] = React.useState<'last_contacted' | 'newest'>('last_contacted');
@@ -1185,6 +1248,26 @@ export function CustomersPage(): React.ReactElement {
     }
     return m;
   }, [store.statuses]);
+
+  React.useEffect(() => {
+    apiGet<Record<string, number>>('/api/contacts-lead-status-counts')
+      .then((counts) => { if (counts) setGlobalLsCounts(counts); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshNonce]);
+
+  const stageCounts = React.useMemo(() => {
+    const result: Record<string, number> = {};
+    let allTotal = 0;
+    for (const [key, count] of Object.entries(globalLsCounts)) {
+      allTotal += count;
+      if (key === '__no_status__') continue;
+      const stage = statusStageMap.get(key);
+      if (stage) result[stage] = (result[stage] || 0) + count;
+    }
+    if (allTotal > 0) result['__all__'] = allTotal;
+    return result;
+  }, [globalLsCounts, statusStageMap]);
 
   const {
     contacts,
@@ -1379,15 +1462,12 @@ export function CustomersPage(): React.ReactElement {
     } catch { /* ignore */ }
   }, [leadStatus]);
 
-  // Persist the active stage tab to sessionStorage so it survives navigation
-  // away and back. Cleared when the user selects "All" (the default tab).
+  // Persist the active stage tab to sessionStorage. Store '__all__' when the
+  // user explicitly picks "All" so readUrlState can distinguish "user chose All"
+  // from "no preference yet" (which defaults to 'sales').
   React.useEffect(() => {
     try {
-      if (stageFilter) {
-        sessionStorage.setItem(CUSTOMERS_STAGE_KEY, stageFilter);
-      } else {
-        sessionStorage.removeItem(CUSTOMERS_STAGE_KEY);
-      }
+      sessionStorage.setItem(CUSTOMERS_STAGE_KEY, stageFilter || '__all__');
     } catch { /* ignore */ }
   }, [stageFilter]);
 
@@ -1806,15 +1886,15 @@ export function CustomersPage(): React.ReactElement {
 
   // Build the stage tab list: All, then one button per workflow stage.
   const stageTabs = React.useMemo(() => {
-    const tabs: Array<{ key: string; label: string }> = [
-      { key: '__all__', label: 'All' },
+    const tabs: Array<{ key: string; label: string; count?: number }> = [
+      { key: '__all__', label: 'All', count: stageCounts['__all__'] || undefined },
     ];
     const stages = workflow?.stages || {};
     for (const [k, s] of Object.entries(stages)) {
-      tabs.push({ key: k, label: s?.label || k });
+      tabs.push({ key: k, label: s?.label || k, count: stageCounts[k] || undefined });
     }
     return tabs;
-  }, [workflow]);
+  }, [workflow, stageCounts]);
 
   const currentTab: string = stageFilter ? stageFilter : '__all__';
 

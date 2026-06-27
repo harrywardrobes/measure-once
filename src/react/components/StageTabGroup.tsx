@@ -1,11 +1,14 @@
 import React from 'react';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
+import Box from '@mui/material/Box';
 import { BRAND_COLORS } from '../theme';
 
 export interface StageTab {
   key: string;
   label: string;
+  /** Optional customer count displayed muted to the right of the label. */
+  count?: number;
 }
 
 export interface StageColorEntry {
@@ -98,6 +101,20 @@ export function StageTabGroup({ value, onChange, tabs, stageColors, fullWidth }:
             }}
           >
             {t.label}
+            {t.count != null && t.count > 0 && (
+              <Box
+                component="span"
+                sx={{
+                  ml: 0.625,
+                  fontSize: '0.78em',
+                  fontWeight: 400,
+                  opacity: selected ? 0.65 : 0.5,
+                  letterSpacing: 0,
+                }}
+              >
+                {t.count}
+              </Box>
+            )}
           </ToggleButton>
         );
       })}
