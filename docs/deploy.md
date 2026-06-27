@@ -27,8 +27,8 @@ Run injects the differences via env vars and Secret Manager:
 Fixed values used throughout: project `harry-wardrobes`, region `europe-west2`,
 Artifact Registry repo `measure-once`, runtime service account
 `wardrobes-run@harry-wardrobes.iam.gserviceaccount.com`, Cloud SQL instance
-`harry-wardrobes-instance` (connection name
-`harry-wardrobes:europe-west2:harry-wardrobes-instance`).
+`harry-wardrobes-db` (connection name
+`harry-wardrobes:europe-west2:harry-wardrobes-db`).
 
 **Database migrations never run at container boot** (`RUN_MIGRATIONS_ON_BOOT` is
 intentionally unset). Migrating is always a separate, deliberate step you run
@@ -59,7 +59,7 @@ with ADC (preferred — credentials auto-refresh) rather than `--token` (expires
 after ~1 hour and causes `ECONNRESET`):
 
 ```powershell
-C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-instance
+C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-db
 ```
 
 See [docs/staging-handoff.md](staging-handoff.md) Part B2 for full proxy setup
@@ -83,7 +83,7 @@ gcloud run deploy measure-once-staging `
   --image=$IMAGE `
   --region=europe-west2 `
   --service-account="wardrobes-run@harry-wardrobes.iam.gserviceaccount.com" `
-  --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-instance" `
+  --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-db" `
   --allow-unauthenticated --cpu-boost `
   --cpu=1 --memory=512Mi --min-instances=0 --max-instances=2 `
   --set-env-vars="NODE_ENV=production,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket-staging,ADMIN_EMAILS=harry@harrywardrobes.co.uk,APP_URL=https://staging.harrywardrobes.co.uk,GOOGLE_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/google/callback,QB_REDIRECT_URI=https://staging.harrywardrobes.co.uk/auth/quickbooks/callback" `
@@ -137,7 +137,7 @@ gcloud run deploy measure-once `
   --image=$IMAGE `
   --region=europe-west2 `
   --service-account="wardrobes-run@harry-wardrobes.iam.gserviceaccount.com" `
-  --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-instance" `
+  --add-cloudsql-instances="harry-wardrobes:europe-west2:harry-wardrobes-db" `
   --allow-unauthenticated `
   --port=8080 --cpu=1 --memory=512Mi --min-instances=0 --max-instances=4 `
   --set-env-vars="NODE_ENV=production,STORAGE_BACKEND=gcs,GCS_BUCKET=wardrobes-bucket,ADMIN_EMAILS=harry@harrywardrobes.co.uk,APP_URL=https://measure.harrywardrobes.co.uk,GOOGLE_REDIRECT_URI=https://measure.harrywardrobes.co.uk/auth/google/callback,QB_REDIRECT_URI=https://measure.harrywardrobes.co.uk/auth/quickbooks/callback" `

@@ -95,7 +95,7 @@ gcloud run services describe measure-once-staging --region=europe-west2 `
    auto-refreshes, never expires). The binary lives at
    `C:\Users\User\cloud-sql-proxy.exe`:
    ```powershell
-   C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-instance
+   C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-db
    ```
    Run this in the background, then re-check the port after a few seconds.
    If the proxy fails because ADC credentials are missing or expired, run:
@@ -172,7 +172,7 @@ Only once all three are explicitly satisfied, continue to section 4.
 
 1. **On-demand backup first** (extra safety margin before touching the prod DB):
    ```powershell
-   gcloud sql backups create --instance=harry-wardrobes-instance `
+   gcloud sql backups create --instance=harry-wardrobes-db `
      --description="pre-deploy $(git rev-parse --short HEAD)"
    ```
    This command blocks until the backup finishes — confirm it reports success.
