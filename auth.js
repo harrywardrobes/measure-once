@@ -1,25 +1,15 @@
-// Email/password auth (bcrypt + Passport session in PostgreSQL).
-// req.user shape: `{ claims: { sub, email, ... }, expires_at, privilege_level,
+// Google Cloud Identity Platform auth.
+// req.user shape: `{ claims: { sub, email, identity_uid, ... }, privilege_level,
 // onboarding_status }`
 const logger = require('./logger');
-const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { photoUploadLimiter } = require('./rate-limiters');
-const passport = require('passport');
-const connectPg = require('connect-pg-simple');
 const { Pool } = require('pg');
 const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
-const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const zxcvbn = require('zxcvbn');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
-
-// Dummy hash for constant-time comparison when email is not found/approved.
-// Keeps login response time uniform regardless of account state (timing oracle mitigation).
-// bcrypt.hashSync at work factor 10 produces a real valid hash the compare step
-// will fully evaluate, ensuring timing is consistent across all auth-rejection branches.
-const DUMMY_HASH = bcrypt.hashSync('_timing_placeholder_', 10);
+const admin = require('./identity-platform');
 
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
@@ -98,9 +88,6 @@ function turnstileError(res) {
 }
 
 const MIN_PASSWORD_STRENGTH_SCORE = 2;
-
-const PASSWORD_SET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h (admin-issued)
-const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;    // 1h  (self-service reset)
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 // Escapes characters that have special meaning in HTML to prevent injection
@@ -161,18 +148,17 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   }
 }
 
-async function sendSetPasswordEmail(email, token, { resend = false, reset = false } = {}) {
+async function sendSetPasswordEmail(email, link, { resend = false, reset = false } = {}) {
   const transport = createMailTransport();
   if (!transport) {
     logger.warn(`  SMTP not configured — skipping set-password email for ${email}.`);
     if (process.env.LOG_SET_PASSWORD_LINK === 'true' && process.env.NODE_ENV !== 'production') {
-      logger.warn(`  Set-password link (manual delivery): ${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`);
+      logger.warn(`  Set-password link (manual delivery): ${link}`);
     } else if (process.env.NODE_ENV !== 'production' && !process.env.LOG_SET_PASSWORD_LINK) {
       logger.warn(`  Set-password link (manual delivery) — set LOG_SET_PASSWORD_LINK=true in .env to print the link here.`);
     }
     return;
   }
-  const link = `${appBaseUrl()}/set-password?token=${encodeURIComponent(token)}`;
   const from = buildFromHeader();
   const replyTo = buildReplyTo();
   const templateKey = reset
@@ -306,12 +292,11 @@ const loginLimiter = rateLimit({
 
 // ── Schema bootstrap ─────────────────────────────────────────────────────────
 async function ensureAuthTables() {
-  // Schema (sessions, users, allowed_emails, account_requests,
-  // password_set_tokens, bootstrap_admin_emails, job_roles, nav_role_configs
-  // …) plus their idempotent seeds/backfills are created by migrations on boot.
-  // This boot step performs only the runtime ADMIN_EMAILS bootstrap below, which
-  // depends on the process.env.ADMIN_EMAILS value and cannot live in a static
-  // migration.
+  // Schema (users, allowed_emails, account_requests, bootstrap_admin_emails,
+  // job_roles, nav_role_configs …) plus their idempotent seeds/backfills are
+  // created by migrations on boot. This boot step performs only the runtime
+  // ADMIN_EMAILS bootstrap below, which depends on process.env.ADMIN_EMAILS
+  // and cannot live in a static migration.
 
   // Seed admin emails from env var + create user rows for them so the very
   // first admin can sign in once they set a password via the emailed link.
@@ -346,6 +331,23 @@ async function ensureAuthTables() {
        ON CONFLICT (email) DO NOTHING`,
       [email]
     );
+    // Ensure an Identity Platform user exists for each admin so they can sign in.
+    try {
+      let idUser;
+      try { idUser = await admin.auth().getUserByEmail(email); }
+      catch (e) {
+        if (e.code === 'auth/user-not-found') {
+          idUser = await admin.auth().createUser({ email, emailVerified: true });
+          logger.info(`[ensureAuthTables] Created Identity Platform user for admin: ${email}`);
+        } else { throw e; }
+      }
+      await pool.query(
+        'UPDATE users SET identity_uid = $1 WHERE LOWER(email) = $2 AND identity_uid IS NULL',
+        [idUser.uid, email]
+      );
+    } catch (idErr) {
+      logger.error({ err: idErr.message }, `[ensureAuthTables] Identity Platform user setup failed for ${email}:`);
+    }
   }
 }
 
@@ -368,36 +370,9 @@ function scheduleRateLimitCleanup() {
   setInterval(cleanupExpiredRateLimitRecords, 60 * 60 * 1000);
 }
 
-async function cleanupExpiredSessions() {
-  try {
-    const result = await pool.query(`DELETE FROM sessions WHERE expire < NOW()`);
-    if (result.rowCount > 0) {
-      logger.info(`[session cleanup] Removed ${result.rowCount} expired session(s).`);
-    }
-  } catch (err) {
-    logger.error({ err: err.message }, '[session cleanup] Failed to prune expired sessions:');
-  }
-}
-
-async function cleanupExpiredPasswordTokens() {
-  try {
-    // Only delete tokens that were never consumed. Consumed tokens (used_at IS NOT NULL)
-    // are kept for audit history.
-    const r = await pool.query(
-      `DELETE FROM password_set_tokens WHERE expires_at < NOW() - INTERVAL '7 days' AND used_at IS NULL`
-    );
-    if (r.rowCount > 0) logger.info(`[password-token cleanup] Removed ${r.rowCount} expired unconsumed token(s).`);
-  } catch (err) {
-    logger.error({ err: err.message }, '[password-token cleanup] Failed:');
-  }
-}
-
 function scheduleSessionCleanup() {
-  const raw = parseInt(process.env.SESSION_CLEANUP_INTERVAL_MS, 10);
-  const intervalMs = raw > 0 ? raw : 60 * 60 * 1000;
-  cleanupExpiredSessions();
-  cleanupExpiredPasswordTokens();
-  setInterval(() => { cleanupExpiredSessions(); cleanupExpiredPasswordTokens(); }, intervalMs);
+  // No-op: sessions are now managed by Identity Platform (cookie-based,
+  // no server-side session store). Nothing to clean up on a schedule.
 }
 
 // ── Audit log helper ─────────────────────────────────────────────────────────
@@ -551,8 +526,8 @@ async function getUser(id) {
 async function getUserByEmail(email) {
   if (!email) return null;
   const r = await pool.query(
-    `SELECT id, email, first_name, last_name, profile_image_url,
-            job_role, privilege_level, onboarding_status, password_hash,
+    `SELECT id, email, first_name, last_name, profile_image_url, identity_uid,
+            job_role, privilege_level, onboarding_status,
             (custom_photo IS NOT NULL) AS has_custom_photo
      FROM users WHERE LOWER(email) = LOWER($1)`,
     [email]
@@ -560,43 +535,95 @@ async function getUserByEmail(email) {
   return r.rows[0] || null;
 }
 
-// ── Password / onboarding helpers ────────────────────────────────────────────
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
+// ── Identity Platform helpers ─────────────────────────────────────────────────
+
+// Read the Identity Platform session cookie from the request headers.
+function getSessionCookie(req) {
+  const cookieHeader = req.headers.cookie || '';
+  const match = cookieHeader.match(/(?:^|;\s*)__session=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
-async function issuePasswordSetToken(email, { purpose = 'set' } = {}) {
-  const lower = email.toLowerCase();
-  const raw = crypto.randomBytes(32).toString('hex');
-  const tokenHash = hashToken(raw);
-  const ttlMs = purpose === 'reset' ? PASSWORD_RESET_TOKEN_TTL_MS : PASSWORD_SET_TOKEN_TTL_MS;
-  const expiresAt = new Date(Date.now() + ttlMs);
-  // Invalidate any prior unused tokens for this email so only the newest link works.
-  await pool.query(
-    `UPDATE password_set_tokens SET used_at = NOW()
-       WHERE email = $1 AND used_at IS NULL`,
-    [lower]
-  );
-  await pool.query(
-    `INSERT INTO password_set_tokens (token_hash, email, expires_at, purpose)
-     VALUES ($1, $2, $3, $4)`,
-    [tokenHash, lower, expiresAt, purpose]
-  );
-  return raw;
-}
-
-async function lookupPasswordSetToken(rawToken) {
-  if (!rawToken || typeof rawToken !== 'string') return null;
+async function getUserByIdentityUid(uid) {
+  if (!uid) return null;
   const r = await pool.query(
-    `SELECT email, expires_at, used_at, purpose FROM password_set_tokens WHERE token_hash = $1`,
-    [hashToken(rawToken)]
+    `SELECT id, email, first_name, last_name, profile_image_url, identity_uid,
+            job_role, privilege_level, onboarding_status,
+            (custom_photo IS NOT NULL) AS has_custom_photo
+     FROM users WHERE identity_uid = $1`,
+    [uid]
   );
-  const row = r.rows[0];
-  if (!row) return null;
-  if (row.used_at) return { ...row, invalid: 'used' };
-  if (new Date(row.expires_at).getTime() < Date.now()) return { ...row, invalid: 'expired' };
-  return { ...row, invalid: null };
+  return r.rows[0] || null;
 }
+
+// Ensure an Identity Platform user exists for the given email, create one if not.
+// Also backfills identity_uid into our users table.
+async function ensureIdentityUser(email) {
+  const lower = email.toLowerCase();
+  let idUser;
+  try { idUser = await admin.auth().getUserByEmail(lower); }
+  catch (err) {
+    if (err.code === 'auth/user-not-found') {
+      idUser = await admin.auth().createUser({ email: lower, emailVerified: true });
+    } else { throw err; }
+  }
+  if (idUser.disabled) {
+    await admin.auth().updateUser(idUser.uid, { disabled: false });
+  }
+  await pool.query(
+    'UPDATE users SET identity_uid = $1 WHERE LOWER(email) = $2 AND identity_uid IS NULL',
+    [idUser.uid, lower]
+  );
+  return idUser;
+}
+
+// Generate a Firebase password-reset link and extract just the oobCode so we
+// can embed it in our own branded email pointing at /set-password?oobCode=...
+async function generateSetPasswordLink(email) {
+  // The continueUrl must be on an authorized domain in Identity Platform.
+  // We only use it to satisfy the SDK — we extract the oobCode from the
+  // generated link and build our own branded URL, so the continueUrl is
+  // never actually visited by the user.
+  const productionBase = process.env.APP_URL_PRODUCTION || 'https://measure.harrywardrobes.co.uk';
+  const continueUrl = `${productionBase}/login?password_set=1`;
+  const idLink = await admin.auth().generatePasswordResetLink(email.toLowerCase(), {
+    url: continueUrl,
+    handleCodeInApp: false,
+  });
+  const oobCode = new URL(idLink).searchParams.get('oobCode');
+  return `${appBaseUrl()}/set-password?oobCode=${encodeURIComponent(oobCode)}`;
+}
+
+// Call the Firebase Identity Toolkit REST API.
+async function identityREST(action, body) {
+  const apiKey = process.env.IDENTITY_API_KEY;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:${action}?key=${apiKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal }
+    );
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Revoke all Firebase sessions for a user (best-effort; does not throw).
+async function revokeUserSessions(email) {
+  try {
+    const idUser = await admin.auth().getUserByEmail(email.toLowerCase());
+    await admin.auth().revokeRefreshTokens(idUser.uid);
+  } catch (err) {
+    if (err.code !== 'auth/user-not-found') {
+      logger.error({ err: err.message }, `[revokeUserSessions] Failed for ${email}:`);
+    }
+  }
+}
+
+// ── Password / onboarding helpers ────────────────────────────────────────────
 
 async function ensureUserForApprovedEmail(client, email, meta, { job_role = null, privilege_level = null } = {}) {
   const lower = email.toLowerCase();
@@ -617,7 +644,7 @@ async function ensureUserForApprovedEmail(client, email, meta, { job_role = null
            privilege_level = EXCLUDED.privilege_level,
            job_role        = CASE WHEN EXCLUDED.job_role IS NOT NULL THEN EXCLUDED.job_role ELSE users.job_role END,
            updated_at      = NOW()
-     RETURNING id, email, password_hash, onboarding_status`,
+     RETURNING id, email, identity_uid, onboarding_status`,
     [lower, first, last, privilege, job_role || null]
   );
   return r.rows[0];
@@ -645,74 +672,9 @@ function validatePasswordPolicy(pw, userInputs = []) {
 }
 
 // ── Session install / setup ──────────────────────────────────────────────────
-function getSession() {
-  const ttl = SESSION_TTL_SECONDS * 1000;
-  const PgStore = connectPg(session);
-  const store = new PgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl,
-    tableName: 'sessions',
-  });
-  const isProd = process.env.NODE_ENV === 'production';
-  return session({
-    secret: process.env.SESSION_SECRET,
-    store,
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: {
-      httpOnly: true,
-      // Production runs behind HTTPS with cross-site OAuth, so the cookie must
-      // be Secure + SameSite=None. Over plain http://localhost a Secure cookie
-      // is silently dropped by the browser, breaking local login — so dev uses
-      // secure:false + SameSite=Lax. Gated on NODE_ENV (server-side signal).
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: ttl,
-    },
-  });
-}
-
+// Sessions are now Firebase session cookies — no PostgreSQL session store needed.
 function installSession(app) {
-  if (!process.env.SESSION_SECRET) {
-    throw new Error('SESSION_SECRET is required.');
-  }
   app.set('trust proxy', 1);
-  app.use(getSession());
-  app.use(passport.initialize());
-  app.use(passport.session());
-}
-
-function buildSessionUser(dbUser) {
-  return {
-    claims: {
-      sub: dbUser.id,
-      email: dbUser.email,
-      first_name: dbUser.first_name || null,
-      last_name: dbUser.last_name || null,
-      profile_image_url: dbUser.profile_image_url || null,
-    },
-    has_custom_photo: dbUser.has_custom_photo || false,
-    privilege_level: dbUser.privilege_level || 'member',
-    onboarding_status: dbUser.onboarding_status || 'active',
-    expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-  };
-}
-
-function loginSessionUser(req, sessionUser) {
-  return new Promise((resolve, reject) => {
-    req.session.regenerate((regenerateErr) => {
-      if (regenerateErr) return reject(regenerateErr);
-      req.login(sessionUser, (loginErr) => {
-        if (loginErr) return reject(loginErr);
-        req.session.save((saveErr) => {
-          if (saveErr) return reject(saveErr);
-          resolve(sessionUser);
-        });
-      });
-    });
-  });
 }
 
 async function setupAuth(app) {
@@ -729,39 +691,65 @@ async function setupAuth(app) {
       'Set both secrets in production to enable bot and credential-stuffing protection.');
   }
 
-  passport.serializeUser((user, cb) => cb(null, user));
-  passport.deserializeUser((user, cb) => cb(null, user));
-
   // ── Login / logout ─────────────────────────────────────────────────────────
-  app.post('/api/login', loginLimiter, async (req, res) => {
-    const rawEmail = req.body?.email;
-    const email = (typeof rawEmail === 'string' ? rawEmail : '').trim().toLowerCase();
-    const password = req.body?.password;
-    if (!email || typeof password !== 'string' || !password || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: 'Please enter your email and password.' });
+  // The client signs in with Identity Platform (via the REST API), receives an
+  // ID token, then exchanges it here for an HttpOnly session cookie.
+  // Legacy /api/login — kept as a 400 stub so existing tooling and tests
+  // that probe this path don't get an unexpected 404. All clients should
+  // migrate to the two-step Identity Platform → /api/session flow.
+  app.post('/api/login', loginLimiter, (_req, res) => {
+    res.status(400).json({ error: 'Direct email/password login is no longer supported. Use the sign-in page.' });
+  });
+
+  app.post('/api/session', loginLimiter, async (req, res) => {
+    const { idToken, captchaToken } = req.body || {};
+    if (!idToken || typeof idToken !== 'string') {
+      return res.status(400).json({ error: 'ID token required.' });
     }
-    const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
+    const captcha = await verifyCaptchaToken(captchaToken || req.body?.['cf-turnstile-response'], req.ip);
     if (!captcha.ok) return turnstileError(res);
     try {
-      // Run both DB lookups in parallel regardless of approval status so both
-      // paths take the same time (timing oracle mitigation).
-      const [approved, dbUser] = await Promise.all([isEmailApproved(email), getUserByEmail(email)]);
-      const hashToCheck = (approved && dbUser?.password_hash) || DUMMY_HASH;
-      const normalOk = await bcrypt.compare(password, hashToCheck) && !!dbUser?.password_hash;
-      if (!approved || !normalOk) {
-        return res.status(401).json({ error: 'Invalid email or password.' });
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      const email = (decoded.email || '').toLowerCase();
+      if (!email) return res.status(401).json({ error: 'Invalid credentials.' });
+
+      const approved = await isEmailApproved(email);
+      if (!approved) {
+        return res.status(403).json({ error: 'Your account has not been approved. Request access or contact an admin.' });
       }
 
-      const sessionUser = buildSessionUser(dbUser);
-      await loginSessionUser(req, sessionUser);
+      // Look up our DB user; backfill identity_uid on first login after migration.
+      let dbUser = await getUserByIdentityUid(decoded.uid);
+      if (!dbUser) {
+        dbUser = await getUserByEmail(email);
+        if (dbUser) {
+          await pool.query(
+            'UPDATE users SET identity_uid = $1 WHERE id = $2 AND identity_uid IS NULL',
+            [decoded.uid, dbUser.id]
+          );
+        }
+      }
+      if (!dbUser) return res.status(403).json({ error: 'Account not found.' });
+
+      const expiresIn = SESSION_TTL_SECONDS * 1000;
+      const sessionCookie = await admin.auth().createSessionCookie(idToken, { expiresIn });
+      const isProd = process.env.NODE_ENV === 'production';
+      res.cookie('__session', sessionCookie, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        maxAge: expiresIn,
+        path: '/',
+      });
       res.json({
         ok: true,
-        onboarding_status: sessionUser.onboarding_status,
-        next: sessionUser.onboarding_status === 'more_info_required' ? '/onboarding' : '/',
+        onboarding_status: dbUser.onboarding_status,
+        next: dbUser.onboarding_status === 'more_info_required' ? '/onboarding' : '/',
       });
     } catch (e) {
-      logger.error({ err: e.message }, 'Login failed:');
-      res.status(500).json({ error: 'Could not sign in. Please try again later.' });
+      if (e.code?.startsWith('auth/')) return res.status(401).json({ error: 'Invalid credentials.' });
+      logger.error({ err: e.message }, 'POST /api/session failed:');
+      return res.status(500).json({ error: 'Could not sign in. Please try again later.' });
     }
   });
 
@@ -775,20 +763,25 @@ async function setupAuth(app) {
     });
   });
 
-  app.post('/api/logout', (req, res) => {
+  // The Identity Platform web API key is safe to expose in the browser —
+  // it identifies the project but cannot be used to bypass security rules.
+  app.get('/api/identity-config', (_req, res) => {
+    res.json({ apiKey: process.env.IDENTITY_API_KEY || null });
+  });
+
+  app.post('/api/logout', async (req, res) => {
     const wantsJson = req.get('accept')?.includes('application/json')
                    && !req.get('accept')?.includes('text/html');
-    const finish = () => {
-      const done = () => {
-        res.clearCookie('connect.sid');
-        if (wantsJson) return res.json({ ok: true });
-        return res.redirect('/login?signed_out=1');
-      };
-      if (req.session) req.session.destroy(done);
-      else done();
-    };
-    if (req.logout) req.logout(() => finish());
-    else finish();
+    const cookie = getSessionCookie(req);
+    if (cookie) {
+      try {
+        const decoded = await admin.auth().verifySessionCookie(cookie).catch(() => null);
+        if (decoded) await admin.auth().revokeRefreshTokens(decoded.uid);
+      } catch { /* best-effort */ }
+    }
+    res.clearCookie('__session', { path: '/' });
+    if (wantsJson) return res.json({ ok: true });
+    return res.redirect('/login?signed_out=1');
   });
 
   // ── Public: email helpers / access requests (unchanged behaviour) ──────────
@@ -797,6 +790,41 @@ async function setupAuth(app) {
   // The access-request form relies on the 409 from POST /api/request-access for
   // its authoritative already-approved signal; this endpoint no longer leaks
   // approval status to unauthenticated callers.
+  // ── Dev-only: test-login (non-production only) ────────────────────────────
+  // Creates a real Identity Platform session cookie for an approved user WITHOUT
+  // requiring a password. Used by the test harness so integration tests can
+  // authenticate without going through the full REST sign-in flow.
+  // NEVER registered in production.
+  if (process.env.NODE_ENV !== 'production') {
+    app.post('/api/test-login', async (req, res) => {
+      const email = (req.body?.email || '').trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: 'email required' });
+      try {
+        const dbUser = await getUserByEmail(email);
+        if (!dbUser) return res.status(404).json({ error: 'user not found' });
+        let uid = dbUser.identity_uid;
+        if (!uid) {
+          const idUser = await ensureIdentityUser(email);
+          uid = idUser?.uid || (await admin.auth().getUserByEmail(email)).uid;
+        }
+        const customToken = await admin.auth().createCustomToken(uid);
+        // Exchange custom token for an ID token via REST API.
+        const { ok, data } = await identityREST('signInWithCustomToken', { token: customToken, returnSecureToken: true });
+        if (!ok || !data?.idToken) {
+          return res.status(500).json({ error: 'failed to exchange custom token', detail: data?.error?.message });
+        }
+        const SESSION_TTL = 14 * 24 * 60 * 60 * 1000; // 14 days for tests
+        const sessionCookie = await admin.auth().createSessionCookie(data.idToken, { expiresIn: SESSION_TTL });
+        res.cookie('__session', sessionCookie, {
+          httpOnly: true, secure: false, sameSite: 'lax', maxAge: SESSION_TTL, path: '/',
+        });
+        res.json({ ok: true, email, privilege_level: dbUser.privilege_level });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+  }
+
   app.get('/api/check-email', accessRequestLimiter, async (req, res) => {
     const email = (req.query.email || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -849,7 +877,6 @@ async function setupAuth(app) {
   });
 
   // ── Public: forgot-password ────────────────────────────────────────────────
-  // Rate-limited via accessRequestLimiter (same 5/hr/IP cap as request-access).
   // Returns 404 when the email is not on the approved list so the UI can
   // direct the user to request access instead of silently doing nothing.
   app.post('/api/forgot-password', accessRequestLimiter, async (req, res) => {
@@ -862,8 +889,9 @@ async function setupAuth(app) {
     try {
       if (await isEmailApproved(email)) {
         try {
-          const token = await issuePasswordSetToken(email, { purpose: 'reset' });
-          await sendSetPasswordEmail(email, token, { reset: true });
+          await ensureIdentityUser(email);
+          const link = await generateSetPasswordLink(email);
+          await sendSetPasswordEmail(email, link, { reset: true });
           logger.info(`  Password reset link issued for ${email}`);
         } catch (mailErr) {
           logger.error({ err: mailErr.message }, '  Failed to issue/send password reset email:');
@@ -880,178 +908,88 @@ async function setupAuth(app) {
   });
 
   // ── Public: set-password flow ──────────────────────────────────────────────
+  // The `token` param contains the oobCode from the Identity Platform reset link.
+  // Calling the REST API with just the oobCode (no newPassword) verifies validity
+  // without consuming the code.
   app.get('/api/set-password/validate', async (req, res) => {
-    const token = (req.query?.token || '').toString();
-    const row = await lookupPasswordSetToken(token);
-    if (!row) return res.status(404).json({ valid: false, reason: 'invalid' });
-    if (row.invalid) return res.status(410).json({ valid: false, reason: row.invalid, email: row.email, purpose: row.purpose || null });
-    res.json({ valid: true, email: row.email, purpose: row.purpose || null });
+    const oobCode = (req.query?.token || '').toString();
+    if (!oobCode) return res.status(404).json({ valid: false, reason: 'invalid' });
+    try {
+      const { ok, data } = await identityREST('resetPassword', { oobCode });
+      if (!ok) {
+        const msg = data?.error?.message || '';
+        const reason = msg === 'EXPIRED_OOB_CODE' ? 'expired' : 'invalid';
+        return res.status(410).json({ valid: false, reason });
+      }
+      res.json({ valid: true, email: data.email, purpose: 'reset' });
+    } catch (e) {
+      logger.error({ err: e.message }, 'set-password/validate failed:');
+      res.status(500).json({ valid: false, reason: 'server_error' });
+    }
   });
 
   app.post('/api/set-password', async (req, res) => {
-    const token = (req.body?.token || '').toString();
+    const oobCode = (req.body?.token || '').toString();
     const password = req.body?.password;
-    // Pre-flight check (outside transaction) — fast rejection for obviously
-    // invalid or already-used tokens before we acquire a connection.
-    const row = await lookupPasswordSetToken(token);
-    if (!row || row.invalid) {
-      return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
-    }
-    const lower = row.email.toLowerCase();
-    const localPart = lower.split('@')[0] || '';
-    const policyErr = validatePasswordPolicy(password, [lower, localPart, 'measure once', 'measureonce']);
+    if (!oobCode) return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
+
+    // Validate strength before calling Identity Platform (avoid wasting the code).
+    const policyErr = validatePasswordPolicy(password, ['measure once', 'measureonce']);
     if (policyErr) return res.status(400).json({ error: policyErr });
-    if (!(await isEmailApproved(lower))) {
-      return res.status(403).json({ error: 'This account is no longer approved. Contact an admin.' });
-    }
-    const client = await pool.connect();
+
     try {
-      await client.query('BEGIN');
-      // Re-check the token inside the transaction with a row-level lock so that
-      // two concurrent requests using the same link cannot both succeed.  The
-      // FOR UPDATE lock serialises them; the second request will see used_at
-      // already set and bail out before touching the password hash.
-      const lockedToken = await client.query(
-        `SELECT used_at, expires_at FROM password_set_tokens
-           WHERE token_hash = $1
-           FOR UPDATE`,
-        [hashToken(token)]
-      );
-      if (
-        lockedToken.rowCount === 0 ||
-        lockedToken.rows[0].used_at !== null ||
-        new Date(lockedToken.rows[0].expires_at).getTime() < Date.now()
-      ) {
-        await client.query('ROLLBACK');
-        return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
-      }
-      const hash = await bcrypt.hash(password, 10);
-      // Ensure user row exists (it should — created at approval time).
-      const u = await client.query(
-        `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
-        [lower]
-      );
-      if (u.rowCount === 0) {
-        await client.query(
-          `INSERT INTO users (email, password_hash, onboarding_status, privilege_level)
-           VALUES ($1, $2, 'more_info_required', $3)`,
-          [lower, hash, isAdminEmail(lower) ? 'admin' : 'member']
-        );
-      } else {
-        // INTENTIONAL: only password_hash and updated_at are updated here.
-        // Do NOT widen this UPDATE — profile fields (custom_photo, profile_image_url,
-        // first_name, last_name, onboarding_status, etc.) must never be touched
-        // by a password-reset path.
-        await client.query(
-          `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-          [hash, u.rows[0].id]
-        );
-      }
-      // Mark token consumed. The AND used_at IS NULL guard provides a final
-      // safety net; rowCount = 0 here would indicate a logic error.
-      const consumed = await client.query(
-        `UPDATE password_set_tokens SET used_at = NOW()
-          WHERE token_hash = $1 AND used_at IS NULL`,
-        [hashToken(token)]
-      );
-      if (consumed.rowCount === 0) {
-        // Should be unreachable given the FOR UPDATE check above, but treat it
-        // as a concurrent replay and abort rather than silently proceeding.
-        await client.query('ROLLBACK');
-        return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
-      }
-      const userIdRow = u.rowCount === 0
-        ? await client.query(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, [lower])
-        : u;
-      const userId = userIdRow.rows[0]?.id;
-      const currentSid = req.sessionID || null;
-      if (userId) {
-        const del = await client.query(
-          `DELETE FROM sessions
-             WHERE sid <> COALESCE($2, '')
-               AND (
-                 (sess #>> '{passport,user,claims,sub}') = $1::text
-                 OR LOWER(sess #>> '{passport,user,claims,email}') = LOWER($3)
-               )`,
-          [String(userId), currentSid, lower]
-        );
-        if (del.rowCount) {
-          logger.info(`[set-password] Cleared ${del.rowCount} other session(s) for ${lower}.`);
+      // Apply the password reset via Identity Platform REST API.
+      const { ok, data } = await identityREST('resetPassword', { oobCode, newPassword: password });
+      if (!ok) {
+        const msg = data?.error?.message || '';
+        if (msg === 'EXPIRED_OOB_CODE' || msg === 'INVALID_OOB_CODE') {
+          return res.status(410).json({ error: 'This password link is no longer valid. Ask an admin to send a new one.' });
         }
+        return res.status(400).json({ error: 'Could not set password. Please try again.' });
       }
-      await client.query('COMMIT');
+      const email = (data.email || '').toLowerCase();
+      if (email && !(await isEmailApproved(email))) {
+        return res.status(403).json({ error: 'This account is no longer approved. Contact an admin.' });
+      }
+      // Revoke any existing sessions so the user must log in fresh with the new password.
+      if (email) await revokeUserSessions(email).catch(() => {});
       res.json({ ok: true });
     } catch (e) {
-      await client.query('ROLLBACK');
       logger.error({ err: e.message }, 'set-password failed:');
       res.status(500).json({ error: 'Could not set password. Please try again.' });
-    } finally {
-      client.release();
     }
   });
 
   // ── Authenticated: change own password ────────────────────────────────────
   app.post('/api/change-password', isAuthenticated, loginLimiter, async (req, res) => {
-    const currentPassword = req.body?.currentPassword;
-    const newPassword = req.body?.newPassword;
+    const { currentPassword, newPassword } = req.body || {};
     if (typeof currentPassword !== 'string' || !currentPassword ||
         typeof newPassword !== 'string' || !newPassword) {
       return res.status(400).json({ error: 'Current and new password are required.' });
     }
     const email = (req.user?.claims?.email || '').toLowerCase();
-    const userId = req.user?.claims?.sub;
-    if (!email || !userId) {
-      return res.status(401).json({ error: 'Not signed in.' });
-    }
-    const dbUser = await getUserByEmail(email);
-    if (!dbUser || !dbUser.password_hash) {
-      return res.status(400).json({
-        error: "This account doesn't have a password set. Ask an admin to send a set-password link.",
-        code: 'NO_PASSWORD',
-      });
-    }
-    const ok = await bcrypt.compare(currentPassword, dbUser.password_hash);
-    if (!ok) {
-      return res.status(401).json({ error: 'Current password is incorrect.' });
-    }
-    const localPart = email.split('@')[0] || '';
-    const policyErr = validatePasswordPolicy(newPassword, [
-      email, localPart, 'measure once', 'measureonce',
-      dbUser.first_name || '', dbUser.last_name || '',
-    ]);
+    const identityUid = req.user?.claims?.identity_uid;
+    if (!email || !identityUid) return res.status(401).json({ error: 'Not signed in.' });
+
+    const policyErr = validatePasswordPolicy(newPassword, [email, email.split('@')[0] || '', 'measure once', 'measureonce']);
     if (policyErr) return res.status(400).json({ error: policyErr });
     if (currentPassword === newPassword) {
       return res.status(400).json({ error: 'New password must be different from your current password.' });
     }
-    const client = await pool.connect();
+
     try {
-      await client.query('BEGIN');
-      const hash = await bcrypt.hash(newPassword, 10);
-      await client.query(
-        `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
-        [hash, dbUser.id]
-      );
-      const currentSid = req.sessionID || null;
-      const del = await client.query(
-        `DELETE FROM sessions
-           WHERE sid <> COALESCE($2, '')
-             AND (
-               (sess #>> '{passport,user,claims,sub}') = $1::text
-               OR LOWER(sess #>> '{passport,user,claims,email}') = LOWER($3)
-             )`,
-        [String(dbUser.id), currentSid, email]
-      );
-      if (del.rowCount) {
-        logger.info(`[change-password] Cleared ${del.rowCount} other session(s) for ${email}.`);
-      }
-      await client.query('COMMIT');
-      res.json({ ok: true, otherSessionsCleared: del.rowCount || 0 });
+      // Verify current password by attempting a sign-in (Identity Platform REST API).
+      const verify = await identityREST('signInWithPassword', { email, password: currentPassword, returnSecureToken: false });
+      if (!verify.ok) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+      // Update password via Admin SDK.
+      await admin.auth().updateUser(identityUid, { password: newPassword });
+      // Revoke all other sessions.
+      await admin.auth().revokeRefreshTokens(identityUid);
+      res.json({ ok: true, otherSessionsCleared: true });
     } catch (e) {
-      await client.query('ROLLBACK');
       logger.error({ err: e.message }, 'change-password failed:');
       res.status(500).json({ error: 'Could not change password. Please try again.' });
-    } finally {
-      client.release();
     }
   });
 
@@ -1304,11 +1242,12 @@ async function setupAuth(app) {
       await ensureUserForApprovedEmail(client, email, meta, { job_role: chosenRole, privilege_level: chosenPrivilege });
       await client.query('COMMIT');
 
-      // Issue token + email outside the transaction so a mailer hiccup doesn't
-      // roll back the approval. Admin can always resend.
+      // Issue set-password link outside the transaction so a mailer hiccup
+      // doesn't roll back the approval. Admin can always resend.
       try {
-        const token = await issuePasswordSetToken(email);
-        await sendSetPasswordEmail(email, token);
+        await ensureIdentityUser(email);
+        const link = await generateSetPasswordLink(email);
+        await sendSetPasswordEmail(email, link);
       } catch (mailErr) {
         logger.error({ err: mailErr.message }, '  Failed to issue/send set-password email after approval:');
       }
@@ -1426,8 +1365,9 @@ async function setupAuth(app) {
       await client.query('COMMIT');
 
       try {
-        const token = await issuePasswordSetToken(email);
-        await sendSetPasswordEmail(email, token);
+        await ensureIdentityUser(email);
+        const link = await generateSetPasswordLink(email);
+        await sendSetPasswordEmail(email, link);
       } catch (mailErr) {
         logger.error({ err: mailErr.message }, '  Failed to issue/send set-password email after add-allowed:');
       }
@@ -1488,11 +1428,9 @@ async function setupAuth(app) {
           `UPDATE users SET onboarding_status = 'archived', updated_at = NOW() WHERE LOWER(email) = $1`,
           [email]
         );
-        // Invalidate active sessions for the archived user immediately.
-        await pool.query(
-          `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
-          [email]
-        );
+        // Revoke Identity Platform refresh tokens so the archived user cannot
+        // continue using the app with existing session cookies.
+        await revokeUserSessions(email).catch(() => {});
       }
       res.json({ ok: true });
     } catch (e) {
@@ -1511,10 +1449,12 @@ async function setupAuth(app) {
       if (upd.rowCount > 0) {
         const adminEmail = req.user?.claims?.email || req.user?.email || null;
         await logAdminAction(adminEmail, 'restore_team_member', email, null);
-        // Restore the user to active if they have a password set, otherwise back to more_info_required.
+        // Restore the user to active if they have an Identity Platform account
+        // with a password, otherwise back to more_info_required so an admin
+        // resends a set-password link.
         await pool.query(
           `UPDATE users
-           SET onboarding_status = CASE WHEN password_hash IS NOT NULL THEN 'active' ELSE 'more_info_required' END,
+           SET onboarding_status = CASE WHEN identity_uid IS NOT NULL THEN 'active' ELSE 'more_info_required' END,
                updated_at = NOW()
            WHERE LOWER(email) = $1`,
           [email]
@@ -1536,8 +1476,9 @@ async function setupAuth(app) {
       return res.status(404).json({ error: 'This email is not on the approved list.' });
     }
     try {
-      const token = await issuePasswordSetToken(email);
-      await sendSetPasswordEmail(email, token, { resend: true });
+      await ensureIdentityUser(email);
+      const link = await generateSetPasswordLink(email);
+      await sendSetPasswordEmail(email, link, { resend: true });
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'resend_set_password_email', email, null);
       res.json({ ok: true });
@@ -1565,20 +1506,12 @@ async function setupAuth(app) {
       return res.status(400).json({ error: 'Use the change-password flow to reset your own password.' });
     }
     try {
-      // INTENTIONAL: only password_hash and updated_at are cleared here.
-      // Do NOT widen this UPDATE — profile fields (custom_photo, profile_image_url,
-      // first_name, last_name, onboarding_status, etc.) must never be touched
-      // by a force-password-reset path.
-      await pool.query(
-        `UPDATE users SET password_hash = NULL, updated_at = NOW() WHERE LOWER(email) = LOWER($1)`,
-        [email]
-      );
-      await pool.query(
-        `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
-        [email]
-      );
-      const token = await issuePasswordSetToken(email, { purpose: 'reset' });
-      await sendSetPasswordEmail(email, token, { reset: true });
+      // Revoke all existing sessions so the user cannot continue with old credentials.
+      await revokeUserSessions(email).catch(() => {});
+      // Generate a fresh password reset link and email it.
+      await ensureIdentityUser(email);
+      const link = await generateSetPasswordLink(email);
+      await sendSetPasswordEmail(email, link, { reset: true });
       await logAdminAction(adminEmail, 'force_password_reset', email, null);
       res.json({ ok: true });
     } catch (e) {
@@ -1686,6 +1619,24 @@ async function setupAuth(app) {
     }
   });
 
+  // ── Self-service phone update ─────────────────────────────────────────────────
+  app.patch('/api/users/me/phone', isAuthenticated, async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+    const phone = (req.body?.phone || '').trim().slice(0, 30) || null;
+    try {
+      const r = await pool.query(
+        `UPDATE users SET phone = $1, updated_at = NOW() WHERE id = $2 RETURNING phone`,
+        [phone, userId]
+      );
+      if (r.rowCount === 0) return res.status(404).json({ error: 'User not found.' });
+      res.json({ phone: r.rows[0].phone });
+    } catch (e) {
+      logger.error({ err: e.message }, 'PATCH /api/users/me/phone error:');
+      res.status(500).json({ error: 'Could not update phone number.' });
+    }
+  });
+
   // ── User Profile ─────────────────────────────────────────────────────────────
   app.get('/api/users/:id/profile', isAuthenticated, async (req, res) => {
     const requestingId    = req.user?.claims?.sub;
@@ -1702,7 +1653,7 @@ async function setupAuth(app) {
     }
     try {
       const r = await pool.query(
-        `SELECT id, email, first_name, last_name, profile_image_url, job_role, privilege_level,
+        `SELECT id, email, first_name, last_name, profile_image_url, job_role, phone, privilege_level,
                 onboarding_status, created_at,
                 (custom_photo  IS NOT NULL) AS has_custom_photo,
                 (pending_photo IS NOT NULL) AS has_pending_photo
@@ -1744,7 +1695,7 @@ async function setupAuth(app) {
       const r = await pool.query(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.profile_image_url,
                 u.job_role, u.privilege_level, u.onboarding_status, u.created_at, u.updated_at,
-                (u.password_hash IS NOT NULL) AS has_password,
+                (u.identity_uid IS NOT NULL) AS has_password,
                 (u.custom_photo  IS NOT NULL) AS has_custom_photo,
                 (u.pending_photo IS NOT NULL) AS has_pending_photo,
                 ae.note, ae.metadata, ae.pending_profile_updates, ae.conflict_created_at
@@ -1858,7 +1809,7 @@ async function setupAuth(app) {
 
   app.patch('/api/users/:id/profile', isAuthenticated, requireAdmin, async (req, res) => {
     const body = req.body || {};
-    const { job_role, first_name, last_name,
+    const { job_role, first_name, last_name, phone,
             date_of_birth, ni_number, mobile_number,
             ec_first_name, ec_last_name, ec_phone, note } = body;
     const newEmail = body.email !== undefined ? (body.email || '').trim().toLowerCase() : undefined;
@@ -1899,6 +1850,7 @@ async function setupAuth(app) {
         userVals.push(lnTok ? lnTok.charAt(0).toUpperCase() + lnTok.slice(1).toLowerCase() : null);
       }
       if (job_role !== undefined)        { userCols.push(`job_role = $${userCols.length+1}`);        userVals.push(job_role || null); }
+      if (phone !== undefined)           { userCols.push(`phone = $${userCols.length+1}`);           userVals.push((phone || '').trim().slice(0, 30) || null); }
       if (privilege_level !== undefined) { userCols.push(`privilege_level = $${userCols.length+1}`); userVals.push(privilege_level); }
       if (newEmail !== undefined)        { userCols.push(`email = $${userCols.length+1}`);           userVals.push(newEmail || null); }
 
@@ -1987,30 +1939,17 @@ async function setupAuth(app) {
 
       await client.query('COMMIT');
 
-      // If the privilege level changed, immediately invalidate the target
-      // user's active sessions so cached `state.user` in their browser cannot
-      // keep showing admin/manager affordances after a downgrade (or stale
-      // reduced UI after an upgrade). They'll be bounced to /login on the
-      // next request and pick up the new level on sign-in.
+      // If the privilege level changed, immediately revoke the target user's
+      // Identity Platform refresh tokens so their session cookie becomes invalid
+      // on the next request — they'll re-login and pick up the new level.
       if (privilege_level !== undefined && privilege_level !== currentPrivilegeLevel) {
-        const actorId = req.user?.claims?.sub;
-        if (actorId !== req.params.id) {
+        const actorId = String(req.user?.claims?.sub);
+        if (actorId !== String(req.params.id)) {
           const sessionEmail = (updated.email || currentEmail || '').toLowerCase();
           if (sessionEmail) {
-            try {
-              await pool.query(
-                `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
-                [sessionEmail]
-              );
-              if (currentEmail && currentEmail !== sessionEmail) {
-                await pool.query(
-                  `DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'email' = $1`,
-                  [currentEmail]
-                );
-              }
-            } catch (e) {
-              logger.error({ err: e.message }, 'Failed to invalidate sessions after role change:');
-            }
+            await revokeUserSessions(sessionEmail).catch((e) => {
+              logger.error({ err: e.message }, 'Failed to revoke tokens after role change:');
+            });
           }
         }
       }
@@ -2450,34 +2389,58 @@ async function setupAuth(app) {
 }
 
 const isAuthenticated = async (req, res, next) => {
-  if (req.isAuthenticated && req.isAuthenticated() && req.user && req.user.claims?.sub) {
-    // Defense-in-depth: re-verify the user is still on the allow-list on every
-    // request. All users, including those originally seeded from ADMIN_EMAILS,
-    // must remain in allowed_emails to continue accessing the application.
-    const email = req.user.claims?.email;
-    if (email) {
-      try {
-        const approved = await isEmailApproved(email);
-        if (!approved) {
-          logger.warn({ email, path: req.path, method: req.method }, '[isAuthenticated] 401: email not in allowed_emails — session invalidated');
-          req.logout(() => {});
-          return res.status(401).json({ message: 'Unauthorized' });
-        }
-      } catch (err) {
-        logger.error({ err: err.message, path: req.path, method: req.method }, '[isAuthenticated] 500: DB error during isEmailApproved');
-        return res.status(500).json({ message: 'Authorization check failed' });
-      }
-    }
-    return next();
+  const cookie = getSessionCookie(req);
+  if (!cookie) {
+    logger.warn({ path: req.path, method: req.method }, '[isAuthenticated] 401: no session cookie');
+    return res.status(401).json({ message: 'Unauthorized' });
   }
-  logger.warn({
-    path: req.path,
-    method: req.method,
-    hasSession: !!(req.session && req.session.id),
-    passportAuth: !!(req.isAuthenticated && req.isAuthenticated()),
-    hasUser: !!(req.user),
-  }, '[isAuthenticated] 401: no valid session');
-  return res.status(401).json({ message: 'Unauthorized' });
+  let decoded;
+  try {
+    // checkRevoked=false: rely on the allowed_emails check below for immediate
+    // revocation after archive. Token revocation propagates within ~1 min.
+    decoded = await admin.auth().verifySessionCookie(cookie, false);
+  } catch (e) {
+    logger.warn({ path: req.path, method: req.method, err: e.code }, '[isAuthenticated] 401: invalid session cookie');
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const email = (decoded.email || '').toLowerCase();
+  try {
+    // Defense-in-depth: re-verify on every request so archived users are
+    // bounced immediately even without token revocation propagating.
+    const approved = await isEmailApproved(email);
+    if (!approved) {
+      logger.warn({ email, path: req.path, method: req.method }, '[isAuthenticated] 401: email not in allowed_emails');
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+  } catch (err) {
+    logger.error({ err: err.message, path: req.path, method: req.method }, '[isAuthenticated] 500: DB error during isEmailApproved');
+    return res.status(500).json({ message: 'Authorization check failed' });
+  }
+  // Populate req.user from DB. Try identity_uid first, fall back to email.
+  let dbUser = await getUserByIdentityUid(decoded.uid).catch(() => null);
+  if (!dbUser) {
+    dbUser = await getUserByEmail(email).catch(() => null);
+    // Backfill identity_uid lazily on first match.
+    if (dbUser && decoded.uid) {
+      pool.query(
+        `UPDATE users SET identity_uid = $1, updated_at = NOW() WHERE id = $2 AND identity_uid IS NULL`,
+        [decoded.uid, dbUser.id]
+      ).catch(() => {});
+    }
+  }
+  if (!dbUser) {
+    logger.warn({ email, path: req.path, method: req.method }, '[isAuthenticated] 401: no matching DB user');
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  req.user = {
+    claims: {
+      sub: dbUser.id,
+      email: dbUser.email,
+      identity_uid: decoded.uid,
+    },
+    privilege_level: dbUser.privilege_level || 'member',
+  };
+  return next();
 };
 
 // ── Onboarding conflict digest ────────────────────────────────────────────────

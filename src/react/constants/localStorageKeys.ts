@@ -167,6 +167,11 @@ export const HOME_TASK_CONTACT_SEARCH_PREFIX  = 'mo:home:task-contact-search:';
  */
 export const CONNECT_MODAL_SHOWN_KEY = 'mo:connectModalShownThisSession';
 
+// ── User profile ──────────────────────────────────────────────────────────────
+
+/** Per-user phone number draft for the email signature card: `${USER_PHONE_DRAFT_PREFIX}${userId}` */
+export const USER_PHONE_DRAFT_PREFIX = 'mo:profile:phone-draft:';
+
 // ── Legacy-key global sweep ────────────────────────────────────────────────────
 /**
  * Written to localStorage once the one-time global sweep that removes all

@@ -13,7 +13,7 @@ const { BASE, PASSWORD, ROLES, login } = require('./harness');
 const { Pool } = require('pg');
 
 function parseCookieKV(jar) {
-  // jar is like "connect.sid=s%3A..." (already trimmed by parseSetCookie)
+  // jar is like "__session=<value>" (already trimmed by parseSetCookie)
   if (!jar) return null;
   const idx = jar.indexOf('=');
   if (idx < 0) return null;
@@ -121,10 +121,10 @@ async function runUiSmoke({ users, runId, clients }) {
       // Sign in via a Node-side fetch (harness's makeClient) and inject the
       // resulting session cookie into puppeteer. This sidesteps puppeteer's
       // page-context fetch dropping the Set-Cookie under certain
-      // origin/SameSite combinations, while still exercising /api/login.
+      // origin/SameSite combinations, while still exercising /api/test-login.
       const sess = await login(users[role].email, PASSWORD);
       const kv = parseCookieKV(sess.cookie);
-      record(`${role} can sign in via /api/login (server-side jar)`,
+      record(`${role} can sign in via /api/test-login (server-side jar)`,
         'session cookie set', `cookieSet=${!!kv}`,
         'critical', !!kv);
       if (kv) {

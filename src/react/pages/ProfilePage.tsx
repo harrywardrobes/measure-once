@@ -9,9 +9,11 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Divider,
   IconButton,
   LinearProgress,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -27,6 +29,7 @@ import { Pill } from '../components/Pill';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { clearOfflineData } from '../lib/registerServiceWorker';
+import { USER_PHONE_DRAFT_PREFIX } from '../constants/localStorageKeys';
 
 type Profile = {
   id: string;
@@ -34,6 +37,7 @@ type Profile = {
   first_name?: string;
   last_name?: string;
   job_role?: string;
+  phone?: string | null;
   has_custom_photo?: boolean;
   has_pending_photo?: boolean;
   profile_image_url?: string | null;
@@ -227,6 +231,7 @@ export function ProfilePage(): React.ReactElement {
 
       <IdentityCard profile={profile} appUser={appUser} onReload={reload} approvalSuccess={approvalSuccess} rejectionFeedback={rejectionFeedback} />
       <RoleCard profile={profile} />
+      <EmailSignatureCard profile={profile} onPhoneSaved={reload} />
       <GoogleCalendarCard />
       <ChangePasswordCard profile={profile} />
       <AccountActionsCard isAdmin={isAdmin} />
@@ -476,6 +481,131 @@ function RoleCard({ profile }: { profile: Profile }) {
             {profile.job_role || '—'}
           </Typography>
         </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Email signature ────────────────────────────────────────────────────
+
+function EmailSignatureCard({
+  profile,
+  onPhoneSaved,
+}: {
+  profile: Profile;
+  onPhoneSaved: () => void;
+}) {
+  const draftKey = `${USER_PHONE_DRAFT_PREFIX}${profile.id}`;
+  const [phone, setPhone] = React.useState<string>(() => {
+    try { return localStorage.getItem(draftKey) ?? (profile.phone || ''); } catch { return profile.phone || ''; }
+  });
+  const [saving, setSaving] = React.useState(false);
+  const [success, setSuccess] = React.useState(false);
+  const [error, setError]     = React.useState<string | null>(null);
+  const [sig, setSig]         = React.useState<{ text: string; html: string } | null>(null);
+
+  // Persist phone draft to localStorage while the user types.
+  React.useEffect(() => {
+    try { localStorage.setItem(draftKey, phone); } catch { /* ignore */ }
+  }, [phone, draftKey]);
+
+  // Fetch the current rendered signature for preview.
+  React.useEffect(() => {
+    fetch('/api/users/me/email-signature', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { text: string; html: string } | null) => { if (data) setSig(data); })
+      .catch(() => { /* non-critical */ });
+  }, []);
+
+  const isDirty = phone.trim() !== (profile.phone || '').trim();
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const r = await fetch('/api/users/me/phone', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((data as { error?: string }).error || `HTTP ${r.status}`);
+      try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+      onPhoneSaved();
+      // Refresh the signature preview.
+      fetch('/api/users/me/email-signature', { headers: { Accept: 'application/json' } })
+        .then(r2 => r2.ok ? r2.json() : null)
+        .then((d: { text: string; html: string } | null) => { if (d) setSig(d); })
+        .catch(() => { /* ignore */ });
+    } catch (e) {
+      setError((e as Error).message || 'Could not save phone number.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const sigLines = sig?.text.split('\n').filter(Boolean) ?? [];
+
+  return (
+    <Card variant="outlined" sx={{ mb: 1.5 }}>
+      <CardContent>
+        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+          Email Signature
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+          Appended to customer emails you send. Your name, role, and email come from your profile.
+        </Typography>
+
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start', mb: 1.5 }}>
+          <TextField
+            label="Phone"
+            size="small"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            disabled={saving}
+            placeholder="e.g. 07900 123456"
+            slotProps={{ htmlInput: { maxLength: 30 } }}
+            sx={{ flex: 1 }}
+          />
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => void handleSave()}
+            disabled={saving || !isDirty}
+            sx={{ mt: 0.25 }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </Stack>
+
+        {error   && <Alert severity="error"   sx={{ mb: 1, py: 0 }}>{error}</Alert>}
+        {success && <Alert severity="success" sx={{ mb: 1, py: 0 }}>Phone number saved.</Alert>}
+
+        {sigLines.length > 0 && (
+          <>
+            <Divider sx={{ mb: 1.5 }} />
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+              Preview:
+            </Typography>
+            <Box sx={{
+              px: 1.5,
+              py: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              bgcolor: 'grey.50',
+            }}>
+              {sigLines.map((line, i) => (
+                <Typography key={i} variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.7 }}>
+                  {line}
+                </Typography>
+              ))}
+            </Box>
+          </>
+        )}
       </CardContent>
     </Card>
   );

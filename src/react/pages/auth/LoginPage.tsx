@@ -18,7 +18,11 @@ const LOGO_URL = '/harry-wardrobes-logo.png';
 
 const bodyStyles = { 'html, body': { margin: 0, padding: 0, minHeight: '100vh', background: BRAND_COLORS.pageBackground } };
 
-type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void };
+type TW = { render: (el: Element, opts: object) => string; getResponse: (id: string) => string; reset: (id: string) => void; remove: (widgetId: string) => void };
+
+const TURNSTILE_PAIRS: Array<[string, string]> = [
+  ['login', 'turnstile-login'], ['forgot', 'ts-forgot'], ['request', 'ts-request'],
+];
 
 function useTurnstile() {
   const [siteKey, setSiteKey] = React.useState<string | null>(null);
@@ -28,17 +32,30 @@ function useTurnstile() {
   const widgetIds = React.useRef<Record<string, string | null>>({});
   const attempted = React.useRef<Set<string>>(new Set());
 
-  const PAIRS: Array<[string, string]> = [
-    ['login', 'turnstile-login'], ['forgot', 'ts-forgot'], ['request', 'ts-request'],
-  ];
+  // Call this *before* changing view so tw.remove() runs while DOM containers still exist.
+  const cleanupAllWidgets = React.useCallback(() => {
+    const tw = (window as unknown as { turnstile?: TW }).turnstile;
+    TURNSTILE_PAIRS.forEach(([name]) => {
+      const staleId = widgetIds.current[name];
+      if (staleId != null) {
+        if (tw) { try { tw.remove(staleId); } catch { /* ignore */ } }
+        widgetIds.current[name] = null;
+      }
+      attempted.current.delete(name);
+    });
+  }, []);
 
   const renderWidgets = React.useCallback(() => {
     const tw = (window as unknown as { turnstile?: TW }).turnstile;
     const key = siteKeyRef.current;
     if (!key || !tw) return;
-    PAIRS.forEach(([name, elId]) => {
+    TURNSTILE_PAIRS.forEach(([name, elId]) => {
       const el = document.getElementById(elId);
-      if (!el || attempted.current.has(name)) return;
+      if (!el) {
+        // Container gone — already cleaned up by cleanupAllWidgets; nothing to do.
+        return;
+      }
+      if (attempted.current.has(name)) return;
       attempted.current.add(name);
       const id = tw.render(el, {
         sitekey: key,
@@ -54,7 +71,6 @@ function useTurnstile() {
       });
       widgetIds.current[name] = id;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -102,7 +118,7 @@ function useTurnstile() {
     return () => window.removeEventListener('pageshow', handlePageShow as EventListener);
   }, [handlePageShow]);
 
-  return { siteKey, getToken, hasError, resetWidget, renderWidgets };
+  return { siteKey, getToken, hasError, resetWidget, renderWidgets, cleanupAllWidgets };
 }
 
 function AuthCard({ children, maxWidth = 440, elevated = false }: {
@@ -152,7 +168,9 @@ const VIEW_TITLES: Record<View, string> = {
   request: 'Request Access · Measure Once',
 };
 
-function LoginPageInner() {
+const IDENTITY_REST = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword';
+
+function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
   const [view, setView] = React.useState<View>(() => {
     const h = window.location.hash;
     if (h === '#forgot') return 'forgot';
@@ -184,13 +202,15 @@ function LoginPageInner() {
   const [reqMsg, setReqMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
   const [reqBusy, setReqBusy] = React.useState(false);
 
-  const { siteKey, getToken, hasError, resetWidget, renderWidgets } = useTurnstile();
+  const { siteKey, getToken, hasError, resetWidget, renderWidgets, cleanupAllWidgets } = useTurnstile();
 
   React.useEffect(() => {
     renderWidgets();
   }, [view, renderWidgets]);
 
   function switchView(next: View) {
+    // Remove widgets before setView so tw.remove() runs while containers still exist.
+    cleanupAllWidgets();
     if (next === 'login') {
       if (forgotEmail && !loginEmail) setLoginEmail(forgotEmail);
       if (reqEmail && !loginEmail) setLoginEmail(reqEmail);
@@ -216,10 +236,44 @@ function LoginPageInner() {
     setLoginMsg(null);
     setLoginBusy(true);
     try {
-      const r = await fetch('/api/login', {
+      // Step 1: Authenticate with Identity Platform to get an ID token.
+      let idToken: string;
+      try {
+        const idRes = await fetch(
+          identityApiKey ? `${IDENTITY_REST}?key=${encodeURIComponent(identityApiKey)}` : IDENTITY_REST,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword, returnSecureToken: true }),
+          }
+        );
+        const idData = await idRes.json().catch(() => ({})) as { idToken?: string; error?: { message?: string } };
+        if (!idRes.ok || !idData.idToken) {
+          const msg = idData?.error?.message || '';
+          if (msg === 'EMAIL_NOT_FOUND' || msg === 'INVALID_PASSWORD' || msg.startsWith('INVALID_LOGIN_CREDENTIALS')) {
+            setLoginMsg({ text: 'Invalid email or password.', ok: false });
+          } else if (msg === 'USER_DISABLED') {
+            setLoginMsg({ text: 'This account has been disabled. Contact an admin.', ok: false });
+          } else if (msg === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+            setLoginMsg({ text: 'Too many failed attempts — please try again later.', ok: false });
+          } else {
+            setLoginMsg({ text: 'Sign in failed — please try again.', ok: false });
+          }
+          resetWidget('login');
+          return;
+        }
+        idToken = idData.idToken;
+      } catch {
+        setLoginMsg({ text: 'Network error — please try again.', ok: false });
+        resetWidget('login');
+        return;
+      }
+
+      // Step 2: Exchange the ID token for a server-managed session cookie.
+      const r = await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword, captchaToken }),
+        body: JSON.stringify({ idToken, captchaToken }),
       });
       const data = await r.json().catch(() => ({})) as { next?: string; error?: string };
       if (!r.ok) {
@@ -485,24 +539,27 @@ function LoginPageInner() {
  */
 export function LoginPage() {
   const [sessionChecked, setSessionChecked] = React.useState(false);
+  const [identityApiKey, setIdentityApiKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    fetch('/api/auth/user', { credentials: 'same-origin' })
-      .then(r => {
-        if (r.ok) {
-          window.location.replace('/');
-        } else {
-          setSessionChecked(true);
-        }
-      })
-      .catch(() => setSessionChecked(true));
+    Promise.all([
+      fetch('/api/auth/user', { credentials: 'same-origin' }),
+      fetch('/api/identity-config').then(r => r.json()).catch(() => ({})) as Promise<{ apiKey?: string }>,
+    ]).then(([authRes, idCfg]) => {
+      if (authRes.ok) {
+        window.location.replace('/');
+      } else {
+        setIdentityApiKey(idCfg?.apiKey ?? null);
+        setSessionChecked(true);
+      }
+    }).catch(() => setSessionChecked(true));
   }, []);
 
   if (!sessionChecked) {
     return <LoginPageSkeleton forceVisible />;
   }
 
-  return <LoginPageInner />;
+  return <LoginPageInner identityApiKey={identityApiKey} />;
 }
 
 export default LoginPage;

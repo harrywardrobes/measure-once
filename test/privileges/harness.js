@@ -1,6 +1,5 @@
 const { spawn } = require('child_process');
 const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const path = require('path');
 
@@ -9,8 +8,7 @@ const BASE = `http://127.0.0.1:${TEST_PORT}`;
 const PREFIX = 'privtest-';
 const PASSWORD = 'Tr0ub4dor&3-VeryUnique-Pw!';
 
-// Module-level pool reference, set by run.js once the pool is created.
-// Needed by loginViaDb when captcha enforcement is active.
+// Module-level pool reference (kept for callers that pass it in).
 let _pool = null;
 function setPool(pool) { _pool = pool; }
 
@@ -33,18 +31,10 @@ async function resetRateLimitStore(pool) {
 
 async function cleanupTestData(pool) {
   // Everything synthetic uses the privtest- prefix (seed users, lifecycle
-  // accounts, xss probe access-requests). The session purge also catches any
-  // legacy '%@privtest.local' rows from older runs.
+  // accounts, xss probe access-requests).
   // Each statement is wrapped in try/catch so that missing tables on a
   // fresh isolated DB (before the server has booted and run schema migrations)
   // are silently ignored — matching the pattern used in resetRateLimitStore.
-  try {
-    await pool.query(`DELETE FROM sessions
-      WHERE sess::text LIKE '%@privtest.local%'`);
-  } catch { /* table may not exist yet on a brand-new DB */ }
-  try {
-    await pool.query(`DELETE FROM password_set_tokens WHERE email LIKE $1`, [`${PREFIX}%`]);
-  } catch { /* table may not exist yet on a brand-new DB */ }
   try {
     await pool.query(`DELETE FROM users WHERE email LIKE $1`, [`${PREFIX}%`]);
   } catch { /* table may not exist yet on a brand-new DB */ }
@@ -57,7 +47,6 @@ async function cleanupTestData(pool) {
 }
 
 async function seedUsers(pool, runId) {
-  const hash = await bcrypt.hash(PASSWORD, 10);
   const seeded = {};
   for (const role of ROLES) {
     const email = makeEmail(role, runId);
@@ -67,12 +56,16 @@ async function seedUsers(pool, runId) {
       [email]
     );
     const r = await pool.query(
-      `INSERT INTO users (email, first_name, last_name, password_hash,
+      `INSERT INTO users (email, first_name, last_name,
                           privilege_level, onboarding_status)
-       VALUES ($1, $2, 'Test', $3, $4, 'active')
+       VALUES ($1, $2, 'Test', $3, 'active')
+       ON CONFLICT (email) DO UPDATE
+         SET privilege_level = EXCLUDED.privilege_level,
+             onboarding_status = EXCLUDED.onboarding_status
        RETURNING id`,
-      [email, role.charAt(0).toUpperCase() + role.slice(1), hash, role]
+      [email, role.charAt(0).toUpperCase() + role.slice(1), role]
     );
+    // Identity Platform user is created lazily by /api/test-login on first use.
     seeded[role] = { email, id: r.rows[0].id, password: PASSWORD };
   }
   return seeded;
@@ -138,10 +131,11 @@ async function waitForServer(timeoutMs = 15000) {
 
 function parseSetCookie(headerValue) {
   if (!headerValue) return null;
-  const first = headerValue.split(',').find(p => p.trim().startsWith('connect.sid='))
+  // Look for the Identity Platform session cookie (__session=...).
+  const first = headerValue.split(',').find(p => p.trim().startsWith('__session='))
              || headerValue;
   const kv = first.split(';')[0].trim();
-  return kv.startsWith('connect.sid=') ? kv : null;
+  return kv.startsWith('__session=') ? kv : null;
 }
 
 function makeClient(cookie) {
@@ -180,95 +174,16 @@ function makeClient(cookie) {
   };
 }
 
-// Sign a session id the same way express-session / cookie-signature does:
-//   s:<sid>.<hmac-sha256(sid, secret) as plain base64 with trailing = stripped>
-function signSid(sid, secret) {
-  const sig = crypto.createHmac('sha256', secret)
-    .update(sid)
-    .digest('base64')
-    .replace(/=+$/, '');
-  return 's:' + sid + '.' + sig;
-}
-
-// Inject a session row directly into the `sessions` table and return an
-// authenticated client.  Used when the spawned server has TURNSTILE_SECRET_KEY
-// set (i.e. captcha is enforced), which means the HTTP /api/login endpoint
-// would reject harness requests that carry no captcha token.
-async function loginViaDb(email) {
-  const pool = _pool;
-  if (!pool) throw new Error('loginViaDb: call setPool(pool) before login when captcha is active');
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET is required for loginViaDb');
-  const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
-  const r = await pool.query(
-    `SELECT id, email, first_name, last_name, profile_image_url,
-            privilege_level, onboarding_status
-     FROM users WHERE LOWER(email) = LOWER($1)`,
-    [email]
-  );
-  if (!r.rows[0]) {
-    // Diagnostic: show how many privtest users currently exist
-    const diag = await pool.query(
-      `SELECT email, privilege_level FROM users WHERE email LIKE 'privtest-%' ORDER BY email`
-    );
-    console.error(`loginViaDb: user not found — ${email}`);
-    console.error(`loginViaDb: privtest users in DB (${diag.rows.length}):`, diag.rows.map(u => u.email).join(', ') || '(none)');
-    throw new Error(`loginViaDb: user not found — ${email}`);
-  }
-  const dbUser = r.rows[0];
-  const sessionUser = {
-    claims: {
-      sub: dbUser.id,
-      email: dbUser.email,
-      first_name: dbUser.first_name || null,
-      last_name: dbUser.last_name || null,
-      profile_image_url: dbUser.profile_image_url || null,
-    },
-    privilege_level: dbUser.privilege_level || 'member',
-    onboarding_status: dbUser.onboarding_status || 'active',
-    expires_at: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
-  };
-  const sid = crypto.randomUUID();
-  const expire = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
-  const sess = JSON.stringify({
-    cookie: {
-      originalMaxAge: SESSION_TTL_SECONDS * 1000,
-      expires: expire.toISOString(),
-      secure: false,
-      httpOnly: true,
-      path: '/',
-      sameSite: 'lax',
-    },
-    passport: { user: sessionUser },
-  });
-  await pool.query(
-    `INSERT INTO sessions (sid, sess, expire) VALUES ($1, $2::jsonb, $3)
-     ON CONFLICT (sid) DO UPDATE SET sess = EXCLUDED.sess, expire = EXCLUDED.expire`,
-    [sid, sess, expire]
-  );
-  const cookieValue = `connect.sid=${encodeURIComponent(signSid(sid, secret))}`;
-  return makeClient(cookieValue);
-}
-
-// Log in as `email` using the best available method:
-//   • If TURNSTILE_SECRET_KEY is passed through to the test server
-//     (PRIVTEST_USE_TURNSTILE_SECRET_KEY=1), the HTTP login endpoint enforces
-//     captcha and the harness cannot send a valid token — use DB session
-//     injection instead.
-//   • Otherwise use the normal HTTP /api/login path (captcha is a no-op when
-//     the key is absent).
-async function login(email, password, { retries = 3, retryDelayMs = 200 } = {}) {
-  const captchaActive = process.env.PRIVTEST_USE_TURNSTILE_SECRET_KEY === '1'
-    && !!process.env.TURNSTILE_SECRET_KEY;
-  if (captchaActive) {
-    return loginViaDb(email);
-  }
+// Log in as `email` via the dev-only /api/test-login endpoint which creates
+// a real Identity Platform session cookie without requiring a password.
+// The password parameter is accepted for API compatibility but ignored.
+async function login(email, _password, { retries = 3, retryDelayMs = 200 } = {}) {
   let lastErr;
   for (let attempt = 1; attempt <= retries; attempt++) {
     const client = makeClient(null);
-    const r = await client.post('/api/login', { email, password });
+    const r = await client.post('/api/test-login', { email });
     if (r.status === 200) return client;
-    lastErr = new Error(`login failed for ${email}: ${r.status} ${r.text}`);
+    lastErr = new Error(`test-login failed for ${email}: ${r.status} ${r.text}`);
     if (attempt < retries) {
       console.warn(`  login attempt ${attempt}/${retries} failed (${r.status}) — retrying in ${retryDelayMs}ms`);
       await new Promise(res => setTimeout(res, retryDelayMs));

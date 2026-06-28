@@ -23,7 +23,7 @@ const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLeve
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 const { loadAnswers, saveAnswers } = require('./design-visits');
-const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const {
   structuredAddressSchema, formatAddress, isAddressEmpty,
 } = require('./shared/address.cjs');
@@ -1549,28 +1549,25 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
           const total = r.unit_price_pence * r.unit_count;
           return `  ${r.room_name} (${r.door_style_name || '—'}): £${penceToGbp(total)}`;
         }).join('\n');
-        await transport.sendMail({
-          from, replyTo,
-          to: visit.contact_email,
-          subject: customSubject || `Your survey visit — ${visit.contact_name || ''}`,
-          text: [
-            `Hi ${firstName},`,
-            '',
-            preamble,
-            '',
-            '--- Room Breakdown ---',
-            roomRowsText,
-            '',
-            `Estimate total: £${penceToGbp(grandTotal)}`,
-            visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
-            '',
-            'See Your Survey & Sign Off:',
-            signOffUrl,
-            '',
-            'This link is personal to you and expires in 7 days.',
-            'If you have questions, reply to this email.',
-          ].join('\n'),
-          html: `<!DOCTYPE html>
+        const sig = await buildSenderSignature(pool, req.user?.claims?.sub);
+        const baseText = [
+          `Hi ${firstName},`,
+          '',
+          preamble,
+          '',
+          '--- Room Breakdown ---',
+          roomRowsText,
+          '',
+          `Estimate total: £${penceToGbp(grandTotal)}`,
+          visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
+          '',
+          'See Your Survey & Sign Off:',
+          signOffUrl,
+          '',
+          'This link is personal to you and expires in 7 days.',
+          'If you have questions, reply to this email.',
+        ].join('\n');
+        const baseHtml = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
@@ -1608,8 +1605,15 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
     This link is personal to you and expires in 7 days.
     If you have questions, reply to this email.
   </p>
+  ${sig.html}
 </body>
-</html>`,
+</html>`;
+        await transport.sendMail({
+          from, replyTo,
+          to: visit.contact_email,
+          subject: customSubject || `Your survey visit — ${visit.contact_name || ''}`,
+          text: sig.text ? baseText + '\n\n' + sig.text : baseText,
+          html: baseHtml,
         });
         emailSent = true;
       }

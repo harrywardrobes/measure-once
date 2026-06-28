@@ -6,7 +6,9 @@ import { PhoneSummaryModal } from './modals/PhoneSummaryModal';
 const ScheduleVisitModal = React.lazy(() =>
   import('./modals/ScheduleVisitModal').then(m => ({ default: m.ScheduleVisitModal }))
 );
-import { UploadPhotosModal } from './modals/UploadPhotosModal';
+const UploadPhotosModal = React.lazy(() =>
+  import('./modals/UploadPhotosModal').then(m => ({ default: m.UploadPhotosModal }))
+);
 const DesignVisitWizard = React.lazy(() =>
   import('./DesignVisitWizard').then(m => ({ default: m.DesignVisitWizard }))
 );
@@ -167,7 +169,9 @@ export function CardActionModalsHost() {
         </React.Suspense>
       )}
       {modal.type === 'upload_photos_and_info' && (
-        <UploadPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        <React.Suspense fallback={null}>
+          <UploadPhotosModal handler={modal.handler} ctx={modal.ctx} open onClose={close} />
+        </React.Suspense>
       )}
       {modal.type === 'review_customer_photos' && (
         <React.Suspense fallback={null}>

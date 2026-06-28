@@ -754,7 +754,7 @@ input.token-overlay {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 56px 16px 16px;
+  padding: max(56px, calc(env(safe-area-inset-top) + 16px)) 16px 16px;
   backdrop-filter: blur(2px);
 }
 .cp-modal {
@@ -900,7 +900,7 @@ input.token-overlay {
   background: var(--overlay-scrim);
   display: flex; align-items: center; justify-content: center;
   z-index: var(--z-tooltip);
-  padding: 16px;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
 }
 .js-modal-scrim--below { z-index: calc(var(--z-tooltip) - 1); }
 
@@ -949,7 +949,8 @@ input.token-overlay {
 /* WhatsApp action modal positioning (markup in customer-detail.html). */
 .wa-modal {
   position: fixed; inset: 0; z-index: var(--z-modal);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
+  display: flex; align-items: center; justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
 }
 .wa-modal.hidden { display: none; }
 
@@ -1060,7 +1061,8 @@ input.token-overlay {
   position: fixed; inset: 0;
   background: rgba(20,20,19,.52);
   display: flex; align-items: center; justify-content: center;
-  z-index: var(--z-modal); padding: 16px;
+  z-index: var(--z-modal);
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
 }
 .modal-overlay.hidden { display: none; }
 .modal {

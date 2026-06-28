@@ -101,14 +101,16 @@ export function FullScreenModal({
         },
       }}
     >
-      {/* Header */}
+      {/* Header — on mobile fullscreen the top padding expands to clear the
+          Dynamic Island / notch so the title and × button are always reachable. */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1,
           px: 3,
-          py: 2,
+          pt: fullScreen ? 'max(16px, env(safe-area-inset-top))' : 2,
+          pb: 2,
           borderBottom: '1px solid',
           borderColor: 'divider',
           flexShrink: 0,
@@ -135,14 +137,16 @@ export function FullScreenModal({
         </IconButton>
       </Box>
 
-      {/* Body */}
+      {/* Body — when fullscreen with no footer, expand bottom padding to clear
+          the home-indicator / gesture bar. */}
       <Box
         sx={{
           flex: 1,
           minHeight: 0,
           overflowY: 'auto',
           px: 3,
-          py: 2.5,
+          pt: 2.5,
+          pb: fullScreen && !footer ? 'max(20px, env(safe-area-inset-bottom))' : 2.5,
           ...(centerContent
             ? { display: 'flex', flexDirection: 'column', justifyContent: 'center' }
             : {}),
@@ -151,7 +155,7 @@ export function FullScreenModal({
         {children}
       </Box>
 
-      {/* Footer */}
+      {/* Footer — bottom padding clears the home-indicator zone on fullscreen. */}
       {footer && (
         <Box
           sx={{
@@ -161,7 +165,8 @@ export function FullScreenModal({
             justifyContent: 'flex-end',
             gap: 1,
             px: 3,
-            py: 2,
+            pt: 2,
+            pb: fullScreen ? 'max(16px, env(safe-area-inset-bottom))' : 2,
             borderTop: '1px solid',
             borderColor: 'divider',
           }}

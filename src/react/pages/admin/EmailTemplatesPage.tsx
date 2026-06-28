@@ -852,6 +852,7 @@ export function TemplateRow({ templateKey, template, shared, system, sentFrom, t
   );
 }
 
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EmailTemplatesPage() {
@@ -1039,6 +1040,12 @@ export default function EmailTemplatesPage() {
         Edit the subject, body and footer of the emails this app sends. Changes take effect immediately.
         Templates left unedited use the built-in defaults. Templates are grouped by the action handler that
         sends them, by outcome. <strong>System emails</strong> are lifecycle messages sent outside the workflow.
+      </Alert>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Each team member's personal signature (name, role, company, email, phone) is automatically
+        appended to all customer-facing emails they send. Configure the company name in the{' '}
+        <strong>Settings</strong> tab.
       </Alert>
 
       {loading && (

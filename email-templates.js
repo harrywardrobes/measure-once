@@ -32,6 +32,51 @@ function footerTextToHtml(footerText) {
   return `<p>${footerText.split('\n').map(escapeHtml).join('<br>')}</p>`;
 }
 
+// Build a personal email signature from user profile data + company name.
+// Returns { text, html } — both empty strings when the user has no data.
+function buildUserSignature(user, companyName) {
+  const name     = [user.first_name, user.last_name].filter(Boolean).join(' ');
+  const roleComp = [user.job_role, companyName].filter(Boolean).join(' - ');
+  const lines    = [name, roleComp, user.email, user.phone].filter(Boolean);
+  if (!lines.length) return { text: '', html: '' };
+
+  const text = lines.join('\n');
+  const html = `<p style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e7eb;color:#4b5563;font-size:0.875em;line-height:1.6;">${
+    lines.map(escapeHtml).join('<br>')
+  }</p>`;
+  return { text, html };
+}
+
+// Read the company name from admin_settings. Takes pool as a param so any
+// module can call it. Returns '' if not set or on DB error.
+async function getEmailCompanyName(pool) {
+  try {
+    const r = await pool.query(
+      `SELECT value FROM admin_settings WHERE key = 'email_company_name' LIMIT 1`
+    );
+    const v = r.rows[0]?.value;
+    if (v === undefined || v === null) return '';
+    return typeof v === 'string' ? v : '';
+  } catch { return ''; }
+}
+
+// Build the sender's personal signature for a given integer user id.
+// Takes pool as a param so any module can call it.
+// Returns { text, html } — both empty strings when the user has no data.
+async function buildSenderSignature(pool, userId) {
+  if (!userId) return { text: '', html: '' };
+  try {
+    const r = await pool.query(
+      `SELECT first_name, last_name, email, job_role, phone FROM users WHERE id = $1`,
+      [userId]
+    );
+    const user = r.rows[0];
+    if (!user) return { text: '', html: '' };
+    const companyName = await getEmailCompanyName(pool);
+    return buildUserSignature(user, companyName);
+  } catch { return { text: '', html: '' }; }
+}
+
 // ── Template definitions (seed + fallback) ────────────────────────────────────
 // `variables` is the advertised list shown to admins in the editor. The seed
 // strings are the verbatim current hardcoded content.
@@ -698,4 +743,7 @@ module.exports = {
   substituteVars,
   renderEmail,
   escapeHtml,
+  buildUserSignature,
+  getEmailCompanyName,
+  buildSenderSignature,
 };

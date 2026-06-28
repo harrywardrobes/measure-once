@@ -64,7 +64,7 @@ const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContact
 const { router: surveyVisitsRouter, setPatchContactProperties: setSvPatchContactProperties, ensureStartSurveyVisitHandlerBindings } = require('./survey-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
-const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml } = require('./email-templates');
+const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml, buildUserSignature, getEmailCompanyName, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const app = express();
 app.set('view engine', 'ejs');
@@ -524,9 +524,9 @@ app.use(photoReviewsRouter);
 // Auth gate for all /api/* routes (whitelist endpoints reachable while
 // signed-out: login, account requests, the public set-password flow).
 const AUTH_WHITELIST = new Set([
-  '/login', '/auth/user', '/request-access', '/check-email',
+  '/login', '/session', '/auth/user', '/request-access', '/check-email',
   '/set-password', '/set-password/validate',
-  '/forgot-password', '/turnstile-config',
+  '/forgot-password', '/turnstile-config', '/identity-config', '/test-login',
   // Public Google Maps client config (browser key + runtime flags)
   '/google-maps/config',
   // Public Google Maps client usage beacon (in-memory diagnostics counters)
@@ -905,6 +905,30 @@ async function getSharedContactsCache() {
  */
 function clearContactCache() {
   _allContactsCache = null;
+}
+
+/**
+ * Patch a single contact's properties in the in-process contacts cache
+ * without invalidating the whole cache.  Called after a successful PATCH +
+ * verify so /api/contacts-all reflects the new values immediately without
+ * waiting for HubSpot's search index to catch up (which can lag by several
+ * seconds after a direct object update).
+ *
+ * Updates both `_allContactsCache` and `_allContactsLastGood` so stale-
+ * fallback responses also carry the correct data.
+ */
+function patchContactInCache(contactId, properties) {
+  const idStr = String(contactId);
+  const seen = new Set();
+  for (const cache of [_allContactsCache, _allContactsLastGood]) {
+    if (!cache?.contacts) continue;
+    if (seen.has(cache)) continue; // skip if both refs point to the same object
+    seen.add(cache);
+    const contact = cache.contacts.find(c => String(c.id) === idStr);
+    if (contact) {
+      contact.properties = Object.assign(contact.properties || {}, properties);
+    }
+  }
 }
 
 // Assign (or unassign) a fitter to a specific room on a contact (manager or admin only)
@@ -2613,7 +2637,11 @@ app.patch('/api/contacts/:id', isAuthenticated, requirePrivilege('member'), requ
       }
     }
 
-    clearContactCache();
+    // Patch the in-memory cache directly so the next contacts-all response
+    // reflects the new values immediately.  Clearing the cache instead would
+    // trigger a full HubSpot search re-fetch whose index may not yet reflect
+    // the update, causing a page refresh to still show the old value.
+    patchContactInCache(contactId, properties);
     if (Object.prototype.hasOwnProperty.call(properties, 'hs_lead_status')) {
       _invalidateLeadStatusCountsCache();
       _invalidateOpenLeadsCache();
@@ -5437,6 +5465,54 @@ function _emailTemplateWithMeta(row) {
   };
 }
 
+// ── Email signature helpers ───────────────────────────────────────────────────
+
+// Thin wrappers that bind pool so callers don't need to pass it.
+const _getEmailCompanyName  = () => getEmailCompanyName(pool);
+const _buildSenderSignature = (userId) => buildSenderSignature(pool, userId);
+
+// GET /api/admin/settings/company-name
+app.get('/api/admin/settings/company-name', isAuthenticated, requireAdmin, async (req, res) => {
+  try {
+    const companyName = await _getEmailCompanyName();
+    res.json({ company_name: companyName });
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/admin/settings/company-name error:');
+    res.status(500).json({ error: 'Could not load company name.' });
+  }
+});
+
+// PATCH /api/admin/settings/company-name
+app.patch('/api/admin/settings/company-name', isAuthenticated, requireAdmin, async (req, res) => {
+  const companyName = (req.body?.company_name ?? '').toString().trim().slice(0, 200);
+  try {
+    await pool.query(
+      `INSERT INTO admin_settings (key, value, updated_at)
+       VALUES ('email_company_name', to_jsonb($1::text), NOW())
+       ON CONFLICT (key) DO UPDATE SET value = to_jsonb($1::text), updated_at = NOW()`,
+      [companyName]
+    );
+    await logAdminAction(req.user?.email, 'update_email_company_name', null, `company_name="${companyName}"`);
+    res.json({ company_name: companyName });
+  } catch (e) {
+    logger.error({ err: e.message }, 'PATCH /api/admin/settings/company-name error:');
+    res.status(500).json({ error: 'Could not save company name.' });
+  }
+});
+
+// GET /api/users/me/email-signature — returns the current user's signature { text, html }.
+app.get('/api/users/me/email-signature', isAuthenticated, async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  try {
+    const sig = await _buildSenderSignature(userId);
+    res.json(sig);
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET /api/users/me/email-signature error:');
+    res.status(500).json({ error: 'Could not build signature.' });
+  }
+});
+
 // GET /api/admin/email-templates — all templates ordered by key.
 app.get('/api/admin/email-templates', isAuthenticated, requireAdmin, async (req, res) => {
   try {
@@ -5547,7 +5623,7 @@ app.post('/api/email-templates/render', isAuthenticated, async (req, res) => {
 // Mirrors the exact send-path semantics: when body_html is empty the html field
 // is auto-generated from the rendered plain text (same line-wrapping logic used
 // by sendReviewEmail in photo-reviews.js) so the preview matches real emails.
-app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmin, (req, res) => {
+app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmin, async (req, res) => {
   const { key } = req.params;
   if (!TEMPLATE_KEYS.includes(key)) {
     return res.status(404).json({ error: 'Unknown email template key.' });
@@ -5576,6 +5652,17 @@ app.post('/api/admin/email-templates/:key/preview', isAuthenticated, requireAdmi
       .split('\n')
       .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
       .join('');
+  }
+
+  // For customer-facing templates, append a sample personal email signature
+  // so the preview shows how the email will look when sent by a staff member.
+  const def = TEMPLATE_DEFS[key];
+  if (def?.audience === 'customer') {
+    const companyName = await _getEmailCompanyName();
+    const sampleUser  = { first_name: 'Jane', last_name: 'Smith', email: 'jane@example.com', job_role: 'Designer', phone: '07700 900456' };
+    const sig = buildUserSignature(sampleUser, companyName);
+    if (sig.html) rendered.html += sig.html;
+    if (sig.text) rendered.text += '\n\n' + sig.text;
   }
 
   res.json(rendered);
@@ -6986,6 +7073,12 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
           .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
           .join('');
       }
+
+      // Append the sender's personal signature to the preview HTML so what
+      // the user sees in the preview matches what the customer will receive.
+      const sig = await _buildSenderSignature(req.user?.claims?.sub);
+      if (sig.html) rendered.html += sig.html;
+
       res.json(rendered);
     } catch (e) {
       const status = e.response?.status;
@@ -7035,10 +7128,13 @@ app.post('/api/card-actions/contact-customer/:contactId/send-email',
       }
 
       const replyTo = _buildReplyTo();
-      const html = body
+      const sig = await _buildSenderSignature(req.user?.claims?.sub);
+      const fullText = sig.text ? body + '\n\n' + sig.text : body;
+      const bodyHtml = body
         .split('\n')
         .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
         .join('');
+      const fullHtml = sig.html ? bodyHtml + sig.html : bodyHtml;
       const attachments = (req.files || []).map(f => ({
         filename:    f.originalname,
         content:     f.buffer,
@@ -7049,12 +7145,12 @@ app.post('/api/card-actions/contact-customer/:contactId/send-email',
         ...(replyTo ? { replyTo } : {}),
         to:      contactEmail,
         subject,
-        text:    body,
-        html:    html || body,
+        text:    fullText,
+        html:    fullHtml || fullText,
         ...(attachments.length ? { attachments } : {}),
       });
 
-      const userId   = req.user?.id;
+      const userId   = req.user?.claims?.sub;
       const autoNote = `Follow-up email sent: "${subject}"`;
       const client   = await pool.connect();
       try {
@@ -7814,16 +7910,21 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
           const template  = await getEmailTemplate(getRequiredOutcomeEmailTemplate('deposit_invoice_followup', 'not_proceeding'));
           const firstName = contactName.split(' ')[0] || 'there';
           const rendered  = renderEmail(template, { textVars: { firstName } });
+          const sig       = await _buildSenderSignature(req.user?.claims?.sub);
           const transport = _createMailTransport();
           if (transport) {
-            const replyTo = _buildReplyTo();
+            const replyTo  = _buildReplyTo();
+            const baseText = emailBody    || rendered.text;
+            const baseHtml = emailBody    || rendered.html || rendered.text;
+            const fullText = sig.text ? baseText + '\n\n' + sig.text : baseText;
+            const fullHtml = sig.html ? baseHtml + sig.html             : baseHtml;
             await transport.sendMail({
               from:    _buildFromHeader(),
               ...(replyTo ? { replyTo } : {}),
               to:      contactEmail,
               subject: emailSubject || rendered.subject,
-              text:    emailBody    || rendered.text,
-              html:    emailBody    || rendered.html || rendered.text,
+              text:    fullText,
+              html:    fullHtml,
             });
             steps.thankYouSent = true;
           }

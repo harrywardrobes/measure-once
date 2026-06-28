@@ -7,6 +7,7 @@ const crypto    = require('crypto');
 const axios     = require('axios').create({ timeout: 12000 });
 const { Pool }  = require('pg');
 const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
+const { buildSenderSignature } = require('./email-templates');
 const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
@@ -574,29 +575,26 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         const total = r.unit_price_pence * r.unit_count;
         return `  ${r.room_name} (${r.door_style_name || '—'}): £${penceToGbp(total)}`;
       }).join('\n');
-      await transport.sendMail({
-        from, replyTo,
-        to: visit.contact_email,
-        subject: `Your design visit — ${visit.contact_name || ''}`,
-        text: [
-          `Hi ${firstName},`,
-          '',
-          'Thank you for your time today. Here\'s a summary of the design options we discussed.',
-          '',
-          '--- Room Breakdown ---',
-          roomRowsText,
-          '',
-          `Estimate total: £${penceToGbp(grandTotal)}`,
-          visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
-          '',
-          'See Your Design & Sign Off:',
-          signOffUrl,
-          '',
-          'This link is personal to you and expires in 7 days.',
-          'If you have questions, reply to this email.',
-          terms ? `\n--- Terms & Conditions ---\n${terms}` : '',
-        ].join('\n'),
-        html: `<!DOCTYPE html>
+      const sig = await buildSenderSignature(pool, submitterUser?.claims?.sub);
+      const baseText = [
+        `Hi ${firstName},`,
+        '',
+        'Thank you for your time today. Here\'s a summary of the design options we discussed.',
+        '',
+        '--- Room Breakdown ---',
+        roomRowsText,
+        '',
+        `Estimate total: £${penceToGbp(grandTotal)}`,
+        visit.visit_notes ? `\n--- Visit Notes ---\n${visit.visit_notes}` : '',
+        '',
+        'See Your Design & Sign Off:',
+        signOffUrl,
+        '',
+        'This link is personal to you and expires in 7 days.',
+        'If you have questions, reply to this email.',
+        terms ? `\n--- Terms & Conditions ---\n${terms}` : '',
+      ].join('\n');
+      const baseHtml = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="font-family:sans-serif;color:#1f2937;max-width:600px;margin:0 auto;padding:24px;">
@@ -638,8 +636,15 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
     <summary style="cursor:pointer;font-weight:600;">Terms &amp; Conditions</summary>
     <div style="margin-top:8px;white-space:pre-line;">${_esc(terms)}</div>
   </details>` : ''}
+  ${sig.html}
 </body>
-</html>`,
+</html>`;
+      await transport.sendMail({
+        from, replyTo,
+        to: visit.contact_email,
+        subject: `Your design visit — ${visit.contact_name || ''}`,
+        text: sig.text ? baseText + '\n\n' + sig.text : baseText,
+        html: baseHtml,
       });
     }
   } catch (e) {

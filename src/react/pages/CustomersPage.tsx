@@ -53,6 +53,7 @@ import Toggle from '../components/Toggle';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
@@ -916,6 +917,7 @@ function CustomerCard({
           <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
             <Typography
               variant="subtitle1"
+              component="p"
               noWrap
               sx={{ display: 'flex', alignItems: 'center', minWidth: 0, mb: 0.75 }}
             >
@@ -954,14 +956,28 @@ function CustomerCard({
           {/* Right column — lead status, QB badge */}
           <Box sx={{ flex: '0 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'flex-start', [CCARD_CQ]: { alignItems: 'flex-end' } }}>
             {syncStatus ? <SyncStatePill status={syncStatus} testId="contact-sync-pill" /> : null}
-            <Chip
-              label={lsLabel || (isManagerOrAdmin ? 'Set status' : 'No status')}
-              size="small"
-              color={lsLabel ? 'primary' : 'default'}
-              variant="outlined"
-              onClick={isManagerOrAdmin ? handleLeadStatusChipClick : undefined}
-              sx={isManagerOrAdmin ? { cursor: 'pointer' } : undefined}
-            />
+            {/* Wrapper stops mousedown from bubbling to CardActionArea, preventing
+                the whole-card ripple from firing when only the status chip is clicked. */}
+            <Box
+              component="span"
+              onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              <Chip
+                label={
+                  isManagerOrAdmin ? (
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                      <span>{lsLabel || 'Set status'}</span>
+                      <ArrowDropDownIcon sx={{ fontSize: 16, flexShrink: 0, mr: -0.5 }} />
+                    </Box>
+                  ) : (lsLabel || 'No status')
+                }
+                size="small"
+                color={lsLabel ? 'primary' : 'default'}
+                variant="outlined"
+                onClick={isManagerOrAdmin ? handleLeadStatusChipClick : undefined}
+                sx={isManagerOrAdmin ? { cursor: 'pointer' } : undefined}
+              />
+            </Box>
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
             {depositInvoice && (
               <DepositInvoiceBadge
@@ -1260,6 +1276,9 @@ export function CustomersPage(): React.ReactElement {
     const result: Record<string, number> = {};
     let allTotal = 0;
     for (const [key, count] of Object.entries(globalLsCounts)) {
+      if (!showExcluded && key !== '__no_status__' && excludedStatusKeys.has(key.toUpperCase())) {
+        continue;
+      }
       allTotal += count;
       if (key === '__no_status__') continue;
       const stage = statusStageMap.get(key);
@@ -1267,7 +1286,7 @@ export function CustomersPage(): React.ReactElement {
     }
     if (allTotal > 0) result['__all__'] = allTotal;
     return result;
-  }, [globalLsCounts, statusStageMap]);
+  }, [globalLsCounts, statusStageMap, showExcluded, excludedStatusKeys]);
 
   const {
     contacts,
@@ -1282,19 +1301,41 @@ export function CustomersPage(): React.ReactElement {
     page,
     setPage,
     patchContact,
+    removeContact,
   } = usePaginatedContacts(
     { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst: sortBy === 'priority', prioritySortMode },
     { onFetchSuccess: scheduleCounts },
   );
 
   // Patch contacts list instantly when a lead-status change is broadcast from
-  // the Customer Detail page or any other tab/window (same behaviour as the
-  // Projects board).
+  // the Customer Detail page or any other tab/window.  Also remove cards that
+  // no longer match the active stage / lead-status filter so the list reflects
+  // the new stage immediately without a page refresh.
   React.useEffect(() => {
     return subscribeLeadStatusChange((contactId, props) => {
       patchContact(contactId, props);
+
+      if (props.hs_lead_status === undefined) return;
+      const newStatus = props.hs_lead_status ?? '';
+
+      if (leadStatus) {
+        // Specific lead-status filter: remove if the contact moved to a different status
+        const noLongerMatches = leadStatus === '__no_status__'
+          ? !!newStatus                           // had no status, now has one
+          : newStatus !== leadStatus;             // changed to a different status
+        if (noLongerMatches) removeContact(contactId);
+        return;
+      }
+
+      if (stageFilter) {
+        // Stage filter: mirrors the server-side logic in _filterContactsByStage /
+        // contacts-all — contacts with no status belong to 'sales', otherwise
+        // use the stage mapped from lead_status_config.
+        const newStage = newStatus ? (statusStageMap.get(newStatus) || '') : (stageFilter === 'sales' ? 'sales' : '');
+        if (newStage !== stageFilter) removeContact(contactId);
+      }
     });
-  }, [patchContact]);
+  }, [patchContact, removeContact, leadStatus, stageFilter, statusStageMap]);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {

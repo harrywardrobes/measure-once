@@ -46,6 +46,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT         = resolve(__dirname, '..');
 const SRC_REACT    = resolve(ROOT, 'src', 'react');
 const REGISTRY_ABS = resolve(SRC_REACT, 'constants', 'localStorageKeys.ts');
+// Build-output directories under src/react/ — gitignored but still walked by the FS
+const EXCLUDED_DIRS = [resolve(SRC_REACT, 'public')];
 
 // ── Pattern ───────────────────────────────────────────────────────────────
 //
@@ -69,6 +71,7 @@ function walkSync(dir, results = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = resolve(dir, entry.name);
     if (entry.isDirectory()) {
+      if (EXCLUDED_DIRS.some(d => full === d || full.startsWith(d + sep))) continue;
       walkSync(full, results);
     } else if (entry.isFile() && /\.[tj]sx?$/.test(entry.name)) {
       results.push(full);

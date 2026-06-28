@@ -35,7 +35,11 @@ export function SetPasswordPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
 
-  const token = React.useMemo(() => new URLSearchParams(location.search).get('token') || '', []);
+  // Accept either ?oobCode= (Identity Platform links) or legacy ?token= URLs.
+  const token = React.useMemo(() => {
+    const p = new URLSearchParams(location.search);
+    return p.get('oobCode') || p.get('token') || '';
+  }, []);
 
   const userInputs = React.useMemo(() => {
     const local = (email || '').split('@')[0] || '';
@@ -53,20 +57,12 @@ export function SetPasswordPage() {
       .catch(() => ({ ok: false, data: {} }))
       .then(({ ok, data }) => {
         if (!ok || !data.valid) {
-          const isReset = data.purpose === 'reset';
           let msg: string;
           let actionHref = '/login';
           let actionLabel = 'Back to sign in';
           if (data.reason === 'expired') {
-            msg = isReset
-              ? 'This reset link has expired (reset links are valid for 15 minutes). Request a new one.'
-              : 'This link has expired (links are valid for 24 hours). Ask an admin to send a new one.';
-            if (isReset) { actionHref = '/login#forgot'; actionLabel = 'Request a new reset link'; }
-          } else if (data.reason === 'used') {
-            msg = isReset
-              ? 'This reset link has already been used. If you need to change your password, request a new reset link.'
-              : 'This link has already been used. If you need to change your password, ask an admin to send a new link.';
-            if (isReset) { actionHref = '/login#forgot'; actionLabel = 'Request a new reset link'; }
+            msg = 'This link has expired. Request a new one.';
+            actionHref = '/login#forgot'; actionLabel = 'Request a new reset link';
           } else if (data.reason === 'invalid') {
             msg = 'This link is not valid. Ask an admin to send a new set-password email.';
           } else {

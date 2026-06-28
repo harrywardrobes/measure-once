@@ -92,6 +92,12 @@ export type UsePaginatedContactsResult = {
    * reflect the latest value without waiting for the next full fetch.
    */
   patchContact: (contactId: string, props: Record<string, string | undefined>) => void;
+  /**
+   * Remove a single contact from the in-memory list immediately.  Used when
+   * a lead-status change means the contact no longer matches the current
+   * stage / status filter and should disappear from the view right away.
+   */
+  removeContact: (contactId: string) => void;
 };
 
 export type UsePaginatedContactsOptions = {
@@ -535,5 +541,10 @@ export function usePaginatedContacts(
     [],
   );
 
-  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, priorityActiveDays, page: effectivePage, setPage, patchContact };
+  const removeContact = React.useCallback((contactId: string) => {
+    setContacts(prev => prev.filter(c => c.id !== contactId));
+    setTotal(prev => Math.max(0, prev - 1));
+  }, []);
+
+  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, priorityActiveDays, page: effectivePage, setPage, patchContact, removeContact };
 }

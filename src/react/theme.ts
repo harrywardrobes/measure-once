@@ -274,6 +274,14 @@ export const theme: Theme = createTheme({
         paper: {
           borderRadius: RADIUS.md,
           boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+          // Non-fullscreen dialogs: ensure the paper is centered within the
+          // iOS safe area zone so it never clips behind the Dynamic Island or
+          // home-indicator bar. Fullscreen dialogs handle this internally via
+          // FullScreenModal's header/footer padding.
+          '&:not(.MuiDialog-paperFullScreen)': {
+            marginTop: 'env(safe-area-inset-top)',
+            marginBottom: 'env(safe-area-inset-bottom)',
+          },
         },
       },
     },

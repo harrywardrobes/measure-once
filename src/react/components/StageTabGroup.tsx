@@ -108,7 +108,6 @@ export function StageTabGroup({ value, onChange, tabs, stageColors, fullWidth }:
                   ml: 0.625,
                   fontSize: '0.78em',
                   fontWeight: 400,
-                  opacity: selected ? 0.65 : 0.5,
                   letterSpacing: 0,
                 }}
               >

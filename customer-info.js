@@ -16,7 +16,7 @@ const storage    = require('./storage');
 const { isAuthenticated, requirePrivilege, requireAdmin } = require('./auth');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
-const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { getOutcomeEmailTemplates, getActionLevelEmailTemplates } = require('./shared/handler-outcomes.cjs');
 const {
@@ -133,8 +133,9 @@ async function renderCustomerInviteEmail(maskedEmail, formLink) {
 /**
  * Send the customer invite email. Pass customSubject/customBody to override
  * the template (used when staff edited the email before sending).
+ * userId is the integer PK of the staff member sending the link (req.user?.claims?.sub).
  */
-async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink, customSubject, customBody) {
+async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink, customSubject, customBody, userId) {
   const transport = createMailTransport();
   if (!transport) {
     logger.warn('[customer-info] SMTP not configured — skipping invite email.');
@@ -161,6 +162,9 @@ async function sendCustomerInviteEmail(contactEmail, maskedEmail, formLink, cust
   } else {
     ({ subject, text, html } = await renderCustomerInviteEmail(maskedEmail, formLink));
   }
+  const sig = await buildSenderSignature(pool, userId);
+  if (sig.text) text = text + '\n\n' + sig.text;
+  if (sig.html) html = html + sig.html;
   try {
     await transport.sendMail({ from, replyTo, to: contactEmail, subject, text, html });
     logger.info(`[customer-info] Invite email sent to ${contactEmail}`);
@@ -931,7 +935,7 @@ router.post('/api/card-actions/upload-photos-and-info',
         }
         const row = rows[0];
         const formLink = `${appBaseUrl()}/customer-info/${encodeURIComponent(preToken)}`;
-        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, emailOverride.subject, emailOverride.body);
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, emailOverride.subject, emailOverride.body, req.user?.claims?.sub);
         return res.status(200).json({ ok: true });
       }
 
@@ -996,7 +1000,7 @@ router.post('/api/card-actions/upload-photos-and-info',
         uploadClient.release();
       }
 
-      await sendCustomerInviteEmail(email, maskEmail(email), formLink, emailOverride.subject, emailOverride.body);
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink, emailOverride.subject, emailOverride.body, req.user?.claims?.sub);
 
       res.status(201).json({ ok: true });
     } catch (err) {
@@ -1755,7 +1759,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
             [formLink, tokenHash]
           );
         }
-        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, customSubject, customBody);
+        await sendCustomerInviteEmail(row.contact_email, row.masked_email, formLink, customSubject, customBody, req.user?.claims?.sub);
         logger.info(`[customer-info] Resent (pre-generated) invite link for contact ${cid}`);
         return res.json({ ok: true });
       }
@@ -1820,7 +1824,7 @@ router.post('/api/customer-info/by-contact/:contactId/resend',
         staffResendClient.release();
       }
 
-      await sendCustomerInviteEmail(email, maskEmail(email), formLink, customSubject, customBody);
+      await sendCustomerInviteEmail(email, maskEmail(email), formLink, customSubject, customBody, req.user?.claims?.sub);
 
       logger.info(`[customer-info] Resent invite link for contact ${cid}`);
       res.json({ ok: true });

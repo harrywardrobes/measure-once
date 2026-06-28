@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { encrypt: qbEncrypt, tryDecrypt: qbTryDecrypt } = require('./qb-token-crypto.cjs');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
-const { getEmailTemplate, renderEmail, escapeHtml } = require('./email-templates');
+const { getEmailTemplate, renderEmail, escapeHtml, buildSenderSignature } = require('./email-templates');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 
 // Status values derived from the outcome registry — keeps them in sync with
@@ -936,16 +936,20 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
             const template = await getEmailTemplate(getRequiredOutcomeEmailTemplate('open_deal', 'accept'));
             const firstName = contactName.split(' ')[0] || 'there';
             const rendered  = renderEmail(template, { textVars: { firstName, depositPercent: String(depositPercent) } });
+            const sig       = await buildSenderSignature(pool, userId);
             const transport = _createMailTransport();
             if (transport && contactEmail) {
-              const replyTo = _buildReplyTo();
+              const replyTo  = _buildReplyTo();
+              const fullText = sig.text ? rendered.text + '\n\n' + sig.text : rendered.text;
+              const baseHtml = rendered.html || rendered.text;
+              const fullHtml = sig.html ? baseHtml + sig.html : baseHtml;
               await transport.sendMail({
                 from:    _buildFromHeader(),
                 ...(replyTo ? { replyTo } : {}),
                 to:      contactEmail,
                 subject: rendered.subject,
-                text:    rendered.text,
-                html:    rendered.html || rendered.text,
+                text:    fullText,
+                html:    fullHtml,
               });
             }
             // Mark as sent whether SMTP was configured or not — "not applicable" is not a failure
@@ -1085,6 +1089,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
     const contactName   = String(req.body?.contactName  || '').trim() || '';
     const customSubject = typeof req.body?.emailSubject === 'string' ? req.body.emailSubject.trim() || null : null;
     const customBody    = typeof req.body?.emailBody    === 'string' ? req.body.emailBody.trim()    || null : null;
+    const userId        = req.user?.claims?.sub || req.user?.id;
 
     const steps = {
       estimatesDeclined: false,
@@ -1193,16 +1198,20 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
                 ...(customSubject !== null ? { subject:   customSubject }                         : {}),
               } : template;
               const rendered  = renderEmail(effectiveTemplate, { textVars: { firstName } });
+              const sig       = await buildSenderSignature(pool, userId);
               const transport = _createMailTransport();
               if (transport) {
-                const replyTo = _buildReplyTo();
+                const replyTo  = _buildReplyTo();
+                const fullText = sig.text ? rendered.text + '\n\n' + sig.text : rendered.text;
+                const baseHtml = rendered.html || rendered.text;
+                const fullHtml = sig.html ? baseHtml + sig.html : baseHtml;
                 await transport.sendMail({
                   from:    _buildFromHeader(),
                   ...(replyTo ? { replyTo } : {}),
                   to:      contactEmail,
                   subject: rendered.subject,
-                  text:    rendered.text,
-                  html:    rendered.html || rendered.text,
+                  text:    fullText,
+                  html:    fullHtml,
                 });
                 steps.thankYouSent = true;
                 // Record declined_at while still holding the lock so the next

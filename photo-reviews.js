@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const axios      = require('axios').create({ timeout: 12000 });
 const { isAuthenticated, requirePrivilege } = require('./auth');
 const { signCustomerPhotoUrl } = require('./customer-info');
-const { getEmailTemplate, renderEmail } = require('./email-templates');
+const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
 const { REVIEW_OUTCOME_STATUS: _REVIEW_OUTCOME_STATUS } = require('./shared/handler-route-contracts.cjs');
 const { GLOBAL_NULL_STAGE_KEY } = require('./shared/slotConstants.cjs');
@@ -85,7 +85,7 @@ async function ensurePhotoReviewOutcomesTable() {
 }
 
 // ── Send review outcome email ─────────────────────────────────────────────────
-async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
+async function sendReviewEmail(toEmail, subject, textBody, htmlBody, userId) {
   const transport = createMailTransport();
   if (!transport) {
     logger.warn('[photo-reviews] SMTP not configured — skipping review outcome email.');
@@ -93,18 +93,21 @@ async function sendReviewEmail(toEmail, subject, textBody, htmlBody) {
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
-  const html = (htmlBody && htmlBody.trim())
+  const sig = await buildSenderSignature(pool, userId);
+  const text = sig.text ? textBody + '\n\n' + sig.text : textBody;
+  let html = (htmlBody && htmlBody.trim())
     ? htmlBody
     : textBody
         .split('\n')
         .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
         .join('');
+  if (sig.html) html += sig.html;
   try {
     await transport.sendMail({
       from, replyTo,
       to:      toEmail,
       subject,
-      text:    textBody,
+      text,
       html,
     });
     logger.info(`[photo-reviews] Review outcome email sent to ${toEmail}`);
@@ -335,7 +338,7 @@ router.post('/api/card-actions/review-customer-photos',
     // Send email after the outcome is durably committed — if the email fails
     // the outcome is already recorded and no duplicate will be sent on retry.
     try {
-      await sendReviewEmail(toEmail, subject, body, htmlBody);
+      await sendReviewEmail(toEmail, subject, body, htmlBody, reviewerId);
     } catch (err) {
       logger.error({ err: err.message }, '[photo-reviews] Failed to send review email (outcome already recorded):');
       return res.status(502).json({ error: 'Failed to send email: ' + err.message });

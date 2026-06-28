@@ -60,6 +60,11 @@ export function SettingsPage() {
   const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
   const [pageFilterSaving, setPageFilterSaving] = useState(false);
 
+  const [companyName, setCompanyName]       = useState('');
+  const [companyDraft, setCompanyDraft]     = useState('');
+  const [companyLoading, setCompanyLoading] = useState(true);
+  const [companySaving, setCompanySaving]   = useState(false);
+
   const [formLinkCopied, setFormLinkCopied] = useState(false);
   const genericFormUrl = `${window.location.origin}/customer-info`;
 
@@ -153,9 +158,30 @@ export function SettingsPage() {
     }
   }, []);
 
+  const saveCompanyName = useCallback(async () => {
+    setCompanySaving(true);
+    try {
+      const result = await PATCH<{ company_name: string }>(
+        '/api/admin/settings/company-name',
+        { company_name: companyDraft.trim() },
+      );
+      setCompanyName(result.company_name);
+      setCompanyDraft(result.company_name);
+      showToast('Company name saved.');
+    } catch (e) {
+      showToast((e as Error).message || 'Could not save company name.', true);
+    } finally {
+      setCompanySaving(false);
+    }
+  }, [companyDraft]);
+
   useEffect(() => {
     fetchDigestSettings();
     fetchPageFilterConfig();
+    GET<{ company_name: string }>('/api/admin/settings/company-name')
+      .then(({ company_name }) => { setCompanyName(company_name); setCompanyDraft(company_name); })
+      .catch(() => {})
+      .finally(() => setCompanyLoading(false));
     fetch('/storybook/index.html', { method: 'HEAD' })
       .then((r) => setStorybookBuilt(r.ok))
       .catch(() => setStorybookBuilt(false));
@@ -478,6 +504,45 @@ export function SettingsPage() {
               Open
             </Button>
           </Stack>
+        </CardContent>
+      </Card>
+
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>Email signature</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Each team member's personal signature is automatically appended to customer-facing emails
+            they send. It is built from their profile (name, job role, email, phone) and the company
+            name below.
+          </Typography>
+          {companyLoading ? (
+            <CircularProgress size={20} />
+          ) : (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+              <TextField
+                label="Company name"
+                size="small"
+                value={companyDraft}
+                onChange={e => setCompanyDraft(e.target.value)}
+                disabled={companySaving}
+                placeholder="e.g. Gautier Design Ltd"
+                slotProps={{ htmlInput: { maxLength: 200 } }}
+                sx={{ flex: 1, maxWidth: 420 }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => void saveCompanyName()}
+                disabled={companySaving || companyDraft.trim() === companyName}
+                sx={{ mt: 0.25 }}
+              >
+                {companySaving ? 'Saving…' : 'Save'}
+              </Button>
+            </Stack>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+            Each user's phone number and job role are managed on their own profile page.
+          </Typography>
         </CardContent>
       </Card>
 
