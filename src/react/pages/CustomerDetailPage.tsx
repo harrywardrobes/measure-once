@@ -706,6 +706,28 @@ export function CustomerDetailPage() {
           </Alert>
         )}
 
+        {/* Rooms: first priority on mobile — stage checking happens in the field */}
+        {contact && (
+          <RoomsTabs
+            contactId={contactId}
+            rooms={rooms}
+            notes={notes}
+            workflow={workflow}
+            selectedRoomIdx={selectedRoom}
+            onRoomsChange={setRooms}
+            onNotesChange={setNotes}
+            onRoomSelect={handleRoomSelect}
+            onSave={saveRoomsAndNotes}
+            onNotesSaved={() => showToast('Notes saved')}
+            onRoomSaved={() => showToast('Saved')}
+            onInstallDateSaved={() => showToast('Install date updated')}
+            onCommentSaved={() => showToast('Comment saved')}
+            onRoomSaveError={() => showToast('Failed to save — please try again', true)}
+            onCommentSaveError={() => showToast('Failed to save comment — please try again', true)}
+            onNotesSaveError={() => showToast('Failed to save notes — please try again', true)}
+          />
+        )}
+
         {/* Customer info submissions (upload_photos_and_info handler) */}
         <CustomerInfoSubmissionsRail contactId={contactId} />
 
@@ -729,36 +751,9 @@ export function CustomerDetailPage() {
           onRefresh={fetchSurveyVisits}
         />
 
-        {/* These sections only render once contact is loaded */}
+        {/* Remaining contact-dependent sections */}
         {contact && (
           <>
-            <RoomsTabs
-              contactId={contactId}
-              rooms={rooms}
-              notes={notes}
-              workflow={workflow}
-              selectedRoomIdx={selectedRoom}
-              onRoomsChange={setRooms}
-              onNotesChange={setNotes}
-              onRoomSelect={handleRoomSelect}
-              onSave={saveRoomsAndNotes}
-              onNotesSaved={() => showToast('Notes saved')}
-              onRoomSaved={() => showToast('Saved')}
-              onInstallDateSaved={() => showToast('Install date updated')}
-              onCommentSaved={() => showToast('Comment saved')}
-              onRoomSaveError={() => showToast('Failed to save — please try again', true)}
-              onCommentSaveError={() => showToast('Failed to save comment — please try again', true)}
-              onNotesSaveError={() => showToast('Failed to save notes — please try again', true)}
-            />
-
-            {qb.statusKnown && qb.connected && (
-              <InvoicesSection contact={contact} qb={qb} />
-            )}
-
-            {qb.statusKnown && (
-              <PaymentHistory variant="list" contactId={contactId} />
-            )}
-
             <UpcomingVisitsSection
               contactId={contactId}
               contact={contact}
@@ -790,6 +785,15 @@ export function CustomerDetailPage() {
               error={waError}
               enabled={waEnabled}
             />
+
+            {/* Invoices + payment at the bottom — rarely checked on mobile */}
+            {qb.statusKnown && qb.connected && (
+              <InvoicesSection contact={contact} qb={qb} />
+            )}
+
+            {qb.statusKnown && (
+              <PaymentHistory variant="list" contactId={contactId} />
+            )}
           </>
         )}
 
