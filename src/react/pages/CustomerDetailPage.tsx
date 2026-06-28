@@ -26,10 +26,10 @@ import { usePageTitle } from '../hooks/usePageTitle';
 import { useNowTick } from '../hooks/useNowTick';
 import { cacheRecord, cacheRecords, readRecord, readRecords } from '../lib/offlineDb';
 import Alert from '@mui/material/Alert';
-import { useToast } from '../contexts/ToastContext';
+import { useToastContext } from '../contexts/ToastContext';
 import { sendOrQueue, CONFLICT_RESOLVED_EVENT, type ConflictResolvedDetail } from '../lib/offlineQueue';
 import { LEAD_STATUS_REMOVED_MESSAGE, GET, isGoogleAuthError } from '../utils/api';
-import { subscribeLeadStatusChange } from '../utils/broadcastLeadStatus';
+import { subscribeLeadStatusChange, broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
 
@@ -136,7 +136,7 @@ export function CustomerDetailPage() {
   const [waModalOpen, setWaModalOpen] = useState(false);
 
   const [contactEditOpen, setContactEditOpen] = useState(false);
-  const showToast = useToast();
+  const { showToast, showToastWithAction } = useToastContext();
 
   type LastAttemptEntry = { at: string; by: string | null; count: number; method: string | null; methodCounts?: Record<string, number> | null } | null;
   const [lastAttempt, setLastAttempt] = useState<LastAttemptEntry>(null);
@@ -525,6 +525,11 @@ export function CustomerDetailPage() {
   const contactRef = useRef<Contact | null>(null);
   useEffect(() => { contactRef.current = contact; }, [contact]);
 
+  const showToastWithActionRef = useRef(showToastWithAction);
+  useEffect(() => { showToastWithActionRef.current = showToastWithAction; }, [showToastWithAction]);
+  const leadStatusesRef = useRef(leadStatuses);
+  useEffect(() => { leadStatusesRef.current = leadStatuses; }, [leadStatuses]);
+
   useEffect(() => {
     const g = window as unknown as Record<string, unknown>;
 
@@ -533,13 +538,14 @@ export function CustomerDetailPage() {
       if (id !== contactId) return;
       const c = contactRef.current;
       const prevStatus = c?.properties?.hs_lead_status || '';
-      if (prevStatus === String(newStatus)) return;
+      const nextStatus = String(newStatus);
+      if (prevStatus === nextStatus) return;
 
       const updated: Contact = {
         ...(c as Contact),
         properties: {
           ...(c?.properties || {}),
-          hs_lead_status: String(newStatus),
+          hs_lead_status: nextStatus,
         },
       };
       setContact(updated);
@@ -547,12 +553,44 @@ export function CustomerDetailPage() {
       const st = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
       if (st) st.selectedContact = updated;
 
+      broadcastLeadStatusChange(id, { hs_lead_status: nextStatus });
+
+      const newLabel = nextStatus
+        ? (leadStatusesRef.current.find(o => o.value === nextStatus)?.label || nextStatus)
+        : 'cleared';
+      showToastWithActionRef.current(
+        nextStatus ? `Lead status updated to "${newLabel}"` : 'Lead status cleared',
+        {
+          label: 'Undo',
+          onClick: () => {
+            const revert: Contact = {
+              ...(contactRef.current as Contact),
+              properties: { ...(contactRef.current?.properties || {}), hs_lead_status: prevStatus },
+            };
+            setContact(revert);
+            contactRef.current = revert;
+            const st3 = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
+            if (st3) st3.selectedContact = revert;
+            broadcastLeadStatusChange(id, { hs_lead_status: prevStatus });
+            void sendOrQueue({
+              area: 'customer',
+              label: `Lead status → ${prevStatus || 'clear'} (undo)`,
+              method: 'PATCH',
+              url: `/api/contacts/${encodeURIComponent(id)}`,
+              body: { hs_lead_status: prevStatus },
+              dedupeKey: `contact:${id}:lead-status`,
+            }).catch(() => {});
+          },
+        },
+        { duration: 5000 },
+      );
+
       void sendOrQueue({
         area: 'customer',
-        label: `Lead status → ${String(newStatus)}`,
+        label: `Lead status → ${nextStatus}`,
         method: 'PATCH',
         url: `/api/contacts/${encodeURIComponent(id)}`,
-        body: { hs_lead_status: String(newStatus) },
+        body: { hs_lead_status: nextStatus },
         dedupeKey: `contact:${id}:lead-status`,
       }).then(res => {
         if (!res.queued && !res.ok) {
@@ -562,8 +600,8 @@ export function CustomerDetailPage() {
             contactRef.current = c as Contact;
             const st2 = (window as unknown as Record<string, unknown>).state as Record<string, unknown> | undefined;
             if (st2) st2.selectedContact = c;
-            const w = window as unknown as Record<string, unknown>;
-            if (typeof w['toast'] === 'function') (w['toast'] as (m: string, e: boolean) => void)(LEAD_STATUS_REMOVED_MESSAGE, true);
+            broadcastLeadStatusChange(id, { hs_lead_status: prevStatus });
+            showToast(LEAD_STATUS_REMOVED_MESSAGE, true);
           }
         }
       }).catch(() => { /* noop — optimistic UI already applied */ });
@@ -572,7 +610,7 @@ export function CustomerDetailPage() {
     return () => {
       delete g.quickSetLeadStatus;
     };
-  }, [contactId, setContact]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contactId, setContact, showToast]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Boot ───────────────────────────────────────────────────────────────────
 
