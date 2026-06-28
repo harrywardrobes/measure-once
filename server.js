@@ -30,7 +30,7 @@ const _emailAttachUpload = multer({
 const logger = require('./logger');
 const { runMigrations, ensureRateLimitMigrations } = require('./db-migrate');
 const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('./google-token-crypto.cjs');
-const { installSession, setupAuth, isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
+const { installSession, setupAuth, isAuthenticated, requirePageAuth, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -1171,14 +1171,34 @@ const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar'
 ];
 
+// Short-lived cookie helpers for Google OAuth CSRF state.
+// express-session was removed in the Identity Platform migration; these
+// cookies replace the session as the per-flow state carrier.
+function getOAuthCookie(req, name) {
+  const header = req.headers.cookie || '';
+  const match = header.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+function setOAuthCookies(res, state, isPopup) {
+  const opts = { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 5 * 60 * 1000 };
+  if (process.env.NODE_ENV === 'production') opts.secure = true;
+  res.cookie('_goauth_state', state, opts);
+  res.cookie('_goauth_popup', isPopup ? '1' : '0', opts);
+}
+function clearOAuthCookies(res) {
+  const opts = { httpOnly: true, sameSite: 'lax', path: '/', expires: new Date(0) };
+  if (process.env.NODE_ENV === 'production') opts.secure = true;
+  res.cookie('_goauth_state', '', opts);
+  res.cookie('_goauth_popup', '', opts);
+}
+
 // ── Auth Routes ───────────────────────────────────────────────────────────────
 
 app.get('/auth/google', isAuthenticated, (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
-  req.session.googleOAuthState = state;
   // When the connect button opens a new tab (popup=1), record that so the
   // callback can post a message to the opener instead of doing a full redirect.
-  req.session.googleOAuthPopup = req.query.popup === '1';
+  setOAuthCookies(res, state, req.query.popup === '1');
   const url = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: GOOGLE_SCOPES,
@@ -1219,19 +1239,15 @@ function googlePopupPage(outcome, reason) {
 }
 
 app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
-  const isPopup = !!req.session.googleOAuthPopup;
-  delete req.session.googleOAuthPopup;
-
-  const expectedState = req.session.googleOAuthState;
-  delete req.session.googleOAuthState;
+  const isPopup = getOAuthCookie(req, '_goauth_popup') === '1';
+  const expectedState = getOAuthCookie(req, '_goauth_state');
+  clearOAuthCookies(res);
   if (!expectedState || req.query.state !== expectedState) {
     if (isPopup) return res.send(googlePopupPage('error', 'invalid_state'));
     return res.redirect('/?error=google_auth_failed');
   }
   try {
     const { tokens } = await oauth2Client.getToken(req.query.code);
-    req.session.googleTokens = tokens;
-    req.session.googleTokensBoundTo = String(req.user.claims.sub);
     await saveGoogleTokens(String(req.user.claims.sub), tokens);
     if (isPopup) return res.send(googlePopupPage('connected'));
     res.redirect('/?connected=true');
@@ -1242,8 +1258,6 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
 });
 
 app.post('/auth/logout-google', isAuthenticated, async (req, res) => {
-  delete req.session.googleTokens;
-  delete req.session.googleTokensBoundTo;
   try { await deleteGoogleTokens(String(req.user.claims.sub)); } catch {}
   res.json({ success: true });
 });
@@ -1266,14 +1280,11 @@ app.get('/api/google/status', isAuthenticated, async (req, res) => {
     const auth = getGoogleClient(googleTokens);
     const { token } = await auth.getAccessToken();
     if (!token) return res.json({ connected: false, code: 'NO_TOKEN' });
-    req.session.googleTokens = auth.credentials;
     await saveGoogleTokens(userSub, auth.credentials);
     res.json({ connected: true });
   } catch (e) {
     const msg = (e.message || '').toLowerCase();
     if (msg.includes('invalid_grant') || msg.includes('token has been expired') || msg.includes('token has been revoked')) {
-      delete req.session.googleTokens;
-      delete req.session.googleTokensBoundTo;
       try { await deleteGoogleTokens(userSub); } catch {}
       return res.json({ connected: false, code: 'TOKEN_EXPIRED' });
     }
@@ -2809,11 +2820,8 @@ function classifyGoogleError(e) {
   return 'GOOGLE_ERROR';
 }
 
-// Returns the Google tokens for the currently authenticated user, using the
-// session as a fast cache and falling back to the DB when the session is empty
-// (e.g. after a logout/login cycle or server restart).  If session tokens exist
-// but belong to a different user (cross-account session reuse), they are cleared
-// and null is returned so stale credentials are never silently forwarded.
+// Returns the Google tokens for the currently authenticated user from the DB,
+// or null if none are stored or the user is not authenticated.
 async function getVerifiedGoogleTokens(req) {
   const currentUser = req.user?.claims?.sub != null
     ? String(req.user.claims.sub)
@@ -2827,25 +2835,10 @@ async function getVerifiedGoogleTokens(req) {
     try { return JSON.parse(process.env.GOOGLE_TEST_TOKENS); } catch {}
   }
 
-  const sessionTokens = req.session.googleTokens;
-  if (sessionTokens) {
-    const boundTo = req.session.googleTokensBoundTo;
-    if (!boundTo || boundTo !== currentUser) {
-      delete req.session.googleTokens;
-      delete req.session.googleTokensBoundTo;
-      return null;
-    }
-    return sessionTokens;
-  }
-
-  // Session miss — try the DB.
+  // Session caching removed (sessions migrated to Identity Platform cookies).
+  // Always load from DB.
   const dbTokens = await loadGoogleTokens(currentUser);
-  if (!dbTokens) return null;
-
-  // Repopulate session so subsequent requests avoid the DB round-trip.
-  req.session.googleTokens = dbTokens;
-  req.session.googleTokensBoundTo = currentUser;
-  return dbTokens;
+  return dbTokens || null;
 }
 
 app.get('/api/emails', isAuthenticated, async (req, res) => {
@@ -3914,11 +3907,7 @@ async function ensureTradesTable() {
 // Admin page: handle auth/authorization with page-friendly responses so users
 // see a redirect to login or a friendly "no access" page instead of raw JSON
 // or a confusing 404.
-app.get('/admin', async (req, res) => {
-  const isAuthed = req.isAuthenticated && req.isAuthenticated();
-  if (!isAuthed || !req.user?.claims) {
-    return res.redirect('/login');
-  }
+app.get('/admin', requirePageAuth, async (req, res) => {
   const userId = req.user.claims.sub;
   let admin = false;
   if (userId) {
@@ -3965,11 +3954,12 @@ app.get('/trades', isAuthenticated, (_req, res) => {
 });
 
 // Sales, Projects, Invoices — manager/admin only
-function requireManagerOrAdminPage(req, res, next) {
-  if (!req.isAuthenticated || !req.isAuthenticated()) return res.redirect('/login');
-  const priv = getRequestPrivilegeLevel(req);
-  if (priv === 'manager' || priv === 'admin') return next();
-  return res.redirect('/access-restricted');
+async function requireManagerOrAdminPage(req, res, next) {
+  await requirePageAuth(req, res, async () => {
+    const priv = getRequestPrivilegeLevel(req);
+    if (priv === 'manager' || priv === 'admin') return next();
+    return res.redirect('/access-restricted');
+  });
 }
 
 app.get('/access-restricted', isAuthenticated, (_req, res) => {

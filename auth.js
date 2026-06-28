@@ -891,8 +891,8 @@ async function setupAuth(app) {
         try {
           await ensureIdentityUser(email);
           const link = await generateSetPasswordLink(email);
-          await sendSetPasswordEmail(email, link, { reset: true });
           logger.info(`  Password reset link issued for ${email}`);
+          await sendSetPasswordEmail(email, link, { reset: true });
         } catch (mailErr) {
           logger.error({ err: mailErr.message }, '  Failed to issue/send password reset email:');
         }
@@ -2263,11 +2263,21 @@ async function setupAuth(app) {
       return res.status(400).json({ error: 'Image is too large. Max ~3 MB after compression.' });
     }
     try {
-      await pool.query(
-        `UPDATE users SET pending_photo = $1, photo_version = NOW(), updated_at = NOW() WHERE id = $2`,
-        [data, userId]
-      );
-      res.json({ ok: true });
+      const isAdmin = req.user?.privilege_level === 'admin';
+      if (isAdmin) {
+        // Admins are the approvers, so skip the queue and go live immediately.
+        await pool.query(
+          `UPDATE users SET custom_photo = $1, pending_photo = NULL, photo_version = NOW(), updated_at = NOW() WHERE id = $2`,
+          [data, userId]
+        );
+        res.json({ ok: true, approved: true });
+      } else {
+        await pool.query(
+          `UPDATE users SET pending_photo = $1, photo_version = NOW(), updated_at = NOW() WHERE id = $2`,
+          [data, userId]
+        );
+        res.json({ ok: true });
+      }
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -2443,6 +2453,46 @@ const isAuthenticated = async (req, res, next) => {
   return next();
 };
 
+// Page-route variant of isAuthenticated: redirects to /login on failure
+// instead of returning 401 JSON (which would show a raw JSON error in the browser).
+const requirePageAuth = async (req, res, next) => {
+  const cookie = getSessionCookie(req);
+  if (!cookie) return res.redirect('/login');
+  let decoded;
+  try {
+    decoded = await admin.auth().verifySessionCookie(cookie, false);
+  } catch {
+    return res.redirect('/login');
+  }
+  const email = (decoded.email || '').toLowerCase();
+  try {
+    const approved = await isEmailApproved(email);
+    if (!approved) return res.redirect('/login');
+  } catch {
+    return res.redirect('/login');
+  }
+  let dbUser = await getUserByIdentityUid(decoded.uid).catch(() => null);
+  if (!dbUser) {
+    dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser && decoded.uid) {
+      pool.query(
+        `UPDATE users SET identity_uid = $1, updated_at = NOW() WHERE id = $2 AND identity_uid IS NULL`,
+        [decoded.uid, dbUser.id]
+      ).catch(() => {});
+    }
+  }
+  if (!dbUser) return res.redirect('/login');
+  req.user = {
+    claims: {
+      sub: dbUser.id,
+      email: dbUser.email,
+      identity_uid: decoded.uid,
+    },
+    privilege_level: dbUser.privilege_level || 'member',
+  };
+  return next();
+};
+
 // ── Onboarding conflict digest ────────────────────────────────────────────────
 // Sends a weekly email to admins listing team members whose onboarding
 // conflicts (pending_profile_updates) have been unresolved for 7+ days.
@@ -2563,7 +2613,7 @@ function scheduleConflictDigest() {
 }
 
 module.exports = {
-  installSession, setupAuth, isAuthenticated, requireAdmin,
+  installSession, setupAuth, isAuthenticated, requirePageAuth, requireAdmin,
   requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete,
   isAdminEmail, userIdExists, pool, logAdminAction, getRequestPrivilegeLevel,
   scheduleConflictDigest,

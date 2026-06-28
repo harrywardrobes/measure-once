@@ -42,12 +42,6 @@ const SECRET_KEYS = [
   'GOOGLE_SHARED_CALENDAR_ID',
   'QB_CLIENT_ID',
   'QB_CLIENT_SECRET',
-  'SMTP_HOST',
-  'SMTP_PORT',
-  'SMTP_USER',
-  'SMTP_PASS',
-  'SMTP_FROM',
-  'SMTP_REPLY_TO',
   // NOTE: TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY are intentionally NOT pulled.
   // The real site key is bound to the prod hostname in Cloudflare and won't
   // render on localhost. Left blank, the app disables Turnstile in dev
@@ -75,6 +69,19 @@ const DEV_DEFAULTS = {
   // localhost). Set Cloudflare test keys here if you want the widget locally.
   TURNSTILE_SITE_KEY: '',
   TURNSTILE_SECRET_KEY: '',
+  // SMTP blank in dev = no real emails sent; transport returns null.
+  // Set LOG_SET_PASSWORD_LINK=true (or LOG_EMAILS_TO_CONSOLE=true) to see
+  // links/content in the server console instead.
+  // In production, Cloud Run injects SMTP credentials directly from GSM.
+  SMTP_HOST: '',
+  SMTP_PORT: '587',
+  SMTP_USER: '',
+  SMTP_PASS: '',
+  SMTP_FROM: '',
+  SMTP_REPLY_TO: '',
+  // Print the set-password / password-reset link to the console when no SMTP
+  // transport is configured. Only active in development (never production).
+  LOG_SET_PASSWORD_LINK: '',
 };
 
 function parseEnv(text) {
