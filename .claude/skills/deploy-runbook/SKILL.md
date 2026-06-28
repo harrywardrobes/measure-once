@@ -139,6 +139,14 @@ gcloud run services describe measure-once-staging --region=europe-west2 `
    ```powershell
    gcloud run services logs read measure-once-staging --region=europe-west2 --limit=100
    ```
+   > **Log attribution gotcha:** `gcloud run services logs read` returns logs
+   > from *all* revisions, including the old one being drained. Crashes that
+   > appear immediately after a deploy — especially if the error string doesn't
+   > match any code in the current source — are likely from the previous
+   > revision's final moments, not the new one. Cross-check against
+   > `gcloud run revisions list` timestamps and grep the current source for the
+   > crashing symbol before raising an alarm. If the error *does* appear in the
+   > current source, stop — it's a real regression.
    Then walk the checklist one item at a time, waiting for the user's browser
    confirmation on each:
    - [ ] Login works
