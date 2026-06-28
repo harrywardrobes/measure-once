@@ -154,7 +154,7 @@ function Logo() {
   );
 }
 
-function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | 'error'; id?: string }) {
+function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | 'error' | 'warning'; id?: string }) {
   return (
     <Alert id={id} severity={severity} sx={{ mb: 2.5, fontSize: '0.875rem' }}>
       {msg}
@@ -191,7 +191,7 @@ function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
   const [loginBusy, setLoginBusy] = React.useState(false);
 
   const [forgotEmail, setForgotEmail] = React.useState('');
-  const [forgotMsg, setForgotMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
+  const [forgotMsg, setForgotMsg] = React.useState<{ text: string; ok: boolean; severity?: 'success' | 'error' | 'warning' } | null>(null);
   const [forgotConfirmed, setForgotConfirmed] = React.useState(false);
   const [forgotConfirmEmail, setForgotConfirmEmail] = React.useState('');
   const [forgotBusy, setForgotBusy] = React.useState(false);
@@ -313,11 +313,21 @@ function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
         setForgotNotFound(true);
       } else if (r.status === 429) {
         setForgotMsg({ text: 'Too many requests — please try again later.', ok: false });
+      } else if (r.status === 502 || r.status === 503) {
+        setForgotMsg({
+          text: 'We couldn’t send the reset email due to a connection issue. No email was sent — please try again in a moment.',
+          ok: false,
+          severity: 'warning',
+        });
       } else {
         setForgotMsg({ text: data.error || 'Could not send reset link.', ok: false });
       }
     } catch {
-      setForgotMsg({ text: 'Network error — please try again.', ok: false });
+      setForgotMsg({
+        text: 'We couldn’t reach the server due to a connection issue. No email was sent — please try again in a moment.',
+        ok: false,
+        severity: 'warning',
+      });
     } finally {
       setForgotBusy(false);
       resetWidget('forgot');
@@ -371,7 +381,7 @@ function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5 }}>
           Enter your email and we&apos;ll send you a link to set a new password.
         </Typography>
-        {forgotMsg && <AuthAlert msg={forgotMsg.text} severity={forgotMsg.ok ? 'success' : 'error'} />}
+        {forgotMsg && <AuthAlert msg={forgotMsg.text} severity={forgotMsg.severity ?? (forgotMsg.ok ? 'success' : 'error')} />}
         {forgotNotFound ? (
           <>
             <Alert severity="error" sx={{ mb: 2.5 }}>

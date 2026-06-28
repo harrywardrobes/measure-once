@@ -148,6 +148,12 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
   }
 }
 
+// Returns a status so callers can decide whether to claim success:
+//   'sent'    — handed to the SMTP transport without error.
+//   'skipped' — no transport configured (dev/test, or prod SMTP unset).
+//   'failed'  — a transport was configured but the send threw.
+// Callers that must not report a false success (public forgot-password, admin
+// resend / force-reset) check this; the approval flows intentionally ignore it.
 async function sendSetPasswordEmail(email, link, { resend = false, reset = false } = {}) {
   const transport = createMailTransport();
   if (!transport) {
@@ -157,7 +163,7 @@ async function sendSetPasswordEmail(email, link, { resend = false, reset = false
     } else if (process.env.NODE_ENV !== 'production' && !process.env.LOG_SET_PASSWORD_LINK) {
       logger.warn(`  Set-password link (manual delivery) — set LOG_SET_PASSWORD_LINK=true in .env to print the link here.`);
     }
-    return;
+    return 'skipped';
   }
   const from = buildFromHeader();
   const replyTo = buildReplyTo();
@@ -178,8 +184,10 @@ async function sendSetPasswordEmail(email, link, { resend = false, reset = false
       html,
     });
     logger.info(`  Set-password email sent to ${email}`);
+    return 'sent';
   } catch (err) {
     logger.error({ err: err.message }, '  Failed to send set-password email:');
+    return 'failed';
   }
 }
 
@@ -892,9 +900,18 @@ async function setupAuth(app) {
           await ensureIdentityUser(email);
           const link = await generateSetPasswordLink(email);
           logger.info(`  Password reset link issued for ${email}`);
-          await sendSetPasswordEmail(email, link, { reset: true });
+          const sendStatus = await sendSetPasswordEmail(email, link, { reset: true });
+          if (sendStatus === 'failed') {
+            // The transport accepted the job then errored — the email did not
+            // go out. Surface a retryable error rather than a false success.
+            logger.error(`  Password reset email failed to send for ${email}`);
+            return res.status(502).json({ error: 'email_send_failed' });
+          }
         } catch (mailErr) {
           logger.error({ err: mailErr.message }, '  Failed to issue/send password reset email:');
+          // Don't claim success when the email never went out — surface a
+          // retryable error so the UI can show a connection-issue warning.
+          return res.status(502).json({ error: 'email_send_failed' });
         }
         return res.json({ ok: true });
       } else {
@@ -903,7 +920,9 @@ async function setupAuth(app) {
       }
     } catch (e) {
       logger.error({ err: e.message }, 'forgot-password failed:');
-      res.json({ ok: true });
+      // A genuine failure (e.g. DB unreachable) means we couldn't process the
+      // request — return a retryable error rather than a false success.
+      res.status(502).json({ error: 'request_failed' });
     }
   });
 
@@ -1478,7 +1497,11 @@ async function setupAuth(app) {
     try {
       await ensureIdentityUser(email);
       const link = await generateSetPasswordLink(email);
-      await sendSetPasswordEmail(email, link, { resend: true });
+      const sendStatus = await sendSetPasswordEmail(email, link, { resend: true });
+      if (sendStatus === 'failed') {
+        logger.error(`  Resend set-password email failed to send for ${email}`);
+        return res.status(502).json({ error: 'Could not send the email. Please try again.' });
+      }
       const adminEmail = req.user?.claims?.email || req.user?.email || null;
       await logAdminAction(adminEmail, 'resend_set_password_email', email, null);
       res.json({ ok: true });
@@ -1511,7 +1534,13 @@ async function setupAuth(app) {
       // Generate a fresh password reset link and email it.
       await ensureIdentityUser(email);
       const link = await generateSetPasswordLink(email);
-      await sendSetPasswordEmail(email, link, { reset: true });
+      const sendStatus = await sendSetPasswordEmail(email, link, { reset: true });
+      if (sendStatus === 'failed') {
+        // Sessions are already revoked at this point, so a silent failure would
+        // lock the user out with no link. Surface it so the admin retries.
+        logger.error(`  Force-reset email failed to send for ${email}`);
+        return res.status(502).json({ error: 'Could not send the reset email. Please try again.' });
+      }
       await logAdminAction(adminEmail, 'force_password_reset', email, null);
       res.json({ ok: true });
     } catch (e) {
