@@ -34,6 +34,20 @@ Artifact Registry repo `measure-once`, runtime service account
 intentionally unset). Migrating is always a separate, deliberate step you run
 before deploying — for staging *and* production, every time.
 
+> ⚠️ **Migrate the instance the app actually uses — `harry-wardrobes-db`.**
+> A second Cloud SQL instance, `harry-wardrobes-instance` (the original cutover
+> instance), still exists and *also* has `measureonce` / `measureonce_staging`
+> databases, so the two look interchangeable but are **not**. Both app services
+> read `harry-wardrobes-db` (confirm any time with
+> `gcloud secrets versions access latest --secret=DATABASE_URL` → the `host=`
+> param). On 2026-06-28 the password-reset migrations were applied through a
+> proxy left pointing at `harry-wardrobes-instance`; they landed on a database
+> the app never reads, so prod kept failing with `column "identity_uid" does
+> not exist` even though the migrations "looked applied". **Before every
+> `npm run db:migrate`, verify the proxy's target instance** — e.g. on Windows:
+> `Get-CimInstance Win32_Process -Filter "Name LIKE '%cloud-sql-proxy%'" | Select CommandLine`
+> — and make sure it says `…harry-wardrobes-db`, not `…harry-wardrobes-instance`.
+
 ---
 
 ## Step 1 — Build the image
@@ -61,6 +75,11 @@ after ~1 hour and causes `ECONNRESET`):
 ```powershell
 C:\Users\User\cloud-sql-proxy.exe --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-db
 ```
+
+> If a proxy is **already** listening on `15432`, do not assume it targets the
+> right instance — check its command line (see the warning above) before
+> migrating. The same `mo_db_password.txt` happens to authenticate the `app`
+> user on both instances, so a wrong-instance proxy fails silently, not loudly.
 
 See [docs/staging-handoff.md](staging-handoff.md) Part B2 for full proxy setup
 including the ADC refresh step. Then run migrations:
