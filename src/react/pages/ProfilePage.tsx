@@ -277,6 +277,7 @@ function IdentityCard({
   const [submitting, setSubmitting] = React.useState(false);
   const [uploadProgress, setUploadProgress] = React.useState<number | undefined>(undefined);
   const [photoSuccess, setPhotoSuccess] = React.useState(false);
+  const [freshPhotoSrc, setFreshPhotoSrc] = React.useState<string | null>(null);
   const successTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
@@ -333,12 +334,15 @@ function IdentityCard({
         try { msg = (JSON.parse(xhr.responseText) as { error?: string }).error || msg; } catch { /* ignore */ }
         setErrorMsg(msg);
       } else {
+        let autoApproved = false;
+        try { autoApproved = !!(JSON.parse(xhr.responseText) as { approved?: boolean }).approved; } catch { /* ignore */ }
+        if (autoApproved && pendingData) setFreshPhotoSrc(pendingData);
         setPendingData(null);
         if (fileRef.current) fileRef.current.value = '';
         setPhotoSuccess(true);
         if (successTimerRef.current) clearTimeout(successTimerRef.current);
         successTimerRef.current = setTimeout(() => setPhotoSuccess(false), SUCCESS_BANNER_HIDE_MS);
-        showToast('Photo submitted for approval');
+        showToast(autoApproved ? 'Photo updated' : 'Photo submitted for approval');
         onReload();
       }
     };
@@ -366,7 +370,7 @@ function IdentityCard({
         <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
           <Box sx={{ position: 'relative' }}>
             <Avatar
-              src={photoSrc || undefined}
+              src={freshPhotoSrc || photoSrc || undefined}
               sx={{
                 width: 64, height: 64, bgcolor: 'primary.light', fontWeight: 700,
                 outline: '3px solid',
