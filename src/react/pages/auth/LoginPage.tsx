@@ -98,7 +98,7 @@ function useTurnstile() {
     const tw = (window as unknown as { turnstile?: TW }).turnstile;
     const id = widgetIds.current[name];
     setErrors((p) => ({ ...p, [name]: false }));
-    if (id != null && tw) tw.reset(id);
+    if (id != null && tw) { try { tw.reset(id); } catch { /* container may have unmounted */ } }
   }, []);
 
   const getToken = (name: string) => tokens[name] || '';
