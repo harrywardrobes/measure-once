@@ -94,6 +94,48 @@ Never edit an applied migration — add a new one to change the schema.
 
 ---
 
+## Pulling production data
+
+`npm run db:pull` copies configuration and reference data from production into your local dev database and/or staging. It is safe to run repeatedly — rows are upserted, not replaced.
+
+**What is pulled** (always):
+- Team: `users`, `allowed_emails`, `job_roles`, role & nav config
+- Workflow: lead statuses, sub-statuses, stage action labels, card action handlers
+- Settings: admin, app, search, page filter, workshop, QuickBooks config
+- Catalogue: design visit options, product ranges, doors, handles, finishes, pairings
+- Templates: email templates, terms & conditions, visit questions
+
+**Optional groups** (you choose each run): Trades, Ideas, Customer data, Finance
+
+**Never pulled**: `sessions`, `password_set_tokens`, `qb_tokens`, `google_oauth_tokens`, image/upload tables, audit logs.
+
+### Prerequisites
+
+1. Add to `.env` (see `.env.example` for the format):
+   ```
+   PROD_DATABASE_URL=postgres://app:PASSWORD@127.0.0.1:15432/measureonce
+   STAGING_DATABASE_URL=postgres://app:PASSWORD@127.0.0.1:15432/measureonce_staging
+   ```
+
+2. Start the Cloud SQL Auth Proxy:
+   ```powershell
+   & "C:\Users\User\cloud-sql-proxy.exe" --port 15432 harry-wardrobes:europe-west2:harry-wardrobes-db
+   ```
+
+### Running the pull
+
+```bash
+npm run db:pull                   # interactive — prompts for target + optional tables
+npm run db:pull -- --local        # local dev only, no prompts
+npm run db:pull -- --staging      # staging only, no prompts
+npm run db:pull -- --local --staging  # both at once
+npm run db:pull -- --dry-run      # preview row counts without writing anything
+```
+
+When pulling to **staging**, `dev_mode_enabled` is automatically set to `true` after the pull (so staging only shows test contacts). QuickBooks and Google tokens are never pulled — reconnect them in the staging admin panel if needed.
+
+---
+
 ## Deployment
 
 The app runs on **Google Cloud Run**. See [docs/deploy.md](docs/deploy.md) for the full deploy runbook and [docs/environments.md](docs/environments.md) for environment concepts.

@@ -12,6 +12,7 @@
     "db:migrate:down": "node scripts/run-db-migrate.js down 1",
     "db:migrate:redo": "node scripts/run-db-migrate.js down 1 && node scripts/run-db-migrate.js up",
     "db:migrate:create": "node scripts/create-migration.js",
+    "db:pull": "node scripts/pull-prod-data.mjs",
     "staging:safety-reset": "node scripts/staging-safety-reset.mjs",
     "google:rotate-token-key": "node scripts/rotate-google-token-key.mjs",
     "prestart": "node scripts/start-prebuild.mjs",
