@@ -132,12 +132,10 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
       (data as { status?: string }).status === 'connected';
     const code = (data as { code?: string }).code;
     const prev = _lastKnown.get(service);
-    if (!connected && prev !== 'error') {
+    if (!connected && prev !== 'error' && code !== 'KEY_MISSING') {
       _fire(service, 'disconnected');
       // If the token exists but can't be decrypted (key rotation), open the
       // modal immediately with a targeted message so users know to reconnect.
-      // KEY_MISSING means the encryption key is not configured at all — the
-      // connect flow won't work until an admin sets it up, so don't prompt.
       if (code === 'TOKEN_UNREADABLE') {
         const unreadableMessage = service === 'quickbooks'
           ? 'Your QuickBooks connection needs to be refreshed — please reconnect to restore invoice access.'

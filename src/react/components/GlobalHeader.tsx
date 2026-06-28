@@ -3,6 +3,7 @@ import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
 import Avatar from '@mui/material/Avatar';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CheckIcon from '@mui/icons-material/Check';
 import SearchIcon from '@mui/icons-material/Search';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import ShieldIcon from '@mui/icons-material/Shield';
@@ -33,7 +34,6 @@ import {
   StatusBadgeRoot,
   StatusIconBox,
   StatusDotBadge,
-  ReconnectLabel,
   OfflinePillRoot,
   OfflinePillLabel,
   ProfileBadge,
@@ -97,8 +97,6 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
     status === 'ok'      ? 'rgba(134,239,172,0.35)' :
     'rgba(255,255,255,0.12)';
 
-  const showReconnectLabel = status === 'error' && !!onClick;
-
   return (
     <Tooltip title={onClick ? `${tip} — click to manage connections` : tip}>
       <StatusBadgeRoot
@@ -123,10 +121,25 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
             <Icon fontSize="small" />
           </StatusIconBox>
         </StatusDotBadge>
-        {showReconnectLabel && (
-          <ReconnectLabel aria-hidden="true">Reconnect</ReconnectLabel>
-        )}
       </StatusBadgeRoot>
+    </Tooltip>
+  );
+}
+
+// ── All-ok indicator ──────────────────────────────────────────────────────────
+
+function AllOkIndicator() {
+  return (
+    <Tooltip title="All services connected">
+      <StatusIconBox
+        component="span"
+        role="status"
+        aria-label="All services connected"
+        $iconColor="#86efac" // hex-color-ok: matches 'ok' service icon tint
+        $borderColor="rgba(134,239,172,0.35)"
+      >
+        <CheckIcon fontSize="small" />
+      </StatusIconBox>
     </Tooltip>
   );
 }
@@ -260,22 +273,32 @@ export function GlobalHeader() {
             <Box sx={{ display: 'flex', alignItems: 'center', mr: 0.25 }}>
               <OfflinePill />
             </Box>
-          ) : (
-            <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.25 }}
-              role="group"
-              aria-label="Service status"
-            >
-              {SERVICE_KEYS.map((svc) => (
-                <ServiceStatusBadge
-                  key={svc}
-                  service={svc}
-                  status={serviceStatuses.get(svc) ?? 'checking'}
-                  onClick={() => openConnectModal(svc)}
-                />
-              ))}
-            </Box>
-          )}
+          ) : (() => {
+            const failingServices = SERVICE_KEYS.filter((svc) => {
+              const s = serviceStatuses.get(svc) ?? 'checking';
+              return s === 'error' || s === 'warning';
+            });
+            return (
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mr: 0.25 }}
+                role="group"
+                aria-label="Service status"
+              >
+                {failingServices.length === 0 ? (
+                  <AllOkIndicator />
+                ) : (
+                  failingServices.map((svc) => (
+                    <ServiceStatusBadge
+                      key={svc}
+                      service={svc}
+                      status={serviceStatuses.get(svc) ?? 'checking'}
+                      onClick={() => openConnectModal(svc)}
+                    />
+                  ))
+                )}
+              </Box>
+            );
+          })()}
 
           <Tooltip title={`Search (${kbdHint})`}>
             <SearchButton

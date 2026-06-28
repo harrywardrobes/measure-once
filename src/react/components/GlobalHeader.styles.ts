@@ -109,7 +109,7 @@ export const StatusBadgeRoot = styled(Box, {
 // Icon tile inside the badge. Colors are status-dependent (transient props).
 export const StatusIconBox = styled(Box, {
   shouldForwardProp: (prop) => prop !== '$iconColor' && prop !== '$borderColor',
-})<{ $iconColor: string; $borderColor: string }>(({ $iconColor, $borderColor }) => ({
+})<{ $iconColor: string; $borderColor: string; component?: ElementType }>(({ $iconColor, $borderColor }) => ({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -143,16 +143,6 @@ export const StatusDotBadge = styled(Badge, {
     },
   }),
 );
-
-// "Reconnect" label shown next to a failed service icon.
-export const ReconnectLabel = styled('span')({
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.04em',
-  lineHeight: 1,
-  color: '#fca5a5', // hex-color-ok: error label tint, matches status icon tint
-  whiteSpace: 'nowrap',
-});
 
 // ── Offline pill ───────────────────────────────────────────────────────────────
 
