@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ARRANGE_VISIT_DRAFT_PREFIX } from '../../constants/localStorageKeys';
-import { nowDate, nowDateTime } from '../../utils/dateDefaults';
+import { nowDateTime } from '../../utils/dateDefaults';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,11 +10,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { DateTimeEditor } from '../DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -78,17 +74,13 @@ interface DraftState {
   notes: string;
   emailSubject: string;
   emailBody: string;
-  proposedEmailDateIso: string | null;
-  proposedEmailTimeIso: string | null;
+  proposedEmailDateTimeIso: string | null;
 }
 
 /** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
-function buildProposedDateLine(date: Dayjs | null, time: Dayjs | null): string {
-  if (!date && !time) return '';
-  const parts: string[] = [];
-  if (date) parts.push(date.format('D MMMM YYYY'));
-  if (time) parts.push(time.format('h:mm A'));
-  return `We have a proposed slot available: ${parts.join(' at ')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
+function buildProposedDateLine(dateTime: Dayjs | null): string {
+  if (!dateTime) return '';
+  return `We have a proposed slot available: ${dateTime.format('D MMMM YYYY')} at ${dateTime.format('h:mm A')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
 function draftKey(contactId: string): string {
@@ -192,11 +184,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const [cancelExistingError, setCancelExistingError] = useState('');
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
-  const [proposedEmailDate, setProposedEmailDate] = useState<Dayjs | null>(
-    draft.proposedEmailDateIso ? dayjs(draft.proposedEmailDateIso) : dayjs(nowDate()),
-  );
-  const [proposedEmailTime, setProposedEmailTime] = useState<Dayjs | null>(
-    draft.proposedEmailTimeIso ? dayjs(draft.proposedEmailTimeIso) : dayjs(nowDateTime()),
+  const [proposedEmailDateTime, setProposedEmailDateTime] = useState<Dayjs | null>(
+    draft.proposedEmailDateTimeIso ? dayjs(draft.proposedEmailDateTimeIso) : dayjs(nowDateTime()),
   );
   const [emailLoading, setEmailLoading] = useState(false);
 
@@ -284,18 +273,17 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       notes,
       emailSubject,
       emailBody,
-      proposedEmailDateIso: proposedEmailDate?.toISOString() ?? null,
-      proposedEmailTimeIso: proposedEmailTime?.toISOString() ?? null,
+      proposedEmailDateTimeIso: proposedEmailDateTime?.toISOString() ?? null,
     });
-  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody, proposedEmailDate, proposedEmailTime]);
+  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody, proposedEmailDateTime]);
 
   // Re-fetch the no-answer email template whenever the proposed date/time changes
   // while the user is on the email step (same pattern as DesignVisitFollowupModal).
   useEffect(() => {
     if (step !== 'email') return;
-    fetchEmailTemplate(proposedEmailDate, proposedEmailTime, contactInfo);
+    fetchEmailTemplate(proposedEmailDateTime, contactInfo);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposedEmailDate, proposedEmailTime]);
+  }, [proposedEmailDateTime]);
 
   function handleClose() {
     setActionError('');
@@ -579,7 +567,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     return { subject, body };
   }
 
-  function fetchEmailTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null): void {
+  function fetchEmailTemplate(dateTime: Dayjs | null, info: ContactInfo | null): void {
     setEmailLoading(true);
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     const vLabel = visitLabel(info?.visitType ?? 'design');
@@ -588,9 +576,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       vars: {
         firstName,
         visitLabel: vLabel,
-        proposedDate: date ? date.format('D MMMM YYYY') : '',
-        proposedTime: time ? time.format('h:mm A') : '',
-        proposedDateLine: buildProposedDateLine(date, time),
+        proposedDate: dateTime ? dateTime.format('D MMMM YYYY') : '',
+        proposedTime: dateTime ? dateTime.format('h:mm A') : '',
+        proposedDateLine: buildProposedDateLine(dateTime),
       },
     })
       .then((t: unknown) => {
@@ -673,14 +661,13 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           disabled={submitting}
           onClick={() => {
             setActionError('');
-            setProposedEmailDate(dayjs(nowDate()));
-            setProposedEmailTime(dayjs(nowDateTime()));
+            setProposedEmailDateTime(dayjs(nowDateTime()));
             if (!emailSubject && !emailBody) {
               if (noAnswerTemplate) {
                 setEmailSubject(noAnswerTemplate.subject);
                 setEmailBody(noAnswerTemplate.body_text);
               } else {
-                fetchEmailTemplate(null, null, contactInfo);
+                fetchEmailTemplate(null, contactInfo);
               }
             }
             setMadeProgress(true); setStep('email');
@@ -755,7 +742,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   }
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
+    <>
       <FullScreenModal
         open={open}
         onClose={handleRequestClose}
@@ -822,17 +809,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
                 />
-                <DateTimePicker
+                <DateTimeEditor
                   label="Visit date & time"
                   value={bookedSlot}
-                  onChange={(v: Dayjs | null) => setBookedSlot(v)}
-                  slotProps={{
-                    textField: {
-                      id: 'av-booked-slot',
-                      fullWidth: true,
-                      size: 'small',
-                    },
-                  }}
+                  onChange={(v) => setBookedSlot(v)}
+                  id="av-booked-slot"
                 />
                 <AddressInput
                   value={structuredAddress}
@@ -896,21 +877,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   <Typography variant="body2" color="text.secondary">
                     Optionally include a proposed date and time in the email:
                   </Typography>
-                  <Stack direction="row" spacing={1.5}>
-                    <DatePicker
-                      label="Proposed date"
-                      value={proposedEmailDate}
-                      onChange={(v) => setProposedEmailDate(v)}
-                      slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                      disablePast
-                    />
-                    <TimePicker
-                      label="Proposed time"
-                      value={proposedEmailTime}
-                      onChange={(v) => setProposedEmailTime(v)}
-                      slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                    />
-                  </Stack>
+                  <DateTimeEditor
+                    value={proposedEmailDateTime}
+                    onChange={(v) => setProposedEmailDateTime(v)}
+                    disablePast
+                  />
                 </Stack>
                 {emailLoading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
@@ -1038,6 +1009,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           }}
         />
       )}
-    </LocalizationProvider>
+    </>
   );
 }

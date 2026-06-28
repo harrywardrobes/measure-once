@@ -27,10 +27,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EmailComposer } from './EmailComposer';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { DateTimeEditor } from '../DateTimeEditor';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
@@ -79,12 +76,9 @@ function clearDraftStep(key: string): void {
 }
 
 /** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
-function buildProposedDateLine(date: Dayjs | null, time: Dayjs | null): string {
-  if (!date && !time) return '';
-  const parts: string[] = [];
-  if (date) parts.push(date.format('D MMMM YYYY'));
-  if (time) parts.push(time.format('h:mm A'));
-  return `We have a proposed slot available: ${parts.join(' at ')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
+function buildProposedDateLine(dateTime: Dayjs | null): string {
+  if (!dateTime) return '';
+  return `We have a proposed slot available: ${dateTime.format('D MMMM YYYY')} at ${dateTime.format('h:mm A')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
 interface CalendarEventStub {
@@ -116,8 +110,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
 
-  const [resendDate, setResendDate] = useState<Dayjs | null>(null);
-  const [resendTime, setResendTime] = useState<Dayjs | null>(null);
+  const [resendDateTime, setResendDateTime] = useState<Dayjs | null>(null);
 
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [outcomeError, setOutcomeError] = useState('');
@@ -167,7 +160,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   }, [open]);
 
   /** Fetch (or re-fetch) the visit_invite template, incorporating optional proposed date/time. */
-  function fetchResendTemplate(date: Dayjs | null, time: Dayjs | null, info: ContactInfo | null) {
+  function fetchResendTemplate(dateTime: Dayjs | null, info: ContactInfo | null) {
     if (demo) {
       const firstName = (info?.contactName || '').split(' ')[0] || 'there';
       const subj = 'Your design visit — getting in touch';
@@ -188,9 +181,9 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
         visitLabel: 'design visit',
         visitDuration: '60',
         location: info?.contactAddress ? ` at ${info.contactAddress}` : '',
-        proposedDate: date ? date.format('D MMMM YYYY') : '',
-        proposedTime: time ? time.format('h:mm A') : '',
-        proposedDateLine: buildProposedDateLine(date, time),
+        proposedDate: dateTime ? dateTime.format('D MMMM YYYY') : '',
+        proposedTime: dateTime ? dateTime.format('h:mm A') : '',
+        proposedDateLine: buildProposedDateLine(dateTime),
       },
     })
       .then((data) => {
@@ -216,18 +209,17 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   // "Resend invite" — fetch editable visit_invite template
   function handleResendInvite() {
     goToStep('resend');
-    setResendDate(null);
-    setResendTime(null);
-    fetchResendTemplate(null, null, contactInfo);
+    setResendDateTime(null);
+    fetchResendTemplate(null, contactInfo);
   }
 
   // Re-fetch template whenever the proposed date/time changes (only on the resend step, non-demo)
   useEffect(() => {
     if (step !== 'resend') return;
     if (demo) return;
-    fetchResendTemplate(resendDate, resendTime, contactInfo);
+    fetchResendTemplate(resendDateTime, contactInfo);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resendDate, resendTime]);
+  }, [resendDateTime]);
 
   // "Confirmed" — check for duplicate calendar events then open ScheduleVisitModal
   async function handleConfirmed() {
@@ -383,8 +375,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
 
   const isLocked = step === 'outcome_in_progress';
   const hasUnsavedChanges = !isLocked && !demo && step === 'resend' && !emailLoading && (
-    resendDate !== null ||
-    resendTime !== null ||
+    resendDateTime !== null ||
     emailSubject.trim() !== emailFetchedSubject.trim() ||
     emailBody.trim()    !== emailFetchedBody.trim()
   );
@@ -493,21 +484,11 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
             <Typography variant="body2" color="text.secondary">
               Optionally include a proposed date and time in the email:
             </Typography>
-            <Stack direction="row" spacing={1.5}>
-              <DatePicker
-                label="Proposed date"
-                value={resendDate}
-                onChange={(v) => setResendDate(v)}
-                slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                disablePast
-              />
-              <TimePicker
-                label="Proposed time"
-                value={resendTime}
-                onChange={(v) => setResendTime(v)}
-                slotProps={{ textField: { size: 'small', fullWidth: true } }}
-              />
-            </Stack>
+            <DateTimeEditor
+              value={resendDateTime}
+              onChange={(v) => setResendDateTime(v)}
+              disablePast
+            />
           </Stack>
           {emailLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
@@ -569,7 +550,6 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
   })();
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
       <>
         <FullScreenModal
           open={hubDialogOpen}
@@ -702,6 +682,5 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
           />
         )}
       </>
-    </LocalizationProvider>
   );
 }

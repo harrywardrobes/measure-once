@@ -5,9 +5,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimeEditor } from '../../components/DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { CalendarTask } from './types';
@@ -264,7 +262,6 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
   void getTaskUrgency;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
       <div id="tasks-section" ref={sectionRef} className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-2)' }}>Tasks</h3>
@@ -301,11 +298,10 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
               style={{ fontSize: 16 }}
             />
             <Box sx={{ mb: '8px' }}>
-              <DateTimePicker
+              <DateTimeEditor
                 label="Due date & time"
                 value={dueDate}
-                onChange={(v: Dayjs | null) => setDueDate(v)}
-                slotProps={{ textField: { fullWidth: true, size: 'small' } }}
+                onChange={(v) => setDueDate(v)}
               />
             </Box>
             <button
@@ -466,11 +462,12 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
 
                         {!isDone && !isViewer && editingTaskId === task.id ? (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <DateTimePicker
-                              value={editDueDate}
-                              onChange={(v: Dayjs | null) => setEditDueDate(v)}
-                              slotProps={{ textField: { size: 'small', sx: { fontSize: 12, width: 200 } } }}
-                            />
+                            <Box sx={{ width: 220 }}>
+                              <DateTimeEditor
+                                value={editDueDate}
+                                onChange={(v) => setEditDueDate(v)}
+                              />
+                            </Box>
                             <Box
                               component="button"
                               onClick={() => void saveDueDate(task.id)}
@@ -566,6 +563,5 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
           <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
         )}
       </div>
-    </LocalizationProvider>
   );
 }

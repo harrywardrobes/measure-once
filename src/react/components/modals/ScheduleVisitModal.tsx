@@ -30,9 +30,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimeEditor } from '../DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
@@ -339,7 +337,7 @@ export function ScheduleVisitModal({
     : `Schedule visit${ctx.contactName ? ` for ${ctx.contactName}` : ''}`;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
+    <>
       <FullScreenModal
         open={pastConfirmOpen}
         onClose={() => setPastConfirmOpen(false)}
@@ -432,11 +430,11 @@ export function ScheduleVisitModal({
               size="small"
             />
             <Stack direction="row" spacing={1.5}>
-              <DateTimePicker
+              <DateTimeEditor
                 label="Start"
                 value={startDt}
-                onChange={(v: Dayjs | null) => { setStartDt(v); setStartDtWasReset(false); }}
-                slotProps={{ textField: { id: 'cah-sv-start', fullWidth: true, size: 'small' } }}
+                onChange={(v) => { setStartDt(v); setStartDtWasReset(false); }}
+                id="cah-sv-start"
               />
               <TextField
                 id="cah-sv-duration"
@@ -547,6 +545,6 @@ export function ScheduleVisitModal({
         onKeepEditing={handleKeepEditing}
         onDiscard={handleCancel}
       />
-    </LocalizationProvider>
+    </>
   );
 }

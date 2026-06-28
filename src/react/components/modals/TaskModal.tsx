@@ -10,9 +10,7 @@ import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimeEditor } from '../DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
@@ -171,7 +169,6 @@ export function TaskModal({
   }
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
       <FullScreenModal
         open={open}
         onClose={handleClose}
@@ -241,11 +238,12 @@ export function TaskModal({
             size="small"
           />
 
-          <DateTimePicker
+          <DateTimeEditor
             label="Deadline"
             value={deadlineDt}
-            onChange={(v: Dayjs | null) => setDeadlineDt(v)}
-            slotProps={{ textField: { id: 'task-modal-deadline', fullWidth: true, size: 'small', required: true } }}
+            onChange={(v) => setDeadlineDt(v)}
+            id="task-modal-deadline"
+            required
           />
 
           <FormControl size="small" fullWidth>
@@ -272,6 +270,5 @@ export function TaskModal({
           </Typography>
         </Stack>
       </FullScreenModal>
-    </LocalizationProvider>
   );
 }

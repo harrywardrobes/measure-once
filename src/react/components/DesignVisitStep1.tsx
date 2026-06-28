@@ -4,9 +4,7 @@ import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimeEditor } from './DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { AddressInput } from './AddressInput';
@@ -134,19 +132,12 @@ export function DesignVisitStep1({
       : undefined;
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
       <Box>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', mb: 1.5 }}>
-          <DateTimePicker
+          <DateTimeEditor
             label="Visit date & time"
             value={parseVisitDate(data.visitDate)}
-            onChange={(v: Dayjs | null) => update({ visitDate: formatVisitDate(v) })}
-            slotProps={{
-              textField: {
-                size: 'small',
-                fullWidth: true,
-              },
-            }}
+            onChange={(v) => update({ visitDate: formatVisitDate(v) })}
           />
           <TextField
             label="Duration (minutes)"
@@ -258,7 +249,6 @@ export function DesignVisitStep1({
           sx={{ mt: '10px', alignItems: 'flex-start' }}
         />
       </Box>
-    </LocalizationProvider>
   );
 }
 
