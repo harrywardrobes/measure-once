@@ -209,7 +209,7 @@ app.use(express.json({ limit: '25mb' }));
 
 // Clean URLs for each page (no .html extension). Must precede express.static so the
 // extensionless paths win over any default static-index handling.
-// /trades, /admin, /projects, /invoices are protected — handled below after auth middleware is set up
+// /trades, /admin, /projects are protected — handled below after auth middleware is set up
 app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once',      description: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.' }));
 app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once',  description: 'Browse and manage your customer accounts, contact details, and project history.' }));
 app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once',    description: 'Update your personal details, preferences, and account settings.' }));
@@ -226,7 +226,6 @@ app.get('/admin.html', (req, res) => res.redirect(301, '/admin'));
 // Redirect .html variants of privilege-restricted pages to their clean URL
 // so the single protected route below is the only entry point.
 app.get('/projects.html', (req, res) => res.redirect(301, '/projects'));
-app.get('/invoices.html', (req, res) => res.redirect(301, '/invoices'));
 
 // Public design-visit sign-off page (no auth required — token-gated)
 app.get('/design-visit/sign-off', async (req, res) => {
@@ -3694,6 +3693,9 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
+// 'invoices' is retained as a valid (non-rendered) nav key after the dedicated
+// /invoices page was removed — BottomNav drops any stored key not in its NAV
+// array. Must match VALID_NAV_KEYS_SERVER in auth.js (see test:nav-key-sync).
 const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'designvisit', 'projects', 'invoices', 'trades', 'ideas']);
 const NAV_BAR_SIZE = 3;
 
@@ -3960,15 +3962,6 @@ app.get('/trades', isAuthenticated, (_req, res) => {
   res.redirect('/');
 });
 
-// Sales, Projects, Invoices — manager/admin only
-async function requireManagerOrAdminPage(req, res, next) {
-  await requirePageAuth(req, res, async () => {
-    const priv = getRequestPrivilegeLevel(req);
-    if (priv === 'manager' || priv === 'admin') return next();
-    return res.redirect('/access-restricted');
-  });
-}
-
 app.get('/access-restricted', isAuthenticated, (_req, res) => {
   res.render('access-restricted', { title: 'Access Restricted · Measure Once' });
 });
@@ -3984,9 +3977,6 @@ app.get('/survey', isAuthenticated, (_req, res) => {
 // never shadows the public token-gated /design-visit/sign-off route above.
 app.get('/design-visit', isAuthenticated, (_req, res) => {
   res.render('design-visit', { title: 'Design visit · Measure Once', description: 'Start a design visit on this device — works offline and syncs when you reconnect.' });
-});
-app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
-  res.render('invoices', { title: 'Invoices · Measure Once', description: 'Review, manage, and send customer invoices for completed wardrobe projects.' });
 });
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {

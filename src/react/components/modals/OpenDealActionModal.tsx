@@ -647,14 +647,14 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
             variant="outlined"
             fullWidth
             component={Link}
-            href="/invoices"
+            href={`/customers/${contactId}`}
             sx={{ justifyContent: 'flex-start', textAlign: 'left', py: 1.5 }}
             startIcon={<OpenInNewIcon />}
           >
             <Box>
-              <Typography variant="body1" sx={{ fontWeight: 600 }}>Amend estimate in QuickBooks</Typography>
+              <Typography variant="body1" sx={{ fontWeight: 600 }}>Review invoices &amp; estimates</Typography>
               <Typography variant="caption" color="text.secondary">
-                Opens the QuickBooks estimates &amp; invoices page
+                Opens this customer&apos;s detail page
               </Typography>
             </Box>
           </Button>

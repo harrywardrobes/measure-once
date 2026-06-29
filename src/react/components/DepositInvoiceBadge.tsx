@@ -23,7 +23,9 @@ export function DepositInvoiceBadge({
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
+    // Open the invoice in the customer-detail Invoices drawer (same page) via
+    // the `#inv-<id>` hash, which InvoicesSection listens for.
+    window.location.hash = `inv-${encodeURIComponent(depositInvoiceId)}`;
   };
   const title =
     paymentState === 'paid'    ? 'Deposit paid — view invoice' :

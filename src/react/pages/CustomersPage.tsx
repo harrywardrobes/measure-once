@@ -413,21 +413,21 @@ function matchInvoicesForContact(contact: Contact, invoices: QBInvoice[]): QBInv
 }
 
 function DepositInvoiceBadge({
-  depositInvoiceId,
   depositInvoiceDocNum,
   paymentState,
   loading,
+  onOpen,
 }: {
-  depositInvoiceId: string;
   depositInvoiceDocNum: string | null;
   paymentState?: 'paid' | 'partial' | 'unpaid' | null;
   loading?: boolean;
+  onOpen: () => void;
 }) {
   const label = depositInvoiceDocNum ? `Deposit inv. #${depositInvoiceDocNum}` : 'Deposit invoice';
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    window.location.href = `/invoices#inv-${encodeURIComponent(depositInvoiceId)}`;
+    onOpen();
   };
   const title =
     paymentState === 'paid'    ? 'Deposit paid — view invoice' :
@@ -981,10 +981,10 @@ function CustomerCard({
             <QBBadge invoices={invoices} onOpen={onOpenInvoice} />
             {depositInvoice && (
               <DepositInvoiceBadge
-                depositInvoiceId={depositInvoice.id}
                 depositInvoiceDocNum={depositInvoice.docNum}
                 paymentState={depositInvoicePaymentState}
                 loading={depositInvoiceLoading}
+                onOpen={() => onOpenInvoice(depositInvoice.id, [depositInvoice.id])}
               />
             )}
             <TasksBadge contactId={contact.id} openTaskCount={openTaskCount ?? 0} />

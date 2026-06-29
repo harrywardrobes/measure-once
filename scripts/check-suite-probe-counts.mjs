@@ -227,7 +227,7 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:admin-tab-skeletons',          'narrative — in-component data skeleton layer check'],
   ['test:photo-storage-errors',         'narrative — error sanitisation across upload/delete/download paths'],
   ['test:turnstile-signout',            'narrative — bfcache fix + signed-out redirect regression guard'],
-  ['test:invoice-panel-hidden',         'narrative — CSS visibility regression guard across six pages'],
+  ['test:invoice-panel-hidden',         'narrative — CSS visibility regression guard across five pages'],
   ['test:onboarding-conflicts',         'narrative — conflict detection + admin resolution e2e'],
   ['test:ideas',                        'narrative — CRUD + privilege checks for Ideas page'],
   ['test:settings-tab-load',            'narrative — race-condition regression guard for settings tab'],

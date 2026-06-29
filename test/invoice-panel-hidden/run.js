@@ -14,9 +14,6 @@ const PROBE_LABELS = [
   'Survey: page loads (HTTP 200)',
   'Survey: #inv-panel (old static panel) absent from DOM',
   'Survey: InvoiceDetailDrawer not open on initial load',
-  'Invoices: page loads (HTTP 200)',
-  'Invoices: #inv-panel (old static panel) absent from DOM',
-  'Invoices: InvoiceDetailDrawer not open on initial load',
   'Calendar: page loads (HTTP 200)',
   'Calendar: #inv-panel (old static panel) absent from DOM',
   'Calendar: InvoiceDetailDrawer not open on initial load',
@@ -29,7 +26,7 @@ const PROBE_LABELS = [
 // and that no MUI Drawer is visibly open on initial page load.
 //
 // Checks:
-//   - Home, Trades, Projects, Survey, Invoices, Calendar:
+//   - Home, Trades, Projects, Survey, Calendar:
 //       (A) #inv-panel is NOT present in the DOM (old static panel removed)
 //       (B) No [data-testid="invoice-detail-drawer"] element has its paper
 //           in a translated-open state on initial load
@@ -257,7 +254,6 @@ async function main() {
     { label: 'Trades',   path: '/trades' },
     { label: 'Projects', path: '/projects' },
     { label: 'Survey',   path: '/survey' },
-    { label: 'Invoices', path: '/invoices' },
   ];
 
   try {

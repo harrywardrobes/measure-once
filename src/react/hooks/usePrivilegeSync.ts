@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 
 const RESTRICTED_PATHS = new Set([
   '/projects', '/projects.html',
-  '/invoices', '/invoices.html',
 ]);
 
 /**

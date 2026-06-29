@@ -64,9 +64,6 @@ export const PROJECTS_SUBSTAGE_PREFIX = 'mo:projects:substage:';
 
 // ── Invoices ──────────────────────────────────────────────────────────────────
 
-/** Prefix for the per-user invoice list page number: `${INVOICE_PAGE_PREFIX}${userId}` */
-export const INVOICE_PAGE_PREFIX  = 'mo:invoices:page:';
-
 /** Prefix for the per-user invoice draft map: `${INVOICE_DRAFT_PREFIX}${userId}` */
 export const INVOICE_DRAFT_PREFIX = 'mo:invoices:draft:';
 

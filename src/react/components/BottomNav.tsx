@@ -11,8 +11,6 @@ import { NavCustomiseDialog } from './NavCustomiseDialog';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SquareFootIcon from '@mui/icons-material/SquareFoot';
 import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import AssignmentIcon from '@mui/icons-material/Assignment';
@@ -75,7 +73,6 @@ export const NAV: NavItem[] = [
   { key: 'projects',  href: '/projects',  label: 'Projects',  Icon: SquareFootIcon,       IconOutlined: SquareFootOutlinedIcon },
   { key: 'survey',    href: '/survey',    label: 'Survey',    Icon: AssignmentIcon,       IconOutlined: AssignmentOutlinedIcon },
   { key: 'designvisit', href: '/design-visit', label: 'Design visit', Icon: DesignServicesIcon, IconOutlined: DesignServicesOutlinedIcon },
-  { key: 'invoices',  href: '/invoices',  label: 'Invoices',  Icon: ReceiptLongIcon,      IconOutlined: ReceiptLongOutlinedIcon, managerOnly: true },
 ];
 
 const DEFAULT_PRIMARY_KEYS = ['home', 'customers', 'projects'];

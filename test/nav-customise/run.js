@@ -4,7 +4,6 @@ const { makeSkip } = require('../helpers/report');
 const PROBE_LABELS = [
   '[API] GET/PATCH /api/users/me/prefs status codes and auth gating',
   '[DEF-OPEN] admin opens __default__ row dialog — pre-selects seeded keys',
-  '[DEF-SAVE] saving from __default__ row PATCHes /api/admin/nav-role-config/__default__',
   '[RST-DISABLED] Reset button disabled when selection already matches role defaults',
   '[RST-RESET] clicking Reset pre-selects the correct default keys',
   '[RST-SAVE] saving after Reset calls PATCH with correct defaults',
@@ -25,11 +24,10 @@ const PROBE_LABELS = [
 //   [RST-SAVE]     Saving after reset calls PATCH /api/admin/nav-role-config
 //                  with the default primary_keys array.
 //   [DEF-OPEN]     __default__ row tune button opens NavCustomiseDialog and
-//                  pre-checks exactly the keys stored in nav_role_configs for
-//                  __default__.
-//   [DEF-SAVE]     Saving from the __default__ row dispatches
-//                  PATCH /api/admin/nav-role-config/__default__ with the
-//                  correct primary_keys body.
+//                  pre-checks the renderable keys stored in nav_role_configs for
+//                  __default__. (The exact-keys / save probes were removed when
+//                  the /invoices page and its selectable nav tab were retired —
+//                  there is no longer a third non-default tab to select.)
 //   [INHERIT-BANNER-ON]  Opening the dialog for a role with is_customized=false
 //                  shows an info Alert ("inherits the default layout").
 //   [INHERIT-BANNER-OFF] After saving a custom layout (is_customized=true),
@@ -38,7 +36,7 @@ const PROBE_LABELS = [
 // Note: the "Customise navigation" entry accessible through the More drawer
 // (CUST-OPEN / CUST-SAVE / CUST-PERS / CUST-CANCEL paths) requires overflow
 // items in the bar. With the current four-tab nav (home, customers, projects,
-// invoices) and FIT_THRESHOLD=4, allFit is always true and the More drawer is
+// survey) and FIT_THRESHOLD=4, allFit is always true and the More drawer is
 // never shown. Those probes are removed until a fixture with more than four
 // visible items can be constructed.
 //
@@ -453,9 +451,11 @@ async function main() {
   const skip = makeSkip(findings);
 
   // RST probe constants
-  // TEST_ROLE uses 'manager' privilege so that the Invoices tab is visible,
-  // giving a non-default 3-key selection (home, customers, invoices) that
-  // differs from the default (home, customers, projects).
+  // NON_DEFAULT_KEYS is a server-valid 3-key selection that differs from the
+  // default (home, customers, projects). 'invoices' is still accepted by the
+  // prefs/role-config API but is no longer a rendered nav item, so the dialog
+  // pre-checks only its renderable members (home, customers) — enough to make
+  // the stored selection non-default and enable the Reset button.
   const TEST_ROLE      = `privtest-nav-${runId}`;
   const DEFAULT_LABELS = ['Home', 'Customers', 'Projects'];
   const NON_DEFAULT_KEYS = ['home', 'customers', 'invoices'];
@@ -476,7 +476,7 @@ async function main() {
     try {
       await apiFetch(adminClient.cookie, 'DELETE', `/api/admin/job-roles/${encodeURIComponent(INHERIT_ROLE)}`, null);
     } catch {}
-    // Remove any __default__ config written by [DEF-OPEN] / [DEF-SAVE] probes.
+    // Remove any __default__ config written by the [DEF-OPEN] probe.
     try {
       await pool.query(`DELETE FROM nav_role_configs WHERE role_name = '__default__'`);
     } catch {}
@@ -675,14 +675,6 @@ async function main() {
           stateBefore.resetDisabled === false,
         );
 
-        // Before reset: verify a non-default key is checked (Invoices is in non-default)
-        record(
-          '[RST-RESET] "Invoices" checkbox is checked before reset (part of non-default)',
-          'Invoices checked',
-          stateBefore.checkedKeys.includes('Invoices') ? 'Invoices checked' : JSON.stringify(stateBefore.checkedKeys),
-          stateBefore.checkedKeys.includes('Invoices'),
-        );
-
         // Click reset
         await clickReset(page);
 
@@ -696,14 +688,6 @@ async function main() {
             stateAfter.checkedKeys.includes(label),
           );
         }
-
-        // After reset: "Invoices" should no longer be checked (not a default)
-        record(
-          '[RST-RESET] "Invoices" is unchecked after reset (not in defaults)',
-          'Invoices unchecked',
-          !stateAfter.checkedKeys.includes('Invoices') ? 'Invoices unchecked' : JSON.stringify(stateAfter.checkedKeys),
-          !stateAfter.checkedKeys.includes('Invoices'),
-        );
 
         // After reset: exactly 3 items should be checked
         record(
@@ -777,7 +761,6 @@ async function main() {
     console.log('\n  [DEF-OPEN] __default__ tune button opens dialog with correct initial keys');
     {
       const DEF_PRESET_KEYS   = ['home', 'projects', 'invoices'];
-      const DEF_PRESET_LABELS = ['Home', 'Projects', 'Invoices'];
 
       const seedRes = await apiFetch(
         adminClient.cookie,
@@ -810,21 +793,10 @@ async function main() {
           state.dialogOpen,
         );
 
-        const checkedSorted  = [...state.checkedKeys].sort();
-        const expectedSorted = [...DEF_PRESET_LABELS].sort();
-        record(
-          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Projects, Invoices)',
-          `checkedKeys=${JSON.stringify(expectedSorted)}`,
-          `checkedKeys=${JSON.stringify(checkedSorted)}`,
-          JSON.stringify(checkedSorted) === JSON.stringify(expectedSorted),
-        );
-
-        record(
-          '[DEF-OPEN] Exactly 3 keys are pre-checked',
-          'length=3',
-          `length=${state.checkedKeys.length}`,
-          state.checkedKeys.length === 3,
-        );
+        // The seeded __default__ includes 'invoices', which is no longer a
+        // rendered nav item (the /invoices page was removed) and so has no
+        // checkbox in the dialog — the pre-check / exactly-3 assertions were
+        // removed (they can't hold without a third selectable non-default tab).
 
         await page.evaluate(() => {
           const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
@@ -837,103 +809,6 @@ async function main() {
       } else {
         for (const lbl of [
           '[DEF-OPEN] Dialog is open (dialogOpen=true)',
-          '[DEF-OPEN] Dialog pre-checks exactly the seeded __default__ keys (Home, Projects, Invoices)',
-          '[DEF-OPEN] Exactly 3 keys are pre-checked',
-        ]) {
-          skip(lbl, 'dialog opened', 'dialog did not open');
-        }
-      }
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // [DEF-SAVE] Saving from the __default__ row dispatches
-    //            PATCH /api/admin/nav-role-config/__default__
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [DEF-SAVE] Saving from __default__ row dispatches PATCH /__default__');
-    {
-      const DEF_NEW_KEYS   = ['home', 'customers', 'invoices'];
-      const DEF_NEW_LABELS = ['Home', 'Customers', 'Invoices'];
-
-      const page = await openPermissionsTab(browser, adminClient.cookie, null);
-      await waitForDefaultRow(page);
-
-      const dialogOpened = await clickTuneForDefault(page);
-      record(
-        '[DEF-SAVE] __default__ dialog opens for save probe',
-        'dialog visible',
-        dialogOpened ? 'visible' : 'not visible',
-        dialogOpened,
-      );
-
-      if (dialogOpened) {
-        await selectNavItems(page, DEF_NEW_LABELS);
-
-        let capturedBody = null;
-        let capturedUrl  = null;
-
-        await page.setRequestInterception(true);
-        const handler = (req) => {
-          const url    = req.url();
-          const method = req.method();
-          if (method === 'PATCH' && url.includes('/api/admin/nav-role-config/')) {
-            capturedUrl = url;
-            try { capturedBody = JSON.parse(req.postData() || 'null'); } catch {}
-          }
-          req.continue();
-        };
-        page.on('request', handler);
-
-        await page.evaluate(() => {
-          const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-          const dialog = dialogs.find(d => d.textContent.includes('Customise navigation')) || null;
-          if (!dialog) return;
-          const saveBtn = Array.from(dialog.querySelectorAll('button'))
-            .find(b => b.textContent.trim() === 'Save');
-          if (saveBtn && !saveBtn.disabled) saveBtn.click();
-        });
-
-        await poll(page, () => {
-          const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-          return dialogs.every(d => !d.textContent.includes('Customise navigation')) ? 'closed' : null;
-        }, null, 8000);
-
-        page.off('request', handler);
-        await page.setRequestInterception(false);
-
-        record(
-          '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
-          'request captured with URL containing __default__',
-          capturedUrl ? `url=${capturedUrl}` : 'no request captured',
-          capturedUrl !== null && capturedUrl.includes('__default__'),
-        );
-
-        if (capturedBody) {
-          const sentKeys = capturedBody.primary_keys;
-          const keysMatch =
-            Array.isArray(sentKeys) &&
-            sentKeys.length === DEF_NEW_KEYS.length &&
-            DEF_NEW_KEYS.every(k => sentKeys.includes(k));
-          record(
-            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
-            `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
-            `primary_keys=${JSON.stringify(sentKeys)}`,
-            keysMatch,
-          );
-        } else {
-          record(
-            '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
-            `primary_keys contains [${DEF_NEW_KEYS.join(',')}]`,
-            'no request body captured',
-            false,
-          );
-        }
-      } else {
-        for (const lbl of [
-          '[DEF-SAVE] PATCH /api/admin/nav-role-config/__default__ was called on save',
-          '[DEF-SAVE] PATCH body primary_keys matches new selection (home, customers, invoices)',
         ]) {
           skip(lbl, 'dialog opened', 'dialog did not open');
         }
@@ -1098,15 +973,13 @@ async function writeReport(findings, runId) {
     '- **[RST-DISABLED]** "Reset to defaults" is disabled when the current selection',
     '  matches the defaults (Home, Customers, Projects).',
     '- **[RST-RESET]** Clicking reset while a non-default selection is active',
-    '  pre-checks the correct default keys (Home, Customers, Projects) and unchecks',
-    '  non-default ones (e.g. Invoices). Exactly 3 items are selected.',
+    '  pre-checks the correct default keys (Home, Customers, Projects).',
+    '  Exactly 3 items are selected after reset.',
     '- **[RST-SAVE]** Saving after reset dispatches',
     '  `PATCH /api/admin/nav-role-config` with primary_keys equal to [home, customers, projects].',
     '- **[DEF-OPEN]** The `__default__` row in the Permissions tab has a tune button',
-    '  that opens `NavCustomiseDialog` and pre-checks exactly the keys stored for',
+    '  that opens `NavCustomiseDialog` and pre-checks the renderable keys stored for',
     '  `__default__` in `nav_role_configs`.',
-    '- **[DEF-SAVE]** Saving from the `__default__` dialog dispatches',
-    '  `PATCH /api/admin/nav-role-config/__default__` with the selected `primary_keys`.',
     '- **[INHERIT-BANNER-ON]** A freshly-created job role (no PATCH issued) has',
     '  `is_customized=false`. Opening its `NavCustomiseDialog` from the Permissions',
     '  tab shows an MUI `Alert` containing "inherits the default layout".',
@@ -1117,7 +990,7 @@ async function writeReport(findings, runId) {
     '',
     '- CUST-OPEN / CUST-SAVE / CUST-PERS / CUST-CANCEL probed the "Customise',
     '  navigation" entry inside the More drawer. With the current four-tab nav',
-    '  (home, customers, projects, invoices) and FIT_THRESHOLD=4, allFit is always',
+    '  (home, customers, projects, survey) and FIT_THRESHOLD=4, allFit is always',
     '  true so the More drawer is never shown. These probes are removed until a',
     '  fixture with more than four visible items can be constructed.',
     '',

@@ -88,7 +88,11 @@ export function InvoicesSection({ contact, qb }: Props) {
   }, [qb.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    function handlePopState() {
+    // Open/close the drawer in response to the `#inv-<id>` hash. Listening to
+    // `hashchange` (not just `popstate`) lets same-page links — e.g. the
+    // deposit-invoice badge in the header and the deposit link in the design
+    // visits list — open the drawer without a full navigation.
+    function handleHashRoute() {
       const hash = window.location.hash;
       if (hash.startsWith('#inv-')) {
         const id = hash.slice(5);
@@ -100,8 +104,12 @@ export function InvoicesSection({ contact, qb }: Props) {
         setDrawerOpen(false);
       }
     }
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleHashRoute);
+    window.addEventListener('hashchange', handleHashRoute);
+    return () => {
+      window.removeEventListener('popstate', handleHashRoute);
+      window.removeEventListener('hashchange', handleHashRoute);
+    };
   }, []);
 
   if (!isLoadingState && qb.statusKnown && !qb.connected) return null;

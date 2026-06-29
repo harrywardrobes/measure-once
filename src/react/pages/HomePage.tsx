@@ -563,17 +563,9 @@ function InvoicesSection({
   if (overdue.length === 0) return null;
   return (
     <Box sx={{ mb: 3 }}>
-      <SectionHeader title="Overdue Invoices" linkLabel="See all" linkHref="/invoices" />
+      <SectionHeader title="Overdue Invoices" />
       {overdue.map((inv) => (
-        <HomeCard
-          key={inv.id}
-          onClick={() => {
-            const opener = (window as unknown as { openInvoicePanel?: (id: string) => void })
-              .openInvoicePanel;
-            if (typeof opener === 'function') opener(inv.id);
-            else location.href = '/invoices';
-          }}
-        >
+        <HomeCard key={inv.id}>
           <Stack direction="row" spacing={1} sx={{  alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="body2" noWrap sx={{  minWidth: 0, fontWeight: 600 }}>
               {inv.customerName || '—'}

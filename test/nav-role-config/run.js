@@ -2,9 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 
 const UI_PROBE_LABELS = [
-  '[UI-ROLE-NAV] Bar contains role-specific keys (home, trades, invoices)',
   '[UI-ROLE-NAV] Default manager key "sales" is NOT in bar (overridden by role config)',
-  '[UI-ROLE-NAV] Default manager key "projects" is NOT in bar (overridden by role config)',
 ];
 
 // test/nav-role-config/run.js
@@ -799,8 +797,11 @@ async function main() {
       // Strategy:
       //   1. Assign the manager's job_role → ROLE_NAME (which has CUSTOM_KEYS).
       //   2. Open / as the manager.
-      //   3. Verify the bar contains exactly the keys in CUSTOM_KEYS (home,
-      //      trades, invoices) and NOT the manager defaults (sales, projects).
+      //   3. With the current 4-item nav all tabs fit (FIT_THRESHOLD=4), so the
+      //      role-config primary-key *selection* is not observable in the bar —
+      //      we only assert a default key that is never a NAV item ('sales')
+      //      stays absent. (The 'invoices'/'trades' render checks were removed
+      //      when the /invoices page and its nav item were retired.)
       //   4. Reset job_role.
       // ════════════════════════════════════════════════════════════════════════
       console.log('\n  [UI-ROLE-NAV] BottomNav renders role-specific tabs');
@@ -818,15 +819,11 @@ async function main() {
       const page = await openHomePage(browser, managerClient2.cookie);
 
       const barKeys = await readBarKeys(page);
-      const expectedKeys  = CUSTOM_KEYS; // ['home', 'trades', 'invoices']
-      const managerDefaults = ['sales', 'projects'];
+      // 'projects' is a NAV item that renders whenever all tabs fit, so it can no
+      // longer be "overridden" out of the bar by a role config — only 'sales'
+      // (never a NAV item) is a meaningful absence check now.
+      const managerDefaults = ['sales'];
 
-      record(
-        '[UI-ROLE-NAV] Bar contains role-specific keys (home, trades, invoices)',
-        `bar includes ${JSON.stringify(expectedKeys)}`,
-        `bar=${JSON.stringify(barKeys)}`,
-        !!barKeys && expectedKeys.every(k => barKeys.includes(k)),
-      );
       for (const key of managerDefaults) {
         record(
           `[UI-ROLE-NAV] Default manager key "${key}" is NOT in bar (overridden by role config)`,

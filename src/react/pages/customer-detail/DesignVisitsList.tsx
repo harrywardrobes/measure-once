@@ -811,7 +811,7 @@ export function DesignVisitsList({ contactId, visits, loading, error, fromCache,
                           <span style={sxMetaSep}>·</span>
                           <a
                             data-testid="dv-deposit-invoice-link"
-                            href={`/invoices#inv-${encodeURIComponent(v.deposit_invoice_id)}`}
+                            href={`#inv-${encodeURIComponent(v.deposit_invoice_id)}`}
                             style={linkStyle}
                             title={linkTitle}
                             onClick={e => e.stopPropagation()}

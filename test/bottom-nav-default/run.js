@@ -2,7 +2,7 @@
 const { makeSkip } = require('../helpers/report');
 
 const DEF_UI_PROBE_LABELS = [
-  '[DEF-UI] Bar contains custom default keys (home, projects, invoices)',
+  '[DEF-UI] Bar contains renderable custom default keys (home, projects)',
   '[DEF-UI] Default "customers" key is NOT in bar (overridden by custom default)',
   '[DEF-UI-RESTORE] Bar falls back to member defaults (home, customers, projects)',
 ];
@@ -115,7 +115,7 @@ function readBarKeys(page) {
   return page.evaluate(() => {
     const nav = document.querySelector('nav.bottom-nav#main-content');
     if (!nav) return null;
-    return ['home', 'customers', 'projects', 'invoices']
+    return ['home', 'customers', 'projects']
       .filter(k => !!nav.querySelector(`#bnav-${k}`));
   });
 }
@@ -260,7 +260,8 @@ async function main() {
         //
         // Strategy:
         //   The __default__ is already patched to CUSTOM_KEYS above.  Log in as
-        //   member (no job_role) and verify the bar shows home, projects, invoices.
+        //   member (no job_role) and verify the bar shows the renderable custom
+        //   keys (home, projects); 'invoices' is configured but no longer rendered.
         // ════════════════════════════════════════════════════════════════════════
         console.log('\n  [DEF-UI] BottomNav renders admin-configured __default__ tabs for no-role user');
 
@@ -270,11 +271,15 @@ async function main() {
         const page = await openHomePage(browser, memberClient2.cookie);
         const barKeys = await readBarKeys(page);
 
+        // 'invoices' is part of the custom __default__ config but is no longer a
+        // rendered nav item (the /invoices page was removed), so the bar filters
+        // it out — assert only the renderable custom keys are present.
+        const renderableCustomKeys = CUSTOM_KEYS.filter(k => k !== 'invoices');
         record(
-          '[DEF-UI] Bar contains custom default keys (home, projects, invoices)',
-          `bar includes ${JSON.stringify(CUSTOM_KEYS)}`,
+          '[DEF-UI] Bar contains renderable custom default keys (home, projects)',
+          `bar includes ${JSON.stringify(renderableCustomKeys)}`,
           `bar=${JSON.stringify(barKeys)}`,
-          !!barKeys && CUSTOM_KEYS.every(k => barKeys.includes(k)),
+          !!barKeys && renderableCustomKeys.every(k => barKeys.includes(k)),
         );
         record(
           '[DEF-UI] Default "customers" key is NOT in bar (overridden by custom default)',

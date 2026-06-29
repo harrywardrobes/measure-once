@@ -4,14 +4,12 @@
 // End-to-end test for the bottom navigation bar with the current four-tab nav.
 // Verifies:
 //
-//   [M-BAR]  Member bar shows Home, Customers, Projects — all three visible tabs
-//            render directly in the bar; NO "More" button present.
-//   [MG-BAR] Manager bar shows Home, Customers, Projects, Invoices — all four
-//            visible tabs render directly; NO "More" button present.
+//   [M-BAR]  Member bar shows Home, Customers, Projects, Survey — all four
+//            visible tabs render directly in the bar; NO "More" button present.
+//   [MG-BAR] Manager bar shows the same four tabs (Home, Customers, Projects,
+//            Survey) — no manager-only tabs remain; NO "More" button present.
 //   [M-ACT]  Member active-tab highlight: Home at /, Customers at /customers,
 //            Projects at /projects.
-//   [MG-ACT] Manager Invoices tab highlights directly in the bar when at
-//            /invoices — no "More" overflow needed.
 //
 // With FIT_THRESHOLD = 4 and the current nav having at most 4 items, allFit is
 // always true so the primary/overflow split and "More" button are never shown.
@@ -114,7 +112,7 @@ function readBarState(page) {
       home:      inBar('bnav-home'),
       customers: inBar('bnav-customers'),
       projects:  inBar('bnav-projects'),
-      invoices:  inBar('bnav-invoices'),
+      survey:    inBar('bnav-survey'),
       more:      inBar('bnav-more'),
     };
   });
@@ -273,10 +271,10 @@ async function main() {
         !!(bar && bar.projects),
       );
       record(
-        '[M-BAR] Invoices NOT in member bar (manager-only)',
-        'bnav-invoices absent from nav',
-        bar ? (bar.invoices ? 'present' : 'absent') : 'bar state null',
-        !!(bar && !bar.invoices),
+        '[M-BAR] Survey in member bar',
+        'bnav-survey present in nav',
+        bar ? (bar.survey ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.survey),
       );
       record(
         '[M-BAR] More button NOT present for member (all tabs fit)',
@@ -290,7 +288,7 @@ async function main() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // [MG-BAR] Manager bar layout: Home + Customers + Projects + Invoices, no More
+    // [MG-BAR] Manager bar layout: Home + Customers + Projects + Survey, no More
     // ══════════════════════════════════════════════════════════════════════════
     console.log('\n  [MG-BAR] Manager bottom bar');
     {
@@ -316,10 +314,10 @@ async function main() {
         !!(bar && bar.projects),
       );
       record(
-        '[MG-BAR] Invoices in manager bar (manager-only tab)',
-        'bnav-invoices present in nav',
-        bar ? (bar.invoices ? 'present' : 'missing') : 'bar state null',
-        !!(bar && bar.invoices),
+        '[MG-BAR] Survey in manager bar (identical to member bar — no manager-only tabs)',
+        'bnav-survey present in nav',
+        bar ? (bar.survey ? 'present' : 'missing') : 'bar state null',
+        !!(bar && bar.survey),
       );
       record(
         '[MG-BAR] More button NOT present for manager (all 4 tabs fit within threshold)',
@@ -398,60 +396,6 @@ async function main() {
       }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // [MG-ACT] Manager Invoices highlights directly in bar at /invoices;
-    //          no "More" overflow needed. Navigating to a different primary tab
-    //          deselects Invoices.
-    // ══════════════════════════════════════════════════════════════════════════
-    console.log('\n  [MG-ACT] Manager active-tab: /invoices highlights Invoices directly');
-    {
-      const page = await openPage(browser, managerClient.cookie, '/invoices');
-
-      const state = await readBarTabState(page, 'invoices');
-      record(
-        '[MG-ACT] #bnav-invoices has data-selected="true" at /invoices',
-        'selected',
-        state ? (state.selected ? 'selected' : 'not selected') : 'state null',
-        !!(state && state.selected),
-      );
-      record(
-        '[MG-ACT] [data-more-selected] absent at /invoices (primary tab, no overflow)',
-        'absent',
-        state ? (state.moreSelected ? 'present (unexpected)' : 'absent') : 'state null',
-        !!(state && !state.moreSelected),
-      );
-      record(
-        '[MG-ACT] More button absent at /invoices (allFit=true)',
-        'bnav-more absent',
-        state ? (state.morePresent ? 'present (unexpected)' : 'absent') : 'state null',
-        !!(state && !state.morePresent),
-      );
-
-      // Push to / (home) and verify Invoices deselects
-      await page.evaluate(() => {
-        history.pushState({}, '', '/');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      });
-      const invoicesDeselected = await waitForTabSelected(page, 'invoices', false, 5000);
-      record(
-        '[MG-ACT] #bnav-invoices loses data-selected after pushState to /',
-        'not selected',
-        invoicesDeselected ? 'not selected' : 'still selected',
-        invoicesDeselected,
-      );
-
-      const homeSelected = await waitForTabSelected(page, 'home', true, 5000);
-      record(
-        '[MG-ACT] #bnav-home becomes selected after pushState to /',
-        'selected',
-        homeSelected ? 'selected' : 'not selected',
-        homeSelected,
-      );
-
-      await page.close().catch(() => {});
-      await page.__ctx.close().catch(() => {});
-    }
-
   } catch (e) {
     record('test harness', 'no uncaught error', `error: ${e.message}`, false);
     console.error(e);
@@ -496,15 +440,12 @@ async function writeReport(findings, runId) {
     '',
     '## Coverage',
     '',
-    '- **[M-BAR]**  Member bar renders Home + Customers + Projects directly; no "More"',
-    '              button. Invoices (manager-only) is absent.',
-    '- **[MG-BAR]** Manager bar renders Home + Customers + Projects + Invoices directly;',
+    '- **[M-BAR]**  Member bar renders Home + Customers + Projects + Survey directly;',
     '              no "More" button. FIT_THRESHOLD=4 means all 4 tabs fit.',
+    '- **[MG-BAR]** Manager bar renders the same four tabs (Home + Customers + Projects',
+    '              + Survey) — no manager-only tabs remain; no "More" button.',
     '- **[M-ACT]**  Active-tab highlight works for each primary tab in the member bar:',
     '              Home at /, Customers at /customers, Projects at /projects.',
-    '- **[MG-ACT]** Invoices highlights directly in the manager bar at /invoices;',
-    '              [data-more-selected] is absent and #bnav-more is not in the DOM.',
-    '              pushState to / deselects Invoices and selects Home.',
     '',
     '## Relevant files',
     '',

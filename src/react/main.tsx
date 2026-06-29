@@ -74,7 +74,6 @@ const AdminRequestsPage  = React.lazy(() => import('./pages/admin/AdminRequestsP
 const AdminAuditLogPage  = React.lazy(() => import('./pages/admin/AdminAuditLogPage').then(m => ({ default: m.AdminAuditLogPage })));
 const IdeasPage              = React.lazy(() => import('./pages/IdeasPage').then(m => ({ default: m.IdeasPage })));
 const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
-const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
 const DesignVisitStandalonePage  = React.lazy(() => import('./pages/DesignVisitStandalonePage').then(m => ({ default: m.DesignVisitStandalonePage })));
 const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
@@ -204,7 +203,6 @@ const MOUNTS: Array<{
   { id: 'tab-workflow',         render: () => <WorkflowPage /> },
   { id: 'ideas-page-mount',       render: () => <IdeasPage /> },
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
-  { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
   { id: 'design-visit-view',      render: () => <DesignVisitStandalonePage /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> }, // public-island

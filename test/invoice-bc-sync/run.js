@@ -6,10 +6,6 @@ const PROBE_LABELS = [
   '[BC-A] listener tab received a mo_invoices message (BC event delivered)',
   '[BC-A] InvoicesSection re-fetches invoices after mo_invoices message',
   '[BC-A] re-fetch occurs without a full page reload',
-  '[BC-B] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
-  '[BC-B] listener tab received a mo_invoices message (BC event delivered)',
-  '[BC-B] StandaloneInvoicesPage re-fetches invoices after mo_invoices message',
-  '[BC-B] re-fetch occurs without a full page reload',
 ];
 
 // test/invoice-bc-sync/run.js
@@ -17,12 +13,12 @@ const PROBE_LABELS = [
 // Puppeteer probe: when an admin saves an invoice in
 // InvoiceDetailDrawer (via the "Save changes" button), the drawer posts a
 // { type: 'invoice-saved' } message on the 'mo_invoices' BroadcastChannel.
-// Both InvoicesSection (customer-detail) and StandaloneInvoicesPage subscribe
-// to that channel and call qb.refresh() in response.  This test exercises the
-// full path from the UI save action through to the cross-tab refresh.
+// InvoicesSection (customer-detail) subscribes to that channel and calls
+// qb.refresh() in response.  This test exercises the full path from the UI
+// save action through to the cross-tab refresh.
 //
-// Two probes — each opens a listener page and a separate sender page in the
-// same browser so BroadcastChannel messages route correctly:
+// One probe — opens a listener page and a separate sender page in the same
+// browser so BroadcastChannel messages route correctly:
 //
 //   (BC-A) Customer-detail InvoicesSection listener: the admin opens
 //          InvoiceDetailDrawer on a second tab by clicking an invoice row,
@@ -31,10 +27,7 @@ const PROBE_LABELS = [
 //          InvoiceDetailDrawer.tsx.  Asserts the listener tab makes a second
 //          GET /api/quickbooks/invoices without a full page reload.
 //
-//   (BC-B) StandaloneInvoicesPage listener: same save action on the sender
-//          tab; asserts the /invoices listener tab re-fetches without reload.
-//
-// Both probes use fetch interception (evaluateOnNewDocument) to stub all API
+// The probe uses fetch interception (evaluateOnNewDocument) to stub all API
 // calls and track invoice-list fetches via window.__invoiceFetchCount.  A
 // window.__pageLoadToken (set once per page load) confirms no full reload.
 //
@@ -213,7 +206,7 @@ function pageInterceptFetch(contactId, contactJson, invoicesJson, invDetailJson,
 
       if (name === 'mo_invoices') {
         // Return a proxy that wraps the onmessage handler to count messages.
-        // InvoicesSection / StandaloneInvoicesPage do `bc.onmessage = handler`.
+        // InvoicesSection does `bc.onmessage = handler`.
         // Our wrapper increments __moInvoicesMsgCount before calling through.
         return new Proxy(ch, {
           set: function(target, prop, value) {
@@ -559,15 +552,11 @@ async function writeReport(runId) {
     '  `new BroadcastChannel(\'mo_invoices\').postMessage({ type: \'invoice-saved\' })`.',
     '  Asserts the listener tab makes a second `GET /api/quickbooks/invoices`',
     '  without a full page reload.',
-    '- **(BC-B)** `StandaloneInvoicesPage` listener: same save action on the',
-    '  sender tab; asserts the `/invoices` listener tab re-fetches without',
-    '  reload.',
     '',
     '## Relevant files',
     '',
     '- `src/react/components/InvoiceDetailDrawer.tsx` — fires BC event after save',
     '- `src/react/pages/customer-detail/InvoicesSection.tsx` — BC listener',
-    '- `src/react/pages/StandaloneInvoicesPage.tsx` — BC listener',
   ];
   fs.writeFileSync(REPORT_PATH, lines.join('\n'));
   console.log(`  Report: ${path.relative(process.cwd(), REPORT_PATH)}`);
@@ -668,7 +657,6 @@ async function main() {
   }
 
   let listenerPageA = null;
-  let listenerPageB = null;
 
   try {
 
@@ -782,115 +770,11 @@ async function main() {
       }
     }
 
-    // ── Probe BC-B: StandaloneInvoicesPage (/invoices) listener ─────────────
-    console.log('\n  ─── Probe BC-B: StandaloneInvoicesPage (/invoices) listener ───');
-
-    listenerPageB = await setupListenerPage(browser, adminClient.cookie);
-    const logsB = [];
-    listenerPageB.on('console',   m => logsB.push(`[${m.type()}] ${m.text()}`));
-    listenerPageB.on('pageerror', e => logsB.push(`[pageerror] ${e.message}`));
-
-    const urlB = `${BASE}/invoices`;
-    console.log(`  Listener B: loading ${urlB}`);
-    const respB = await listenerPageB.goto(urlB, { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-    if (!respB || !respB.ok()) {
-      for (const l of PROBE_LABELS.slice(4)) {
-        record(l, 'listener page loads (200)', `${respB ? respB.status() : 0}`, false);      }
-    } else {
-      console.log('  Listener B: waiting for initial invoice fetch…');
-      const initialFetchB = await pollUntil(
-        listenerPageB,
-        () => (window.__invoiceFetchCount >= 1 ? window.__invoiceFetchCount : null),
-        15000, 200,
-      );
-
-      if (!initialFetchB) {
-        const unstubbed = await listenerPageB.evaluate(() => window.__unstubbed || []).catch(() => []);
-        for (const l of PROBE_LABELS.slice(4)) {
-          record(l, 'fetch count >= 1 after initial load', 'never reached 1',
-            false, `unstubbed=${JSON.stringify(unstubbed)}; logs: ${logsB.slice(-10).join(' | ')}`);
-        }
-      } else {
-        console.log(`  Listener B: initial fetch count = ${initialFetchB}`);
-
-        const tokenBeforeB = await listenerPageB.evaluate(() => window.__pageLoadToken).catch(() => null);
-        const countBeforeB = await listenerPageB.evaluate(() => window.__invoiceFetchCount).catch(() => 0);
-
-        const senderB = await runSenderSave(browser, adminClient.cookie);
-
-        if (!senderB.ok) {
-          for (const l of PROBE_LABELS.slice(4)) {
-            record(l, 'sender save succeeded', `sender failed: ${senderB.detail}`, false);          }
-        } else {
-          // Assert 1: production save endpoint intercepted.
-          record(
-            '[BC-B] POST /api/quickbooks/invoice/:id intercepted (production code reached)',
-            '__invoiceSaveCalled = true',
-            `__invoiceSaveCalled = ${senderB.saveCalled}`,
-            !!senderB.saveCalled,
-          );
-
-          // Assert 2: listener tab received a 'mo_invoices' message specifically.
-          // qb-invoices-sync is silenced on this tab — only mo_invoices can fire.
-          console.log('  Listener B: waiting for mo_invoices message…');
-          const moCountB = await pollUntil(
-            listenerPageB,
-            () => (window.__moInvoicesMsgCount >= 1 ? window.__moInvoicesMsgCount : null),
-            10000, 150,
-          );
-
-          record(
-            '[BC-B] listener tab received a mo_invoices message (BC event delivered)',
-            '__moInvoicesMsgCount >= 1',
-            moCountB ? `__moInvoicesMsgCount = ${moCountB}` : '__moInvoicesMsgCount = 0 (no message received)',
-            !!moCountB,
-            moCountB ? '' : logsB.slice(-10).join(' | '),
-          );
-
-          // Assert 3: StandaloneInvoicesPage re-fetches after the mo_invoices message.
-          const expectedCountB = countBeforeB + 1;
-          console.log(`  Listener B: waiting for fetch count to reach ${expectedCountB}…`);
-          const countAfterB = await pollUntil(
-            listenerPageB,
-            (expected) => (window.__invoiceFetchCount >= expected ? window.__invoiceFetchCount : null),
-            12000, 200,
-            [expectedCountB],
-          );
-
-          record(
-            '[BC-B] StandaloneInvoicesPage re-fetches invoices after mo_invoices message',
-            `fetch count >= ${expectedCountB}`,
-            countAfterB
-              ? `fetch count = ${countAfterB}`
-              : `timed out; count still at ${countBeforeB}`,
-            !!countAfterB,
-            countAfterB ? '' : logsB.slice(-15).join(' | '),
-          );
-
-          // Assert 4: no full page reload occurred.
-          const tokenAfterB = await listenerPageB.evaluate(() => window.__pageLoadToken).catch(() => null);
-          const noReloadB   = tokenAfterB !== null && tokenAfterB === tokenBeforeB;
-          record(
-            '[BC-B] re-fetch occurs without a full page reload',
-            'page-load token unchanged after BC re-fetch',
-            noReloadB
-              ? `token preserved (${tokenAfterB})`
-              : `token changed: before=${tokenBeforeB} after=${tokenAfterB}`,
-            noReloadB,
-          );
-
-          await senderB.page.close().catch(() => {});
-        }
-      }
-    }
-
   } catch (e) {
     record('test harness', 'no error', `error: ${e.message}`, false,
       (logBuf || []).slice(-20).join(''));
   } finally {
     if (listenerPageA) await listenerPageA.close().catch(() => {});
-    if (listenerPageB) await listenerPageB.close().catch(() => {});
     if (browser)       await browser.close().catch(() => {});
   }
 

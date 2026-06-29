@@ -2213,6 +2213,12 @@ async function setupAuth(app) {
   });
 
   // Admin: upsert nav primary_keys for a specific role.
+  // NOTE: 'invoices' is retained as a valid (configurable) nav key even though
+  // the dedicated /invoices page and its bottom-nav item were removed. It is a
+  // non-rendered allow-list entry (like 'sales'/'trades'/'ideas') — BottomNav
+  // filters any stored key not present in its NAV array, so a stale 'invoices'
+  // key in a saved role/user nav config is simply dropped on render. Kept in
+  // sync with VALID_NAV_KEYS in server.js (see test:nav-key-sync).
   const VALID_NAV_KEYS_SERVER = new Set([
     'home', 'customers', 'sales', 'survey', 'designvisit', 'projects', 'invoices', 'trades', 'ideas',
   ]);

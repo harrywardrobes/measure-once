@@ -3,8 +3,8 @@
  *
  * All React island roots share the same JS bundle, so module-level variables
  * are shared across every `createRoot` instance on the page. This lets
- * CommandPalette, StandaloneInvoicesPage, HomePage, etc. all consume the same
- * cached data without each issuing independent network requests.
+ * CommandPalette, the customer-detail Invoices section, HomePage, etc. all
+ * consume the same cached data without each issuing independent network requests.
  *
  * Fetch lifecycle:
  *  - `triggerLoad()` is idempotent — if a fetch is already in progress or

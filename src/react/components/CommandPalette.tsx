@@ -3,11 +3,8 @@ import { ADMIN_ACTIVE_GROUP_PREFIX, ADMIN_ACTIVE_TAB_PREFIX, CP_RECENT_CUSTOMERS
 import { useAuth } from '../contexts/AuthContext';
 import { loadSearchSettings } from '../lib/searchSettings';
 import type { SearchSettings } from '../lib/searchSettings';
-import { useQBInvoices } from '../hooks/useQBInvoices';
 import { useContactSearch } from '../hooks/useContactSearch';
-import { triggerLoad as triggerQBLoad } from '../lib/qbInvoicesStore';
 import { clearOfflineData } from '../lib/registerServiceWorker';
-import type { InvoiceSummary } from './InvoiceDetailDrawer';
 import { usePrivilege } from '../hooks/usePrivilege';
 import { useDevMode } from '../hooks/useDevMode';
 import { FullScreenModal } from './modals/FullScreenModal';
@@ -24,7 +21,6 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import GroupIcon from '@mui/icons-material/Group';
 import HomeIcon from '@mui/icons-material/Home';
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban';
-import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -68,7 +64,6 @@ const ALL_ACTIONS: Action[] = [
   { id: 'go-home',         label: 'Home dashboard',         hint: 'Go to the main dashboard',               category: 'Navigate', icon: <HomeIcon fontSize="small" />,            href: '/' },
   { id: 'go-projects',     label: 'Projects tracker',       hint: 'Active workshop and delivery jobs',      category: 'Navigate', icon: <ViewKanbanIcon fontSize="small" />,      href: '/projects' },
   { id: 'go-survey',       label: 'Survey visits',          hint: 'View and manage survey visits',          category: 'Navigate', icon: <AssignmentIcon fontSize="small" />,      href: '/survey' },
-  { id: 'go-invoices',     label: 'Invoices & payments',    hint: 'View and send invoices via QuickBooks',  category: 'Navigate', icon: <ReceiptLongIcon fontSize="small" />,     href: '/invoices' },
   { id: 'go-admin',        label: 'Admin panel',            hint: 'Manage users and team access',           category: 'Navigate', icon: <AdminPanelSettingsIcon fontSize="small" />, href: '/admin' },
   { id: 'go-profile',      label: 'Your profile',           hint: 'Update your account details',            category: 'Account',  icon: <PersonIcon fontSize="small" />,          href: '/profile' },
   { id: 'filter-workshop', label: 'Customers · Workshop',   hint: 'Show only customers in Workshop',        category: 'Filter',   icon: <SettingsIcon fontSize="small" />,        href: '/customers?stage=workshop' },
@@ -201,7 +196,6 @@ export function CommandPalette() {
   const [isDevelopment, setIsDevelopment] = useState<boolean | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const { invoices: qbInvoices, loading: invoicesLoading } = useQBInvoices();
   const { contacts: searchedContacts, loading: contactsLoading } = useContactSearch(query, open);
   const { isAdmin } = usePrivilege();
   const { devMode } = useDevMode({ enabled: isAdmin });
@@ -226,7 +220,6 @@ export function CommandPalette() {
   }, [isAdmin, isDevelopment]);
 
   const doOpen = useCallback(() => {
-    triggerQBLoad();
     const seed = location.pathname === '/customers'
       ? new URLSearchParams(location.search).get('q') || '' : '';
     setQuery(seed);
@@ -400,17 +393,7 @@ export function CommandPalette() {
   const q = query.toLowerCase().trim();
   const encoded = encodeURIComponent(query.trim());
 
-  const invoices: InvoiceSummary[] = qbInvoices;
-
   const matchedContacts = q ? searchedContacts : [];
-
-  const matchedInvoices: InvoiceSummary[] = q
-    ? invoices.filter(inv => {
-        const custName  = (inv.customerName || '').toLowerCase();
-        const docNumber = (inv.docNumber    || '').toLowerCase();
-        return custName.includes(q) || docNumber.includes(q);
-      }).slice(0, 5)
-    : [];
 
   // Determine whether an admin-tab action should appear in the palette.
   //
@@ -464,7 +447,7 @@ export function CommandPalette() {
   if (_page > 1)                  customersSearchUrl += '&page='        + _page;
 
   const hasResults = q
-    ? (matchedContacts.length > 0 || matchedInvoices.length > 0 || filteredActions.length > 0 || true)
+    ? (matchedContacts.length > 0 || filteredActions.length > 0 || true)
     : (recentCustomers.length > 0 || filteredActions.length > 0);
 
   return (
@@ -525,12 +508,6 @@ export function CommandPalette() {
               sub="Browse all matching customers"
               onClick={() => { doClose(); location.href = customersSearchUrl; }}
             />
-            <ResultItem
-              icon={<ReceiptLongIcon fontSize="small" />}
-              label={`Search invoices for "${query.trim()}"`}
-              sub="Filter invoices by customer or invoice number"
-              onClick={() => { doClose(); location.href = `/invoices?q=${encoded}`; }}
-            />
           </>
         )}
 
@@ -583,49 +560,6 @@ export function CommandPalette() {
                   label={name}
                   sub={company}
                   onClick={() => { doClose(); location.href = `/customers/${id}`; }}
-                />
-              );
-            })}
-          </>
-        )}
-
-        {invoicesLoading && (
-          <>
-            <Typography sx={SECTION_LABEL_SX}>Invoices</Typography>
-            {[0, 1, 2].map(i => (
-              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.25, px: 2, py: 1 }}>
-                <Skeleton variant="rounded" width={20} height={20} />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Skeleton variant="text" width="50%" height={18} />
-                  <Skeleton variant="text" width="30%" height={14} />
-                </Box>
-              </Box>
-            ))}
-          </>
-        )}
-
-        {!invoicesLoading && matchedInvoices.length > 0 && (
-          <>
-            <Typography sx={SECTION_LABEL_SX}>Invoices</Typography>
-            {matchedInvoices.map(inv => {
-              const label = inv.customerName || inv.docNumber || 'Invoice';
-              const doc   = inv.docNumber ? `#${inv.docNumber}` : '';
-              const bal   = inv.balance != null ? ` · £${Number(inv.balance).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '';
-              const sub   = [doc, bal].filter(Boolean).join('') || undefined;
-              return (
-                <ResultItem
-                  key={inv.id ?? label}
-                  icon={<ReceiptLongIcon fontSize="small" />}
-                  label={label}
-                  sub={sub}
-                  onClick={() => {
-                    doClose();
-                    if (typeof (window as Window & { openInvoicePanel?: (id: string) => void }).openInvoicePanel === 'function') {
-                      (window as Window & { openInvoicePanel?: (id: string) => void }).openInvoicePanel!(String(inv.id));
-                    } else {
-                      location.href = '/invoices';
-                    }
-                  }}
                 />
               );
             })}
