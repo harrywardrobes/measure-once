@@ -52,6 +52,12 @@ export interface DesignVisitWizardCtx {
   contact_email?: string;
   contactPhone?: string;
   contactMobile?: string;
+  /** Brand-new customer with no CRM contact yet (standalone offline page). The
+   *  server matches/creates the HubSpot contact at submit time. Mutually
+   *  exclusive with contactId. */
+  newContact?: { name: string; email?: string; phone?: string; address?: StructuredAddress };
+  /** Idempotency key minted once per visit; dedupes offline replays server-side. */
+  clientSubmissionId?: string;
 }
 
 export interface ExistingVisit {
@@ -154,9 +160,12 @@ function normaliseRooms(existingVisit?: ExistingVisit | null): RoomData[] {
   }));
 }
 
-function draftKey(contactId: string, editId?: string | number | null): string {
+function draftKey(contactId: string, editId?: string | number | null, newKey?: string): string {
   if (editId) return DV_WIZARD_DRAFT_EDIT_PREFIX + editId;
-  return DV_WIZARD_DRAFT_PREFIX + (contactId || 'new');
+  if (contactId) return DV_WIZARD_DRAFT_PREFIX + contactId;
+  // Brand-new customer (no contactId yet): key the draft on the per-visit
+  // clientSubmissionId so concurrent new-customer drafts don't collide on 'new'.
+  return DV_WIZARD_DRAFT_PREFIX + 'new:' + (newKey || 'anon');
 }
 
 function saveDraft(key: string, step1: Step1Data, rooms: RoomData[], answers: AnswerMap) {
@@ -206,14 +215,16 @@ function extractOrphanedDraftKeys(key: string): string[] {
 export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCatalogueReady, demo }: DesignVisitWizardProps) {
   const cfg = handler.config || {};
   const defaultDuration = cfg.defaultDurationMin || 90;
+  const newContact    = ctx.newContact;
+  const clientSubmissionId = ctx.clientSubmissionId;
   const contactId     = ctx.contactId    || ctx.contact_id    || '';
-  const contactName   = ctx.contactName  || ctx.contact_name  || '';
-  const contactEmail  = ctx.contactEmail || ctx.contact_email || '';
-  const contactPhone  = ctx.contactPhone  || '';
+  const contactName   = ctx.contactName  || ctx.contact_name  || newContact?.name  || '';
+  const contactEmail  = ctx.contactEmail || ctx.contact_email || newContact?.email || '';
+  const contactPhone  = ctx.contactPhone || newContact?.phone || '';
   const contactMobile = ctx.contactMobile || '';
   const editMode     = !!(existingVisit && existingVisit.id);
   const editVisitId  = editMode ? existingVisit!.id : null;
-  const storageKey   = draftKey(contactId, editVisitId);
+  const storageKey   = draftKey(contactId, editVisitId, clientSubmissionId);
 
   const [open, setOpen] = useState(true);
   const [step, setStep] = useState(1);
@@ -248,7 +259,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [showDraftNotice, setShowDraftNotice] = useState<boolean>(() => {
     if (editMode || demo) return false;
     if (orphanedDraftKeys.length > 0) return false;
-    return loadDraft(draftKey(contactId, editVisitId)) !== null;
+    return loadDraft(storageKey) !== null;
   });
 
   const [step1, setStep1] = useState<Step1Data>(() => {
@@ -459,15 +470,25 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   useEffect(() => {
     if (demo) return;
-    if (!editMode && cfg.intermediateLeadStatus && contactId && !intermediateStatusFiredRef.current) {
+    const intermediateStatus = cfg.intermediateLeadStatus;
+    if (!editMode && intermediateStatus && contactId && !intermediateStatusFiredRef.current) {
       intermediateStatusFiredRef.current = true;
-      fetch(`/api/contacts/${encodeURIComponent(contactId)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hs_lead_status: cfg.intermediateLeadStatus }),
-      }).then(() => {
-        broadcastLeadStatusChange(contactId, { hs_lead_status: cfg.intermediateLeadStatus });
-      }).catch(e => console.warn('[design-visit] intermediate lead status update failed:', e.message));
+      // Broadcast optimistically and route the write through the offline queue so
+      // the "design visit in progress" lead status still applies on reconnect
+      // when the wizard was opened offline (a raw fetch would silently no-op
+      // offline). dedupeKey matches the canonical lead-status writes so it
+      // collapses with any other queued status change for this contact.
+      broadcastLeadStatusChange(contactId, { hs_lead_status: intermediateStatus });
+      void import('../lib/offlineQueue')
+        .then(({ sendOrQueue }) => sendOrQueue({
+          area: 'customer',
+          label: `Lead status → ${intermediateStatus}`,
+          method: 'PATCH',
+          url: `/api/contacts/${encodeURIComponent(contactId)}`,
+          body: { hs_lead_status: intermediateStatus },
+          dedupeKey: `contact:${contactId}:lead-status`,
+        }))
+        .catch(e => console.warn('[design-visit] intermediate lead status update failed:', e?.message));
     }
   }, [editMode, cfg.intermediateLeadStatus, contactId, demo]);
 
@@ -611,7 +632,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     setSubmitError('');
     try {
       const payload = {
-        contactId,
+        ...(contactId ? { contactId } : {}),
+        ...(newContact ? { newContact } : {}),
+        ...(clientSubmissionId ? { clientSubmissionId } : {}),
         contactName,
         contactEmail,
         handleId:         step1.handleId         || undefined,
@@ -674,6 +697,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               baseUpdatedAt: existingVisit?.updated_at ?? null,
             }
           : {}),
+        // Brand-new design visit from the standalone page: collapse repeat
+        // submits of the same visit into one queue entry (the server also
+        // dedupes by clientSubmissionId on replay).
+        ...(!editMode && clientSubmissionId ? { dedupeKey: `dv-new:${clientSubmissionId}` } : {}),
         // When queued offline, carry calendar metadata so the sync engine can
         // create the event after replay — mirroring the online-submission path.
         ...(!editMode && step1.visitDate

@@ -20,6 +20,16 @@ const { makeSkip } = require('../helpers/report');
 //           designVisitId, status transitions to 'submitted', QB skipped
 //           non-fatally (qb_estimate_id NULL, no chain error logged), email
 //           transport absent (silent skip).
+//   (VAL)   POST /api/design-visits contact-input validation: a visit must
+//           carry either an existing contactId or a brand-new customer with a
+//           name (both missing → 400; newContact without a name → 400).
+//   (IDEM)  client_submission_id idempotency: replaying a submit with the same
+//           id returns the original visit (200, idempotent) and never inserts a
+//           duplicate row — the safety net for queued offline replays.
+//   (NC)    Brand-new-customer contact resolution (resolveSubmitContact): an
+//           existing email is matched (no duplicate create), an unknown email
+//           creates a contact, a contactId passes through, and missing HubSpot
+//           helpers throw a retryable 503.
 //   (TOK)   sign-off token is generated and pinned to a 7-day expiry.
 //   (PUB)   Public sign-off API: GET /api/design-visits/sign-off/:token
 //           returns the visit, POST approve flips status to signed_off and
@@ -430,6 +440,137 @@ async function main() {
       'no "[design-visits] Side effect chain error" entry',
       chainErr ? 'FAIL: chain error logged' : 'no chain error logged',
       !chainErr);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [VAL] POST /api/design-visits contact-input validation
+  //       (standalone-page additions: a visit must carry either an existing
+  //        contactId or a brand-new customer with a name)
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [VAL] POST /api/design-visits contact-input validation');
+
+  {
+    const r = await memberClient.post('/api/design-visits', {
+      termsAccepted: true,
+      rooms: [{ roomName: 'Kitchen', unitCount: 1, unitPricePence: 0 }],
+      handlerConfig: {},
+    });
+    record('[VAL] POST without contactId or newContact → 400',
+      'status=400',
+      `status=${r.status}`,
+      r.status === 400);
+  }
+
+  {
+    const r = await memberClient.post('/api/design-visits', {
+      newContact: { email: 'no-name@privtest.local' },
+      termsAccepted: true,
+      rooms: [{ roomName: 'Kitchen', unitCount: 1, unitPricePence: 0 }],
+      handlerConfig: {},
+    });
+    record('[VAL] POST with newContact missing a name → 400',
+      'status=400',
+      `status=${r.status}`,
+      r.status === 400);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [IDEM] client_submission_id idempotency (offline-replay safety)
+  //        A replay with the same id must return the original visit, never
+  //        insert a duplicate — the core guarantee for queued offline submits.
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [IDEM] client_submission_id idempotency');
+
+  {
+    const csid = `privtest-csid-${crypto.randomBytes(6).toString('hex')}`;
+    const body = {
+      contactId:     FAKE_CONTACT_ID,
+      contactName:   'Idempotency Test',
+      contactEmail:  'idem@privtest.local',
+      termsAccepted: true,
+      rooms: [{ roomName: 'Kitchen', unitCount: 1, unitPricePence: 1000 }],
+      handlerConfig: {},
+      clientSubmissionId: csid,
+    };
+    const first  = await memberClient.post('/api/design-visits', body);
+    const second = await memberClient.post('/api/design-visits', body);
+
+    record('[IDEM] first submit with clientSubmissionId returns 201',
+      'status=201 with integer designVisitId',
+      `status=${first.status} id=${first.json?.designVisitId}`,
+      first.status === 201 && Number.isInteger(first.json?.designVisitId));
+
+    record('[IDEM] replay with the same clientSubmissionId returns the same visit (idempotent, no duplicate)',
+      'status=200, idempotent=true, same designVisitId',
+      `status=${second.status} idempotent=${second.json?.idempotent} firstId=${first.json?.designVisitId} secondId=${second.json?.designVisitId}`,
+      second.status === 200 && second.json?.idempotent === true && second.json?.designVisitId === first.json?.designVisitId);
+
+    const dup = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM design_visits WHERE client_submission_id = $1`, [csid]);
+    record('[IDEM] exactly one design_visits row stored for the clientSubmissionId',
+      'count=1',
+      `count=${dup.rows[0]?.n}`,
+      dup.rows[0]?.n === 1);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [NC] Brand-new-customer contact resolution (create-or-match)
+  //      Unit-level: exercises resolveSubmitContact directly with injected fake
+  //      HubSpot helpers (no live HubSpot needed). An email already in HubSpot is
+  //      matched (no duplicate create); an unknown email creates a contact;
+  //      missing helpers throw a retryable 503. The require uses an in-process
+  //      module instance, isolated from the spawned server. (The full HTTP create
+  //      path is covered by the contactId path above plus the customer-info
+  //      create/search helpers in test:new-customer-flow.)
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [NC] Brand-new-customer contact resolution (create-or-match)');
+  {
+    const dvModule = require('../../design-visits');
+    const created = [];
+    dvModule.setHubSpotContactHelpers({
+      searchByEmail: async (email) =>
+        email === 'nc-existing@privtest.local'
+          ? { id: 'hs-existing-1', properties: { email, firstname: 'Existing', lastname: 'Customer' } }
+          : null,
+      create: async (name, email, phone) => {
+        created.push({ name, email, phone });
+        return { id: 'hs-new-1', properties: { email, firstname: name } };
+      },
+    });
+
+    const matched = await dvModule.resolveSubmitContact({
+      newContact: { name: 'Existing Customer', email: 'nc-existing@privtest.local' },
+    });
+    record('[NC] newContact whose email is already in HubSpot is matched (no duplicate create)',
+      'contactId=hs-existing-1, create not called',
+      `contactId=${matched && matched.contactId} creates=${created.length}`,
+      !!matched && matched.contactId === 'hs-existing-1' && created.length === 0);
+
+    const createdContact = await dvModule.resolveSubmitContact({
+      newContact: { name: 'Brand New', email: 'nc-new@privtest.local', phone: '0123' },
+    });
+    record('[NC] newContact with an unknown email creates a HubSpot contact and uses its id',
+      'contactId=hs-new-1, create called once',
+      `contactId=${createdContact && createdContact.contactId} creates=${created.length}`,
+      !!createdContact && createdContact.contactId === 'hs-new-1' && created.length === 1);
+
+    const passthrough = await dvModule.resolveSubmitContact({ contactId: '12345', contactName: 'Direct' });
+    record('[NC] an existing contactId passes through unchanged (no HubSpot call)',
+      'contactId=12345',
+      `contactId=${passthrough && passthrough.contactId}`,
+      !!passthrough && passthrough.contactId === '12345');
+
+    dvModule.setHubSpotContactHelpers(null);
+    let threw503 = false;
+    try {
+      await dvModule.resolveSubmitContact({ newContact: { name: 'No Helpers', email: 'x@y.z' } });
+    } catch (e) {
+      threw503 = e.statusCode === 503;
+    }
+    record('[NC] new-customer resolution throws a retryable 503 when HubSpot is unavailable',
+      'throws with statusCode=503',
+      `threw503=${threw503}`,
+      threw503);
   }
 
   // ════════════════════════════════════════════════════════════════════════════

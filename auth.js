@@ -2214,7 +2214,7 @@ async function setupAuth(app) {
 
   // Admin: upsert nav primary_keys for a specific role.
   const VALID_NAV_KEYS_SERVER = new Set([
-    'home', 'customers', 'sales', 'survey', 'projects', 'invoices', 'trades', 'ideas',
+    'home', 'customers', 'sales', 'survey', 'designvisit', 'projects', 'invoices', 'trades', 'ideas',
   ]);
   app.patch('/api/admin/nav-role-config/:roleName', isAuthenticated, requireAdmin, async (req, res) => {
     const roleName = req.params.roleName;

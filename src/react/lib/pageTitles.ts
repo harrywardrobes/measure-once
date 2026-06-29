@@ -4,6 +4,7 @@ export const PAGE_TITLES: Record<string, string> = {
   '/projects': 'Projects',
   '/invoices': 'Invoices',
   '/survey': 'Survey',
+  '/design-visit': 'Design visit',
   '/admin': 'Admin',
   '/profile': 'Profile',
 };

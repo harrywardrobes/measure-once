@@ -2111,4 +2111,8 @@ module.exports = {
   signCustomerPhotoUrl,
   setSharedSseClients,
   setPatchContactProperties,
+  // HubSpot contact create-or-match helpers, reused by design-visits.js for the
+  // standalone offline design-visit page's brand-new-customer path.
+  searchHubSpotContactByEmail,
+  createHubSpotContact,
 };

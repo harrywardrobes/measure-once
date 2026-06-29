@@ -76,6 +76,7 @@ const IdeasPage              = React.lazy(() => import('./pages/IdeasPage').then
 const CustomerDetailPage     = React.lazy(() => import('./pages/CustomerDetailPage').then(m => ({ default: m.CustomerDetailPage })));
 const StandaloneInvoicesPage = React.lazy(() => import('./pages/StandaloneInvoicesPage').then(m => ({ default: m.StandaloneInvoicesPage })));
 const ProjectsPage           = React.lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
+const DesignVisitStandalonePage  = React.lazy(() => import('./pages/DesignVisitStandalonePage').then(m => ({ default: m.DesignVisitStandalonePage })));
 const DesignVisitSignOffPage     = React.lazy(() => import('./pages/DesignVisitSignOffPage').then(m => ({ default: m.DesignVisitSignOffPage })));
 const SurveyVisitSignOffPage     = React.lazy(() => import('./pages/SurveyVisitSignOffPage').then(m => ({ default: m.SurveyVisitSignOffPage })));
 const CustomerInfoPage           = React.lazy(() => import('./pages/CustomerInfoPage').then(m => ({ default: m.CustomerInfoPage })));
@@ -205,6 +206,7 @@ const MOUNTS: Array<{
   { id: 'customer-detail-root',   render: () => <CustomerDetailPage />, preSuspenseWrap: (c) => <WorkflowDataProvider>{c}</WorkflowDataProvider> },
   { id: 'invoices-page-mount',    render: () => <StandaloneInvoicesPage /> },
   { id: 'projects-view',          render: () => <ProjectsPage />, fallback: <ProjectsPageSkeleton /> },
+  { id: 'design-visit-view',      render: () => <DesignVisitStandalonePage /> },
   { id: 'dv-signoff-mount',           render: () => <DesignVisitSignOffPage /> }, // public-island
   { id: 'sv-signoff-mount',           render: () => <SurveyVisitSignOffPage /> }, // public-island
   { id: 'customer-info-mount',        render: () => <CustomerInfoPage /> },        // public-island

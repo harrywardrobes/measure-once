@@ -124,6 +124,14 @@ export const DV_WIZARD_DRAFT_PREFIX = 'dv-wizard-draft-';
 /** Design-visit wizard edit drafts: `${DV_WIZARD_DRAFT_EDIT_PREFIX}${visitId}` */
 export const DV_WIZARD_DRAFT_EDIT_PREFIX = 'dv-wizard-draft-edit-';
 
+/**
+ * Standalone /design-visit page — the in-progress customer selection (existing
+ * contact or brand-new customer + its clientSubmissionId). Persisted so a
+ * refresh / app restart mid-visit re-opens the wizard against the same draft
+ * key instead of stranding it; cleared when the wizard closes.
+ */
+export const DV_STANDALONE_SELECTION_KEY = 'dv-standalone-selection';
+
 /** Survey-visit wizard new-visit drafts: `${SV_WIZARD_DRAFT_PREFIX}${contactId}` */
 export const SV_WIZARD_DRAFT_PREFIX = 'sv-wizard-draft-';
 

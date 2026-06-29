@@ -60,9 +60,9 @@ const { structuredAddressSchema, hubspotToAddress, addressToHubspot, formatAddre
 const _DI_TERMINAL_STATUS   = getTerminalStatusMap('deposit_invoice_followup');
 const { getCredential, CRED_MAP } = require('./hubspot-creds');
 // visits.js retired — visits table dropped, all visit creation now via Google Calendar
-const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties, ensureStartDesignVisitHandlerBindings } = require('./design-visits');
+const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContactProperties, setHubSpotContactHelpers: setDvHubSpotContactHelpers, ensureStartDesignVisitHandlerBindings } = require('./design-visits');
 const { router: surveyVisitsRouter, setPatchContactProperties: setSvPatchContactProperties, ensureStartSurveyVisitHandlerBindings } = require('./survey-visits');
-const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties } = require('./customer-info');
+const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties, searchHubSpotContactByEmail, createHubSpotContact } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml, buildUserSignature, getEmailCompanyName, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
@@ -122,6 +122,13 @@ setDvPatchContactProperties((contactId, properties) => patchContactProperties(co
 setSvPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setCiPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 setPrPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
+// Wire HubSpot contact create-or-match into design-visits for the standalone
+// offline design-visit page's brand-new-customer path (all HubSpot I/O stays
+// server-side; the offline device never calls HubSpot directly).
+setDvHubSpotContactHelpers({
+  searchByEmail: searchHubSpotContactByEmail,
+  create: createHubSpotContact,
+});
 quickbooksRoutes.setPatchContactProperties((contactId, properties) => patchContactProperties(contactId, properties));
 quickbooksRoutes.setAssertLeadStatusKey((key) => assertLeadStatusKey(key));
 
@@ -3687,7 +3694,7 @@ app.get('/api/users/me/prefs', isAuthenticated, async (req, res) => {
   }
 });
 
-const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'projects', 'invoices', 'trades', 'ideas']);
+const VALID_NAV_KEYS = new Set(['home', 'customers', 'sales', 'survey', 'designvisit', 'projects', 'invoices', 'trades', 'ideas']);
 const NAV_BAR_SIZE = 3;
 
 app.patch('/api/users/me/prefs', isAuthenticated, prefsWriteLimiter, async (req, res) => {
@@ -3971,6 +3978,12 @@ app.get('/projects', isAuthenticated, (_req, res) => {
 });
 app.get('/survey', isAuthenticated, (_req, res) => {
   res.render('survey', { title: 'Survey · Measure Once', description: 'View and manage survey visits.' });
+});
+
+// Standalone, offline-capable design-visit field tool. Exact-path match, so it
+// never shadows the public token-gated /design-visit/sign-off route above.
+app.get('/design-visit', isAuthenticated, (_req, res) => {
+  res.render('design-visit', { title: 'Design visit · Measure Once', description: 'Start a design visit on this device — works offline and syncs when you reconnect.' });
 });
 app.get('/invoices', isAuthenticated, requireManagerOrAdminPage, (_req, res) => {
   res.render('invoices', { title: 'Invoices · Measure Once', description: 'Review, manage, and send customer invoices for completed wardrobe projects.' });

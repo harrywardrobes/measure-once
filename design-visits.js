@@ -43,6 +43,66 @@ let _patchContactProperties = async (_contactId, _props) => {
 };
 function setPatchContactProperties(fn) { _patchContactProperties = fn; }
 
+// HubSpot contact create-or-match helpers, injected from server.js (wired to
+// customer-info.js's implementations). Used by POST /api/design-visits to
+// resolve a brand-new customer (no contactId) into a real HubSpot contact at
+// submit time — keeping all HubSpot I/O server-side so the offline device never
+// calls HubSpot directly. Null until wired (and in test harnesses that don't
+// exercise the new-customer path).
+let _hubspotContacts = null;
+function setHubSpotContactHelpers(helpers) { _hubspotContacts = helpers; }
+
+// Resolve the contact a submitted design visit belongs to.
+//   - Existing customer: { contactId } is passed through unchanged.
+//   - Brand-new customer: { newContact: { name, email?, phone? } } → match an
+//     existing HubSpot contact by email, else create one (all HubSpot calls run
+//     here, server-side).
+// Returns { contactId, contactName, contactEmail }, or null when neither a
+// contactId nor a usable newContact is present (caller responds 400). Throws a
+// tagged error (statusCode 503) when HubSpot is required but unavailable, so the
+// queued offline submit is retried rather than dropped.
+async function resolveSubmitContact(body) {
+  const directId = body.contactId ? String(body.contactId) : '';
+  if (directId) {
+    return {
+      contactId: directId,
+      contactName: body.contactName ? String(body.contactName) : null,
+      contactEmail: body.contactEmail ? String(body.contactEmail) : null,
+    };
+  }
+
+  const nc = body.newContact;
+  const name = nc && typeof nc === 'object' && nc.name ? String(nc.name).trim() : '';
+  if (!name) return null;
+
+  if (!_hubspotContacts || typeof _hubspotContacts.create !== 'function') {
+    throw Object.assign(new Error('HubSpot contact resolution not available'), { statusCode: 503 });
+  }
+  const email = nc.email ? String(nc.email).trim() : '';
+  const phone = nc.phone ? String(nc.phone).trim() : '';
+
+  let contact = null;
+  if (email && typeof _hubspotContacts.searchByEmail === 'function') {
+    // Idempotent match: reuse an existing contact with this email rather than
+    // minting a duplicate (covers replays and customers added since last sync).
+    contact = await _hubspotContacts.searchByEmail(email);
+  }
+  if (!contact) {
+    // Throws on a HubSpot outage / auth failure → surfaced as 503 (retryable).
+    contact = await _hubspotContacts.create(name, email || undefined, phone || undefined);
+  }
+  if (!contact || contact.id == null) {
+    throw Object.assign(new Error('HubSpot contact resolution returned no id'), { statusCode: 503 });
+  }
+  const props = contact.properties || {};
+  const resolvedName = [props.firstname, props.lastname].filter(Boolean).join(' ').trim() || name;
+  return {
+    contactId: String(contact.id),
+    contactName: resolvedName,
+    contactEmail: props.email || email || null,
+  };
+}
+
 // ── Catalogue image infra ─────────────────────────────────────────────────────
 // Generic per-subdirectory image upload + local-file cleanup, shared by every
 // catalogue table (handles, doors, finishes, ranges). The `door-styles` subdir
@@ -1358,15 +1418,55 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
   }
 
   const {
-    contactId, contactName, contactEmail,
     handleId, furnitureRangeId, visitDate, durationMin,
     structuredAddress, location, notes, visitNotes, termsAccepted, rooms = [],
-    handlerConfig, answers,
+    handlerConfig, answers, newContact,
   } = req.body;
+  const clientSubmissionId = req.body.clientSubmissionId ? String(req.body.clientSubmissionId).slice(0, 100) : null;
 
-  if (!contactId) return res.status(400).json({ error: 'contactId is required' });
+  const hasNewContact = !!(newContact && typeof newContact === 'object' && String(newContact.name || '').trim());
+  if (!req.body.contactId && !hasNewContact) {
+    return res.status(400).json({ error: 'A customer (contactId) or new customer details (newContact.name) are required' });
+  }
   if (!Array.isArray(rooms) || !rooms.length) return res.status(400).json({ error: 'At least one room is required' });
   if (!termsAccepted) return res.status(400).json({ error: 'Terms and conditions must be accepted' });
+
+  // Offline-replay idempotency: the sync engine deletes an outbox entry only on
+  // a confirmed 2xx, so a response lost after the server committed would replay.
+  // If a visit already exists for this client_submission_id, return it without
+  // inserting again or re-running side effects (no duplicate visit / HubSpot
+  // contact / sign-off email).
+  if (clientSubmissionId) {
+    try {
+      const dup = await pool.query(
+        `SELECT id FROM design_visits WHERE client_submission_id = $1 LIMIT 1`,
+        [clientSubmissionId],
+      );
+      if (dup.rows.length) {
+        return res.status(200).json({ ok: true, designVisitId: dup.rows[0].id, idempotent: true });
+      }
+    } catch (e) {
+      logger.warn({ err: e.message }, '[design-visits] client_submission_id pre-check failed; continuing');
+    }
+  }
+
+  // Resolve which contact this visit belongs to. For a brand-new customer this
+  // matches/creates the HubSpot contact server-side; on a HubSpot outage we
+  // respond 503 so the queued submit is retried rather than dropped.
+  let contactId, contactName, contactEmail;
+  try {
+    const resolved = await resolveSubmitContact(req.body);
+    if (!resolved) {
+      return res.status(400).json({ error: 'A customer (contactId) or new customer details (newContact.name) are required' });
+    }
+    contactId    = resolved.contactId;
+    contactName  = resolved.contactName;
+    contactEmail = resolved.contactEmail;
+  } catch (e) {
+    const status = e.statusCode || 503;
+    logger.warn({ err: e.message }, '[design-visits] new-customer contact resolution failed');
+    return res.status(status).json({ error: 'Could not set up the customer record — please retry when back online.', code: 'CONTACT_RESOLVE_FAILED' });
+  }
 
   // Resolve the structured address (preferred) and keep the legacy `location`
   // column populated with a single-line rendering for list/email read-fallback.
@@ -1390,8 +1490,8 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     const vr = await client.query(`
       INSERT INTO design_visits
         (contact_id, contact_name, contact_email, created_by, handle_id, furniture_range_id,
-         visit_date, duration_min, location, structured_address, notes, visit_notes, terms_accepted, terms_condition_version_id, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,'draft')
+         visit_date, duration_min, location, structured_address, notes, visit_notes, terms_accepted, terms_condition_version_id, client_submission_id, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,'draft')
       RETURNING id`,
       [
         String(contactId),
@@ -1408,6 +1508,7 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
         visitNotes ? String(visitNotes).slice(0, 4000) : null,
         !!termsAccepted,
         termsVersionId,
+        clientSubmissionId,
       ]
     );
     const visitId = vr.rows[0].id;
@@ -1521,6 +1622,14 @@ router.post('/api/design-visits', isAuthenticated, requirePrivilege('member'), a
     res.status(201).json({ ok: true, designVisitId: visitId });
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
+    // Idempotency race: a concurrent replay of the same submission inserted
+    // first and tripped the unique index — return that row instead of erroring.
+    if (e.code === '23505' && clientSubmissionId) {
+      try {
+        const dup = await pool.query(`SELECT id FROM design_visits WHERE client_submission_id = $1 LIMIT 1`, [clientSubmissionId]);
+        if (dup.rows.length) return res.status(200).json({ ok: true, designVisitId: dup.rows[0].id, idempotent: true });
+      } catch (_) { /* fall through to 500 */ }
+    }
     logger.error({ err: e.message }, '[design-visits] POST /api/design-visits error:');
     res.status(500).json({ error: 'Could not save design visit.' });
   } finally {
@@ -2701,6 +2810,8 @@ router.post('/api/design-visits/:id/answers', isAuthenticated, requirePrivilege(
 module.exports = {
   router: router,
   setPatchContactProperties,
+  setHubSpotContactHelpers,
+  resolveSubmitContact,
   ensureStartDesignVisitHandlerBindings,
   loadAnswers,
   saveAnswers,

@@ -17,6 +17,8 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import DesignServicesIcon from '@mui/icons-material/DesignServices';
+import DesignServicesOutlinedIcon from '@mui/icons-material/DesignServicesOutlined';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import {
   NAV_HEIGHT,
@@ -72,6 +74,7 @@ export const NAV: NavItem[] = [
   { key: 'customers', href: '/customers', label: 'Customers', Icon: PeopleAltIcon,        IconOutlined: PeopleAltOutlinedIcon },
   { key: 'projects',  href: '/projects',  label: 'Projects',  Icon: SquareFootIcon,       IconOutlined: SquareFootOutlinedIcon },
   { key: 'survey',    href: '/survey',    label: 'Survey',    Icon: AssignmentIcon,       IconOutlined: AssignmentOutlinedIcon },
+  { key: 'designvisit', href: '/design-visit', label: 'Design visit', Icon: DesignServicesIcon, IconOutlined: DesignServicesOutlinedIcon },
   { key: 'invoices',  href: '/invoices',  label: 'Invoices',  Icon: ReceiptLongIcon,      IconOutlined: ReceiptLongOutlinedIcon, managerOnly: true },
 ];
 
