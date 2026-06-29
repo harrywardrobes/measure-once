@@ -8,6 +8,7 @@ const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, 
 const { encrypt: qbEncrypt, tryDecrypt: qbTryDecrypt } = require('./qb-token-crypto.cjs');
 const { quickbooksReadWriteLimiter } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail, escapeHtml, buildSenderSignature } = require('./email-templates');
+const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
 
 // Status values derived from the outcome registry — keeps them in sync with
@@ -923,6 +924,7 @@ router.post('/api/quickbooks/contacts/:contactId/accept-deal',
           try {
             await sendQbTransactionEmail('invoice', invoiceId, { sendTo: contactEmail || undefined });
             steps.invoiceSent = true;
+            await logCustomerEmailAttempt(contactId, userId, 'Deposit invoice sent');
           } catch (e) {
             const qbMsg = e.response?.data?.Fault?.Error?.[0]?.Message || e.message;
             logger.error({ err: qbMsg }, '[accept-deal] QB invoice send failed:');
@@ -1214,6 +1216,7 @@ router.post('/api/quickbooks/contacts/:contactId/decline-deal',
                   html:    fullHtml,
                 });
                 steps.thankYouSent = true;
+                await logCustomerEmailAttempt(contactId, userId, 'Deposit/decline thank-you email sent');
                 // Record declined_at while still holding the lock so the next
                 // waiter sees it IS NOT NULL and skips the send.
                 await declineLockClient.query(

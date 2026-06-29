@@ -204,6 +204,7 @@ const DB_SUITES = [
   'test:customer-info-live-badge:ci',
   'test:dev-mode-bc-sync:ci',
   'test:upload-photos-resend-mode:ci',
+  'test:upload-photos-contact-log:ci',
   'test:active-link-expires:ci',
   'test:active-link-warning-ordering:ci',
   'test:upload-photos-modal-labels:ci',

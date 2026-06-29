@@ -8,6 +8,7 @@ const axios     = require('axios').create({ timeout: 12000 });
 const { Pool }  = require('pg');
 const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
 const { buildSenderSignature } = require('./email-templates');
+const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
@@ -706,6 +707,7 @@ async function submitDesignVisitAndSync(visitId, handlerConfig, submitterUser) {
         text: sig.text ? baseText + '\n\n' + sig.text : baseText,
         html: baseHtml,
       });
+      await logCustomerEmailAttempt(visit.contact_id, submitterUser?.claims?.sub, 'Design visit summary sent');
     }
   } catch (e) {
     logger.warn({ err: e.message }, '[design-visits] Customer email send failed:');

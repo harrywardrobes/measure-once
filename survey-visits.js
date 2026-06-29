@@ -24,6 +24,7 @@ const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 const { loadAnswers, saveAnswers } = require('./design-visits');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
+const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const {
   structuredAddressSchema, formatAddress, isAddressEmpty,
 } = require('./shared/address.cjs');
@@ -555,6 +556,7 @@ async function submitSurveyVisitAndSync(visitId, handlerConfig, submitterUser) {
 </body>
 </html>`,
       });
+      await logCustomerEmailAttempt(visit.contact_id, submitterUser?.claims?.sub, 'Survey visit summary sent');
     }
   } catch (e) {
     logger.warn({ err: e.message }, '[survey-visits] Customer email send failed:');
@@ -1616,6 +1618,7 @@ router.post('/api/survey-visits/:id/resend-signoff', isAuthenticated, requireAdm
           html: baseHtml,
         });
         emailSent = true;
+        await logCustomerEmailAttempt(visit.contact_id, req.user?.claims?.sub, 'Survey visit sign-off email re-sent');
       }
     } catch (e) {
       logger.warn({ err: e.message }, '[survey-visits] resend sign-off email failed:');

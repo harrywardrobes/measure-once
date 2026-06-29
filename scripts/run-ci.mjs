@@ -180,6 +180,7 @@ const STEPS = [
   'test:scheduling-past-time-guard:ci',
   'test:customer-card-action-strip:ci',
   'test:upload-photos-resend-mode:ci',
+  'test:upload-photos-contact-log:ci',
   'test:projects-top-spacing:ci',
   'test:active-link-expires:ci',
   'test:active-link-warning-ordering:ci',

@@ -11,6 +11,7 @@ const { isAuthenticated, requirePrivilege } = require('./auth');
 const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
+const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const { REVIEW_OUTCOME_STATUS: _REVIEW_OUTCOME_STATUS } = require('./shared/handler-route-contracts.cjs');
 const { GLOBAL_NULL_STAGE_KEY } = require('./shared/slotConstants.cjs');
 const { getOutcomeMeta, getOutcomeEmailTemplates } = require('./shared/handler-outcomes.cjs');
@@ -89,7 +90,7 @@ async function sendReviewEmail(toEmail, subject, textBody, htmlBody, userId) {
   const transport = createMailTransport();
   if (!transport) {
     logger.warn('[photo-reviews] SMTP not configured — skipping review outcome email.');
-    return;
+    return false;
   }
   const from    = buildFromHeader();
   const replyTo = buildReplyTo();
@@ -111,6 +112,7 @@ async function sendReviewEmail(toEmail, subject, textBody, htmlBody, userId) {
       html,
     });
     logger.info(`[photo-reviews] Review outcome email sent to ${toEmail}`);
+    return true;
   } catch (err) {
     logger.error({ err: err.message }, '[photo-reviews] Failed to send review outcome email:');
     throw err;
@@ -338,7 +340,8 @@ router.post('/api/card-actions/review-customer-photos',
     // Send email after the outcome is durably committed — if the email fails
     // the outcome is already recorded and no duplicate will be sent on retry.
     try {
-      await sendReviewEmail(toEmail, subject, body, htmlBody, reviewerId);
+      const reviewEmailSent = await sendReviewEmail(toEmail, subject, body, htmlBody, reviewerId);
+      if (reviewEmailSent) await logCustomerEmailAttempt(cid, reviewerId, 'Photo review outcome email sent');
     } catch (err) {
       logger.error({ err: err.message }, '[photo-reviews] Failed to send review email (outcome already recorded):');
       return res.status(502).json({ error: 'Failed to send email: ' + err.message });

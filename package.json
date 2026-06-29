@@ -276,6 +276,8 @@
     "test:copyable-link:ci": "node scripts/with-test-db.js test/copyable-link/run.js",
     "test:upload-photos-resend-mode": "node test/upload-photos-resend-mode/run.js",
     "test:upload-photos-resend-mode:ci": "node scripts/with-test-db.js test/upload-photos-resend-mode/run.js",
+    "test:upload-photos-contact-log": "node test/upload-photos-contact-log/run.js",
+    "test:upload-photos-contact-log:ci": "node scripts/with-test-db.js test/upload-photos-contact-log/run.js",
     "test:projects-top-spacing": "node test/projects-top-spacing/run.js",
     "test:projects-top-spacing:ci": "node scripts/with-test-db.js test/projects-top-spacing/run.js",
     "test:bundle-sizes": "node scripts/check-bundle-sizes.mjs",

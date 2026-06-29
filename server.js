@@ -66,6 +66,7 @@ const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, 
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
 const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml, buildUserSignature, getEmailCompanyName, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
+const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -7997,6 +7998,7 @@ app.post('/api/card-actions/deposit-invoice/not-proceeding',
               html:    fullHtml,
             });
             steps.thankYouSent = true;
+            await logCustomerEmailAttempt(contactId, req.user?.claims?.sub, 'Deposit/decline thank-you email sent');
           }
         } catch (e) {
           logger.warn({ err: e.message }, '[deposit-invoice/not-proceeding] thank-you email failed (non-fatal):');
