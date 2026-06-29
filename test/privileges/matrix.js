@@ -72,6 +72,7 @@ const ROUTES = [
   { method: 'GET',    path: '/api/personal-tasks',            level: 'auth' },
 
   { method: 'GET',    path: '/api/contacts-lead-status-counts', level: 'auth',  needsHubspot: true },
+  { method: 'GET',    path: '/api/contacts-stage-counts',       level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/contacts-substatus-counts?leadStatus=OPEN_DEAL', level: 'auth',  needsHubspot: true },
   { method: 'GET',    path: '/api/lead-statuses',              level: 'auth' },
   { method: 'GET',    path: '/api/stage-action-labels',        level: 'auth' },
@@ -265,7 +266,6 @@ const ROUTES = [
   { method: 'POST',   path: '/api/admin/users/0/resolve-profile-conflicts',      level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/test/bust-open-leads-cache',             level: 'admin', body: {} },
   { method: 'POST',   path: '/api/admin/test/bust-project-contacts-cache',       level: 'admin', body: {} },
-  { method: 'POST',   path: '/api/admin/test/reset-lead-status-counts-cooldown', level: 'admin', body: {} },
   { method: 'GET',    path: '/auth/quickbooks',                                level: 'admin' },
   { method: 'GET',    path: '/auth/quickbooks/callback?code=x&state=y&realmId=1', level: 'admin' },
   { method: 'POST',   path: '/auth/quickbooks/disconnect',                     level: 'admin', body: {} },

@@ -218,7 +218,6 @@ const NO_PROBE_SUITES_ALLOWLIST = new Map([
   ['test:design-visit-qb-resubmit',     'narrative — QB sparse-update vs create-new branches, narrative'],
   ['test:design-visit-submitter-name',  'narrative — regression guard for submitter identity in outputs'],
   ['test:duplicate-phone-warnings',     'narrative — alert copy + disabled-submit + link checks'],
-  ['test:lead-status-counts-rate-limit','narrative — single-flight, stale-cache, and retry behaviour'],
   ['test:phone-directory',              'narrative — auth gating + payload coverage, narrative'],
   ['test:phone-directory-customers',    'narrative — mock-HubSpot field mapping, narrative'],
   ['test:chunk-cache-headers',          'narrative — HTTP HEAD probes for cache-control headers'],

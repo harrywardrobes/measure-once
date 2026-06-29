@@ -33,8 +33,6 @@
     "test:privileges:ci": "node scripts/ensure-chrome.mjs && node scripts/with-test-db.js test/privileges/run.js",
     "test:lead-status-sync": "node test/lead-status-sync/run.js",
     "test:lead-status-sync:ci": "node scripts/with-test-db.js test/lead-status-sync/run.js",
-    "test:lead-status-counts-rate-limit": "node test/lead-status-counts-rate-limit/run.js",
-    "test:lead-status-counts-rate-limit:ci": "node scripts/with-test-db.js test/lead-status-counts-rate-limit/run.js",
     "test:lead-status-delete-substatus-clear": "node test/lead-status-delete-substatus-clear/run.js",
     "test:lead-status-delete-substatus-clear:ci": "node scripts/with-test-db.js test/lead-status-delete-substatus-clear/run.js",
     "test:substatus-hubspot-label-format": "node test/substatus-hubspot-label-format/run.js",

@@ -384,8 +384,8 @@ const getHubSpotHeaders = () => ({
 // Shared HubSpot search retry helper. Retries on 429 (honouring Retry-After
 // when present) and transient 5xx / network errors using bounded exponential
 // backoff so a brief HubSpot hiccup doesn't surface as an error to the UI.
-// Used by /api/contacts-lead-status-counts and /api/open-leads — the two
-// search-API fan-outs that have been hitting per-second rate limits.
+// Used by the shared contacts crawl (fetchAllContactsShared) and /api/open-leads
+// — the search-API callers that have been hitting per-second rate limits.
 async function hubspotSearchWithRetry(body, { maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const isTransient = err => {
@@ -1325,16 +1325,6 @@ app.get('/api/hubspot/status', async (req, res) => {
   if (!getCredential('access_token')) {
     return res.json({ connected: false, code: 'NO_TOKEN' });
   }
-  // Expose cooldown state from the lead-status-counts fan-out so the admin
-  // panel can show a live countdown instead of a vague "try again shortly".
-  const cooldownMs = _leadStatusCountsCooldownUntil - Date.now();
-  if (cooldownMs > 0) {
-    return res.json({
-      connected: false,
-      code: 'HUBSPOT_RATE_LIMIT',
-      cooldownSecondsRemaining: Math.ceil(cooldownMs / 1000),
-    });
-  }
   try {
     await axios.get(`${HS}/account-info/v3/details`, { headers: getHubSpotHeaders(), timeout: 8000 });
     res.json({ connected: true });
@@ -2007,50 +1997,70 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 });
 
 // ── HubSpot: Lead-status counts (for filter dropdown) ─────────────────────────
-// In-memory cache. `fresh` is the latest successful counts within the 120s TTL.
-// `lastGood` is the most recent successful counts of any age — used to serve a
-// stale response when HubSpot is unavailable (rate-limited / 5xx) so the UI
-// doesn't surface a red error toast for a transient hiccup.
-// `inFlight` is a shared promise so concurrent callers on a cold cache trigger
-// a single HubSpot fan-out instead of one per request.
-const LEAD_STATUS_COUNTS_TTL_MS = 120_000;
-const LEAD_STATUS_COUNTS_STALE_MAX_MS = 60 * 60 * 1000; // 1 h hard cap on staleness
-const LEAD_STATUS_COUNTS_COOLDOWN_MS = 60_000; // 60 s post-429-wave cooldown
-let _leadStatusCountsCache = null;   // { counts, fetchedAt } — used while fresh
-let _leadStatusCountsLastGood = null; // { counts, fetchedAt } — survives invalidation, used on error
-let _leadStatusCountsInFlight = null;
-let _leadStatusCountsCooldownUntil = 0; // epoch ms — skip fan-out while active
+// Counts are derived on demand from the shared contacts cache (see the
+// /api/contacts-lead-status-counts handler), so there is no separate counts
+// cache to maintain. Invalidating "counts" just means busting the short-lived
+// contacts-config cache (excluded keys / stage map / dev-mode flag) so the next
+// request picks up updated lead_status_config rows; the contacts list itself is
+// busted via clearContactCache() at the same mutation sites.
 function _invalidateLeadStatusCountsCache() {
-  // Drop the freshness window so the next request refetches, but keep
-  // `_leadStatusCountsLastGood` so a failed refetch can still serve stale
-  // counts instead of erroring out to the UI.
-  _leadStatusCountsCache = null;
-  // Also bust the short-lived contacts-config cache so the next
-  // /api/contacts-all request picks up the updated lead_status_config rows.
   _invalidateContactsConfigCache();
 }
 
-// Helper: filter a contacts array to those that have at least one room in
-// the given stage. Mirrors the logic used in /api/contacts-all.
-// The sales stage also includes contacts with no rooms (no status assigned yet).
-function _filterContactsByStage(contacts, stageParam) {
+// Helper: load the lead-status → normalised-stage map (e.g. 'NEW' → 'sales',
+// 'DESIGN_BOOKED' → 'designvisit') from lead_status_config, memoised on the
+// shared 60 s config cache so repeated callers don't re-query. Stage values are
+// stored UPPERCASE+underscore and normalised to lowercase, underscores stripped
+// (matching the workflow stage keys and stage_action_labels.stage_key).
+async function _getStatusStageMap() {
+  if (_stageConfigCache && Date.now() - _stageConfigCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+    return _stageConfigCache.map;
+  }
+  const { rows: stageRows } = await pool.query(
+    'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
+  );
+  const map = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
+  _stageConfigCache = { map, fetchedAt: Date.now() };
+  return map;
+}
+
+// Helper: apply the dev-mode / hw_test_user filter exactly as /api/contacts-all
+// does — when dev_mode_enabled is true only test contacts are shown, otherwise
+// test contacts are hidden. Used by the count endpoints so their totals reflect
+// the same base set as the list. Memoised on the shared 60 s config cache.
+async function _applyDevModeFilter(contacts) {
+  let devModeEnabled = false;
+  if (_devModeCache && Date.now() - _devModeCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+    devModeEnabled = _devModeCache.value;
+  } else {
+    const { rows: dmRows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+    );
+    devModeEnabled = dmRows.length > 0 && dmRows[0].value === 'true';
+    _devModeCache = { value: devModeEnabled, fetchedAt: Date.now() };
+  }
+  return devModeEnabled
+    ? contacts.filter(c => c.properties?.hw_test_user === 'true')
+    : contacts.filter(c => c.properties?.hw_test_user !== 'true');
+}
+
+// Helper: filter a contacts array to the given stage. MUST mirror the stage
+// filter in /api/contacts-all so stage-scoped counts match the list — i.e.
+// assign each contact's stage from its lead status via lead_status_config
+// (NOT from room stageKey, which can disagree), with a missing status counting
+// as `sales` (the unassigned stage).
+function _filterContactsByStage(contacts, stageParam, statusStageMap) {
   if (!stageParam) return contacts;
-  const isSales = stageParam === 'sales';
   return contacts.filter(c => {
-    const roomsJson = c.properties?.measure_once_rooms;
-    if (!roomsJson) return isSales; // No rooms → treat as sales (unassigned)
-    try {
-      const rooms = JSON.parse(roomsJson);
-      if (!Array.isArray(rooms) || !rooms.length) return isSales;
-      return rooms.some(r => (r.stageKey || 'sales') === stageParam);
-    } catch {
-      return false;
-    }
+    const ls = c.properties?.hs_lead_status || '';
+    if (!ls) return stageParam === 'sales'; // No status → sales (unassigned)
+    return (statusStageMap.get(ls) || '') === stageParam;
   });
 }
 
 // Compute lead-status counts from an in-memory contacts array.
-// Returns { __no_status__: N, KEY: N, ... } matching the shape of _fetchLeadStatusCounts.
+// Returns { __no_status__: N, KEY: N, ... } — every configured status key is
+// present (0 when no contacts hold it) so the filter pills can render a count.
 async function _computeLeadStatusCountsFromContacts(contacts) {
   const { rows: statusRows } = await pool.query(
     'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
@@ -2108,131 +2118,133 @@ async function patchContactProperties(contactId, properties) {
   return resp;
 }
 
-async function _fetchLeadStatusCounts() {
-  const { rows: statusRows } = await pool.query(
-    'SELECT key FROM lead_status_config WHERE is_null_row IS NOT TRUE ORDER BY sort_order ASC, key ASC'
-  );
-  const keys = statusRows.map(r => r.key);
-
-
-  // Serialized searches — one at a time with a small inter-request pause so the
-  // N+1 fan-out never bursts beyond HubSpot's 10 req/s limit. Using Promise.all
-  // previously fired all searches simultaneously, which saturated the rate-limit
-  // quota and caused the cache to never repopulate (feedback loop).
-  const INTER_REQUEST_PAUSE_MS = 150;
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-  const searchConfigs = [
-    { key: '__no_status__', body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'NOT_HAS_PROPERTY' }] }], limit: 1 } },
-    ...keys.map(key => ({ key, body: { filterGroups: [{ filters: [{ propertyName: 'hs_lead_status', operator: 'EQ', value: key }] }], limit: 1 } })),
-  ];
-
-  const entries = [];
-  for (let i = 0; i < searchConfigs.length; i++) {
-    const { key, body } = searchConfigs[i];
-    if (i > 0) await sleep(INTER_REQUEST_PAUSE_MS);
-    const r = await hubspotSearchWithRetry(body);
-    entries.push([key, r.data.total ?? 0]);
-  }
-  return Object.fromEntries(entries);
-}
-
 app.get('/api/contacts-lead-status-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
-  // Stage-scoped request: compute counts from the shared contacts cache in
-  // memory rather than making N+1 HubSpot search API calls. This is fast,
-  // rate-limit-safe, and consistent with how /api/contacts-all filters by stage.
-  const stageParam = (req.query.stage || '').trim();
-  if (stageParam) {
+  // Per-lead-status counts for the Customers filter pills. Computed from the
+  // shared contacts cache (a full HubSpot crawl) rather than per-status Search
+  // API calls, so the counts cover exactly the same set the list shows and need
+  // no rate-limit-prone fan-out. The dev-mode / hw_test_user filter is applied
+  // so the pills match the list; excluded_from_sales statuses are intentionally
+  // NOT pre-filtered — every status carries its true count and the client hides
+  // excluded ones unless "Show excluded" is on.
+  //
+  // With a `stage` param the contacts are first narrowed to that stage using the
+  // same lead-status → stage mapping as /api/contacts-all (normalise the param
+  // the same way: lowercase, strip underscores).
+  const stageParam = (req.query.stage || '').trim().toLowerCase().replace(/_/g, '');
+  try {
+    const { contacts: allContacts, stale, unavailable } = await getSharedContactsCache();
+    if (unavailable) {
+      return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+    }
+    if (stale) res.setHeader('X-Cache-Status', 'stale');
+    let contacts = await _applyDevModeFilter(allContacts);
+    if (stageParam) {
+      const statusStageMap = await _getStatusStageMap();
+      contacts = _filterContactsByStage(contacts, stageParam, statusStageMap);
+    }
+    const counts = await _computeLeadStatusCountsFromContacts(contacts);
+    return res.json(counts);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+  }
+});
+
+// ── HubSpot: per-stage contact counts (Customers page stage tabs) ─────────────
+// Returns { __all__: N, <stageKey>: N, ... } where each stage count is the
+// number of contacts the Customers list would show under that stage tab.
+//
+// This MUST mirror the stage-filtering logic in /api/contacts-all exactly so
+// the tab badge matches the list:
+//   • same base set — the shared contacts cache (a full HubSpot crawl);
+//   • same dev-mode / hw_test_user filter;
+//   • same excluded_from_sales filter (skipped when includeExcluded=1, which
+//     the page sends while "Show excluded" is on);
+//   • same stage assignment — lead_status_config.stage (NOT room stageKey),
+//     with a missing status counting as `sales`.
+//
+// Deriving the tab counts instead from /api/contacts-lead-status-counts (raw
+// per-status HubSpot Search totals) was the bug: those totals span the entire
+// HubSpot database — including contacts beyond the crawl's 10k Search window —
+// so a stage could show hundreds while the list held a handful.
+app.get('/api/contacts-stage-counts', isAuthenticated, requireHubspotToken, async (req, res) => {
+  try {
+    const includeExcluded = req.query.includeExcluded === '1';
+    const { contacts: rawContacts, stale, unavailable } = await getSharedContactsCache();
+    if (unavailable) {
+      return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+    }
+    if (stale) res.setHeader('X-Cache-Status', 'stale');
+
+    let contacts = rawContacts;
+
+    // Dev-mode / hw_test_user filter (mirror /api/contacts-all).
     try {
-      const { contacts: allContacts, stale, unavailable } = await getSharedContactsCache();
-      if (unavailable) {
-        return res.status(502).json({ error: 'HubSpot is currently unavailable. Please try again shortly.', code: 'HUBSPOT_UNAVAILABLE' });
+      let devModeEnabled = false;
+      if (_devModeCache && Date.now() - _devModeCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+        devModeEnabled = _devModeCache.value;
+      } else {
+        const { rows: dmRows } = await pool.query(
+          `SELECT value FROM app_settings WHERE key = 'dev_mode_enabled'`
+        );
+        devModeEnabled = dmRows.length > 0 && dmRows[0].value === 'true';
+        _devModeCache = { value: devModeEnabled, fetchedAt: Date.now() };
       }
-      if (stale) res.setHeader('X-Cache-Status', 'stale');
-      const filtered = _filterContactsByStage(allContacts, stageParam);
-      const counts = await _computeLeadStatusCountsFromContacts(filtered);
-      return res.json(counts);
-    } catch (e) {
-      const status = e.response?.status;
-      if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-      if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-      return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
+      contacts = devModeEnabled
+        ? contacts.filter(c => c.properties?.hw_test_user === 'true')
+        : contacts.filter(c => c.properties?.hw_test_user !== 'true');
+    } catch (dbErr) {
+      logger.warn({ err: dbErr.message }, '[contacts-stage-counts] could not read dev_mode_enabled:');
     }
-  }
 
-  // Fresh cache hit — return immediately.
-  if (_leadStatusCountsCache && Date.now() - _leadStatusCountsCache.fetchedAt < LEAD_STATUS_COUNTS_TTL_MS) {
-    res.setHeader('X-Cache-Status', 'fresh');
-    return res.json(_leadStatusCountsCache.counts);
-  }
-
-  // Post-429-wave cooldown: if a recent fan-out was rate-limited, skip starting
-  // a new fan-out and serve stale counts immediately. This prevents the feedback
-  // loop where every 120s TTL expiry triggers a fresh burst that also gets 429'd.
-  if (Date.now() < _leadStatusCountsCooldownUntil) {
-    if (_leadStatusCountsLastGood) {
-      if (process.env.DEBUG_HUBSPOT) {
-        logger.warn('[lead-status-counts] cooldown active for %dms more; serving stale counts', _leadStatusCountsCooldownUntil - Date.now());
-      }
-      res.setHeader('X-Cache-Status', 'stale');
-      return res.json(_leadStatusCountsLastGood.counts);
-    }
-    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-  }
-
-  // Single-flight: all concurrent cold-cache callers share one fan-out.
-  if (!_leadStatusCountsInFlight) {
-    _leadStatusCountsInFlight = (async () => {
+    // excluded_from_sales filter (mirror /api/contacts-all default).
+    if (!includeExcluded) {
       try {
-        const counts = await _fetchLeadStatusCounts();
-        const entry = { counts, fetchedAt: Date.now() };
-        _leadStatusCountsCache    = entry;
-        _leadStatusCountsLastGood = entry;
-        _leadStatusCountsCooldownUntil = 0; // reset cooldown on success
-        return { ok: true, counts };
-      } catch (err) {
-        // If the fan-out hit rate limits, engage cooldown so the next 60 s of
-        // requests are served from stale cache instead of hammering HubSpot again.
-        if (err.response?.status === 429) {
-          _leadStatusCountsCooldownUntil = Date.now() + LEAD_STATUS_COUNTS_COOLDOWN_MS;
-          if (process.env.DEBUG_HUBSPOT) {
-            logger.warn('[lead-status-counts] 429 wave detected; cooldown engaged for %ds', LEAD_STATUS_COUNTS_COOLDOWN_MS / 1000);
-          }
+        let excludedKeys;
+        if (_excludedKeysCache && Date.now() - _excludedKeysCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+          excludedKeys = _excludedKeysCache.keys;
+        } else {
+          const { rows: excludedRows } = await pool.query(
+            'SELECT key FROM lead_status_config WHERE excluded_from_sales = TRUE'
+          );
+          excludedKeys = new Set(excludedRows.map(r => r.key));
+          _excludedKeysCache = { keys: excludedKeys, fetchedAt: Date.now() };
         }
-        return { ok: false, err };
-      } finally {
-        // Release after a microtask tick so callers awaiting the same promise
-        // all observe the resolved state before the next request starts a new
-        // in-flight fetch.
-        setImmediate(() => { _leadStatusCountsInFlight = null; });
+        if (excludedKeys.size > 0) {
+          contacts = contacts.filter(c => !excludedKeys.has((c.properties?.hs_lead_status || '').toUpperCase()));
+        }
+      } catch (dbErr) {
+        logger.warn({ err: dbErr.message }, '[contacts-stage-counts] could not load excluded lead statuses:');
       }
-    })();
-  }
-
-  const outcome = await _leadStatusCountsInFlight;
-
-  if (outcome.ok) {
-    res.setHeader('X-Cache-Status', 'fresh');
-    return res.json(outcome.counts);
-  }
-
-  // Fetch failed — serve last-good counts if we have any recent enough.
-  const e = outcome.err;
-  const status = e.response?.status;
-  if (_leadStatusCountsLastGood && Date.now() - _leadStatusCountsLastGood.fetchedAt < LEAD_STATUS_COUNTS_STALE_MAX_MS) {
-    if (process.env.DEBUG_HUBSPOT) {
-      logger.warn('[lead-status-counts] HubSpot fetch failed (status=%s); serving stale counts age=%dms', status || 'network', Date.now() - _leadStatusCountsLastGood.fetchedAt);
     }
-    res.setHeader('X-Cache-Status', 'stale');
-    return res.json(_leadStatusCountsLastGood.counts);
+
+    // Stage assignment from lead_status_config (mirror /api/contacts-all).
+    let statusStageMap;
+    try {
+      statusStageMap = await _getStatusStageMap();
+    } catch (dbErr) {
+      logger.warn({ err: dbErr.message }, '[contacts-stage-counts] could not load stage config:');
+      statusStageMap = new Map();
+    }
+
+    const counts = { __all__: 0 };
+    for (const c of contacts) {
+      counts.__all__ += 1;
+      const ls = c.properties?.hs_lead_status || '';
+      // No status → counts toward sales (the "unassigned" stage), matching the
+      // `if (!ls && stageParam === 'sales') return true` rule in /api/contacts-all.
+      const stage = ls ? (statusStageMap.get(ls) || '') : 'sales';
+      if (stage) counts[stage] = (counts[stage] || 0) + 1;
+    }
+    return res.json(counts);
+  } catch (e) {
+    const status = e.response?.status;
+    if (status === 401 || status === 403) return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
+    if (status === 429) return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
+    return res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
   }
-  if (status === 401 || status === 403) {
-    return res.status(502).json({ error: 'HubSpot rejected the request — the token may be invalid or expired.', code: 'HUBSPOT_AUTH' });
-  }
-  if (status === 429) {
-    return res.status(502).json({ error: 'HubSpot rate limit reached. Please wait a moment and try again.', code: 'HUBSPOT_RATE_LIMIT' });
-  }
-  res.status(502).json({ error: e.message || 'Unexpected error reaching HubSpot.', code: 'HUBSPOT_ERROR' });
 });
 
 // ── HubSpot: Open Leads (contacts with hs_lead_status = OPEN_DEAL) ────────────
@@ -6091,19 +6103,6 @@ app.post('/api/admin/test/bust-project-contacts-cache', isAuthenticated, require
   }
   if (_projectContactsCache) _projectContactsCache.fetchedAt = 0;
   res.json({ ok: true, hadCache: _projectContactsCache !== null });
-});
-
-// ── Dev-only: reset the lead-status-counts rate-limit cooldown ───────────────
-// Clears _leadStatusCountsCooldownUntil so the next request performs a live
-// fan-out rather than immediately serving stale counts. Only useful in tests
-// that exercised the always-429 path (section B) and need section C to see a
-// live retry. Only available when NODE_ENV !== 'production'.
-app.post('/api/admin/test/reset-lead-status-counts-cooldown', isAuthenticated, requireAdmin, (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(404).json({ error: 'Not found' });
-  }
-  _leadStatusCountsCooldownUntil = 0;
-  res.json({ ok: true });
 });
 
 // ── Card action handlers ─────────────────────────────────────────────────────

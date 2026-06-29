@@ -106,7 +106,6 @@ const DB_SUITES = [
   'test:migration-renames:ci',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
-  'test:lead-status-counts-rate-limit:ci',
   'test:lead-status-delete-substatus-clear:ci',
   'test:substatus-hubspot-label-format:ci',
   'test:customer-info:ci',

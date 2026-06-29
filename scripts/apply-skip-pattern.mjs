@@ -73,7 +73,6 @@ const SUITES_3ARG = [
   'customer-info-live-badge',
   'customers-pagination',
   'info-card-review-resend',
-  'lead-status-counts-rate-limit',
   'open-leads-stale-visibility',
   'photos-received-badge',
   'project-contacts-dev-mode',

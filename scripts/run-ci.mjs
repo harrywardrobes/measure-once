@@ -73,7 +73,6 @@ const STEPS = [
   'test:migration-renames:ci',
   'test:privileges:ci',
   'test:lead-status-sync:ci',
-  'test:lead-status-counts-rate-limit:ci',
   'test:lead-status-delete-substatus-clear:ci',
   'test:substatus-hubspot-label-format:ci',
   'test:lead-status-sync-customer-detail:ci',

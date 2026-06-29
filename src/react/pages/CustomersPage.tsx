@@ -1179,10 +1179,14 @@ export function CustomersPage(): React.ReactElement {
   const [countsLoading, setCountsLoading] = React.useState<boolean>(false);
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
 
-  // ── Global lead-status counts (stage tab bar totals) ─────────────────────────
-  // Always fetched without a stage filter so each tab shows the full count for
-  // that stage regardless of which tab is currently active.
-  const [globalLsCounts, setGlobalLsCounts] = React.useState<Record<string, number>>({});
+  // ── Stage tab bar totals ─────────────────────────────────────────────────────
+  // Keyed by stage ({ __all__, sales, designvisit, … }). Fetched from
+  // /api/contacts-stage-counts, which mirrors the stage-filtering logic in
+  // /api/contacts-all exactly so each tab badge matches the list under that
+  // tab. (The earlier approach — re-bucketing raw per-status HubSpot Search
+  // totals from /api/contacts-lead-status-counts — over-counted stages because
+  // those totals span the whole HubSpot DB, not the crawled customer set.)
+  const [stageCounts, setStageCounts] = React.useState<Record<string, number>>({});
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [customersPageSize, setCustomersPageSize] = React.useState<number>(PAGINATED_CONTACTS_PAGE_LIMIT);
   const [prioritySortMode, setPrioritySortMode] = React.useState<'last_contacted' | 'newest'>('last_contacted');
@@ -1265,28 +1269,17 @@ export function CustomersPage(): React.ReactElement {
     return m;
   }, [store.statuses]);
 
+  // Stage tab badge totals. Refetched when the contact set may have changed
+  // (refreshNonce) and when the "Show excluded" toggle flips — the endpoint
+  // includes excluded_from_sales contacts only when includeExcluded=1, matching
+  // how /api/contacts-all scopes the list.
   React.useEffect(() => {
-    apiGet<Record<string, number>>('/api/contacts-lead-status-counts')
-      .then((counts) => { if (counts) setGlobalLsCounts(counts); })
+    const qs = showExcluded ? '?includeExcluded=1' : '';
+    apiGet<Record<string, number>>(`/api/contacts-stage-counts${qs}`)
+      .then((counts) => { if (counts) setStageCounts(counts); })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshNonce]);
-
-  const stageCounts = React.useMemo(() => {
-    const result: Record<string, number> = {};
-    let allTotal = 0;
-    for (const [key, count] of Object.entries(globalLsCounts)) {
-      if (!showExcluded && key !== '__no_status__' && excludedStatusKeys.has(key.toUpperCase())) {
-        continue;
-      }
-      allTotal += count;
-      if (key === '__no_status__') continue;
-      const stage = statusStageMap.get(key);
-      if (stage) result[stage] = (result[stage] || 0) + count;
-    }
-    if (allTotal > 0) result['__all__'] = allTotal;
-    return result;
-  }, [globalLsCounts, statusStageMap, showExcluded, excludedStatusKeys]);
+  }, [refreshNonce, showExcluded]);
 
   const {
     contacts,

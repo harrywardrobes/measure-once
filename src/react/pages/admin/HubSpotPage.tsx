@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Box,
@@ -25,7 +25,6 @@ import { useWorkflow } from '../../hooks/useWorkflow';
 interface HubStatus {
   connected: boolean;
   code?: string;
-  cooldownSecondsRemaining?: number;
 }
 
 interface WebhookSubscription {
@@ -253,25 +252,10 @@ export function HubSpotPage() {
   const [webhookLoading, setWebhookLoading] = useState(true);
   const [webhookActing, setWebhookActing] = useState(false);
 
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const fetchHubStatus = useCallback(async () => {
-    if (cooldownRef.current) { clearInterval(cooldownRef.current); cooldownRef.current = null; }
     try {
       const data = await GET<HubStatus>('/api/hubspot/status');
       setHubStatus(data);
-      if (data.code === 'HUBSPOT_RATE_LIMIT' && (data.cooldownSecondsRemaining ?? 0) > 0) {
-        const rem = { v: data.cooldownSecondsRemaining! };
-        cooldownRef.current = setInterval(() => {
-          rem.v -= 1;
-          if (rem.v <= 0) {
-            clearInterval(cooldownRef.current!); cooldownRef.current = null;
-            fetchHubStatus();
-          } else {
-            setHubStatus(d => d ? { ...d, cooldownSecondsRemaining: rem.v } : d);
-          }
-        }, 1000);
-      }
     } catch {
       setHubStatus({ connected: false, code: 'ERROR' });
     }
@@ -318,7 +302,6 @@ export function HubSpotPage() {
   useEffect(() => {
     fetchHubStatus();
     fetchWebhookStatus();
-    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
   }, [fetchHubStatus, fetchWebhookStatus]);
 
   useEffect(() => {
@@ -330,8 +313,7 @@ export function HubSpotPage() {
     if (!hubStatus) return { text: 'Checking…', bg: 'var(--neutral-100)', color: 'var(--neutral-500)' };
     if (hubStatus.connected) return { text: 'Connected', bg: STATUS_COLORS.success.bg, color: STATUS_COLORS.success.text };
     if (hubStatus.code === 'HUBSPOT_RATE_LIMIT') {
-      const secs = hubStatus.cooldownSecondsRemaining;
-      return { text: secs && secs > 0 ? `Rate limited — retrying in ${secs} s` : 'Rate limited — rechecking…', bg: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text };
+      return { text: 'Rate limited — rechecking…', bg: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text };
     }
     if (hubStatus.code === 'NO_TOKEN')  return { text: 'No token set', bg: STATUS_COLORS.error.bg, color: STATUS_COLORS.error.text };
     if (hubStatus.code === 'ERROR')     return { text: 'Could not check', bg: STATUS_COLORS.warning.bg, color: STATUS_COLORS.warning.text };
