@@ -50,23 +50,19 @@ export type UsePaginatedContactsParams = {
   staleAfterDays?: number;
   pageSize?: number;
   /**
-   * When true (the default), contacts with no lead status are pinned to the
-   * top of the list ahead of the active sort order, unless a specific lead
-   * status filter is already applied (in which case pinning has no effect).
+   * When true (the default), "Priority first" ordering is applied (unless a
+   * specific lead status filter is already active, in which case the base
+   * sort is used). The order is:
+   *   - Rank 0: contacts with no lead status sort above everyone else.
+   *   - Then by notes_last_contacted ascending — never-contacted contacts
+   *     first, most-recently-contacted last. The never-contacted
+   *     ("awaiting a call") group is itself ordered first-come-first-serve,
+   *     i.e. by createdate ascending (longest wait first).
+   * Note: the offline path only has notes_last_contacted (the per-page
+   * lastAttempt data is not available at sort time); server-side sorts use
+   * the full contact_attempt_log coalesced with notes_last_contacted.
    */
   priorityFirst?: boolean;
-  /**
-   * Controls the sort order used by "Priority first".
-   * - 'last_contacted' (default): sort by notes_last_contacted ascending —
-   *   never-contacted contacts first, most-recently-contacted last. The
-   *   never-contacted ("awaiting a call") group is itself ordered
-   *   first-come-first-serve, i.e. by createdate ascending (longest wait first).
-   *   Note: the offline path only has notes_last_contacted (the per-page
-   *   lastAttempt data is not available at sort time); server-side sorts use
-   *   the full contact_attempt_log coalesced with notes_last_contacted.
-   * - 'newest': legacy behaviour — pin no-status contacts, then newest-created-first.
-   */
-  prioritySortMode?: 'last_contacted' | 'newest';
 };
 
 export type UsePaginatedContactsResult = {
@@ -121,7 +117,6 @@ type OfflineFilterParams = {
   page: number;
   limit: number;
   priorityFirst?: boolean;
-  prioritySortMode?: 'last_contacted' | 'newest';
   /** Admin-configured priority-sort active window in days (default 60). */
   priorityActiveDays?: number;
 };
@@ -169,7 +164,7 @@ export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
   params: OfflineFilterParams,
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
-  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, limit, priorityFirst, prioritySortMode } = params;
+  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, limit, priorityFirst } = params;
   let list = cached;
 
   // Always exclude HubSpot test users from the customer-facing view.
@@ -234,38 +229,32 @@ export function filterSortPaginateCachedContacts(
     });
   }
 
-  const effectiveMode = prioritySortMode ?? 'last_contacted';
   let effectiveComparator: (a: PaginatedContact, b: PaginatedContact) => number;
   if (priorityFirst && !leadStatus) {
-    if (effectiveMode === 'last_contacted') {
-      // Sort by notes_last_contacted ascending: never-contacted (null) first.
-      // Note: offline path only has notes_last_contacted; server-side also
-      // coalesces with contact_attempt_log which is not available here.
-      effectiveComparator = (a, b) => {
-        const aLast = a.properties?.notes_last_contacted || null;
-        const bLast = b.properties?.notes_last_contacted || null;
-        if (!aLast && bLast) return -1;
-        if (aLast && !bLast) return  1;
-        if (!aLast && !bLast) {
-          // Both never contacted ("awaiting a call") — first-come-first-serve:
-          // tie-break by createdate ascending so the longest-waiting lead is first.
-          return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
-        }
-        const cmp = aLast!.localeCompare(bLast!);
-        if (cmp !== 0) return cmp;
-        // Tie-break first-come-first-serve: createdate ascending (longest wait first).
+    // Mirrors the server-side priority comparator in /api/contacts-all.
+    // Note: offline path only has notes_last_contacted; server-side also
+    // coalesces with contact_attempt_log which is not available here.
+    effectiveComparator = (a, b) => {
+      // Rank 0: contacts with no lead status sort above everyone else.
+      const aNull = !a.properties?.hs_lead_status;
+      const bNull = !b.properties?.hs_lead_status;
+      if (aNull !== bNull) return aNull ? -1 : 1;
+
+      // Then by notes_last_contacted ascending: never-contacted (null) first.
+      const aLast = a.properties?.notes_last_contacted || null;
+      const bLast = b.properties?.notes_last_contacted || null;
+      if (!aLast && bLast) return -1;
+      if (aLast && !bLast) return  1;
+      if (!aLast && !bLast) {
+        // Both never contacted ("awaiting a call") — first-come-first-serve:
+        // tie-break by createdate ascending so the longest-waiting lead is first.
         return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
-      };
-    } else {
-      // Legacy "newest" mode: pin no-status contacts, then newest-created-first.
-      effectiveComparator = (a, b) => {
-        const aNull = !a.properties?.hs_lead_status;
-        const bNull = !b.properties?.hs_lead_status;
-        if (aNull && !bNull) return -1;
-        if (!aNull && bNull) return  1;
-        return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
-      };
-    }
+      }
+      const cmp = aLast!.localeCompare(bLast!);
+      if (cmp !== 0) return cmp;
+      // Tie-break first-come-first-serve: createdate ascending (longest wait first).
+      return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
+    };
   } else {
     effectiveComparator = offlineComparator(sortBy);
   }
@@ -292,7 +281,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, staleAfterDays, pageSize, priorityFirst, prioritySortMode } = params;
+  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -304,7 +293,7 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst, prioritySortMode });
+  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
     prevFiltersRef.current.stage !== stage ||
@@ -315,11 +304,10 @@ export function usePaginatedContacts(
     prevFiltersRef.current.refreshNonce !== refreshNonce ||
     prevFiltersRef.current.staleAfterDays !== staleAfterDays ||
     prevFiltersRef.current.pageSize !== pageSize ||
-    prevFiltersRef.current.priorityFirst !== priorityFirst ||
-    prevFiltersRef.current.prioritySortMode !== prioritySortMode;
+    prevFiltersRef.current.priorityFirst !== priorityFirst;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst, prioritySortMode };
+    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the
@@ -482,7 +470,6 @@ export function usePaginatedContacts(
               page: effectivePage,
               limit,
               priorityFirst,
-              prioritySortMode,
               priorityActiveDays: resolvedPriorityActiveDays,
             });
           setContacts(results);
@@ -517,7 +504,7 @@ export function usePaginatedContacts(
     return () => {
       ctrl.abort();
     };
-  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst, prioritySortMode]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst]);
 
   const patchContact = React.useCallback(
     (contactId: string, props: Record<string, string | undefined>) => {

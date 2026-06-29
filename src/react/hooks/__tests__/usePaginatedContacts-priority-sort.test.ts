@@ -1,10 +1,10 @@
 /**
- * usePaginatedContacts — priority sort mode tests
+ * usePaginatedContacts — priority sort tests
  *
- * Covers filterSortPaginateCachedContacts() with both prioritySortMode values:
- *   - 'last_contacted': sort by notes_last_contacted ascending (nulls first),
- *     tie-break by createdate descending.
- *   - 'newest': legacy pin-no-status-then-newest behaviour.
+ * Covers filterSortPaginateCachedContacts() "Priority first" ordering:
+ *   - Rank 0: contacts with no lead status sort above everyone else.
+ *   - Then by notes_last_contacted ascending (never-contacted first),
+ *     tie-break by createdate ascending (first-come-first-serve).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -38,17 +38,36 @@ const baseParams = {
   limit: 25,
 };
 
-describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted', () => {
-  it('places never-contacted contacts first', () => {
+describe('filterSortPaginateCachedContacts — Priority first ordering', () => {
+  it('places no-lead-status contacts at the very top (rank 0)', () => {
+    const contacts = [
+      // statused, never contacted — would otherwise sort first
+      makeContact('1', { hs_lead_status: 'OPEN_DEAL', notes_last_contacted: null, createdate: '2024-01-01T00:00:00.000Z' }),
+      // no status, but recently contacted — still wins on rank 0
+      makeContact('2', { hs_lead_status: '', notes_last_contacted: '2024-06-01T00:00:00.000Z', createdate: '2024-06-01T00:00:00.000Z' }),
+    ];
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
+    expect(results[0].id).toBe('2');
+  });
+
+  it('orders multiple no-status contacts among themselves by last-contacted ascending', () => {
+    const contacts = [
+      makeContact('a', { hs_lead_status: '', notes_last_contacted: '2024-06-01T00:00:00.000Z' }),
+      makeContact('b', { hs_lead_status: '', notes_last_contacted: null }),
+      makeContact('c', { hs_lead_status: '', notes_last_contacted: '2024-01-01T00:00:00.000Z' }),
+    ];
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
+    // never-contacted (b) first, then ascending by last-contacted (c before a)
+    expect(results.map(r => r.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('places never-contacted contacts first within the statused group', () => {
     const contacts = [
       makeContact('1', { notes_last_contacted: '2024-03-01T00:00:00.000Z' }),
       makeContact('2', { notes_last_contacted: null }),
       makeContact('3', { notes_last_contacted: '2024-01-01T00:00:00.000Z' }),
     ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'last_contacted',
-    });
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
     expect(results[0].id).toBe('2');
   });
 
@@ -58,10 +77,7 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
       makeContact('2', { notes_last_contacted: '2024-01-01T00:00:00.000Z' }),
       makeContact('3', { notes_last_contacted: '2024-03-01T00:00:00.000Z' }),
     ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'last_contacted',
-    });
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
     expect(results.map(r => r.id)).toEqual(['2', '3', '1']);
   });
 
@@ -72,10 +88,7 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
       makeContact('B', { notes_last_contacted: ts, createdate: '2024-03-01T00:00:00.000Z' }),
       makeContact('C', { notes_last_contacted: ts, createdate: '2024-02-01T00:00:00.000Z' }),
     ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'last_contacted',
-    });
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
     expect(results.map(r => r.id)).toEqual(['A', 'C', 'B']);
   });
 
@@ -85,15 +98,12 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
       makeContact('new', { notes_last_contacted: null, createdate: '2024-06-01T00:00:00.000Z' }),
       makeContact('mid', { notes_last_contacted: null, createdate: '2024-03-01T00:00:00.000Z' }),
     ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'last_contacted',
-    });
+    const { results } = filterSortPaginateCachedContacts(contacts, { ...baseParams });
     // Never-contacted "awaiting a call" leads are served oldest-first.
     expect(results.map(r => r.id)).toEqual(['old', 'mid', 'new']);
   });
 
-  it('does not apply last_contacted sort when a leadStatus filter is active', () => {
+  it('does not apply priority sort when a leadStatus filter is active', () => {
     // When leadStatus is set, priorityFirst is suppressed and the base
     // comparator (offlineComparator('priority') = newest-created-first) applies.
     // Contact '2' has a newer createdate ('2024-02-01') than '1' ('2024-01-01'),
@@ -105,51 +115,9 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
     const { results } = filterSortPaginateCachedContacts(contacts, {
       ...baseParams,
       leadStatus: 'OPEN_DEAL',
-      prioritySortMode: 'last_contacted',
     });
     // priorityFirst && !leadStatus is false → falls back to newest-created-first
     // '2' (2024-02-01) is newer than '1' (2024-01-01)
     expect(results.map(r => r.id)).toEqual(['2', '1']);
-  });
-});
-
-describe('filterSortPaginateCachedContacts — prioritySortMode: newest', () => {
-  it('pins no-status contacts to the top', () => {
-    const contacts = [
-      makeContact('1', { hs_lead_status: 'OPEN_DEAL', createdate: '2024-06-01T00:00:00.000Z' }),
-      makeContact('2', { hs_lead_status: '',           createdate: '2024-01-01T00:00:00.000Z' }),
-      makeContact('3', { hs_lead_status: 'OPEN_DEAL', createdate: '2024-03-01T00:00:00.000Z' }),
-    ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'newest',
-    });
-    expect(results[0].id).toBe('2');
-    expect(results.map(r => r.id)).toEqual(['2', '1', '3']);
-  });
-
-  it('sorts statused contacts by createdate descending after pinned rows', () => {
-    const contacts = [
-      makeContact('old', { hs_lead_status: 'A', createdate: '2024-01-01T00:00:00.000Z' }),
-      makeContact('new', { hs_lead_status: 'A', createdate: '2024-06-01T00:00:00.000Z' }),
-    ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-      prioritySortMode: 'newest',
-    });
-    expect(results.map(r => r.id)).toEqual(['new', 'old']);
-  });
-});
-
-describe('filterSortPaginateCachedContacts — prioritySortMode defaults', () => {
-  it('defaults to last_contacted behaviour when prioritySortMode is absent', () => {
-    const contacts = [
-      makeContact('1', { notes_last_contacted: '2024-06-01T00:00:00.000Z' }),
-      makeContact('2', { notes_last_contacted: null }),
-    ];
-    const { results } = filterSortPaginateCachedContacts(contacts, {
-      ...baseParams,
-    });
-    expect(results[0].id).toBe('2');
   });
 });

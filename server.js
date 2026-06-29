@@ -1908,73 +1908,60 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 
     let effectiveComparator;
     if (priorityFirst && !leadStatus) {
-      // Read the configured sort mode (cached with the rest of page filter config).
-      let prioritySortMode = 'last_contacted';
-      try {
-        const cfg = await getPageFilterConfig();
-        if (cfg.customers_priority_sort_mode === 'newest') prioritySortMode = 'newest';
-      } catch (_) {}
-
-      if (prioritySortMode === 'last_contacted') {
-        // Build a map of contactId → max attempted_at from contact_attempt_log
-        // for all contacts currently in the filtered set.  Coalesce with each
-        // contact's HubSpot notes_last_contacted property so whichever is later
-        // wins, then sort ascending (never-contacted → most-recently-contacted).
-        const contactIds = contacts.map(c => c.id);
-        let lastAttemptMap = {};
-        if (contactIds.length > 0) {
-          try {
-            const { rows: attemptRows } = await pool.query(
-              `SELECT hubspot_contact_id, MAX(attempted_at) AS last_attempt
-               FROM contact_attempt_log
-               WHERE hubspot_contact_id = ANY($1::text[])
-               GROUP BY hubspot_contact_id`,
-              [contactIds],
-            );
-            for (const r of attemptRows) {
-              lastAttemptMap[r.hubspot_contact_id] = r.last_attempt ? new Date(r.last_attempt).toISOString() : null;
-            }
-          } catch (dbErr) {
-            logger.warn({ err: dbErr.message }, '[contacts-all] could not load contact_attempt_log for priority sort:');
+      // Build a map of contactId → max attempted_at from contact_attempt_log
+      // for all contacts currently in the filtered set.  Coalesce with each
+      // contact's HubSpot notes_last_contacted property so whichever is later
+      // wins, then sort ascending (never-contacted → most-recently-contacted).
+      const contactIds = contacts.map(c => c.id);
+      let lastAttemptMap = {};
+      if (contactIds.length > 0) {
+        try {
+          const { rows: attemptRows } = await pool.query(
+            `SELECT hubspot_contact_id, MAX(attempted_at) AS last_attempt
+             FROM contact_attempt_log
+             WHERE hubspot_contact_id = ANY($1::text[])
+             GROUP BY hubspot_contact_id`,
+            [contactIds],
+          );
+          for (const r of attemptRows) {
+            lastAttemptMap[r.hubspot_contact_id] = r.last_attempt ? new Date(r.last_attempt).toISOString() : null;
           }
+        } catch (dbErr) {
+          logger.warn({ err: dbErr.message }, '[contacts-all] could not load contact_attempt_log for priority sort:');
         }
-
-        const getLastContacted = (c) => {
-          const fromLog = lastAttemptMap[c.id] || null;
-          const fromHs  = c.properties?.notes_last_contacted || null;
-          if (!fromLog && !fromHs) return null;
-          if (!fromLog) return fromHs;
-          if (!fromHs)  return fromLog;
-          return fromLog > fromHs ? fromLog : fromHs;
-        };
-
-        effectiveComparator = (a, b) => {
-          const aLast = getLastContacted(a);
-          const bLast = getLastContacted(b);
-          // Never-contacted (null) sorts first (highest priority).
-          if (!aLast && bLast) return -1;
-          if (aLast && !bLast) return  1;
-          if (!aLast && !bLast) {
-            // Both never contacted ("awaiting a call") — first-come-first-serve:
-            // tie-break by createdate ascending so the longest-waiting lead is first.
-            return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
-          }
-          // Ascending by last-contacted (longest since contact = first).
-          const cmp = aLast.localeCompare(bLast);
-          if (cmp !== 0) return cmp;
-          // Tie-break first-come-first-serve: createdate ascending (longest wait first).
-          return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
-        };
-      } else {
-        // Legacy "newest created first" mode — pin no-status contacts then newest.
-        effectiveComparator = (a, b) => {
-          const aNull = !a.properties?.hs_lead_status;
-          const bNull = !b.properties?.hs_lead_status;
-          if (aNull && !bNull) return -1;
-          if (!aNull && bNull) return  1;
-          return comparator(a, b);
-        };
       }
+
+      const getLastContacted = (c) => {
+        const fromLog = lastAttemptMap[c.id] || null;
+        const fromHs  = c.properties?.notes_last_contacted || null;
+        if (!fromLog && !fromHs) return null;
+        if (!fromLog) return fromHs;
+        if (!fromHs)  return fromLog;
+        return fromLog > fromHs ? fromLog : fromHs;
+      };
+
+      effectiveComparator = (a, b) => {
+        // Rank 0: contacts with no lead status sort above everyone else.
+        const aNull = !a.properties?.hs_lead_status;
+        const bNull = !b.properties?.hs_lead_status;
+        if (aNull !== bNull) return aNull ? -1 : 1;
+
+        const aLast = getLastContacted(a);
+        const bLast = getLastContacted(b);
+        // Never-contacted (null) sorts first (highest priority).
+        if (!aLast && bLast) return -1;
+        if (aLast && !bLast) return  1;
+        if (!aLast && !bLast) {
+          // Both never contacted ("awaiting a call") — first-come-first-serve:
+          // tie-break by createdate ascending so the longest-waiting lead is first.
+          return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
+        }
+        // Ascending by last-contacted (longest since contact = first).
+        const cmp = aLast.localeCompare(bLast);
+        if (cmp !== 0) return cmp;
+        // Tie-break first-come-first-serve: createdate ascending (longest wait first).
+        return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
+      };
     } else {
       effectiveComparator = comparator;
     }
@@ -5332,7 +5319,6 @@ const PAGE_FILTER_CONFIG_DEFAULTS = {
   surveys_page_size:                 { value: 25,              label: 'Surveys board — default page size',           type: 'number', min: 5, max: 100 },
   customers_page_size:               { value: 25,              label: 'Customers list — default page size',          type: 'number', min: 5, max: 100 },
   surveys_hidden_substages_default:  { value: '[]',            label: 'Surveys board — hidden substages (JSON)',     type: 'json'                      },
-  customers_priority_sort_mode:      { value: 'last_contacted', label: 'Customers list — "Priority first" sort mode', type: 'string', allowedValues: ['last_contacted', 'newest'] },
   task_assignment_emails_enabled:    { value: 'true',          label: 'Task assignment — send email notifications',  type: 'string', allowedValues: ['true', 'false'] },
   task_reassignment_emails_enabled:  { value: 'true',          label: 'Task reassignment — send email notifications', type: 'string', allowedValues: ['true', 'false'] },
 };

@@ -2,22 +2,16 @@
 
 // test/contacts-all-priority-sort/run.js
 //
-// Verifies that GET /api/contacts-all sorts correctly under "Priority first"
-// in both modes:
+// Verifies that GET /api/contacts-all sorts correctly under "Priority first":
 //
-//   [A] last_contacted mode (default): never-contacted ("awaiting a call")
+//   [A] Within the statused group: never-contacted ("awaiting a call")
 //       contacts appear first — ordered first-come-first-serve (createdate
 //       ascending, longest wait first) — then contacted contacts sorted
 //       ascending by last-contacted timestamp. Contacts in contact_attempt_log
 //       whose attempted_at is more recent than notes_last_contacted should win.
 //
-//   [B] newest mode (legacy): contacts with no hs_lead_status are pinned to
-//       the top; the remainder are sorted newest-created-first.
-//
-//   [C] PATCH /api/admin/page-filter-config rejects invalid mode values.
-//
-//   [D] Switching the mode from last_contacted → newest via the admin PATCH
-//       takes effect immediately (cache is invalidated).
+//   [B] Rank 0: contacts with no hs_lead_status sort above everyone else,
+//       regardless of their last-contacted timestamp.
 //
 // Usage:
 //   DATABASE_URL_TEST=<isolated-db>  npm run test:contacts-all-priority-sort
@@ -47,13 +41,10 @@ const REPORT_PATH = path.join(
 );
 
 const PROBE_LABELS = [
-  '(A) last_contacted mode — never-contacted contacts sort first',
-  '(A) last_contacted mode — ascending by last-contacted timestamp (oldest first)',
-  '(A) last_contacted mode — contact_attempt_log wins when later than notes_last_contacted',
-  '(B) newest mode — no-status contacts pinned first',
-  '(B) newest mode — remaining contacts sorted newest-created-first',
-  '(C) PATCH rejects invalid mode values (400)',
-  '(D) switching mode → newest takes effect after cache invalidation',
+  '(A) never-contacted contacts sort first within the statused group',
+  '(A) ascending by last-contacted timestamp (oldest first)',
+  '(A) contact_attempt_log wins when later than notes_last_contacted',
+  '(B) rank 0 — no-status contact sorts above all statused contacts',
 ];
 
 const findings = [];
@@ -110,8 +101,8 @@ const CONTACTS_FIXTURE = [
   },
 ];
 
-// Additional contacts for "newest" mode test — two with a status, one without.
-const NEWEST_FIXTURE = [
+// Additional contacts for the rank-0 test — two with a status, one without.
+const NOSTATUS_FIXTURE = [
   {
     id: 'ns-nostatus',
     properties: {
@@ -201,35 +192,6 @@ function httpGet(urlPath, cookie) {
   });
 }
 
-function httpPatch(urlPath, body, cookie) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(urlPath, BASE);
-    const bodyStr = JSON.stringify(body);
-    const req = http.request({
-      method: 'PATCH',
-      hostname: u.hostname,
-      port: u.port,
-      path: u.pathname + u.search,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-        ...(cookie ? { Cookie: cookie } : {}),
-      },
-    }, res => {
-      let raw = '';
-      res.on('data', c => { raw += c; });
-      res.on('end', () => {
-        let json = null;
-        try { json = JSON.parse(raw); } catch {}
-        resolve({ status: res.statusCode, body: raw, json });
-      });
-    });
-    req.on('error', reject);
-    req.write(bodyStr);
-    req.end();
-  });
-}
-
 // ── Write report ──────────────────────────────────────────────────────────────
 async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
@@ -276,12 +238,6 @@ async function main() {
   const users = await seedUsers(pool, runId);
   console.log(`  Seeded  admin=${users.admin.email}`);
 
-  // Ensure sort mode starts at default (last_contacted)
-  await pool.query(
-    `INSERT INTO page_filter_config (key, value) VALUES ('customers_priority_sort_mode','last_contacted')
-     ON CONFLICT (key) DO UPDATE SET value = 'last_contacted'`,
-  );
-
   // Seed a contact_attempt_log entry for cs-old with a MORE recent timestamp
   // than its notes_last_contacted — verifying that the log wins.
   const ATTEMPT_RECENT = new Date(NOW - 10 * 24 * 3600_000).toISOString(); // 10 days ago (newer than 30)
@@ -299,7 +255,7 @@ async function main() {
     );
   } catch (_) {}
 
-  const mock = await startMockHubspot([...CONTACTS_FIXTURE, ...NEWEST_FIXTURE]);
+  const mock = await startMockHubspot([...CONTACTS_FIXTURE, ...NOSTATUS_FIXTURE]);
   console.log(`  Mock HubSpot on 127.0.0.1:${mock.port}`);
 
   process.env.HUBSPOT_API_URL = `http://127.0.0.1:${mock.port}`;
@@ -321,7 +277,6 @@ async function main() {
   const cleanupAndExit = async (code) => {
     try { if (!exited) child.kill('SIGTERM'); } catch {}
     try { mock.server.close(); } catch {}
-    try { await pool.query(`DELETE FROM page_filter_config WHERE key = 'customers_priority_sort_mode'`); } catch {}
     try { await pool.query(`DELETE FROM contact_attempt_log WHERE hubspot_contact_id = 'cs-old'`); } catch {}
     try { await cleanupTestData(pool); } catch {}
     await pool.end().catch(() => {});
@@ -344,10 +299,9 @@ async function main() {
   }
 
   const memberCookie = (await login(users.member.email, PASSWORD)).cookie;
-  const adminCookie  = (await login(users.admin.email,  PASSWORD)).cookie;
 
-  // ─── Probe A — last_contacted mode ──────────────────────────────────────────
-  console.log('\n  [A] last_contacted mode');
+  // ─── Probe A — last-contacted ordering within the statused group ─────────────
+  console.log('\n  [A] last-contacted ordering');
   {
     const r = await httpGet('/api/contacts-all?priorityFirst=1&limit=25', memberCookie);
     const ids = (r.json?.results || []).map(c => c.id);
@@ -374,59 +328,23 @@ async function main() {
       `attempt_log at ${ATTEMPT_RECENT} (10d) coalesced with notes_last_contacted (30d) → cs-old before cs-recent`);
   }
 
-  // ─── Probe B — newest mode ──────────────────────────────────────────────────
-  console.log('\n  [B] newest mode — switch via admin PATCH');
+  // ─── Probe B — rank 0: no-status contacts sort above everyone ───────────────
+  console.log('\n  [B] rank 0 — no-status contact on top');
   {
-    const patchR = await httpPatch('/api/admin/page-filter-config', { customers_priority_sort_mode: 'newest' }, adminCookie);
-    if (patchR.status !== 200) {
-      record(PROBE_LABELS[3], false, `PATCH failed: ${patchR.status} ${patchR.body.slice(0, 100)}`);
-      record(PROBE_LABELS[4], false, 'skipped — mode switch failed');
-    } else {
-      // Give the cache a moment to be invalidated (it's synchronous in the PATCH handler)
-      const r = await httpGet('/api/contacts-all?priorityFirst=1&limit=25', memberCookie);
-      const ids = (r.json?.results || []).map(c => c.id);
-      console.log('  B order:', ids);
+    const r = await httpGet('/api/contacts-all?priorityFirst=1&limit=25', memberCookie);
+    const ids = (r.json?.results || []).map(c => c.id);
+    console.log('  B order:', ids);
 
-      // [B.1] no-status contact first
-      const nsIdx    = ids.indexOf('ns-nostatus');
-      const newerIdx = ids.indexOf('ns-newer');
-      const olderIdx = ids.indexOf('ns-older');
-      record(PROBE_LABELS[3], nsIdx !== -1 && nsIdx < newerIdx && nsIdx < olderIdx,
-        `ns-nostatus at [${nsIdx}], ns-newer at [${newerIdx}], ns-older at [${olderIdx}]`);
-
-      // [B.2] newer-created before older-created after the pinned block
-      record(PROBE_LABELS[4], newerIdx !== -1 && olderIdx !== -1 && newerIdx < olderIdx,
-        `ns-newer at [${newerIdx}], ns-older at [${olderIdx}]`);
-    }
-
-    // Reset to last_contacted for subsequent tests
-    await httpPatch('/api/admin/page-filter-config', { customers_priority_sort_mode: 'last_contacted' }, adminCookie);
-  }
-
-  // ─── Probe C — invalid mode rejected ────────────────────────────────────────
-  console.log('\n  [C] PATCH rejects invalid mode');
-  {
-    const r = await httpPatch('/api/admin/page-filter-config', { customers_priority_sort_mode: 'invalid_mode' }, adminCookie);
-    record(PROBE_LABELS[5], r.status === 400,
-      `status=${r.status} body=${r.body.slice(0, 100)}`);
-  }
-
-  // ─── Probe D — mode switch takes effect after cache invalidation ─────────────
-  console.log('\n  [D] mode switch takes effect after PATCH');
-  {
-    // Verify we're back on last_contacted (reset above)
-    const r1 = await httpGet('/api/contacts-all?priorityFirst=1&limit=25', memberCookie);
-    const ids1 = (r1.json?.results || []).map(c => c.id);
-    const neverFirst1 = ids1.indexOf('cs-never') < ids1.indexOf('cs-recent');
-
-    // Switch to newest
-    await httpPatch('/api/admin/page-filter-config', { customers_priority_sort_mode: 'newest' }, adminCookie);
-    const r2 = await httpGet('/api/contacts-all?priorityFirst=1&limit=25', memberCookie);
-    const ids2 = (r2.json?.results || []).map(c => c.id);
-    const nsFirstAfterSwitch = ids2.indexOf('ns-nostatus') < ids2.indexOf('ns-newer');
-
-    record(PROBE_LABELS[6], neverFirst1 && nsFirstAfterSwitch,
-      `last_contacted: cs-never first=${neverFirst1}; after switch to newest: ns-nostatus first=${nsFirstAfterSwitch}`);
+    // ns-nostatus (no hs_lead_status) must sort above every statused contact,
+    // including cs-never (statused but never contacted, which would otherwise
+    // lead the list).
+    const nsIdx = ids.indexOf('ns-nostatus');
+    const statusedIdxs = ['cs-never', 'cs-old', 'cs-recent', 'ns-newer', 'ns-older']
+      .map(id => ids.indexOf(id))
+      .filter(i => i !== -1);
+    const nsAboveAll = nsIdx !== -1 && statusedIdxs.every(i => nsIdx < i);
+    record(PROBE_LABELS[3], nsAboveAll,
+      `ns-nostatus at [${nsIdx}], statused contacts at [${statusedIdxs.join(', ')}]`);
   }
 
   await writeReport(runId);

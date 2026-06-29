@@ -1189,20 +1189,14 @@ export function CustomersPage(): React.ReactElement {
   const [stageCounts, setStageCounts] = React.useState<Record<string, number>>({});
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [customersPageSize, setCustomersPageSize] = React.useState<number>(PAGINATED_CONTACTS_PAGE_LIMIT);
-  const [prioritySortMode, setPrioritySortMode] = React.useState<'last_contacted' | 'newest'>('last_contacted');
 
   React.useEffect(() => {
     fetch('/api/page-filter-config', { headers: { Accept: 'application/json' } })
       .then(r => r.ok ? r.json() : null)
-      .then((cfg: { customers_page_size?: number; customers_priority_sort_mode?: string } | null) => {
+      .then((cfg: { customers_page_size?: number } | null) => {
         if (!cfg) return;
         const ps = cfg.customers_page_size;
         if (typeof ps === 'number' && ps > 0) setCustomersPageSize(ps);
-        if (cfg.customers_priority_sort_mode === 'newest') {
-          setPrioritySortMode('newest');
-        } else {
-          setPrioritySortMode('last_contacted');
-        }
       })
       .catch(() => {});
   }, []);
@@ -1296,7 +1290,7 @@ export function CustomersPage(): React.ReactElement {
     patchContact,
     removeContact,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst: sortBy === 'priority', prioritySortMode },
+    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst: sortBy === 'priority' },
     { onFetchSuccess: scheduleCounts },
   );
 
