@@ -250,6 +250,17 @@ async function main() {
     await waitForServer();
     await resetRateLimitStore(pool);
     console.log(`  Server up at ${BASE}`);
+
+    // The isolated test DB seeds lead_status_config without a stage (see
+    // DEFAULT_LEAD_STATUSES in server.js), so a freshly-created OPEN_DEAL
+    // contact would be filtered out of the default stage=sales Customers view.
+    // Production configures OPEN_DEAL → SALES; mirror that here so the
+    // post-create "appears in the list" assertion exercises real behaviour.
+    await pool.query(`
+      INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage)
+      VALUES ('OPEN_DEAL', 'Open Deal', 3, FALSE, 'SALES')
+      ON CONFLICT (key) DO UPDATE SET stage = 'SALES'
+    `);
   } catch (e) {
     console.error('Server boot failed:', e.message);
     console.error(logBuf.join('').slice(-2000));
@@ -461,26 +472,47 @@ async function main() {
           () => document.getElementById('new-customer-form') ? 'ok' : null,
           null, 6000);
         const existingEmail = `nc-${runId}@privtest.local`;
-        await memberPage.evaluate((em) => {
-          const el = document.getElementById('nc-email');
-          if (!el) return;
-          const proto = Object.getPrototypeOf(el);
-          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-          setter ? setter.call(el, em) : (el.value = em);
-          el.dispatchEvent(new Event('input',  { bubbles: true }));
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }, existingEmail);
-        const dupSnap = await pollPage(memberPage, () => {
-          const notice = document.getElementById('nc-duplicate-notice');
-          if (!notice) return null;
-          const link = document.getElementById('nc-duplicate-link');
-          const submit = document.getElementById('nc-submit');
-          return {
-            visible: true,
-            href: link?.getAttribute('href') || '',
-            disabled: !!(submit && submit.hasAttribute('disabled')),
-          };
-        }, null, 8000);
+        // Wait until the modal's lookup endpoint actually returns the existing
+        // contact before driving the UI. The duplicate check is a debounced
+        // single fetch, so without this it can race a briefly-cold shared
+        // contacts cache right after the create+refetch above and miss the
+        // match (a real user types over several seconds, well after it warms).
+        await pollFn(async () => {
+          const found = await memberPage.evaluate(async (em) => {
+            const r = await fetch(`/api/contacts-all?q=${encodeURIComponent(em)}&limit=10`, { headers: { Accept: 'application/json' } });
+            const d = await r.json().catch(() => ({}));
+            return (d.results || []).some(c => (c.properties?.email || '').trim().toLowerCase() === em.toLowerCase());
+          }, existingEmail);
+          return found ? true : null;
+        }, 8000, 150);
+        // Drive the email field and assert the notice in one self-correcting
+        // loop: re-apply the value if a re-render (the post-create list refetch
+        // is still settling) clobbers the controlled input, so the debounced
+        // lookup is never starved of its value. The interval is above the 400ms
+        // debounce so a stable value fires the check between iterations.
+        const dupSnap = await pollFn(async () => {
+          return await memberPage.evaluate((em) => {
+            const el = document.getElementById('nc-email');
+            if (!el) return null;
+            if (el.value !== em) {
+              const proto = Object.getPrototypeOf(el);
+              const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+              setter ? setter.call(el, em) : (el.value = em);
+              el.dispatchEvent(new Event('input',  { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return null; // let the debounce fire before sampling the notice
+            }
+            const notice = document.getElementById('nc-duplicate-notice');
+            if (!notice) return null;
+            const link = document.getElementById('nc-duplicate-link');
+            const submit = document.getElementById('nc-submit');
+            return {
+              visible: true,
+              href: link?.getAttribute('href') || '',
+              disabled: !!(submit && submit.hasAttribute('disabled')),
+            };
+          }, existingEmail);
+        }, 12000, 500);
         record(UI_LABELS[4],
           '#nc-duplicate-notice visible, link → /customers/<id>, #nc-submit disabled',
           `snap=${JSON.stringify(dupSnap)}`,
