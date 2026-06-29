@@ -1090,7 +1090,7 @@ export function CustomerInfoPage() {
               <Stack spacing={3}>
                 <FormControl>
                   <FormLabel sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
-                    How many rooms / spaces are you looking to do?
+                    How many rooms / spaces are you looking to improve?
                   </FormLabel>
                   <RadioGroup
                     row
@@ -1114,7 +1114,7 @@ export function CustomerInfoPage() {
                     Photos of your {roomLabel}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                    Please upload photos of the {roomLabel} — the more angles the better. Include any tricky corners, alcoves, or features.
+                    Please upload photos of the {roomLabel} — they don't have to be pretty. Include any tricky corners, alcoves, or features.
                   </Typography>
 
                   {(() => {
