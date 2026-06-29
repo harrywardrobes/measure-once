@@ -8,6 +8,12 @@
  * dynamically imported so it stays out of the always-loaded main bundle.
  */
 export async function clearOfflineData(): Promise<void> {
+  // Clear the cached last-known user so the offline cold-start fallback doesn't
+  // resurrect the signed-out account on a shared device.
+  try {
+    const { LAST_KNOWN_USER_KEY } = await import('../constants/localStorageKeys');
+    localStorage.removeItem(LAST_KNOWN_USER_KEY);
+  } catch { /* best-effort */ }
   const clearDb = import('./offlineDb')
     .then((m) => m.clearOfflineDb())
     .catch(() => {});

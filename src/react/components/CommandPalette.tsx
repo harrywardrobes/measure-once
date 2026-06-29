@@ -288,9 +288,28 @@ export function CommandPalette() {
       },
       'sign-out': () => {
         const done = () => { location.href = '/login?signed_out=1'; };
-        clearOfflineData().finally(() => {
-          fetch('/api/logout', { method: 'POST' }).then(done).catch(done);
-        });
+        const proceed = () => {
+          clearOfflineData().finally(() => {
+            fetch('/api/logout', { method: 'POST' }).then(done).catch(done);
+          });
+        };
+        // Signing out clears the offline outbox, so warn first if there is
+        // unsynced work queued (e.g. a design visit completed offline that
+        // hasn't reached the server yet). Queue unavailable → don't block logout.
+        void import('../lib/offlineQueue')
+          .then(({ getCounts }) => getCounts())
+          .then((counts) => {
+            const unsynced = counts.pending + counts.syncing + counts.failed;
+            if (unsynced > 0) {
+              const ok = window.confirm(
+                `You have ${unsynced} change${unsynced === 1 ? '' : 's'} that ${unsynced === 1 ? "hasn't" : "haven't"} synced yet. ` +
+                `Signing out will discard ${unsynced === 1 ? 'it' : 'them'}. Sign out anyway?`,
+              );
+              if (!ok) return;
+            }
+            proceed();
+          })
+          .catch(() => proceed());
       },
       'go-admin-group-people':        () => adminGroupNav('people'),
       'go-admin-group-configuration': () => adminGroupNav('configuration'),

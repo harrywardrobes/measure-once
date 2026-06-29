@@ -78,6 +78,9 @@ const { count, size, warnings } = await generateSW({
     { url: '/', revision: buildRev },
     { url: '/customers', revision: buildRev },
     { url: '/profile', revision: buildRev },
+    // Standalone offline design-visit field tool — precached so it cold-launches
+    // with no connection (the primary install-and-go scenario).
+    { url: '/design-visit', revision: buildRev },
   ],
   navigateFallback: null,
   runtimeCaching: [
@@ -111,7 +114,7 @@ const { count, size, warnings } = await generateSW({
       // serialises urlPattern via .toString() the generated sw.js has no
       // reference to any closed-over variable (the old `patterns` closure
       // caused a ReferenceError at SW runtime).  We must test url.pathname
-      // (not url.href) because the routes use ^/api/… anchors.
+      // (not url.href) because the route patterns are anchored to the /api path.
       const patternSrc = routes.map((s) => `(?:${s})`).join('|');
       const escapedSrc = patternSrc.replace(/\//g, '\\/');
       return {

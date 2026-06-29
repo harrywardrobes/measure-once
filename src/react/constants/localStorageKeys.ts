@@ -180,6 +180,15 @@ export const CONNECT_MODAL_SHOWN_KEY = 'mo:connectModalShownThisSession';
 /** Per-user phone number draft for the email signature card: `${USER_PHONE_DRAFT_PREFIX}${userId}` */
 export const USER_PHONE_DRAFT_PREFIX = 'mo:profile:phone-draft:';
 
+// ── Auth (offline cold-start) ───────────────────────────────────────────────────
+/**
+ * Last successfully-fetched `/api/auth/user` payload, cached so an installed PWA
+ * that cold-launches with no connection stays signed in instead of bouncing to
+ * `/login`. Written by AuthContext on every successful fetch, read as the offline
+ * fallback, and cleared on a genuine 401 and on logout (`clearOfflineData`).
+ */
+export const LAST_KNOWN_USER_KEY = 'mo:auth:last-known-user';
+
 // ── Legacy-key global sweep ────────────────────────────────────────────────────
 /**
  * Written to localStorage once the one-time global sweep that removes all

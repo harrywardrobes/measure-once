@@ -97,6 +97,14 @@ export const FEATURE_AREAS: FeatureArea[] = [
       'Room photos captured in the design-visit wizard are saved on the device and uploaded with the queued submission when you reconnect.',
   },
   {
+    name: 'Design visit (standalone page)',
+    capability: 'full',
+    backedBy: ['visit'],
+    cachedBy: ['mo-reference'],
+    detail:
+      'The standalone /design-visit field page works offline: catalogues, the questionnaire, terms and the card-action config are cached so a full visit can be completed and queued. Existing or brand-new customers are supported; the visit (and any new customer) syncs to the CRM on reconnect.',
+  },
+  {
     name: 'Arrange-visit outcomes',
     capability: 'full',
     backedBy: ['visit'],

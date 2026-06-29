@@ -54,6 +54,50 @@ const DEFAULT_ENDPOINTS: VisitUploadEndpoints = {
   deleteUrl: (key) => `/api/design-visits/uploads/${encodeURIComponent(key)}`,
 };
 
+// ── Client-side image downscaling ───────────────────────────────────────────
+// Shrinks captured room photos before they are stored/uploaded: smaller offline
+// outbox entries and comfortably within the per-image (10MB) / request (25MB)
+// size limits, which matters most when several photos are queued offline in one
+// visit. Best-effort — returns the original data URL for non-images, already
+// small images, or on any failure (decode / canvas unavailable).
+const MAX_IMAGE_DIM = 2000;      // longest edge, px
+const DOWNSCALE_QUALITY = 0.82;  // JPEG quality
+
+async function downscaleDataUrl(
+  dataUrl: string,
+  fallbackMime: string,
+): Promise<{ dataUrl: string; mimeType: string }> {
+  try {
+    if (typeof document === 'undefined') return { dataUrl, mimeType: fallbackMime };
+    if (!/^data:image\/(png|jpe?g|webp)/i.test(dataUrl)) return { dataUrl, mimeType: fallbackMime };
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('decode failed'));
+      im.src = dataUrl;
+    });
+    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    if (!longest) return { dataUrl, mimeType: fallbackMime };
+    const scale = Math.min(1, MAX_IMAGE_DIM / longest);
+    // Already small and already JPEG → re-encoding would gain little.
+    if (scale === 1 && /^data:image\/jpe?g/i.test(dataUrl)) return { dataUrl, mimeType: fallbackMime };
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { dataUrl, mimeType: fallbackMime };
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL('image/jpeg', DOWNSCALE_QUALITY);
+    // Only adopt the re-encoded copy if it is actually smaller.
+    if (out && out.length < dataUrl.length) return { dataUrl: out, mimeType: 'image/jpeg' };
+    return { dataUrl, mimeType: fallbackMime };
+  } catch {
+    return { dataUrl, mimeType: fallbackMime };
+  }
+}
+
 /**
  * Internal room representation — wraps the public RoomData with a stable
  * client-side ID so upload state and results are always routed to the correct
@@ -303,11 +347,17 @@ export function DesignVisitRoomsStep({
         continue;
       }
 
+      // Downscale large photos client-side before storing/uploading: smaller
+      // offline outbox entries and comfortably within the size limits.
+      const ds = await downscaleDataUrl(dataUrl, file.type || 'image/jpeg');
+      dataUrl = ds.dataUrl;
+      const effectiveMime = ds.mimeType;
+
       // Keep the photo inline (no server upload). Used when offline or when the
       // upload request fails at the network level — the bytes ride along in the
       // queued submit instead of being dropped.
       const keepInline = () => {
-        uploaded.push({ storageKey: dataUrl, mimeType: file.type || null, viewUrl: dataUrl });
+        uploaded.push({ storageKey: dataUrl, mimeType: effectiveMime, viewUrl: dataUrl });
         setUploadProgressById(prev => ({
           ...prev,
           [clientId]: Math.round(((i + 1) / totalFiles) * 100),
@@ -373,7 +423,7 @@ export function DesignVisitRoomsStep({
 
       const newImg: RoomImage = {
         storageKey: data.storageKey,
-        mimeType: data.mimeType || file.type,
+        mimeType: data.mimeType || effectiveMime,
         viewUrl: data.viewUrl || '',
       };
       onNewUpload?.(newImg.storageKey);

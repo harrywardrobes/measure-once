@@ -30,7 +30,7 @@ export const OFFLINE_READ_CACHES = [
     cacheName: 'mo-customers',
     maxEntries: 200,
     routes: [
-      '^/api/(contacts-all|contacts-lead-status-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$',
+      '^/api/(contacts-all|contacts-lead-status-counts|contacts-stage-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$',
       '^/api/contacts/[^/]+(/(localdata|tasks))?$',
     ],
   },
@@ -60,5 +60,19 @@ export const OFFLINE_READ_CACHES = [
     cacheName: 'mo-customer-photos',
     maxEntries: 200,
     routes: ['^/api/customer-info-photos/'],
+  },
+  {
+    // Design-visit reference data for the standalone offline page (/design-visit):
+    // catalogues, the questionnaire, terms, and the card-action handler config.
+    // Warmed on the page's mount while online so the wizard's existing GETs all
+    // resolve from cache once the device drops offline.
+    cacheName: 'mo-reference',
+    maxEntries: 30,
+    routes: [
+      '^/api/catalog/(handles|ranges|doors)$',
+      '^/api/visit-questions$',
+      '^/api/design-visit-terms$',
+      '^/api/card-action-handlers$',
+    ],
   },
 ];

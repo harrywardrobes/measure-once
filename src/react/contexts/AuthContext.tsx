@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import type { CurrentUser } from '../hooks/useCurrentUser';
+import { LAST_KNOWN_USER_KEY } from '../constants/localStorageKeys';
 
 interface AuthState {
   user: CurrentUser | null;
@@ -24,22 +25,55 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 let _promise: Promise<CurrentUser | null> | null = null;
 
+/**
+ * Persist the last successfully-fetched user (or clear it). Used as the offline
+ * fallback below so an installed PWA that cold-launches with no connection stays
+ * signed in. Cleared on a genuine 401 and on logout (clearOfflineData).
+ */
+function persistUser(u: CurrentUser | null): void {
+  try {
+    if (u) localStorage.setItem(LAST_KNOWN_USER_KEY, JSON.stringify(u));
+    else localStorage.removeItem(LAST_KNOWN_USER_KEY);
+  } catch { /* localStorage unavailable — non-fatal */ }
+}
+
+/** Read the cached last-known user (offline cold-start fallback). */
+export function readPersistedUser(): CurrentUser | null {
+  try {
+    const raw = localStorage.getItem(LAST_KNOWN_USER_KEY);
+    return raw ? (JSON.parse(raw) as CurrentUser) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function attemptFetchUser(): Promise<CurrentUser | null> {
   const r = await fetch('/api/auth/user', { headers: { Accept: 'application/json' } });
-  if (r.ok) return r.json() as Promise<CurrentUser>;
-  if (r.status === 401) return null; // genuinely unauthenticated — do not retry
-  // Any other status (5xx, etc.) — throw so the caller can retry
+  if (r.ok) {
+    const u = (await r.json()) as CurrentUser;
+    persistUser(u); // cache for offline cold-starts
+    return u;
+  }
+  if (r.status === 401) {
+    // Genuinely unauthenticated — clear the cached user and do not retry.
+    persistUser(null);
+    return null;
+  }
+  // Any other status (5xx, etc.) — throw so the caller can retry / fall back.
   throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status });
 }
 
 function fetchUser(): Promise<CurrentUser | null> {
   if (!_promise) {
     _promise = attemptFetchUser().catch(async () => {
-      // Transient server/network error — wait briefly and retry once before
-      // treating the session as expired. This prevents a momentary 5xx from
-      // the /api/auth/user endpoint kicking a genuinely logged-in user to /login.
+      // Transient server/network error — wait briefly and retry once. If it
+      // still fails (offline / server down) fall back to the last-known user
+      // from a previous successful login, so an installed PWA that cold-launches
+      // with no connection stays usable instead of being kicked to /login. A
+      // genuine 401 returns null above (and clears the cache), so a revoked
+      // session still logs out on the next reachable request.
       await new Promise(resolve => setTimeout(resolve, 1500));
-      return attemptFetchUser().catch(() => null);
+      return attemptFetchUser().catch(() => readPersistedUser());
     });
   }
   return _promise;
@@ -80,9 +114,11 @@ function readPrivilege(user: CurrentUser | null): string {
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(
-    () => (window as unknown as { __moHeaderUser?: CurrentUser | null }).__moHeaderUser ?? null,
+    () => (window as unknown as { __moHeaderUser?: CurrentUser | null }).__moHeaderUser ?? readPersistedUser(),
   );
-  const [loading, setLoading] = useState(() => !((window as unknown as { __moHeaderUser?: CurrentUser | null }).__moHeaderUser));
+  const [loading, setLoading] = useState(
+    () => !((window as unknown as { __moHeaderUser?: CurrentUser | null }).__moHeaderUser ?? readPersistedUser()),
+  );
   const [googleConnected, setGoogleConnected] = useState(false);
   const [qbConnected, setQbConnected] = useState(false);
 
