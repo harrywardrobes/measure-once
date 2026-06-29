@@ -9,7 +9,7 @@ import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { AddressInput } from './AddressInput';
 import { CatalogueDropdowns, type CatalogueSuggestion } from './CatalogueDropdowns';
-import type { StructuredAddress } from '../../../shared/address';
+import { formatAddress, isAddressEmpty, type StructuredAddress } from '../../../shared/address';
 
 export interface Step1Data {
   visitDate: string;
@@ -42,6 +42,33 @@ export interface DesignVisitStep1Props {
   addressIdPrefix?: string;
   /** Google Maps autocomplete surface for the address. Defaults to 'designVisit'. */
   addressSurface?: React.ComponentProps<typeof AddressInput>['surface'];
+  /**
+   * When true, the visit address is treated as already-known (sourced from the
+   * customer's record at scheduling time) and shown read-only — the customer
+   * doesn't re-enter it per visit. If the record has no address on file the
+   * component falls back to the editable postcode-first input so a visit is
+   * never submitted without an address. Defaults to false (editable input).
+   */
+  addressReadOnly?: boolean;
+  /**
+   * Show the visit duration field. Defaults to true. The Design Visit wizard
+   * hides it — the duration is inherited from the scheduled visit and is not
+   * edited within the wizard.
+   */
+  showDuration?: boolean;
+  /**
+   * Show the handle / furniture-range product dropdowns. Defaults to true. The
+   * Design Visit wizard hides them here and renders them on the rooms step so
+   * that step 1 is purely for confirming the start of the visit.
+   */
+  showProductSelection?: boolean;
+  /**
+   * Show the terms & conditions text and acceptance checkbox. Defaults to true.
+   * The Design Visit wizard hides it here; the applicable terms are shown as a
+   * read-only reference on the review step instead (no customer acceptance is
+   * captured in the wizard).
+   */
+  showTerms?: boolean;
   /**
    * Optional pairing suggestion for the Handle dropdown (sourced from
    * catalog_pairings). When supplied and it differs from the current handle a
@@ -83,12 +110,26 @@ export function DesignVisitStep1({
   namePlaceholder = 'e.g. Sarah Jones',
   addressIdPrefix = 'dv-step1-address',
   addressSurface = 'designVisit',
+  addressReadOnly = false,
+  showDuration = true,
+  showProductSelection = true,
+  showTerms = true,
   handleSuggestion = null,
   visitNotesTimestamp,
   onVisitNotesEdited,
 }: DesignVisitStep1Props) {
   const [data, setData] = useState<Step1Data>(() => ({ ...initialData }));
   const [visitNotesEdited, setVisitNotesEdited] = useState(false);
+
+  // Decide read-only vs editable address once, at mount, from the seeded value.
+  // The step only renders after the wizard's pre-load completes (the address is
+  // fetched alongside the visit notes), so `initialData` already reflects the
+  // customer's address here. Locking the choice means typing into the editable
+  // fallback (when the record has no address) never flips the field to
+  // read-only mid-entry.
+  const [addressLocked] = useState<boolean>(
+    () => addressReadOnly && !isAddressEmpty(initialData.structuredAddress),
+  );
 
   const onDataChangeRef = useRef(onDataChange);
   useEffect(() => { onDataChangeRef.current = onDataChange; }, [onDataChange]);
@@ -133,30 +174,64 @@ export function DesignVisitStep1({
 
   return (
       <Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', mb: 1.5 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: showDuration ? '1fr 1fr' : '1fr', gap: '12px', mb: 1.5 }}>
           <DateTimeEditor
             label="Visit date & time"
             value={parseVisitDate(data.visitDate)}
             onChange={(v) => update({ visitDate: formatVisitDate(v) })}
           />
-          <TextField
-            label="Duration (minutes)"
-            type="number"
-            size="small"
-            fullWidth
-            slotProps={{ htmlInput: { min: 15, max: 1440, step: 15 } }}
-            value={data.duration}
-            onChange={e => update({ duration: e.target.value })}
-          />
+          {showDuration && (
+            <TextField
+              label="Duration (minutes)"
+              type="number"
+              size="small"
+              fullWidth
+              slotProps={{ htmlInput: { min: 15, max: 1440, step: 15 } }}
+              value={data.duration}
+              onChange={e => update({ duration: e.target.value })}
+            />
+          )}
         </Box>
 
         <Box sx={{ mb: 1.5 }}>
-          <AddressInput
-            value={data.structuredAddress}
-            onChange={(next) => update({ structuredAddress: next })}
-            idPrefix={addressIdPrefix}
-            surface={addressSurface}
-          />
+          {addressLocked ? (
+            <Box>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 600, color: 'var(--neutral-600)', display: 'block', mb: '4px' }}
+              >
+                Visit address
+              </Typography>
+              <Box
+                sx={{
+                  background: 'var(--neutral-50)',
+                  border: '1px solid var(--neutral-200)',
+                  borderRadius: '8px',
+                  p: '10px 12px',
+                  fontSize: '.85rem',
+                  color: 'var(--neutral-800)',
+                  whiteSpace: 'pre-line',
+                  lineHeight: 1.5,
+                }}
+              >
+                {formatAddress(data.structuredAddress)}
+              </Box>
+              <Typography
+                variant="caption"
+                sx={{ color: 'var(--neutral-500)', display: 'block', mt: '4px' }}
+              >
+                From the customer&rsquo;s record. To change it, edit their address on their profile.
+              </Typography>
+            </Box>
+          ) : (
+            <AddressInput
+              value={data.structuredAddress}
+              onChange={(next) => update({ structuredAddress: next })}
+              idPrefix={addressIdPrefix}
+              surface={addressSurface}
+              postcodeFirst
+            />
+          )}
         </Box>
 
         <TextField
@@ -184,27 +259,29 @@ export function DesignVisitStep1({
           sx={{ mb: 1.5 }}
         />
 
-        <CatalogueDropdowns
-          dropdowns={[
-            {
-              label: 'Handle selection',
-              value: data.handleId,
-              options: handles,
-              onChange: (v) => update({ handleId: v }),
-              noneLabel: '— select handle —',
-              suggestion: handleSuggestion,
-            },
-            {
-              label: 'Furniture range',
-              value: data.furnitureRangeId,
-              options: furnitureRanges,
-              onChange: (v) => update({ furnitureRangeId: v }),
-              noneLabel: '— select range —',
-            },
-          ]}
-        />
+        {showProductSelection && (
+          <CatalogueDropdowns
+            dropdowns={[
+              {
+                label: 'Handle selection',
+                value: data.handleId,
+                options: handles,
+                onChange: (v) => update({ handleId: v }),
+                noneLabel: '— select handle —',
+                suggestion: handleSuggestion,
+              },
+              {
+                label: 'Furniture range',
+                value: data.furnitureRangeId,
+                options: furnitureRanges,
+                onChange: (v) => update({ furnitureRangeId: v }),
+                noneLabel: '— select range —',
+              },
+            ]}
+          />
+        )}
 
-        {termsText && (
+        {showTerms && termsText && (
           <>
             <Typography
               variant="caption"
@@ -232,22 +309,24 @@ export function DesignVisitStep1({
           </>
         )}
 
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={data.termsAccepted}
-              onChange={e => update({ termsAccepted: e.target.checked })}
-              size="small"
-              sx={{ mt: '-2px' }}
-            />
-          }
-          label={
-            <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-700)' }}>
-              Customer has read and accepted the terms &amp; conditions
-            </Typography>
-          }
-          sx={{ mt: '10px', alignItems: 'flex-start' }}
-        />
+        {showTerms && (
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={data.termsAccepted}
+                onChange={e => update({ termsAccepted: e.target.checked })}
+                size="small"
+                sx={{ mt: '-2px' }}
+              />
+            }
+            label={
+              <Typography sx={{ fontSize: '.82rem', color: 'var(--neutral-700)' }}>
+                Customer has read and accepted the terms &amp; conditions
+              </Typography>
+            }
+            sx={{ mt: '10px', alignItems: 'flex-start' }}
+          />
+        )}
       </Box>
   );
 }

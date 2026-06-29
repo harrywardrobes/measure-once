@@ -26,6 +26,17 @@ export interface DesignVisitStep3Props {
   answers?: AnswerMap;
   /** Per-room questionnaire questions (scope='room'). */
   roomQuestions?: VisitQuestion[];
+  /** Show the duration review row. Defaults to true. The Design Visit wizard
+   *  passes false — duration isn't captured/edited in that wizard. */
+  showDuration?: boolean;
+  /**
+   * How to present the terms & conditions section. Defaults to 'accepted',
+   * which shows the captured customer acceptance (a tick + version). The Design
+   * Visit wizard passes 'reference': the applicable terms are shown as a
+   * minimised read-only excerpt with their version so the designer can see
+   * which T&Cs accompany the quotation — no customer acceptance is implied.
+   */
+  termsMode?: 'accepted' | 'reference';
 }
 
 /** Formats a captured answer value for read-only display. */
@@ -102,6 +113,8 @@ export function DesignVisitStep3({
   visitQuestions = [],
   answers = {},
   roomQuestions = [],
+  showDuration = true,
+  termsMode = 'accepted',
 }: DesignVisitStep3Props) {
   const handleName =
     handles.find(h => String(h.id) === String(step1Data.handleId))?.name || '—';
@@ -125,7 +138,7 @@ export function DesignVisitStep3({
     <Box>
       <ReviewSection title="Visit details">
         {visitDateDisplay && <ReviewRow label="Date" value={visitDateDisplay} />}
-        <ReviewRow label="Duration" value={`${step1Data.duration} min`} />
+        {showDuration && <ReviewRow label="Duration" value={`${step1Data.duration} min`} />}
         {!isAddressEmpty(step1Data.structuredAddress) && (
           <ReviewRow label="Location" value={formatAddress(step1Data.structuredAddress).replace(/\n/g, ', ')} />
         )}
@@ -196,7 +209,7 @@ export function DesignVisitStep3({
         </Typography>
       </ReviewSection>
 
-      {termsText && (
+      {termsText && termsMode === 'accepted' && (
         <ReviewSection title="Terms &amp; Conditions">
           <ReviewRow
             label="Accepted"
@@ -226,6 +239,49 @@ export function DesignVisitStep3({
               </Box>
             }
           />
+        </ReviewSection>
+      )}
+
+      {termsText && termsMode === 'reference' && (
+        <ReviewSection title="Terms &amp; Conditions sent with quotation">
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: '8px' }}>
+            <Typography sx={{ fontSize: '.8rem', color: 'var(--neutral-600)' }}>
+              These terms will be attached to the quotation.
+            </Typography>
+            {termsVersionNumber != null && (
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  px: '7px',
+                  py: '1px',
+                  borderRadius: '999px',
+                  background: 'var(--neutral-200)',
+                  color: 'var(--neutral-700)',
+                  fontSize: '.7rem',
+                  fontWeight: 700,
+                }}
+              >
+                v{termsVersionNumber}
+              </Box>
+            )}
+          </Box>
+          <Box
+            sx={{
+              background: 'var(--neutral-50)',
+              border: '1px solid var(--neutral-200)',
+              borderRadius: '8px',
+              p: '10px 12px',
+              fontSize: '.78rem',
+              color: 'var(--neutral-600)',
+              maxHeight: 120,
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.5,
+            }}
+          >
+            {termsText}
+          </Box>
         </ReviewSection>
       )}
     </Box>

@@ -28,6 +28,7 @@ import {
   DEMO_ROOM_QUESTIONS,
 } from './modals/demoData';
 import { DesignVisitStep1, type Step1Data, type CatalogueItem } from './DesignVisitStep1';
+import { CatalogueDropdowns } from './CatalogueDropdowns';
 import { QuestionnaireRenderer, missingRequired, type VisitQuestion, type AnswerMap } from './QuestionnaireRenderer';
 import { emptyAddress, isAddressEmpty, type StructuredAddress } from '../../../shared/address';
 import { DesignVisitRoomsStep, type RoomData, type DoorStyleOption } from './DesignVisitRoomsStep';
@@ -388,10 +389,22 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         .then(r => r.ok ? r.json() : null)
         .then(d => {
           if (!d || cancelled) return;
-          if (d.visitNotes) {
-            setStep1(prev => ({ ...prev, visitNotes: d.visitNotes }));
-            setVisitNotesTimestamp(d.visitNotesTimestamp || '');
-          }
+          setStep1(prev => {
+            const next = { ...prev };
+            if (d.visitNotes) next.visitNotes = d.visitNotes;
+            // Seed the address from the customer's record so the wizard shows it
+            // read-only. Only fill when the current address is empty so a
+            // restored draft is never overwritten.
+            if (d.contactStructuredAddress && isAddressEmpty(prev.structuredAddress)) {
+              next.structuredAddress = d.contactStructuredAddress;
+              // Fold the seeded address into the unsaved-changes baseline so a
+              // pre-filled (but untouched) address doesn't trigger the
+              // "Discard your draft?" prompt on close.
+              initialStep1Ref.current = { ...initialStep1Ref.current, structuredAddress: d.contactStructuredAddress };
+            }
+            return next;
+          });
+          if (d.visitNotes) setVisitNotesTimestamp(d.visitNotesTimestamp || '');
         })
         .catch(() => { /* best-effort — notes stay empty on any error */ });
     }
@@ -551,10 +564,9 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
 
   function hasUnsavedDraftData(): boolean {
     const step1Touched =
-      step1.termsAccepted ||
       step1.visitDate !== initialStep1Ref.current.visitDate ||
       step1.designerName.trim() !== '' ||
-      !isAddressEmpty(step1.structuredAddress) ||
+      JSON.stringify(step1.structuredAddress) !== JSON.stringify(initialStep1Ref.current.structuredAddress) ||
       step1.handleId !== '' ||
       step1.furnitureRangeId !== '';
     const roomsTouched = rooms.some(
@@ -597,23 +609,28 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     doClose();
   }, [demo, editMode, step1, rooms, doClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Step 1 is purely about confirming the start of the visit (when / where /
+  // who). Product selection, the visit questionnaire and the terms reference
+  // all live on later steps, so the only gate here is a valid visit date.
   function advanceToStep2() {
-    if (!demo && !step1.termsAccepted) {
-      setS1Error('Please confirm the customer has accepted the terms and conditions.');
+    if (!demo && !step1.visitDate) {
+      setS1Error('Please set the visit date and time.');
       return;
     }
-    if (!demo && missingRequired(visitQuestions, answers).length > 0) {
-      setShowAnswerValidation(true);
-      setS1Error('Please answer all required questions before continuing.');
-      return;
-    }
-    setShowAnswerValidation(false);
     setS1Error('');
     setStep(2);
   }
 
+  // Step 2 carries product selection, the whole-visit questionnaire and the
+  // rooms. Rooms must be named (also enforced by the button's disabled state)
+  // and any required visit / per-room questions must be answered before review.
   function advanceToStep3() {
     if (rooms.some(r => !r.roomName.trim()) || rooms.length === 0) return;
+    if (!demo && missingRequired(visitQuestions, answers).length > 0) {
+      setShowAnswerValidation(true);
+      setS2Error('Please answer all required questions before continuing.');
+      return;
+    }
     if (!demo && roomQuestions.length > 0) {
       const anyMissing = rooms.some(r => missingRequired(roomQuestions, r.answers || {}).length > 0);
       if (anyMissing) {
@@ -622,6 +639,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
         return;
       }
     }
+    setShowAnswerValidation(false);
     setShowRoomAnswerValidation(false);
     setS2Error('');
     setStep(3);
@@ -789,8 +807,8 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     ? 'Edit Design Visit'
     : (contactName ? `Design Visit — ${contactName}` : 'Design Visit');
 
-  const stepLabel = step === 1 ? 'Step 1 of 3 — Visit details'
-                  : step === 2 ? 'Step 2 of 3 — Rooms'
+  const stepLabel = step === 1 ? 'Step 1 of 3 — Confirm visit'
+                  : step === 2 ? 'Step 2 of 3 — Products & rooms'
                   : 'Step 3 of 3 — Review & submit';
 
   const footer = (
@@ -834,18 +852,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               '&:hover': { background: BRAND_COLORS.orchidPress },
             }}
           >
-            Next: Rooms →
+            Next →
           </Button>
         )}
 
         {step === 2 && (
           <Button
             variant="contained"
-            onClick={() => {
-              const emptyRooms = rooms.filter(r => !r.roomName.trim());
-              if (emptyRooms.length || !rooms.length) return;
-              setStep(3);
-            }}
+            onClick={advanceToStep3}
             disabled={uploading || rooms.some(r => !r.roomName.trim()) || rooms.length === 0}
             sx={{
               background: BRAND_COLORS.orchid,
@@ -907,6 +921,10 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     >
       {step === 1 && (
         <>
+          <Typography sx={{ fontSize: '.84rem', color: 'var(--neutral-600)', mb: '16px', lineHeight: 1.5 }}>
+            Confirm where and when the visit is taking place to get started. You&rsquo;ll
+            choose the products and add room measurements on the next step.
+          </Typography>
           <DesignVisitStep1
             initialData={step1}
             handles={handles}
@@ -914,11 +932,61 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             termsText={termsText}
             termsVersionNumber={termsVersionNumber}
             onDataChange={setStep1}
+            // Existing customers: the address is captured on their record at
+            // scheduling time, so show it read-only here. Brand-new customers
+            // (standalone page, no contactId yet) still get the editable input.
+            addressReadOnly={!!contactId}
+            // Step 1 is purely about confirming the visit start. Duration is
+            // inherited from the scheduled visit; product selection, the visit
+            // questionnaire and the terms reference all live on later steps.
+            showDuration={false}
+            showProductSelection={false}
+            showTerms={false}
             visitNotesTimestamp={visitNotesTimestamp || undefined}
             onVisitNotesEdited={() => setVisitNotesTimestamp('')}
           />
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          {(handles.length > 0 || furnitureRanges.length > 0) && (
+            <Box sx={{ mb: '20px' }}>
+              <Typography
+                sx={{
+                  fontSize: '.7rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '.06em',
+                  color: 'var(--neutral-400)',
+                  mb: '10px',
+                }}
+              >
+                Product selection
+              </Typography>
+              <CatalogueDropdowns
+                dropdowns={[
+                  {
+                    label: 'Handle selection',
+                    value: step1.handleId,
+                    options: handles,
+                    onChange: (v) => setStep1(prev => ({ ...prev, handleId: v })),
+                    noneLabel: '— select handle —',
+                  },
+                  {
+                    label: 'Furniture range',
+                    value: step1.furnitureRangeId,
+                    options: furnitureRanges,
+                    onChange: (v) => setStep1(prev => ({ ...prev, furnitureRangeId: v })),
+                    noneLabel: '— select range —',
+                  },
+                ]}
+              />
+            </Box>
+          )}
+
           {visitQuestions.length > 0 && (
-            <Box sx={{ mt: '24px' }}>
+            <Box sx={{ mb: '20px' }}>
               <QuestionnaireRenderer
                 questions={visitQuestions}
                 answers={answers}
@@ -927,21 +995,19 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
               />
             </Box>
           )}
-        </>
-      )}
 
-      {step === 2 && (
-        <DesignVisitRoomsStep
-          initialRooms={rooms}
-          doorStyles={doorStyles}
-          onRoomsChange={setRooms}
-          onUploadingChange={setUploading}
-          onNewUpload={key => pendingUploadKeysRef.current.add(key)}
-          onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
-          roomQuestions={roomQuestions}
-          showAnswerValidation={showRoomAnswerValidation}
-          demo={demo}
-        />
+          <DesignVisitRoomsStep
+            initialRooms={rooms}
+            doorStyles={doorStyles}
+            onRoomsChange={setRooms}
+            onUploadingChange={setUploading}
+            onNewUpload={key => pendingUploadKeysRef.current.add(key)}
+            onImageRemoved={key => pendingUploadKeysRef.current.delete(key)}
+            roomQuestions={roomQuestions}
+            showAnswerValidation={showRoomAnswerValidation}
+            demo={demo}
+          />
+        </>
       )}
 
       {step === 3 && (
@@ -956,6 +1022,11 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           visitQuestions={visitQuestions}
           answers={answers}
           roomQuestions={roomQuestions}
+          // Duration isn't captured in this wizard, and the customer doesn't
+          // accept terms here — show the terms as a read-only reference so the
+          // designer can see which T&Cs accompany the quotation.
+          showDuration={false}
+          termsMode="reference"
         />
       )}
     </VisitWizardShell>

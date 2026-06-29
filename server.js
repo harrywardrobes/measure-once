@@ -6721,6 +6721,31 @@ async function fetchLatestContactNote(contactId) {
   return { visitNotes, visitNotesTimestamp };
 }
 
+// Fetch the contact's structured postal address from HubSpot, best-effort.
+// Returns null on any error or when the contact has no address on file so
+// callers (e.g. the design-visit wizard) can fall back to manual entry.
+// Mirrors fetchLatestContactNote's dev-only stub guard: when HUBSPOT_NOTES_STUB
+// is set (test runs) no live HubSpot call is made.
+async function fetchContactStructuredAddress(contactId) {
+  if (process.env.HUBSPOT_NOTES_STUB && process.env.NODE_ENV !== 'production') {
+    return null;
+  }
+  try {
+    const r = await hubspotRequestWithRetry('get',
+      `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+      null,
+      { params: { properties: 'address,city,state,zip,country' }, timeout: 8000 },
+    );
+    const props = r.data?.properties || {};
+    const addr = hubspotToAddress({
+      address: props.address, city: props.city, state: props.state, zip: props.zip, country: props.country,
+    });
+    return formatAddress(addr).trim() ? addr : null;
+  } catch {
+    return null;
+  }
+}
+
 // Execute: arrange_visit → fetch contact info, determine visit type from lead status.
 app.post('/api/card-actions/arrange-visit',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
@@ -6765,7 +6790,10 @@ app.post('/api/card-actions/arrange-visit',
 );
 
 // Execute: start_design_visit → fetch the most recent HubSpot note to pre-fill
-// the wizard's visit notes field. Returns { visitNotes, visitNotesTimestamp }.
+// the wizard's visit notes field, plus the contact's structured address so the
+// design-visit wizard can show it read-only (the address is captured once when
+// the visit is scheduled / on the customer record, not re-entered per visit).
+// Returns { visitNotes, visitNotesTimestamp, contactStructuredAddress }.
 app.post('/api/card-actions/start-design-visit',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
   async (req, res) => {
@@ -6773,7 +6801,11 @@ app.post('/api/card-actions/start-design-visit',
     if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
     try {
       const { visitNotes, visitNotesTimestamp } = await fetchLatestContactNote(contactId);
-      res.json({ visitNotes, visitNotesTimestamp });
+      // Best-effort: a failure here must not break note pre-fill, so the wizard
+      // simply falls back to manual address entry. Returns null when the contact
+      // has no address on file.
+      const contactStructuredAddress = await fetchContactStructuredAddress(contactId);
+      res.json({ visitNotes, visitNotesTimestamp, contactStructuredAddress });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {
