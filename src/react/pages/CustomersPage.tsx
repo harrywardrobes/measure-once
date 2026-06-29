@@ -805,9 +805,15 @@ function CustomerCard({
     : '';
   const isDesignHandler = handler?.type === 'start_design_visit';
   const hasDraft = !!draftVisitId && isDesignHandler;
+  // Prefer the operator-facing card action label (configured in the Card
+  // actions table and resolved via resolveActionLabel) over the handler's
+  // optional internal action_name.  The "Continue designing" draft indicator
+  // still wins for in-progress design visits; action_name / the handler-type
+  // label remain as fallbacks when no card action label is configured.
   const actionLabel = handler
-    ? (cahName
-        || (hasDraft ? 'Continue designing' : '')
+    ? ((hasDraft ? 'Continue designing' : '')
+        || resolveActionLabel(actionStageKey, leadStatusKey, undefined)
+        || cahName
         || (HANDLER_TYPE_LABELS as Record<string, string>)[handler.type]
         || '')
     : resolveActionLabel(actionStageKey, leadStatusKey, undefined);
@@ -1305,6 +1311,15 @@ export function CustomersPage(): React.ReactElement {
       if (props.hs_lead_status === undefined) return;
       const newStatus = props.hs_lead_status ?? '';
 
+      // Excluded-from-sales statuses (e.g. "Unqualified") are hidden unless the
+      // "Show all" toggle is on. Mirror the server-side filter so a contact
+      // moved to such a status disappears from the list immediately when
+      // Show all is off, regardless of the active stage / lead-status filter.
+      if (!showExcluded && newStatus && excludedStatusKeys.has(newStatus.toUpperCase())) {
+        removeContact(contactId);
+        return;
+      }
+
       if (leadStatus) {
         // Specific lead-status filter: remove if the contact moved to a different status
         const noLongerMatches = leadStatus === '__no_status__'
@@ -1322,7 +1337,7 @@ export function CustomersPage(): React.ReactElement {
         if (newStage !== stageFilter) removeContact(contactId);
       }
     });
-  }, [patchContact, removeContact, leadStatus, stageFilter, statusStageMap]);
+  }, [patchContact, removeContact, leadStatus, stageFilter, statusStageMap, showExcluded, excludedStatusKeys]);
 
   const isViewer = useIsViewer();
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
