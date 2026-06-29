@@ -266,12 +266,18 @@ async function main() {
   console.log('\n  [API] POST /api/contacts');
   {
     const beforeCount = mock.state.createPosts.length;
+    const postcode = 'SW1A 1AA';
+    // Regression guard (task #2827 → fix): the New customer modal posts the
+    // postcode inside the canonical `structuredAddress` shape, NOT a flat
+    // `postcode` field. The endpoint only reads `structuredAddress.postalCode`,
+    // so if either side drifts back to a flat field this probe fails — the zip
+    // would not round-trip and the area prefix would fall back to 'XX'.
     const payload = {
       firstname: 'Alex',
       lastname:  'Tester',
       email:     `nc-${runId}@privtest.local`,
       phone:     '07123456789',
-      postcode:  'SW1A 1AA',
+      structuredAddress: { addressLines: [], postalCode: postcode, countryCode: 'GB' },
     };
     const r = await memberClient.post('/api/contacts', payload);
     const created = r.json || {};
@@ -288,15 +294,37 @@ async function main() {
     const seen = mock.state.createPosts[beforeCount];
     const props = seen?.properties || {};
     record(
-      '[API] mock HubSpot saw the expected contact-create payload',
+      '[API] mock HubSpot saw the expected contact-create payload (structuredAddress → zip)',
       'firstname/lastname/email/phone/zip + hs_lead_status=OPEN_DEAL',
       `properties=${JSON.stringify(props)}`,
       props.firstname === 'Alex'
         && props.lastname  === 'Tester'
         && props.email     === payload.email
         && props.phone     === payload.phone
-        && props.zip       === payload.postcode
+        && props.zip       === postcode
         && props.hs_lead_status === 'OPEN_DEAL',
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // [API] postcode is optional — omit the address entirely
+  // ════════════════════════════════════════════════════════════════════════════
+  console.log('\n  [API] POST /api/contacts with no postcode');
+  {
+    const r = await memberClient.post('/api/contacts', {
+      firstname: 'Nopostcode',
+      lastname:  'Tester',
+      email:     `nc-nopc-${runId}@privtest.local`,
+      phone:     '',
+    });
+    const created = r.json || {};
+    record(
+      '[API] POST /api/contacts with no postcode returns 201 with an XX-prefixed number',
+      'status=201, customer_number starts with "XX"',
+      `status=${r.status}, customer_number=${created.properties?.customer_number}`,
+      r.status === 201
+        && typeof created.properties?.customer_number === 'string'
+        && /^XX/.test(created.properties.customer_number || ''),
     );
   }
 

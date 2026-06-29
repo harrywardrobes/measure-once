@@ -9,6 +9,7 @@ import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadca
 import { subscribeLeadStatusChange, broadcastLeadStatusChange } from '../utils/broadcastLeadStatus';
 import { subscribeCustomerInfoLinkChanged } from '../utils/broadcastCustomerInfoLink';
 import { LEAD_STATUS_REMOVED_MESSAGE } from '../utils/api';
+import { emptyAddress, type StructuredAddress } from '../../../shared/address';
 import { openDirectContactModal } from '../utils/cardActionModalRegistry';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -2255,7 +2256,9 @@ type NewContactBody = {
   lastname: string;
   email: string;
   phone: string;
-  postcode: string;
+  // Postcode is carried inside the canonical structured-address shape (the same
+  // shape every other contact surface posts). Omitted when no postcode is given.
+  structuredAddress?: StructuredAddress;
 };
 
 function NewCustomerDialog({
@@ -2344,20 +2347,19 @@ function NewCustomerDialog({
       setErr('Email is required.');
       return;
     }
-    if (!pc) {
-      setErr('Postcode is required.');
-      return;
-    }
     setErr(null);
     setSubmitting(true);
     try {
-      const contact = await apiPost<Contact>('/api/contacts', {
+      const body: NewContactBody = {
         firstname: fn,
         lastname: ln,
         email: em,
         phone: ph,
-        postcode: pc,
-      });
+      };
+      // Postcode is optional; when supplied, send it in the canonical structured
+      // address shape that POST /api/contacts reads (no flat `postcode` field).
+      if (pc) body.structuredAddress = { ...emptyAddress(), postalCode: pc };
+      await apiPost<Contact>('/api/contacts', body);
       onCreated();
     } catch (e) {
       const er = e as Error & { code?: string };
@@ -2472,7 +2474,6 @@ function NewCustomerDialog({
                 label="Postcode"
                 value={postcode}
                 onChange={(e) => setPostcode(e.target.value)}
-                required
                 fullWidth
                 size="small"
                 disabled={submitting}

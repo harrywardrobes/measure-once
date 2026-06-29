@@ -2442,22 +2442,19 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     return res.status(400).json({ error: 'First name and email are required.' });
   }
 
-  // Structured address is the source for postcode + the customer-number area
-  // prefix. Validate it via the shared Zod schema; a postcode is required so a
-  // customer number can be derived.
-  let addr;
+  // Address fields come from the canonical structured address (the same shape
+  // every other contact surface posts). Postcode is optional — when present it
+  // also supplies the customer-number area prefix. Validate via the shared
+  // Zod schema; an empty/partial object is valid (no address given).
   const parsedAddr = structuredAddressSchema.safeParse(structuredAddress || {});
   if (!parsedAddr.success) {
     return res.status(400).json({ error: 'Invalid address.' });
   }
-  addr = parsedAddr.data;
-  const hsAddr = addressToHubspot(addr);
-  if (!hsAddr.zip) {
-    return res.status(400).json({ error: 'A postcode is required.' });
-  }
+  const hsAddr = addressToHubspot(parsedAddr.data);
 
-  // Extract the area letters from the postcode (leading alpha chars before first digit)
-  const areaMatch = hsAddr.zip.trim().match(/^([A-Za-z]+)/);
+  // Extract the area letters from the postcode (leading alpha chars before the
+  // first digit). With no postcode supplied, fall back to an 'XX' prefix.
+  const areaMatch = (hsAddr.zip || '').match(/^([A-Za-z]+)/);
   const areaPrefix = areaMatch ? areaMatch[1].toUpperCase() : 'XX';
 
   try {
