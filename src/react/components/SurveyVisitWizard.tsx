@@ -1119,6 +1119,11 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
             namePlaceholder="e.g. Sarah Jones"
             addressIdPrefix="sv-step1-address"
             addressSurface="genericVisit"
+            // The survey's address is pre-filled from the customer record (via
+            // /api/survey-visits/prefill), so show it read-only just like the
+            // design visit. Falls back to an editable postcode-first input when
+            // the customer has no address on file.
+            addressReadOnly={!!contactId}
             handleSuggestion={handleSuggestion}
             visitNotesTimestamp={visitNotesTimestamp || undefined}
             onVisitNotesEdited={() => setVisitNotesTimestamp('')}

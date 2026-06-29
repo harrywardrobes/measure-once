@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -20,6 +20,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { PlacesLocationField } from '../PlacesLocationField';
 import { FullScreenModal } from './FullScreenModal';
+import { formatAddress } from '../../../../shared/address';
 
 const VISIT_TYPE_LABELS: Record<string, string> = {
   design:       'Design visit',
@@ -92,6 +93,28 @@ export function GenericVisitEditModal(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // On create for a known customer, pre-fill the location from the customer's
+  // record so it carries through consistently with the design/survey visits.
+  // Kept editable — generic visits (deliveries, installs, workshops) are often
+  // off-site — and folded into the unsaved-changes baseline so it never
+  // triggers a false discard prompt. Best-effort: blank on any error.
+  useEffect(() => {
+    if (!isCreate || !contactId) return;
+    let cancelled = false;
+    fetch(`/api/contacts/${encodeURIComponent(contactId)}`, { credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancelled || !d?.structuredAddress) return;
+        const formatted = formatAddress(d.structuredAddress);
+        if (!formatted.trim()) return;
+        setLocation(prev => (prev.trim() ? prev : formatted));
+        if (!initialLocationRef.current.trim()) initialLocationRef.current = formatted;
+      })
+      .catch(() => { /* best-effort — location stays blank on any error */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const hasUnsavedChanges = (() => {
     const [rs, re] = range;
     return (
