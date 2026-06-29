@@ -487,6 +487,7 @@ export function ReviewCustomerPhotosModal({ handler: _handler, ctx, open, onClos
                 email={submission.contactEmail ?? ctx.contactEmail ?? undefined}
                 phone={ctx.contactPhone}
                 mobile={ctx.contactMobile}
+                contactId={demo ? undefined : ctx.contactId}
               />
               {fromCache && (
                 <Alert severity="info" data-testid="review-photos-offline-banner">
@@ -597,6 +598,7 @@ export function ReviewCustomerPhotosModal({ handler: _handler, ctx, open, onClos
                 email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
                 phone={ctx.contactPhone}
                 mobile={ctx.contactMobile}
+                contactId={demo ? undefined : ctx.contactId}
               />
               <EmailComposer
                 subject={emailSubject}
@@ -623,6 +625,7 @@ export function ReviewCustomerPhotosModal({ handler: _handler, ctx, open, onClos
                 email={submission?.contactEmail ?? ctx.contactEmail ?? undefined}
                 phone={ctx.contactPhone}
                 mobile={ctx.contactMobile}
+                contactId={demo ? undefined : ctx.contactId}
               />
               <TextField
                 label="Price range (e.g. £2,500–£3,500)"

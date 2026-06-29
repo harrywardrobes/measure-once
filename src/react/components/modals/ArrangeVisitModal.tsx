@@ -772,6 +772,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
+                  contactId={demo ? undefined : ctx.contactId}
                 />
                 {contactInfo?.leadStatus === 'DESIGN_INVITED' && (
                   <Alert
@@ -808,6 +809,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
+                  contactId={demo ? undefined : ctx.contactId}
                 />
                 <DateTimeEditor
                   label="Visit date & time"
@@ -854,6 +856,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   mobile={mobile || ctx.contactMobile}
                   email={contactInfo?.contactEmail || ctx.contactEmail}
                   loading={contactLoading && !contactInfo}
+                  contactId={demo ? undefined : ctx.contactId}
                 />
                 {googleDisconnected && !demo && (
                   <Alert

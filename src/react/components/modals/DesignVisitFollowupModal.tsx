@@ -398,6 +398,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
             email={ctx.contactEmail}
             phone={ctx.contactPhone}
             mobile={ctx.contactMobile}
+            contactId={demo ? undefined : ctx.contactId}
           />
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
             <CircularProgress size={28} />
@@ -429,6 +430,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
             email={contactInfo?.contactEmail}
             phone={contactInfo?.phone || ctx.contactPhone}
             mobile={contactInfo?.mobile || ctx.contactMobile}
+            contactId={demo ? undefined : ctx.contactId}
           />
           <Typography variant="body2" color="text.secondary">
             What happened when you followed up?
@@ -476,6 +478,7 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
             email={contactInfo?.contactEmail}
             phone={contactInfo?.phone || ctx.contactPhone}
             mobile={contactInfo?.mobile || ctx.contactMobile}
+            contactId={demo ? undefined : ctx.contactId}
           />
           <Typography variant="body2" color="text.secondary">
             Sending to: <strong>{contactInfo?.contactEmail || '—'}</strong>

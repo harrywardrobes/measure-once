@@ -381,7 +381,7 @@ export function ScheduleVisitModal({
         }
       >
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} />
+            <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} contactId={demo ? undefined : ctx.contactId} />
             {googleDisconnected && !demo && (
               <Alert
                 severity="warning"

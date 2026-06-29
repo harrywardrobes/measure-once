@@ -13,6 +13,7 @@ import { DesignVisitsList } from './customer-detail/DesignVisitsList';
 import { SurveyVisitsList, type SurveyVisitServer } from './customer-detail/SurveyVisitsList';
 import { CustomerInfoSubmissionsRail } from './customer-detail/CustomerInfoSubmissionsRail';
 import { GoogleEmailSection } from './customer-detail/GoogleEmailSection';
+import { ContactActivitySection } from './customer-detail/ContactActivitySection';
 import { WhatsAppHistory, WhatsAppModal } from './customer-detail/WhatsAppSection';
 import { ContactEditModal } from './customer-detail/ContactEditModal';
 import {
@@ -806,6 +807,9 @@ export function CustomerDetailPage() {
               tasks={tasks}
               onTasksChange={setTasks}
             />
+
+            {/* Full HubSpot activity feed — incl. marketing emails + page views */}
+            <ContactActivitySection contactId={contactId} />
 
             <GoogleEmailSection
               contactEmail={contact.properties.email || ''}

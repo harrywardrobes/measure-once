@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
@@ -9,6 +9,16 @@ import Typography from '@mui/material/Typography';
 import EmailIcon from '@mui/icons-material/Email';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { AddressMapPreview } from '../AddressMapPreview';
+import { usePrivilege } from '../../hooks/usePrivilege';
+import type { Contact } from '../../pages/customer-detail/types';
+import type { ContactHeaderDisplay } from './ContactHeaderEdit';
+
+// The edit affordance (pencil button, contact fetch, edit modal) lives in its
+// own chunk so its imports stay out of the always-loaded bundle. Only loaded
+// when a contactId is supplied and the viewer can edit.
+const ContactHeaderEdit = lazy(() =>
+  import('./ContactHeaderEdit').then((m) => ({ default: m.ContactHeaderEdit })),
+);
 
 interface Props {
   name?: string;
@@ -17,6 +27,18 @@ interface Props {
   email?: string;
   address?: string;
   loading?: boolean;
+  /**
+   * When provided (and the viewer has edit rights), a pencil button appears next
+   * to the name that opens the shared ContactEditModal. The full contact is
+   * fetched on click. Omit to render a read-only header (the original behaviour).
+   */
+  contactId?: string;
+  /**
+   * Called after a successful in-modal edit with the updated contact, so a host
+   * that tracks its own contact state can stay in sync. The header already
+   * updates its own displayed values in place regardless.
+   */
+  onContactSaved?: (updated: Contact) => void;
 }
 
 function PhoneLine({ label, number }: { label: string; number: string }) {
@@ -42,9 +64,27 @@ function PhoneLine({ label, number }: { label: string; number: string }) {
  * shown with a location pin. Renders skeleton placeholders while loading
  * and a warning when no contact methods are present. Always ends with a Divider.
  *
+ * When `contactId` is supplied and the viewer is not a read-only viewer, a
+ * pencil button next to the name opens the shared ContactEditModal for quick
+ * edits without leaving the host modal.
+ *
  * Use this in all modals that show a contact header block.
  */
-export function ModalContactHeader({ name, phone, mobile, email, address, loading }: Props) {
+export function ModalContactHeader({ name, phone, mobile, email, address, loading, contactId, onContactSaved }: Props) {
+  const { isViewer } = usePrivilege();
+  const canEdit = !!contactId && !isViewer;
+
+  // In-place display override applied after a successful edit, so the header
+  // reflects the new details immediately without the host having to re-fetch.
+  const [override, setOverride] = useState<ContactHeaderDisplay | null>(null);
+  const [editError, setEditError] = useState('');
+
+  // Reset edit state whenever the header is pointed at a new contact.
+  useEffect(() => {
+    setOverride(null);
+    setEditError('');
+  }, [contactId]);
+
   if (loading) {
     return (
       <Box>
@@ -58,36 +98,60 @@ export function ModalContactHeader({ name, phone, mobile, email, address, loadin
     );
   }
 
-  const hasAny = !!(phone || mobile || email);
+  const dName    = override?.name    ?? name;
+  const dPhone   = override?.phone   ?? phone;
+  const dMobile  = override?.mobile  ?? mobile;
+  const dEmail   = override?.email   ?? email;
+  const dAddress = override?.address ?? address;
+
+  const hasAny = !!(dPhone || dMobile || dEmail);
 
   return (
     <Box>
       <Stack spacing={1} sx={{ mb: 1.5 }}>
-        {name && (
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>{name}</Typography>
+        {(dName || canEdit) && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+            {dName && (
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {dName}
+              </Typography>
+            )}
+            {canEdit && (
+              <Suspense fallback={null}>
+                <ContactHeaderEdit
+                  contactId={contactId!}
+                  onSaved={(display, updated) => { setOverride(display); onContactSaved?.(updated); }}
+                  onError={setEditError}
+                />
+              </Suspense>
+            )}
+          </Box>
+        )}
+        {editError && (
+          <Alert severity="error" sx={{ py: 0 }}>{editError}</Alert>
         )}
         {hasAny ? (
           <Stack spacing={0.75}>
-            {email && (
+            {dEmail && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                 <EmailIcon fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} />
                 <Typography
                   variant="body2"
                   sx={{ color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
                 >
-                  {email}
+                  {dEmail}
                 </Typography>
               </Box>
             )}
-            {phone    && <PhoneLine label="Phone"     number={phone} />}
-            {mobile   && <PhoneLine label="Mobile"    number={mobile} />}
-            {address && (
+            {dPhone    && <PhoneLine label="Phone"     number={dPhone} />}
+            {dMobile   && <PhoneLine label="Mobile"    number={dMobile} />}
+            {dAddress && (
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
                   <LocationOnIcon fontSize="small" sx={{ color: 'text.secondary', mt: '2px' }} />
-                  <Typography variant="body2" color="text.secondary">{address}</Typography>
+                  <Typography variant="body2" color="text.secondary">{dAddress}</Typography>
                 </Box>
-                <AddressMapPreview address={address} surface="contactEdit" height={140} />
+                <AddressMapPreview address={dAddress} surface="contactEdit" height={140} />
               </Box>
             )}
           </Stack>

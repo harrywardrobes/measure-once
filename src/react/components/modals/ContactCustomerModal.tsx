@@ -1,4 +1,5 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import dayjs from 'dayjs';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -13,15 +14,21 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { ContactTimelineRow } from '../customer-activity/ContactTimelineRow';
+import type { HubspotActivity, ActivityResponse, TimelineItem } from '../customer-activity/timeline';
 import { EmailComposer } from './EmailComposer';
-import { ApiError, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError, postFormData } from '../../utils/api';
+import { ApiError, GET, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError, postFormData } from '../../utils/api';
 import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { CONTACT_CUSTOMER_KEY } from '../../utils/handlerMeta';
-import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
+import { leadStatusConfirmationMessage, leadStatusLabelFor } from '../../utils/leadStatusConfirmation';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { sendOrQueue } from '../../lib/offlineQueue';
+import { useToastContext } from '../../contexts/ToastContext';
+import { usePrivilege } from '../../hooks/usePrivilege';
 import { useAuth } from '../../contexts/AuthContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
@@ -31,6 +38,7 @@ import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
+import type { Contact } from '../../pages/customer-detail/types';
 
 const TaskModal = lazy(() =>
   import('./TaskModal').then(m => ({ default: m.TaskModal }))
@@ -99,6 +107,10 @@ interface ContactData {
   historyAttemptLog: HistorySessionEntry[];
 }
 
+// The unified contact-activity timeline model (HubspotActivity, ActivityResponse,
+// TimelineItem) and its row renderer are shared with the customer detail page —
+// see src/react/components/customer-activity/.
+
 const CALL_PRESETS = [
   'No answer, voicemail left',
   'No answer, no voicemail',
@@ -122,6 +134,18 @@ const METHOD_BUTTON_LABEL: Record<Method, string> = {
 
 const METHODS: Method[] = ['call', 'email', 'whatsapp'];
 
+// "Call Later" deadline slots: the next of 09:00 / 13:00 / 17:00, any day. If
+// all of today's slots have passed, fall through to 09:00 the following day.
+const CALL_SLOT_HOURS = [9, 13, 17];
+function nextCallSlotIso(): string {
+  const now = dayjs();
+  for (const h of CALL_SLOT_HOURS) {
+    const slot = now.hour(h).minute(0).second(0).millisecond(0);
+    if (slot.isAfter(now)) return slot.toISOString();
+  }
+  return now.add(1, 'day').hour(9).minute(0).second(0).millisecond(0).toISOString();
+}
+
 const DEMO_CONTACT_DATA: ContactData = {
   contactName: DEMO_CONTACT.name,
   contactEmail: DEMO_CONTACT.email,
@@ -144,6 +168,22 @@ const DEMO_CONTACT_DATA: ContactData = {
 
 export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo, openEmail }: Props) {
   const { user: currentUser } = useAuth();
+  const { isManager, isAdmin } = usePrivilege();
+  const { showToastWithAction } = useToastContext();
+  // Lead-status editing (the inline picker on the board) is manager/admin only,
+  // so the "Not Suitable" action — which writes hs_lead_status and offers an
+  // arbitrary-status Undo via PATCH — is gated the same way.
+  const canEditLeadStatus = isManager || isAdmin;
+
+  // Latest known lead status for this contact. Seeded on load and kept current
+  // when we auto-advance to ATTEMPTED_TO_CONTACT, so the Not-Suitable Undo
+  // reverts to the right prior value.
+  const currentLeadStatusRef = useRef<string>('');
+  // True once the lead status has been advanced to ATTEMPTED_TO_CONTACT this
+  // session (either auto-advanced on the first logged attempt or via Done), so
+  // we never issue the advance twice.
+  const statusAdvancedRef = useRef(false);
+  const [notSuitableSubmitting, setNotSuitableSubmitting] = useState(false);
 
   const [phase, setPhase] = useState<Phase>(demo ? 'contact' : 'loading');
   const [contactData, setContactData] = useState<ContactData | null>(demo ? DEMO_CONTACT_DATA : null);
@@ -168,7 +208,14 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [historyEverEmailed,    setHistoryEverEmailed]    = useState(false);
   const [historyEverWhatsapped, setHistoryEverWhatsapped] = useState(false);
   const [historyAttemptLog,     setHistoryAttemptLog]     = useState<HistorySessionEntry[]>([]);
-  const [showHiddenSessions,    setShowHiddenSessions]    = useState(false);
+
+  // Enriched HubSpot activity (lazy-loaded after the modal opens)
+  const [activities,          setActivities]          = useState<HubspotActivity[]>([]);
+  const [activityLoading,     setActivityLoading]     = useState(false);
+  const [activityError,       setActivityError]       = useState(false);
+  const [activityUnavailable, setActivityUnavailable] = useState<string[]>([]);
+  const [expandedIds,         setExpandedIds]         = useState<Set<string>>(() => new Set());
+  const activityFetchedRef = useRef(false);
 
   // Note panel state — one panel open at a time
   const [openPanel,          setOpenPanel]          = useState<Method | null>(null);
@@ -200,17 +247,29 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   useEffect(() => {
     if (demo) {
       setContactData(DEMO_CONTACT_DATA);
+      currentLeadStatusRef.current = DEMO_CONTACT_DATA.leadStatus || '';
+      statusAdvancedRef.current = false;
       setPhase('contact');
       return;
     }
     setPhase('loading');
     setLoadError('');
     setAdvanceError('');
+    currentLeadStatusRef.current = '';
+    statusAdvancedRef.current = false;
+
+    // Reset enriched-activity state for the new contact.
+    activityFetchedRef.current = false;
+    setActivities([]);
+    setActivityError(false);
+    setActivityUnavailable([]);
+    setExpandedIds(new Set());
 
     POST('/api/card-actions/contact-customer', { contactId })
       .then((data: unknown) => {
         const d = data as ContactData;
         setContactData(d);
+        currentLeadStatusRef.current = d.leadStatus || '';
         setCallAttempted(d.callAttempted);
         setEmailSent(d.emailSent);
         setWhatsappSent(d.whatsappSent);
@@ -238,6 +297,27 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
 
+  // Lazily pull the enriched HubSpot activity feed once the modal has opened.
+  // The modal still renders instantly from the main load above; this populates
+  // the unified timeline asynchronously with its own spinner. Failures are
+  // non-fatal — the internal attempt log still shows.
+  useEffect(() => {
+    if (demo || phase === 'loading' || activityFetchedRef.current) return;
+    activityFetchedRef.current = true;
+    setActivityLoading(true);
+    setActivityError(false);
+    GET<ActivityResponse>(
+      `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/activity`,
+    )
+      .then((d) => {
+        setActivities(Array.isArray(d.activities) ? d.activities : []);
+        setActivityUnavailable(Array.isArray(d.unavailable) ? d.unavailable : []);
+      })
+      .catch(() => { setActivityError(true); })
+      .finally(() => { setActivityLoading(false); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, contactId]);
+
   // Auto-open email composer when the modal is launched via clicking an email chip.
   useEffect(() => {
     if (openEmail && phase === 'contact' && !openEmailTriggeredRef.current) {
@@ -249,6 +329,71 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }, [phase]);
 
   const anyTicked = callAttempted || emailSent || whatsappSent;
+
+  // ── Unified timeline: HubSpot activities + internal attempt log ─────────────
+  const timeline: TimelineItem[] = useMemo(() => {
+    const items: TimelineItem[] = [];
+
+    // HubSpot activities arrive normalised + source-tagged from the server.
+    for (const a of activities) items.push({ ...a });
+
+    // Current-session internal attempts (granular log).
+    attemptLog.forEach((e, i) => {
+      items.push({
+        id: `mo-current:${i}:${e.attemptedAt}`,
+        source: 'measureonce',
+        type: e.method,
+        timestamp: e.attemptedAt,
+        title: METHOD_LABEL[e.method],
+        direction: e.method === 'whatsapp' ? null : 'outgoing',
+        actor: e.attemptedBy,
+        body: e.note,
+        meta: {},
+      });
+    });
+
+    // Prior-session internal history → one item per method recorded that session.
+    historyAttemptLog.forEach((s, si) => {
+      const methods: Method[] = [
+        ...(s.callAttempted  ? (['call']     as Method[]) : []),
+        ...(s.emailSent      ? (['email']    as Method[]) : []),
+        ...(s.whatsappSent   ? (['whatsapp'] as Method[]) : []),
+      ];
+      methods.forEach((m) => {
+        const note = s.notes.find((n) => n.method === m)?.note ?? null;
+        items.push({
+          id: `mo-hist:${si}:${m}:${s.attemptedAt}`,
+          source: 'measureonce',
+          type: m,
+          timestamp: s.attemptedAt,
+          title: METHOD_LABEL[m],
+          direction: m === 'whatsapp' ? null : 'outgoing',
+          actor: s.attemptedBy,
+          body: note,
+          meta: {},
+        });
+      });
+    });
+
+    return items.sort((x, y) => {
+      const tx = x.timestamp ? Date.parse(x.timestamp) : 0;
+      const ty = y.timestamp ? Date.parse(y.timestamp) : 0;
+      return ty - tx;
+    });
+  }, [activities, attemptLog, historyAttemptLog]);
+
+  const hasTimeline = timeline.length > 0;
+  const showHistorySection =
+    hasTimeline || historySessionCount > 0 || activityLoading || activityError || activityUnavailable.length > 0;
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function openNotePanel(method: Method) {
     closeEmailFlow();
@@ -321,6 +466,30 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     return result.html || '';
   }
 
+  // Advance the lead status to ATTEMPTED_TO_CONTACT as soon as the first
+  // attempt is logged, but only when the contact currently has no status.
+  // This decouples "status advanced" from the Done button: previously the
+  // advance only fired in handleDone, so closing the modal any other way
+  // (✕ / Esc / backdrop) left an attempt recorded with the status still empty.
+  // Fire-and-forget — failures are non-fatal and retried by Done.
+  async function maybeAutoAdvanceAttempted() {
+    if (demo || statusAdvancedRef.current) return;
+    const cur = currentLeadStatusRef.current;
+    const isNullStatus = !cur || cur === '' || cur.toUpperCase() === '__NULL__';
+    if (!isNullStatus) return;
+    statusAdvancedRef.current = true; // optimistic guard against duplicate fires
+    try {
+      await POST(
+        `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
+        { currentLeadStatus: cur || null, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
+      );
+      currentLeadStatusRef.current = 'ATTEMPTED_TO_CONTACT';
+    } catch {
+      // Leave the status un-advanced so Done (or the next attempt) can retry.
+      statusAdvancedRef.current = false;
+    }
+  }
+
   async function handleSendEmail() {
     if (demo) {
       closeEmailFlow();
@@ -360,6 +529,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
       emailConfirmTimerRef.current = setTimeout(() => setEmailSentConfirm(''), 3000);
       broadcastContactAttemptLogged(contactId);
+      void maybeAutoAdvanceAttempted();
     } catch (e) {
       const err = e as ApiError;
       if (isGoogleAuthError(e)) {
@@ -414,6 +584,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
       logConfirmTimerRef.current = setTimeout(() => setLogConfirm(''), 3000);
       broadcastContactAttemptLogged(contactId);
+      void maybeAutoAdvanceAttempted();
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 400) {
@@ -439,7 +610,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       currentLeadStatus === '' ||
       currentLeadStatus.toUpperCase() === '__NULL__';
 
-    if (isNullStatus && anyTicked) {
+    if (statusAdvancedRef.current) {
+      // Already advanced to ATTEMPTED_TO_CONTACT when the first attempt was
+      // logged — just confirm and close, no second write.
+      setConfirmMessage(leadStatusConfirmationMessage('ATTEMPTED_TO_CONTACT'));
+    } else if (isNullStatus && anyTicked) {
       setPhase('advancing');
       setAdvanceError('');
       try {
@@ -447,6 +622,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
           `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
           { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
         ) as { setsLeadStatus?: string | null } | undefined;
+        statusAdvancedRef.current = true;
+        currentLeadStatusRef.current = 'ATTEMPTED_TO_CONTACT';
         setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
       } catch (e) {
         const err = e as Error & { code?: string };
@@ -485,6 +662,68 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       }
       setPhase('contact');
     }
+  }
+
+  // Mark the lead NOT_SUITABLE and close, surfacing an Undo toast that restores
+  // the prior status. Writes via the generic contact PATCH (manager/admin only)
+  // so Undo can revert to any prior status — the button is gated on
+  // canEditLeadStatus, mirroring the board's inline lead-status picker.
+  async function handleNotSuitable() {
+    if (demo || notSuitableSubmitting) return;
+    const prevStatus = currentLeadStatusRef.current;
+    setNotSuitableSubmitting(true);
+    setAdvanceError('');
+    // Optimistically move the card on the board (other roots / tabs).
+    broadcastLeadStatusChange(contactId, { hs_lead_status: 'NOT_SUITABLE' });
+    let result: { queued: boolean; ok: boolean; status: number; data?: unknown };
+    try {
+      result = await sendOrQueue({
+        area: 'customer',
+        label: 'Lead status → NOT_SUITABLE',
+        method: 'PATCH',
+        url: `/api/contacts/${encodeURIComponent(contactId)}`,
+        body: { hs_lead_status: 'NOT_SUITABLE' },
+        dedupeKey: `contact:${contactId}:lead-status`,
+      });
+    } catch {
+      result = { queued: false, ok: false, status: 0 };
+    }
+    // A permanent client error (4xx) would never succeed on retry — revert the
+    // optimistic move, surface the message, and keep the modal open.
+    if (!result.queued && !result.ok) {
+      broadcastLeadStatusChange(contactId, { hs_lead_status: prevStatus });
+      const d = result.data as { code?: string; error?: string; message?: string } | undefined;
+      setAdvanceError(
+        d?.code === 'LEAD_STATUS_REMOVED'
+          ? LEAD_STATUS_REMOVED_MESSAGE
+          : (d?.error || d?.message || 'Could not update status.'),
+      );
+      setNotSuitableSubmitting(false);
+      return;
+    }
+    // Persisted (or safely queued while offline) — confirm with an Undo that
+    // restores the prior status, then close.
+    const label = leadStatusLabelFor('NOT_SUITABLE') || 'Not Suitable';
+    currentLeadStatusRef.current = 'NOT_SUITABLE';
+    showToastWithAction(
+      `Lead status updated to "${label}"`,
+      {
+        label: 'Undo',
+        onClick: () => {
+          broadcastLeadStatusChange(contactId, { hs_lead_status: prevStatus });
+          void sendOrQueue({
+            area: 'customer',
+            label: `Lead status → ${prevStatus || 'clear'} (undo)`,
+            method: 'PATCH',
+            url: `/api/contacts/${encodeURIComponent(contactId)}`,
+            body: { hs_lead_status: prevStatus },
+            dedupeKey: `contact:${contactId}:lead-status`,
+          }).catch(() => {});
+        },
+      },
+      { duration: 5000 },
+    );
+    onClose();
   }
 
   function handleSendUploadLink() {
@@ -532,9 +771,70 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     _handleKeepEditing();
   }
 
+  // Keep the locally-held contact data in sync after an in-header quick edit so
+  // the email composer recipient, confirm dialog, and Task modal use fresh values.
+  function handleContactSaved(updated: Contact) {
+    const p = updated.properties;
+    const name = [p.firstname, p.lastname].filter(Boolean).join(' ').trim() || p.email || '';
+    setContactData(prev => prev ? {
+      ...prev,
+      contactName:  name,
+      contactEmail: p.email || '',
+      phone:        p.phone || '',
+      mobile:       p.mobilephone || '',
+    } : prev);
+  }
+
   const displayName = contactData?.contactName || contactName || 'the customer';
   const phone  = contactData?.phone  || contactPhone  || '';
   const mobile = contactData?.mobile || contactMobile || '';
+
+  // Pre-filled values for the "Call Later" task form: a "CALL - <name>" title, a
+  // description seeded with the contact's phone numbers followed by every logged
+  // internal attempt (calls/emails/WhatsApp across this and prior sessions,
+  // newest first), and a deadline set to the next 9am/1pm/5pm slot.
+  const callLaterPrefill = useMemo(() => {
+    const headerLines: string[] = [];
+    if (phone)  headerLines.push(`Phone: ${phone}`);
+    if (mobile) headerLines.push(`Mobile: ${mobile}`);
+
+    const entries: { timestamp: string; method: Method; note: string | null }[] = [];
+    attemptLog.forEach((e) => entries.push({ timestamp: e.attemptedAt, method: e.method, note: e.note }));
+    historyAttemptLog.forEach((s) => {
+      const methods: Method[] = [
+        ...(s.callAttempted ? (['call']     as Method[]) : []),
+        ...(s.emailSent     ? (['email']    as Method[]) : []),
+        ...(s.whatsappSent  ? (['whatsapp'] as Method[]) : []),
+      ];
+      methods.forEach((m) => {
+        const note = s.notes.find((n) => n.method === m)?.note ?? null;
+        entries.push({ timestamp: s.attemptedAt, method: m, note });
+      });
+    });
+    entries.sort((a, b) => {
+      const ta = a.timestamp ? Date.parse(a.timestamp) : 0;
+      const tb = b.timestamp ? Date.parse(b.timestamp) : 0;
+      return tb - ta;
+    });
+
+    const historyLines = entries.map((e) => {
+      const when = e.timestamp ? dayjs(e.timestamp).format('YYYY-MM-DD HH:mm') : '';
+      const parts = [when, METHOD_LABEL[e.method]].filter(Boolean);
+      if (e.note && e.note.trim()) parts.push(e.note.trim());
+      return parts.join(' · ');
+    });
+
+    const description = [
+      ...headerLines,
+      ...(historyLines.length ? ['', ...historyLines] : []),
+    ].join('\n');
+
+    return {
+      taskName: `CALL - ${displayName}`,
+      description,
+      deadlineIso: nextCallSlotIso(),
+    };
+  }, [phone, mobile, attemptLog, historyAttemptLog, displayName]);
 
   const methodLogged: Record<Method, boolean> = {
     call:     callAttempted,
@@ -573,6 +873,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
         >
           No Response
         </Button>
+        {canEditLeadStatus && (
+          <Button
+            onClick={() => void handleNotSuitable()}
+            variant="outlined"
+            color="error"
+            disabled={demo || notSuitableSubmitting}
+            startIcon={notSuitableSubmitting ? <CircularProgress size={14} color="inherit" /> : undefined}
+            data-testid="cc-not-suitable"
+          >
+            Not Suitable
+          </Button>
+        )}
         <Button
           onClick={() => setTaskModalOpen(true)}
           variant="outlined"
@@ -631,6 +943,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
             phone={contactPhone || ''}
             mobile={contactMobile || ''}
             email={contactEmail}
+            contactId={demo ? undefined : contactId}
+            onContactSaved={handleContactSaved}
           />
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress size={36} />
@@ -648,6 +962,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                 phone={phone}
                 mobile={mobile}
                 email={contactData?.contactEmail || contactEmail}
+                contactId={demo ? undefined : contactId}
+                onContactSaved={handleContactSaved}
               />
               {loadError && (
                 <Alert severity="warning">{loadError}</Alert>
@@ -902,266 +1218,81 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                 </Stack>
               </Box>
 
-              {(attemptLog.length > 0 || historySessionCount > 0) && (
+              {showHistorySection && (
                 <Box>
                   <Divider sx={{ mb: 1 }} />
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Contact history
-                  </Typography>
-                  {attemptLog.length > 0 && (() => {
-                    const methodOrder: Array<Method> = ['call', 'email', 'whatsapp'];
-                    const methodLabels: Record<Method, (n: number) => string> = {
-                      call:     (n) => `${n} ${n === 1 ? 'call' : 'calls'}`,
-                      email:    (n) => `${n} ${n === 1 ? 'email' : 'emails'}`,
-                      whatsapp: (n) => `${n} WhatsApp`,
-                    };
-                    const mc = attemptLog.reduce<Record<string, number>>((acc, e) => {
-                      acc[e.method] = (acc[e.method] ?? 0) + 1;
-                      return acc;
-                    }, {});
-                    const breakdown = [
-                      ...methodOrder.filter((m) => (mc[m] ?? 0) > 0).map((m) => methodLabels[m](mc[m])),
-                      ...Object.keys(mc).filter((m) => !methodOrder.includes(m as Method) && mc[m] > 0).map((m) => `${mc[m]} ${m}`),
-                    ].join(', ');
-                    const total = attemptLog.length;
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Contact history
+                    </Typography>
+                    {activityLoading && <CircularProgress size={12} />}
+                  </Box>
+
+                  {historySessionCount > 0 && (() => {
+                    const historyMethods = [
+                      historyEverCalled     && 'calls',
+                      historyEverEmailed    && 'emails',
+                      historyEverWhatsapped && 'WhatsApp',
+                    ].filter(Boolean).join(', ');
                     return (
                       <Box
                         sx={{
-                          px: 1,
-                          py: 0.5,
-                          mb: 0.75,
-                          bgcolor: 'grey.100',
-                          borderRadius: 1,
-                          border: '1px solid',
-                          borderColor: 'divider',
+                          px: 1, py: 0.5, mb: 0.75,
+                          bgcolor: 'grey.50', borderRadius: 1,
+                          border: '1px solid', borderColor: 'divider',
                         }}
                       >
                         <Typography variant="caption" color="text.secondary">
-                          <strong>{total} {total === 1 ? 'attempt' : 'attempts'}</strong>
-                          {breakdown ? ` · ${breakdown}` : ''}
+                          <strong>Across all sessions · {historyTotalAttempts} {historyTotalAttempts === 1 ? 'attempt' : 'attempts'}</strong>
+                          {historyMethods ? ` · ${historyMethods}` : ''}
+                          {' '}
+                          <Box component="span" sx={{ color: 'text.disabled' }}>
+                            ({historySessionCount} prior {historySessionCount === 1 ? 'session' : 'sessions'})
+                          </Box>
                         </Typography>
                       </Box>
                     );
                   })()}
-                  {historySessionCount > 0 && (() => {
-                    const historyMethods = [
-                      historyEverCalled      && 'calls',
-                      historyEverEmailed     && 'emails',
-                      historyEverWhatsapped  && 'WhatsApp',
-                    ].filter(Boolean).join(', ');
-                    return (
-                      <>
-                        <Box
-                          sx={{
-                            px: 1,
-                            py: 0.5,
-                            mb: historyAttemptLog.length > 0 ? 0.5 : 0.75,
-                            bgcolor: 'grey.50',
-                            borderRadius: 1,
-                            border: '1px solid',
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            <strong>Across all sessions · {historyTotalAttempts} {historyTotalAttempts === 1 ? 'attempt' : 'attempts'}</strong>
-                            {historyMethods ? ` · ${historyMethods}` : ''}
-                            {' '}
-                            <Box component="span" sx={{ color: 'text.disabled' }}>
-                              ({historySessionCount} prior {historySessionCount === 1 ? 'session' : 'sessions'})
-                            </Box>
-                          </Typography>
-                        </Box>
-                        {historyAttemptLog.length > 0 && (() => {
-                          const visibleEntries = historyAttemptLog.filter(
-                            e => e.callAttempted || e.emailSent || e.whatsappSent,
-                          );
-                          const hiddenCount = historyAttemptLog.length - visibleEntries.length;
-                          return (
-                            <>
-                              {visibleEntries.length > 0 && (
-                                <Box
-                                  sx={{
-                                    maxHeight: 120,
-                                    overflowY: 'auto',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 0.5,
-                                    mb: hiddenCount > 0 ? 0.25 : 0.75,
-                                    pl: 1,
-                                    borderLeft: '2px solid',
-                                    borderColor: 'divider',
-                                  }}
-                                >
-                                  {visibleEntries.map((entry, i) => {
-                                    const sessionMethods = [
-                                      entry.callAttempted  && METHOD_LABEL['call'],
-                                      entry.emailSent      && METHOD_LABEL['email'],
-                                      entry.whatsappSent   && METHOD_LABEL['whatsapp'],
-                                    ].filter(Boolean).join(', ');
-                                    return (
-                                      <Box
-                                        key={i}
-                                        sx={{
-                                          px: 1,
-                                          py: 0.375,
-                                          borderRadius: 1,
-                                          bgcolor: 'grey.50',
-                                          opacity: 0.85,
-                                        }}
-                                      >
-                                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
-                                          <Typography
-                                            variant="caption"
-                                            sx={{
-                                              fontWeight: 600,
-                                              minWidth: 56,
-                                            }}
-                                          >
-                                            {sessionMethods}
-                                          </Typography>
-                                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                                            {relativeTime(entry.attemptedAt)}
-                                            {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
-                                          </Typography>
-                                        </Box>
-                                        {entry.notes.length > 0 && (
-                                          <Box sx={{ mt: 0.25, pl: '56px', display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                                            {entry.notes.map((n, ni) => (
-                                              <Typography
-                                                key={ni}
-                                                variant="caption"
-                                                color="text.secondary"
-                                                sx={{ display: 'block', fontStyle: 'italic' }}
-                                              >
-                                                {METHOD_LABEL[n.method]}: {n.note}
-                                              </Typography>
-                                            ))}
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    );
-                                  })}
-                                </Box>
-                              )}
-                              {hiddenCount > 0 && (
-                                <>
-                                  <Typography
-                                    component="button"
-                                    variant="caption"
-                                    onClick={() => setShowHiddenSessions(v => !v)}
-                                    sx={{
-                                      display: 'block',
-                                      fontStyle: 'italic',
-                                      mb: showHiddenSessions ? 0.25 : 0.75,
-                                      pl: 1,
-                                      background: 'none',
-                                      border: 'none',
-                                      padding: 0,
-                                      cursor: 'pointer',
-                                      color: 'text.secondary',
-                                      textAlign: 'left',
-                                      textDecoration: 'underline',
-                                      textDecorationStyle: 'dotted',
-                                      '&:hover': { color: 'text.primary' },
-                                    }}
-                                  >
-                                    {hiddenCount} {hiddenCount === 1 ? 'session' : 'sessions'} with no methods recorded{' '}
-                                    {showHiddenSessions ? '▲ hide' : '▼ show'}
-                                  </Typography>
-                                  {showHiddenSessions && (
-                                    <Box
-                                      sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: 0.5,
-                                        mb: 0.75,
-                                        pl: 1,
-                                        borderLeft: '2px solid',
-                                        borderColor: 'divider',
-                                      }}
-                                    >
-                                      {historyAttemptLog
-                                        .filter(e => !e.callAttempted && !e.emailSent && !e.whatsappSent)
-                                        .map((entry, i) => (
-                                          <Box
-                                            key={i}
-                                            sx={{
-                                              display: 'flex',
-                                              alignItems: 'baseline',
-                                              gap: 0.75,
-                                              px: 1,
-                                              py: 0.375,
-                                              borderRadius: 1,
-                                              bgcolor: 'grey.50',
-                                              opacity: 0.75,
-                                            }}
-                                          >
-                                            <Typography
-                                              variant="caption"
-                                              sx={{
-                                                fontStyle: 'italic',
-                                                color: 'text.disabled',
-                                                minWidth: 56,
-                                              }}
-                                            >
-                                              No contact logged
-                                            </Typography>
-                                            <Typography variant="caption" color="text.disabled" sx={{ flex: 1 }}>
-                                              {relativeTime(entry.attemptedAt)}
-                                              {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
-                                            </Typography>
-                                          </Box>
-                                        ))
-                                      }
-                                    </Box>
-                                  )}
-                                </>
-                              )}
-                            </>
-                          );
-                        })()}
-                      </>
-                    );
-                  })()}
-                  {attemptLog.length > 0 && (
+
+                  {hasTimeline && (
                     <Box
+                      data-testid="contact-activity-timeline"
                       sx={{
-                        maxHeight: 140,
+                        maxHeight: 280,
                         overflowY: 'auto',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: 0.5,
                       }}
                     >
-                      {attemptLog.map((entry, i) => (
-                        <Box
-                          key={i}
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'baseline',
-                            gap: 0.75,
-                            px: 1,
-                            py: 0.5,
-                            borderRadius: 1,
-                            bgcolor: 'grey.50',
-                          }}
-                        >
-                          <Typography variant="caption" sx={{ fontWeight: 600, minWidth: 56 }}>
-                            {METHOD_LABEL[entry.method]}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>
-                            {relativeTime(entry.attemptedAt)}
-                            {entry.attemptedBy ? ` · ${entry.attemptedBy}` : ''}
-                            {entry.note ? ` | Note: ${entry.note}` : ''}
-                          </Typography>
-                        </Box>
+                      {timeline.map((item) => (
+                        <ContactTimelineRow
+                          key={item.id}
+                          item={item}
+                          expanded={expandedIds.has(item.id)}
+                          onToggle={() => toggleExpanded(item.id)}
+                        />
                       ))}
                     </Box>
+                  )}
+
+                  {!hasTimeline && !activityLoading && !activityError && (
+                    <Typography variant="caption" color="text.secondary">
+                      No activity recorded yet.
+                    </Typography>
+                  )}
+
+                  {(activityError || activityUnavailable.length > 0) && (
+                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+                      {activityError
+                        ? 'HubSpot activity could not be loaded.'
+                        : `Some HubSpot activity couldn’t be loaded${activityUnavailable.length ? ` (${activityUnavailable.join(', ')})` : ''}.`}
+                    </Typography>
                   )}
                 </Box>
               )}
 
-              {attemptLog.length === 0 && lastAttemptAt && (
+              {!hasTimeline && lastAttemptAt && (
                 <Tooltip
                   title={buildActivityTooltipContent(
                     {
@@ -1217,6 +1348,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
               phone={phone}
               mobile={mobile}
               email={contactData?.contactEmail || contactEmail}
+              contactId={demo ? undefined : contactId}
+              onContactSaved={handleContactSaved}
             />
             <Typography variant="body2">
               This will advance the lead status to <strong>No Response</strong>.
@@ -1301,6 +1434,11 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
           contactId={contactId}
           contactName={displayName}
           contactEmail={contactData?.contactEmail || contactEmail}
+          contactPhone={phone}
+          contactMobile={mobile}
+          prefillTaskName={callLaterPrefill.taskName}
+          prefillDescription={callLaterPrefill.description}
+          prefillDeadlineIso={callLaterPrefill.deadlineIso}
           demo={demo}
         />
       </Suspense>

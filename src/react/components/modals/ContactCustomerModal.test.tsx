@@ -277,32 +277,38 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
       expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
     });
 
-    // Edit subject so changes are dirty, then click Send (now enabled)
+    // Edit subject so changes are dirty, then send via the confirmation dialog
     await user.clear(subjectInput);
     await user.type(subjectInput, 'Edited subject');
 
-    // Send → emailFlow transitions to 'sending' (fetch hangs), isLocked=true
+    // Send → opens the confirm dialog → confirming starts the send (fetch hangs),
+    // so emailFlow transitions to 'sending' and isLocked=true.
     await user.click(screen.getByTestId('email-preview-send-btn'));
+    await user.click(await screen.findByTestId('email-send-confirm-btn'));
 
-    // Wait for sending state to flush (send button becomes disabled)
+    // The confirm dialog closes and the send is now in flight (fetch hangs).
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /send email\?/i })).toBeNull();
+    });
     await waitFor(() => {
       expect(screen.getByTestId('email-preview-send-btn')).toBeDisabled();
     });
 
-    // While sending, handleRequestClose returns early (isLocked=true) — no dialog,
-    // no close. disableClose only covers phase==='advancing' and emailPreviewLoading,
-    // so the button stays enabled but the guard silently swallows the request.
-    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
-    await user.click(within(mainDialog).getByRole('button', { name: /close/i }));
-
-    // Modal stays open — neither onClose called nor discard dialog shown
+    // While sending, the close control is disabled (disableClose →
+    // pointer-events: none), so the modal cannot be dismissed mid-send and the
+    // discard guard never runs — no onClose, no discard dialog.
+    // findByRole retries until MUI lifts the aria-hidden it placed on the main
+    // dialog while the confirm dialog was animating closed.
+    const mainDialog = await screen.findByRole('dialog', { name: /contact jane smith/i });
+    expect(within(mainDialog).getByRole('button', { name: /close/i })).toBeDisabled();
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
   });
 
-  it('disables the close button while the email template is still loading (emailPreviewLoading)', async () => {
-    // The email-preview fetch hangs so emailPreviewLoading stays true.
-    // disableClose=(emailFlow !== 'idle' && emailPreviewLoading) → close button disabled.
+  it('allows closing while the email template is still loading (no unsaved edits yet)', async () => {
+    // The email-preview fetch hangs. The composer renders immediately with empty
+    // fields; because no edits have been made the discard guard is inactive, so
+    // closing proceeds cleanly (the close button is not blocked during load).
     restoreFetch = makeFetch({ emailPreviewHangs: true });
     const onClose = vi.fn();
     const user = userEvent.setup();
@@ -312,54 +318,14 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     // Open email flow — template fetch starts but never resolves
     await user.click(screen.getByTestId('contact-method-email-btn'));
 
-    // The subject input should not yet have the template value (fetch is hanging)
-    // Wait briefly to confirm the loading state is active
+    // The composer is shown (send button present) but template values have not arrived
+    await screen.findByTestId('email-preview-send-btn');
+
     const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
-    const closeBtn = within(mainDialog).getByRole('button', { name: /close/i });
+    await user.click(within(mainDialog).getByRole('button', { name: /close/i }));
 
-    // Close button must be disabled while the template fetch is in-flight
-    await waitFor(() => {
-      expect(closeBtn).toBeDisabled();
-    });
-
-    // onClose must not have been called and no discard dialog should appear
-    expect(onClose).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
-  });
-
-  it('disables the close button during a preview refetch (not just initial load)', async () => {
-    // Initial email-preview fetch resolves; the refetch triggered by toggling
-    // to Preview mode after an edit hangs. emailPreviewLoading stays true
-    // during that refetch window, so disableClose must hold.
-    restoreFetch = makeFetch({ emailPreviewHangsAfterFirst: true });
-    const onClose = vi.fn();
-    const user = userEvent.setup();
-    renderModal(onClose);
-    await waitForContactStep();
-
-    // Open email flow — initial template fetch resolves normally
-    await user.click(screen.getByTestId('contact-method-email-btn'));
-
-    const subjectInput = await screen.findByRole('textbox', { name: /subject/i });
-    await waitFor(() => {
-      expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
-    });
-
-    // Edit the subject so the component considers the preview stale
-    await user.clear(subjectInput);
-    await user.type(subjectInput, 'Edited for refetch test');
-
-    // Toggle to Preview mode — triggers the refetch which now hangs forever
-    await user.click(screen.getByTestId('email-html-preview-toggle'));
-
-    // Close button must be disabled while the refetch is in-flight
-    const mainDialog = screen.getByRole('dialog', { name: /contact jane smith/i });
-    const closeBtn = within(mainDialog).getByRole('button', { name: /close/i });
-    await waitFor(() => {
-      expect(closeBtn).toBeDisabled();
-    });
-
-    expect(onClose).not.toHaveBeenCalled();
+    // Clean state → closes without a discard prompt
+    expect(onClose).toHaveBeenCalledOnce();
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
   });
 
@@ -383,9 +349,10 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     await user.clear(subjectInput);
     await user.type(subjectInput, 'Updated subject line');
 
-    // Toggle to preview mode — triggers refetchEmailHtml which used to
-    // overwrite emailFetchedSubject/Body (falsely clearing dirty state)
-    await user.click(screen.getByTestId('email-html-preview-toggle'));
+    // Toggle to preview mode via the EmailComposer Edit/Preview toggle — this
+    // triggers the HTML preview refetch, which must NOT overwrite the dirty
+    // baseline (emailTemplateSubject/Body) and falsely clear unsaved-changes.
+    await user.click(screen.getByRole('button', { name: /^preview$/i }));
 
     // Wait for the preview refetch to settle
     await waitFor(() => {
@@ -465,7 +432,9 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
       expect((subjectInput as HTMLInputElement).value).toBe(EMAIL_TEMPLATE.subject);
     });
 
+    // Send → confirm dialog → confirming fires the actual send (401 GOOGLE_AUTH)
     await user.click(screen.getByTestId('email-preview-send-btn'));
+    await user.click(await screen.findByTestId('email-send-confirm-btn'));
 
     await waitFor(() => {
       expect(mockOpenConnectModal).toHaveBeenCalledWith(

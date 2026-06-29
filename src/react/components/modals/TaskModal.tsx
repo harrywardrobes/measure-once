@@ -28,6 +28,14 @@ export interface TaskModalProps {
   contactId: string;
   contactName: string;
   contactEmail?: string;
+  contactPhone?: string;
+  contactMobile?: string;
+  /** Pre-filled task name (used only when no saved draft exists). */
+  prefillTaskName?: string;
+  /** Pre-filled description / notes (used only when no saved draft exists). */
+  prefillDescription?: string;
+  /** Pre-filled deadline as an ISO string (used only when no saved draft exists). */
+  prefillDeadlineIso?: string;
   onCreated?: (task: CalendarTask) => void;
   demo?: boolean;
 }
@@ -68,6 +76,11 @@ export function TaskModal({
   contactId,
   contactName,
   contactEmail,
+  contactPhone,
+  contactMobile,
+  prefillTaskName,
+  prefillDescription,
+  prefillDeadlineIso,
   onCreated,
   demo,
 }: TaskModalProps) {
@@ -82,12 +95,16 @@ export function TaskModal({
   const currentUserId = currentUser?.id ? String(currentUser.id) : '';
   const currentUserName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim() || '';
 
-  const [taskName,        setTaskName]        = useState(draft.taskName ?? '');
-  const [taskDescription, setTaskDescription] = useState(draft.taskDescription ?? '');
+  const [taskName,        setTaskName]        = useState(draft.taskName ?? prefillTaskName ?? '');
+  const [taskDescription, setTaskDescription] = useState(draft.taskDescription ?? prefillDescription ?? '');
   const [assignedUserId,  setAssignedUserId]  = useState(draft.assignedUserId ?? currentUserId);
   const [assignedUserName, setAssignedUserName] = useState(draft.assignedUserName ?? currentUserName);
   const [deadlineDt,      setDeadlineDt]      = useState<Dayjs | null>(
-    draft.deadlineDt ? dayjs(draft.deadlineDt) : dayjs().add(1, 'day').startOf('hour'),
+    draft.deadlineDt
+      ? dayjs(draft.deadlineDt)
+      : prefillDeadlineIso
+        ? dayjs(prefillDeadlineIso)
+        : dayjs().add(1, 'day').startOf('hour'),
   );
 
   const [users,        setUsers]        = useState<StaffUser[]>([]);
@@ -191,7 +208,10 @@ export function TaskModal({
         <Stack spacing={2} sx={{ mt: 0.5 }}>
           <ModalContactHeader
             name={contactName}
+            phone={contactPhone}
+            mobile={contactMobile}
             email={contactEmail}
+            contactId={demo ? undefined : contactId}
           />
 
           {googleDisconnected && !demo && (

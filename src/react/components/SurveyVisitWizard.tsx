@@ -1099,6 +1099,7 @@ export function SurveyVisitWizard({ handler, ctx, existingVisit, onClose, onCata
       contactEmail={contactEmail}
       contactPhone={contactPhone}
       contactMobile={contactMobile}
+      contactId={demo ? undefined : contactId}
       loading={catalogueLoading}
       draftNotice={showDraftNotice}
       onDismissDraftNotice={() => setShowDraftNotice(false)}

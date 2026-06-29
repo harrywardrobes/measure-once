@@ -6944,6 +6944,461 @@ app.post('/api/card-actions/arrange-visit/outcome',
   }
 );
 
+// ── HubSpot activity helpers (contact_customer enriched timeline) ────────────
+// Short in-memory cache so reopening the Contact Customer modal doesn't re-hit
+// HubSpot for the same contact within a minute.
+const _ccActivityCache = new Map(); // contactId -> { at: epochMs, payload }
+const CC_ACTIVITY_TTL_MS = 60 * 1000;
+
+// HubSpot owner id → display name, cached process-wide (owners change rarely).
+let _hsOwnersCache = null; // { at: epochMs, byId: Map<string,string> }
+const HS_OWNERS_TTL_MS = 5 * 60 * 1000;
+
+async function getHubspotOwnerNames() {
+  const now = Date.now();
+  if (_hsOwnersCache && (now - _hsOwnersCache.at) < HS_OWNERS_TTL_MS) {
+    return _hsOwnersCache.byId;
+  }
+  const byId = new Map();
+  try {
+    let after;
+    for (let page = 0; page < 20; page++) {
+      const r = await hubspotRequestWithRetry('get',
+        `${HS}/crm/v3/owners/?limit=100${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+        null, { timeout: 10000 });
+      for (const o of (r.data?.results || [])) {
+        const name = [o.firstName, o.lastName].filter(Boolean).join(' ').trim() || o.email || null;
+        if (o.id && name) byId.set(String(o.id), name);
+      }
+      after = r.data?.paging?.next?.after;
+      if (!after) break;
+    }
+    _hsOwnersCache = { at: now, byId };
+  } catch (e) {
+    // Owner names are best-effort. Reuse a stale cache if we have one; otherwise
+    // activities simply render without an actor name.
+    if (_hsOwnersCache) return _hsOwnersCache.byId;
+  }
+  return byId;
+}
+
+// Render a plain-text snippet from a possibly-HTML engagement body.
+function stripHtmlToText(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// Fetch every engagement of `type` (emails/calls/meetings/notes/tasks)
+// associated with a contact, then batch-read the requested properties.
+async function fetchContactEngagements(contactId, type, properties) {
+  const assoc = await hubspotRequestWithRetry('get',
+    `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}/associations/${type}`,
+    null, { timeout: 12000 });
+  const ids = (assoc.data?.results || []).map(r => String(r.id)).filter(Boolean);
+  if (!ids.length) return [];
+  const out = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const r = await hubspotRequestWithRetry('post',
+      `${HS}/crm/v3/objects/${type}/batch/read`,
+      { properties, inputs: batch.map(id => ({ id })) },
+      { timeout: 12000 });
+    out.push(...(r.data?.results || []));
+  }
+  return out;
+}
+
+// Engagement source descriptors (emails/calls/meetings/notes/tasks). Built per
+// request because the normalizers close over the owner-id → name resolver.
+// Shared by the Contact Customer modal endpoint and the customer detail page.
+function makeEngagementSources(ownerName) {
+  return [
+    {
+      key: 'email', type: 'emails',
+      props: ['hs_timestamp', 'hs_email_subject', 'hs_email_text', 'hs_email_html',
+              'hs_email_direction', 'hs_email_status', 'hs_email_from_email',
+              'hs_email_to_email', 'hubspot_owner_id'],
+      norm: (e) => {
+        const p = e.properties || {};
+        const dir = String(p.hs_email_direction || '');
+        return {
+          id: `email:${e.id}`,
+          type: 'email',
+          timestamp: p.hs_timestamp || e.createdAt || null,
+          title: p.hs_email_subject || '(no subject)',
+          direction: dir === 'INCOMING_EMAIL' ? 'incoming' : (dir ? 'outgoing' : null),
+          actor: ownerName(p.hubspot_owner_id),
+          body: stripHtmlToText(p.hs_email_text || p.hs_email_html || ''),
+          meta: {
+            from: p.hs_email_from_email || null,
+            to: p.hs_email_to_email || null,
+            status: p.hs_email_status || null,
+          },
+        };
+      },
+    },
+    {
+      key: 'call', type: 'calls',
+      props: ['hs_timestamp', 'hs_call_title', 'hs_call_body', 'hs_call_direction',
+              'hs_call_duration', 'hs_call_disposition', 'hubspot_owner_id'],
+      norm: (e) => {
+        const p = e.properties || {};
+        const dir = String(p.hs_call_direction || '');
+        return {
+          id: `call:${e.id}`,
+          type: 'call',
+          timestamp: p.hs_timestamp || e.createdAt || null,
+          title: p.hs_call_title || 'Call',
+          direction: dir === 'INBOUND' ? 'incoming' : (dir ? 'outgoing' : null),
+          actor: ownerName(p.hubspot_owner_id),
+          body: stripHtmlToText(p.hs_call_body || ''),
+          meta: {
+            durationMs: p.hs_call_duration != null ? Number(p.hs_call_duration) : null,
+            disposition: p.hs_call_disposition || null,
+          },
+        };
+      },
+    },
+    {
+      key: 'meeting', type: 'meetings',
+      props: ['hs_timestamp', 'hs_meeting_title', 'hs_meeting_body',
+              'hs_meeting_outcome', 'hubspot_owner_id'],
+      norm: (e) => {
+        const p = e.properties || {};
+        return {
+          id: `meeting:${e.id}`,
+          type: 'meeting',
+          timestamp: p.hs_timestamp || e.createdAt || null,
+          title: p.hs_meeting_title || 'Meeting',
+          direction: null,
+          actor: ownerName(p.hubspot_owner_id),
+          body: stripHtmlToText(p.hs_meeting_body || ''),
+          meta: { outcome: p.hs_meeting_outcome || null },
+        };
+      },
+    },
+    {
+      key: 'note', type: 'notes',
+      props: ['hs_timestamp', 'hs_note_body', 'hubspot_owner_id'],
+      norm: (e) => {
+        const p = e.properties || {};
+        return {
+          id: `note:${e.id}`,
+          type: 'note',
+          timestamp: p.hs_timestamp || e.createdAt || null,
+          title: 'Note',
+          direction: null,
+          actor: ownerName(p.hubspot_owner_id),
+          body: stripHtmlToText(p.hs_note_body || ''),
+          meta: {},
+        };
+      },
+    },
+    {
+      key: 'task', type: 'tasks',
+      props: ['hs_timestamp', 'hs_task_subject', 'hs_task_body',
+              'hs_task_status', 'hubspot_owner_id'],
+      norm: (e) => {
+        const p = e.properties || {};
+        return {
+          id: `task:${e.id}`,
+          type: 'task',
+          timestamp: p.hs_timestamp || e.createdAt || null,
+          title: p.hs_task_subject || 'Task',
+          direction: null,
+          actor: ownerName(p.hubspot_owner_id),
+          body: stripHtmlToText(p.hs_task_body || ''),
+          meta: { status: p.hs_task_status || null },
+        };
+      },
+    },
+  ];
+}
+
+// Form submissions live on the legacy contact profile (forms scope), not as CRM
+// engagement objects. The profile path yields form name + page URL + timestamp;
+// per-field values require the Forms submissions API (see fetchFormSubmissionValues).
+async function fetchContactFormSubmissions(contactId) {
+  const r = await hubspotRequestWithRetry('get',
+    `${HS}/contacts/v1/contact/vid/${encodeURIComponent(contactId)}/profile` +
+    `?formSubmissionMode=all&propertyMode=value_only&showListMemberships=false`,
+    null, { timeout: 12000 });
+  const subs = Array.isArray(r.data?.['form-submissions']) ? r.data['form-submissions'] : [];
+  return subs.map((s, i) => ({
+    id: `form:${s['conversion-id'] || `${s['form-id'] || 'form'}:${s.timestamp || i}`}`,
+    type: 'form_submission',
+    timestamp: s.timestamp ? new Date(Number(s.timestamp)).toISOString() : null,
+    title: s.title || s['form-title'] || 'Form submission',
+    direction: 'incoming',
+    actor: null,
+    body: null,
+    meta: { pageUrl: s['page-url'] || null, formId: s['form-id'] || null, fields: null },
+    _rawTs: s.timestamp ? Number(s.timestamp) : null,
+  }));
+}
+
+// Per-form submission rows (incl. field values) via the Forms submissions API
+// (requires the `forms` scope). Returns the API's raw result list for a form,
+// cached briefly per form GUID to avoid refetching for repeated submissions.
+const _hsFormSubmissionsCache = new Map(); // formGuid -> { at, results }
+const HS_FORM_SUBS_TTL_MS = 60 * 1000;
+async function fetchFormSubmissionValues(formGuid) {
+  const cached = _hsFormSubmissionsCache.get(formGuid);
+  if (cached && (Date.now() - cached.at) < HS_FORM_SUBS_TTL_MS) return cached.results;
+  const r = await hubspotRequestWithRetry('get',
+    `${HS}/form-integrations/v1/submissions/forms/${encodeURIComponent(formGuid)}?limit=50`,
+    null, { timeout: 12000 });
+  const results = Array.isArray(r.data?.results) ? r.data.results : [];
+  _hsFormSubmissionsCache.set(formGuid, { at: Date.now(), results });
+  return results;
+}
+
+// Enrich form-submission activities in place with submitted field values. Each
+// distinct form GUID is fetched at most once; a submission is matched to an
+// activity by closest submittedAt (within a 5-minute window). Best-effort and
+// fail-soft per form — a missing `forms` scope leaves the rows showing name/page
+// only, exactly as the un-enriched path does.
+async function enrichFormFieldValues(formActivities, unavailable) {
+  const formIds = [...new Set(formActivities.map(a => a.meta?.formId).filter(Boolean))];
+  let anyFailed = false;
+  await Promise.all(formIds.map(async (formId) => {
+    let results;
+    try {
+      results = await fetchFormSubmissionValues(formId);
+    } catch (err) {
+      anyFailed = true;
+      const status = err.response?.status;
+      if (status !== 403 && status !== 404) {
+        logger.warn({ err: err.response?.data || err.message, formId },
+          'contact activity: form submission values failed');
+      }
+      return;
+    }
+    for (const act of formActivities) {
+      if (act.meta?.formId !== formId || act._rawTs == null) continue;
+      let best = null, bestDelta = Infinity;
+      for (const sub of results) {
+        const subTs = Number(sub.submittedAt);
+        if (!Number.isFinite(subTs)) continue;
+        const delta = Math.abs(subTs - act._rawTs);
+        if (delta < bestDelta) { bestDelta = delta; best = sub; }
+      }
+      if (best && bestDelta <= 5 * 60 * 1000 && Array.isArray(best.values)) {
+        act.meta.fields = best.values
+          .filter(v => v && v.name)
+          .map(v => ({ name: String(v.name), value: v.value == null ? '' : String(v.value) }));
+        if (!act.meta.pageUrl && best.pageUrl) act.meta.pageUrl = best.pageUrl;
+      }
+    }
+  }));
+  if (anyFailed) unavailable.push('form_values');
+}
+
+// Marketing email events (sends + opens + clicks) for a recipient via the legacy
+// email-events API (requires the marketing email / `content` scope). Paginated.
+async function fetchMarketingEmailEvents(email) {
+  const events = [];
+  let offset;
+  for (let page = 0; page < 8; page++) {
+    const url = `${HS}/email/public/v1/events?recipient=${encodeURIComponent(email)}&limit=300` +
+      (offset ? `&offset=${encodeURIComponent(offset)}` : '');
+    const r = await hubspotRequestWithRetry('get', url, null, { timeout: 12000 });
+    events.push(...(r.data?.events || []));
+    if (!r.data?.hasMore || !r.data?.offset) break;
+    offset = r.data.offset;
+  }
+  return events;
+}
+
+// Best-effort marketing-campaign id → { name, subject }, cached process-wide.
+const _hsCampaignCache = new Map(); // campaignId -> { name, subject }
+async function getCampaignMeta(id) {
+  const key = String(id);
+  if (_hsCampaignCache.has(key)) return _hsCampaignCache.get(key);
+  let meta = { name: null, subject: null };
+  try {
+    const r = await hubspotRequestWithRetry('get',
+      `${HS}/email/public/v1/campaigns/${encodeURIComponent(key)}`, null, { timeout: 8000 });
+    meta = { name: r.data?.name || null, subject: r.data?.subject || null };
+  } catch { /* best-effort — fall back to a generic label */ }
+  _hsCampaignCache.set(key, meta);
+  return meta;
+}
+
+// Collapse marketing email events into one activity per campaign, carrying open
+// and click counts plus the last open/click timestamps. Only true campaign sends
+// (events with an emailCampaignId) are surfaced.
+async function buildMarketingEmailActivities(email) {
+  const events = await fetchMarketingEmailEvents(email);
+  const SENT_TYPES = new Set(['SENT', 'DELIVERED', 'PROCESSED']);
+  const byCampaign = new Map();
+  for (const ev of events) {
+    if (!ev.emailCampaignId) continue;
+    const cid = String(ev.emailCampaignId);
+    let g = byCampaign.get(cid);
+    if (!g) { g = { sentAt: null, opens: 0, clicks: 0, lastOpen: null, lastClick: null }; byCampaign.set(cid, g); }
+    const t = Number(ev.created || ev.timestamp) || null;
+    const type = String(ev.type || '').toUpperCase();
+    if (SENT_TYPES.has(type)) { if (t && (!g.sentAt || t < g.sentAt)) g.sentAt = t; }
+    else if (type === 'OPEN') { g.opens++; if (t && (!g.lastOpen || t > g.lastOpen)) g.lastOpen = t; }
+    else if (type === 'CLICK') { g.clicks++; if (t && (!g.lastClick || t > g.lastClick)) g.lastClick = t; }
+  }
+  const campaignIds = [...byCampaign.keys()].slice(0, 40); // bound campaign-name lookups
+  const out = [];
+  for (const cid of campaignIds) {
+    const g = byCampaign.get(cid);
+    const meta = await getCampaignMeta(cid);
+    const ts = g.sentAt || g.lastOpen || g.lastClick;
+    out.push({
+      id: `marketing:${cid}`,
+      type: 'marketing_email',
+      timestamp: ts ? new Date(ts).toISOString() : null,
+      title: meta.subject || meta.name || 'Marketing email',
+      direction: 'outgoing',
+      actor: null,
+      body: null,
+      meta: {
+        opens: g.opens,
+        clicks: g.clicks,
+        lastOpenedAt: g.lastOpen ? new Date(g.lastOpen).toISOString() : null,
+        lastClickedAt: g.lastClick ? new Date(g.lastClick).toISOString() : null,
+        campaignName: meta.name || null,
+      },
+    });
+  }
+  return out;
+}
+
+// Page-view (website-visit) behavioural events via the analytics events API
+// (requires an analytics scope). Newest first, capped server-side.
+async function fetchContactPageViews(contactId) {
+  const r = await hubspotRequestWithRetry('get',
+    `${HS}/events/v3/events?objectType=contact&objectId=${encodeURIComponent(contactId)}` +
+    `&eventType=e_visited_page&limit=100`,
+    null, { timeout: 12000 });
+  const results = Array.isArray(r.data?.results) ? r.data.results : [];
+  return results.map((ev, i) => {
+    const p = ev.properties || {};
+    return {
+      id: `pageview:${ev.id || `${ev.occurredAt || i}`}`,
+      type: 'page_view',
+      timestamp: ev.occurredAt || null,
+      title: p.hs_page_title || p.hs_url || 'Page view',
+      direction: 'incoming',
+      actor: null,
+      body: null,
+      meta: { pageUrl: p.hs_url || null },
+    };
+  });
+}
+
+// ── Shared contact-activity builder ──────────────────────────────────────────
+// Produces the normalized, reverse-chronological activity list used by both the
+// Contact Customer modal (engagements + form name/page only) and the customer
+// detail page (additionally marketing emails, page views and form field values).
+// Every source degrades independently: a source that errors (e.g. a missing
+// scope → 403) is dropped and its key is added to `unavailable`, so a partial
+// timeline always renders. `opts.include` toggles the heavier detail-page-only
+// sources; `opts.email` is required for the marketing-email source.
+async function buildContactActivity(contactId, opts = {}) {
+  const include = opts.include || {};
+  const email = opts.email || null;
+  const ownerNames = await getHubspotOwnerNames();
+  const ownerName = (id) => (id != null ? ownerNames.get(String(id)) : null) || null;
+  const unavailable = [];
+
+  const sources = makeEngagementSources(ownerName);
+  const engagementGroups = await Promise.all(sources.map(async (s) => {
+    try {
+      const raw = await fetchContactEngagements(contactId, s.type, s.props);
+      return raw.map(s.norm);
+    } catch (err) {
+      unavailable.push(s.key);
+      const status = err.response?.status;
+      if (status !== 403 && status !== 404) {
+        logger.warn({ err: err.response?.data || err.message, source: s.type },
+          'contact activity: engagement source failed');
+      }
+      return [];
+    }
+  }));
+
+  let formActivities = [];
+  try {
+    formActivities = await fetchContactFormSubmissions(contactId);
+    if (include.formValues && formActivities.length) {
+      await enrichFormFieldValues(formActivities, unavailable);
+    }
+  } catch (err) {
+    unavailable.push('form_submission');
+    const status = err.response?.status;
+    if (status !== 403 && status !== 404) {
+      logger.warn({ err: err.response?.data || err.message },
+        'contact activity: form submissions failed');
+    }
+  }
+  // Drop the internal matching field before returning to the client.
+  formActivities.forEach(a => { delete a._rawTs; });
+
+  let marketingActivities = [];
+  if (include.marketing && email) {
+    try {
+      marketingActivities = await buildMarketingEmailActivities(email);
+    } catch (err) {
+      unavailable.push('marketing_email');
+      const status = err.response?.status;
+      if (status !== 403 && status !== 404) {
+        logger.warn({ err: err.response?.data || err.message },
+          'contact activity: marketing emails failed');
+      }
+    }
+  }
+
+  let pageViewActivities = [];
+  if (include.pageViews) {
+    try {
+      pageViewActivities = await fetchContactPageViews(contactId);
+    } catch (err) {
+      unavailable.push('page_view');
+      const status = err.response?.status;
+      if (status !== 403 && status !== 404) {
+        logger.warn({ err: err.response?.data || err.message },
+          'contact activity: page views failed');
+      }
+    }
+  }
+
+  const MAX_ITEMS = 200;
+  const all = [
+    ...engagementGroups.flat(),
+    ...formActivities,
+    ...marketingActivities,
+    ...pageViewActivities,
+  ]
+    .map(a => ({ ...a, source: 'hubspot' }))
+    .sort((x, y) => {
+      const tx = x.timestamp ? Date.parse(x.timestamp) : 0;
+      const ty = y.timestamp ? Date.parse(y.timestamp) : 0;
+      return ty - tx;
+    });
+  const truncated = all.length > MAX_ITEMS;
+  return { activities: all.slice(0, MAX_ITEMS), unavailable, truncated };
+}
+
 // ── contact_customer: load contact info + attempt tracking ───────────────────
 app.post('/api/card-actions/contact-customer',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken,
@@ -7055,6 +7510,92 @@ app.post('/api/card-actions/contact-customer',
         return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
       }
       logger.error({ err: e.response?.data || e.message }, 'POST /api/card-actions/contact-customer error:');
+      res.status(502).json({ error: e.message || 'Unexpected error.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── contact_customer: enriched HubSpot activity timeline (lazy-loaded) ────────
+// Returns a normalized, reverse-chronological list of HubSpot activities
+// (emails, calls, meetings, notes, tasks, form submissions) for the contact.
+// Each source degrades independently: if the token lacks a scope (403) or one
+// source errors, the rest still return and `unavailable` lists the sources that
+// could not be read. The modal intentionally omits the heavier marketing-email /
+// page-view / form-field-value sources, which are surfaced only on the customer
+// detail page (GET /api/contacts/:contactId/activity).
+app.get('/api/card-actions/contact-customer/:contactId/activity',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.params.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const cached = _ccActivityCache.get(contactId);
+    if (cached && (Date.now() - cached.at) < CC_ACTIVITY_TTL_MS) {
+      return res.json(cached.payload);
+    }
+
+    try {
+      const payload = await buildContactActivity(contactId);
+      _ccActivityCache.set(contactId, { at: Date.now(), payload });
+      res.json(payload);
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'GET /api/card-actions/contact-customer/:contactId/activity error:');
+      res.status(502).json({ error: e.message || 'Unexpected error.', code: 'HUBSPOT_ERROR' });
+    }
+  }
+);
+
+// ── customer detail page: full HubSpot activity feed (lazy-loaded) ────────────
+// The richer sibling of the modal timeline. In addition to engagements + form
+// submissions it includes marketing emails (with open/click counts), page-view
+// analytics and form-submission field values. Marketing / page-view sources need
+// the marketing + analytics token scopes; without them those sources are simply
+// listed in `unavailable` and the rest of the feed renders normally.
+const _detailActivityCache = new Map(); // contactId -> { at, payload }
+app.get('/api/contacts/:contactId/activity',
+  isAuthenticated, requirePrivilege('member'), requireHubspotToken,
+  async (req, res) => {
+    const contactId = String(req.params.contactId || '');
+    if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+
+    const cached = _detailActivityCache.get(contactId);
+    if (cached && (Date.now() - cached.at) < CC_ACTIVITY_TTL_MS) {
+      return res.json(cached.payload);
+    }
+
+    try {
+      // The marketing-email source is keyed by recipient email, so resolve the
+      // contact's email first (best-effort — marketing just degrades without it).
+      let email = null;
+      try {
+        const r = await hubspotRequestWithRetry('get',
+          `${HS}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,
+          null, { params: { properties: 'email' }, timeout: 12000 });
+        email = r.data?.properties?.email || null;
+      } catch { /* best-effort — handled by marketing source degradation below */ }
+
+      const payload = await buildContactActivity(contactId, {
+        email,
+        include: { marketing: true, pageViews: true, formValues: true },
+      });
+      _detailActivityCache.set(contactId, { at: Date.now(), payload });
+      res.json(payload);
+    } catch (e) {
+      const status = e.response?.status;
+      if (status === 401 || status === 403) {
+        return res.status(502).json({ error: 'HubSpot rejected the request.', code: 'HUBSPOT_AUTH' });
+      }
+      if (status === 429) {
+        return res.status(502).json({ error: 'HubSpot rate limit reached.', code: 'HUBSPOT_RATE_LIMIT' });
+      }
+      logger.error({ err: e.response?.data || e.message }, 'GET /api/contacts/:contactId/activity error:');
       res.status(502).json({ error: e.message || 'Unexpected error.', code: 'HUBSPOT_ERROR' });
     }
   }

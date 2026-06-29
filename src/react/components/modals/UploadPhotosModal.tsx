@@ -1025,7 +1025,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       footer={renderActions()}
     >
       {phase !== 'sent' && phase !== 'done' && phase !== 'advancing' && (
-        <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} />
+        <ModalContactHeader name={ctx.contactName} email={ctx.contactEmail} phone={ctx.contactPhone} mobile={ctx.contactMobile} contactId={demo ? undefined : ctx.contactId} />
       )}
       {renderContent()}
     </FullScreenModal>

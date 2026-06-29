@@ -99,6 +99,13 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
       : values[k] !== savedValues[k],
   );
 
+  // Only guard while the modal is actually open. Once it closes — whether the
+  // user saved or discarded — there is nothing to warn about. Leaving the guard
+  // armed after a save lets a background contact re-fetch (which re-normalises
+  // the address, e.g. addressLines [] ↔ ['','']) keep `hasUnsavedChanges` true,
+  // wrongly triggering the page-exit warning even though the save succeeded.
+  const dirty = open && hasUnsavedChanges;
+
   // Restore draft or reset to contact values each time the modal opens.
   useEffect(() => {
     if (!open) return;
@@ -129,11 +136,11 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   }
 
   const { confirmOpen: confirmDiscardOpen, handleRequestClose, handleKeepEditing } = useDiscardGuard(
-    hasUnsavedChanges,
+    dirty,
     handleDiscard,
     saving,
   );
-  useBeforeUnloadGuard(hasUnsavedChanges);
+  useBeforeUnloadGuard(dirty);
 
   function handleChange(field: 'firstname' | 'lastname' | 'email' | 'phone' | 'mobilephone') {
     return (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -523,6 +523,7 @@ export function OpenDealActionModal({ handler, ctx, open, onClose, demo, demoIni
         email={contactData?.contactEmail}
         address={contactData?.contactAddress}
         loading={opts?.loading}
+        contactId={demo ? undefined : ctx.contactId}
       />
     );
   }

@@ -443,6 +443,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
         email={loaderData?.contactEmail}
         address={loaderData?.contactAddress}
         loading={opts?.loading}
+        contactId={demo ? undefined : ctx.contactId}
       />
     );
   }

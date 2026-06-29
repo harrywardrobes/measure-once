@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import { BRAND_COLORS } from '../theme';
 import { FullScreenModal } from './modals/FullScreenModal';
 import { ModalContactHeader } from './modals/ModalContactHeader';
+import type { Contact } from '../pages/customer-detail/types';
 
 /** Step progress bar shown at the top of the wizard body. */
 function StepIndicator({ current, total }: { current: number; total: number }) {
@@ -45,6 +46,13 @@ export interface VisitWizardShellProps {
   contactPhone?: string;
   /** Contact mobile shown in the modal header strip. */
   contactMobile?: string;
+  /**
+   * HubSpot contact id. When supplied (and the viewer can edit), the header
+   * shows a pencil that opens the shared contact-edit modal for quick edits.
+   */
+  contactId?: string;
+  /** Called after a successful in-header contact edit with the updated contact. */
+  onContactSaved?: (updated: Contact) => void;
   /** When true, shows the contact-header skeleton + a body spinner. */
   loading?: boolean;
   /** When true, shows a dismissible "Restoring your draft" notice. */
@@ -79,6 +87,8 @@ export function VisitWizardShell({
   contactEmail,
   contactPhone,
   contactMobile,
+  contactId,
+  onContactSaved,
   loading,
   draftNotice,
   onDismissDraftNotice,
@@ -95,7 +105,7 @@ export function VisitWizardShell({
       headerActions={headerActions}
       footer={loading ? undefined : footer}
     >
-      <ModalContactHeader name={contactName} email={contactEmail} phone={contactPhone} mobile={contactMobile} loading={loading} />
+      <ModalContactHeader name={contactName} email={contactEmail} phone={contactPhone} mobile={contactMobile} loading={loading} contactId={contactId} onContactSaved={onContactSaved} />
       {draftNotice && (
         <Alert
           severity="info"
