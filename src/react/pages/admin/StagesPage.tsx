@@ -388,10 +388,9 @@ export function StagesPage() {
     if (si < 0 || si >= peers.length) return;
     const a = peers[idx], b = peers[si];
     try {
-      await Promise.all([
-        PATCH(`/api/admin/lead-statuses/${encodeURIComponent(a.key)}`, { sort_order: b.sort_order }),
-        PATCH(`/api/admin/lead-statuses/${encodeURIComponent(b.key)}`, { sort_order: a.sort_order }),
-      ]);
+      // Swap atomically server-side: a partial unique index on sort_order
+      // rejects the transient state two independent PATCHes would create.
+      await POST('/api/admin/lead-statuses/reorder', { a: a.key, b: b.key });
       const next = [...statusesRef.current];
       const ai = next.findIndex(s => s.key === a.key);
       const bi = next.findIndex(s => s.key === b.key);

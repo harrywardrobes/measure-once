@@ -5242,6 +5242,65 @@ app.patch('/api/admin/lead-statuses/:key', isAuthenticated, requireAdmin, async 
   }
 });
 
+// Admin: atomically swap the sort_order of two lead statuses.
+//
+// A naive reorder that PATCHes each row's sort_order independently fails: the
+// partial unique index `lead_status_config_sort_order_uniq` rejects the
+// transient state where both rows momentarily hold the same sort_order (raised
+// as a 23505, previously surfaced as the misleading "A status with that key
+// already exists"). We do the swap in a single transaction, parking one row at
+// a temporary out-of-range sort_order so the unique index is never violated.
+app.post('/api/admin/lead-statuses/reorder', isAuthenticated, requireAdmin, async (req, res) => {
+  const a = String(req.body?.a ?? '').trim();
+  const b = String(req.body?.b ?? '').trim();
+  if (!a || !b) return res.status(400).json({ error: 'a and b keys are required.' });
+  if (a === b) return res.status(400).json({ error: 'a and b must be different statuses.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Lock both rows to serialise concurrent reorders.
+    const { rows } = await client.query(
+      'SELECT key, sort_order, is_null_row FROM lead_status_config WHERE key IN ($1, $2) FOR UPDATE',
+      [a, b]
+    );
+    const rowA = rows.find(r => r.key === a);
+    const rowB = rows.find(r => r.key === b);
+    if (!rowA || !rowB) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Status not found.' });
+    }
+    if (rowA.is_null_row || rowB.is_null_row) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'The null status row cannot be reordered.' });
+    }
+    // Park A at a temporary, guaranteed-free sort_order, then place B and A.
+    const { rows: minRows } = await client.query(
+      'SELECT COALESCE(MIN(sort_order), 0) - 1 AS tmp FROM lead_status_config'
+    );
+    const tmp = minRows[0].tmp;
+    await client.query('UPDATE lead_status_config SET sort_order = $1 WHERE key = $2', [tmp, a]);
+    await client.query('UPDATE lead_status_config SET sort_order = $1 WHERE key = $2', [rowA.sort_order, b]);
+    await client.query('UPDATE lead_status_config SET sort_order = $1 WHERE key = $2', [rowB.sort_order, a]);
+    await client.query('COMMIT');
+    invalidateLeadStatusCache();
+    _invalidateLeadStatusCountsCache();
+    _invalidateOpenLeadsCache();
+    _invalidateProjectContactsCache();
+    res.json({ ok: true });
+    const _lscSseMsg = `data: ${JSON.stringify({ type: 'lead_statuses_changed' })}\n\n`;
+    for (const sseClient of _hsWebhookSseClients) {
+      try { sseClient.write(_lscSseMsg); } catch { _hsWebhookSseClients.delete(sseClient); }
+    }
+    syncLeadStatusesToHubSpot().catch(e => logger.warn({ err: e.response?.data?.message || e.message }, 'HubSpot lead-status sync failed:'));
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    logger.error({ err: e.message }, 'POST /api/admin/lead-statuses/reorder error:');
+    res.status(500).json({ error: 'Could not reorder lead statuses.' });
+  } finally {
+    client.release();
+  }
+});
+
 // Admin: fetch hs_lead_status property options directly from HubSpot
 app.get('/api/admin/hubspot-lead-statuses', isAuthenticated, requireAdmin, requireHubspotToken, async (req, res) => {
   try {
