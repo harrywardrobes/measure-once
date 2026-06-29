@@ -6789,11 +6789,49 @@ app.post('/api/card-actions/arrange-visit',
   }
 );
 
+/**
+ * Best-effort lookup of the duration (in minutes) of the visit already booked
+ * for a contact. Visits are booked via the "arrange visit" step, which creates
+ * a Google Calendar event on the shared calendar tagged with
+ * `moContactId` + `moVisitType`. We return the duration of the soonest upcoming
+ * matching event so the visit wizards can inherit it instead of re-asking.
+ *
+ * Returns `null` on any failure (Google not connected, no shared calendar
+ * configured, or no matching booking) — callers fall back to their default
+ * duration. Never throws.
+ */
+async function getScheduledVisitDurationMin(req, contactId, visitType) {
+  try {
+    const googleTokens = await getVerifiedGoogleTokens(req);
+    if (!googleTokens) return null;
+    const calendarId = getSharedCalendarId();
+    const calendar = getCalendarClient(getGoogleClient(googleTokens));
+    const evRes = await calendar.events.list({
+      calendarId,
+      timeMin: new Date().toISOString(),
+      maxResults: 10,
+      singleEvents: true,
+      orderBy: 'startTime',
+      privateExtendedProperty: [`moContactId=${contactId}`, `moVisitType=${visitType}`],
+    });
+    const ev = (evRes.data?.items || []).find(e => e.start?.dateTime && e.end?.dateTime);
+    if (!ev) return null;
+    const mins = Math.round(
+      (new Date(ev.end.dateTime).getTime() - new Date(ev.start.dateTime).getTime()) / 60000,
+    );
+    return Number.isFinite(mins) && mins > 0 ? mins : null;
+  } catch {
+    // Best-effort: Google not connected, calendar not configured, or no match.
+    return null;
+  }
+}
+
 // Execute: start_design_visit → fetch the most recent HubSpot note to pre-fill
 // the wizard's visit notes field, plus the contact's structured address so the
 // design-visit wizard can show it read-only (the address is captured once when
 // the visit is scheduled / on the customer record, not re-entered per visit).
-// Returns { visitNotes, visitNotesTimestamp, contactStructuredAddress }.
+// Returns { visitNotes, visitNotesTimestamp, contactStructuredAddress,
+// scheduledDurationMin }.
 app.post('/api/card-actions/start-design-visit',
   isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter,
   async (req, res) => {
@@ -6805,7 +6843,14 @@ app.post('/api/card-actions/start-design-visit',
       // simply falls back to manual address entry. Returns null when the contact
       // has no address on file.
       const contactStructuredAddress = await fetchContactStructuredAddress(contactId);
-      res.json({ visitNotes, visitNotesTimestamp, contactStructuredAddress });
+      // Best-effort: the visit duration is set when the visit is booked (the
+      // "arrange visit" step creates a Google Calendar event tagged
+      // moVisitType=design). The wizard inherits that duration rather than
+      // asking for it again. Any failure — Google not connected, no shared
+      // calendar configured, or no matching booking — leaves this null and the
+      // wizard falls back to the handler's default duration.
+      const scheduledDurationMin = await getScheduledVisitDurationMin(req, contactId, 'design');
+      res.json({ visitNotes, visitNotesTimestamp, contactStructuredAddress, scheduledDurationMin });
     } catch (e) {
       const status = e.response?.status;
       if (status === 401 || status === 403) {

@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography';
 import { FullScreenModal } from './modals/FullScreenModal';
 import { VisitWizardShell } from './VisitWizardShell';
 import { useToastContext } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { LEAD_STATUS_REMOVED_MESSAGE, POST } from '../utils/api';
 import { openConnectModal } from '../contexts/ConnectionToastContext';
 import { formatAddress } from '../../../shared/address';
@@ -335,6 +336,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   const [visitNotesTimestamp, setVisitNotesTimestamp] = useState('');
 
   const { showToast, showToastWithAction } = useToastContext();
+  const { user: currentUser } = useAuth();
 
   const intermediateStatusFiredRef = useRef(false);
 
@@ -392,6 +394,14 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
           setStep1(prev => {
             const next = { ...prev };
             if (d.visitNotes) next.visitNotes = d.visitNotes;
+            // Inherit the duration from the booked visit (set at scheduling
+            // time). The field isn't shown in this wizard — this just carries
+            // the right value through to submit / the calendar event. Falls
+            // back to the handler default when no booking is found.
+            if (typeof d.scheduledDurationMin === 'number' && d.scheduledDurationMin > 0) {
+              next.duration = String(d.scheduledDurationMin);
+              initialStep1Ref.current = { ...initialStep1Ref.current, duration: String(d.scheduledDurationMin) };
+            }
             // Seed the address from the customer's record so the wizard shows it
             // read-only. Only fill when the current address is empty so a
             // restored draft is never overwritten.
@@ -505,6 +515,23 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
     }
   }, [editMode, cfg.intermediateLeadStatus, contactId, demo]);
 
+  // Pre-fill the designer name with the logged-in user — the person running the
+  // wizard is usually the designer. Only seeds a fresh new visit when the field
+  // is still empty, so a restored draft, a manual edit, or an existing visit's
+  // designer is never overwritten. The name stays editable.
+  useEffect(() => {
+    if (demo || editMode) return;
+    const name = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ').trim();
+    if (!name) return;
+    setStep1(prev => {
+      if (prev.designerName.trim()) return prev;
+      // Fold the seeded name into the unsaved-changes baseline so a pre-filled
+      // (but untouched) designer name doesn't trigger the "Discard?" prompt.
+      initialStep1Ref.current = { ...initialStep1Ref.current, designerName: name };
+      return { ...prev, designerName: name };
+    });
+  }, [currentUser, demo, editMode]);
+
   useEffect(() => {
     const channels: BroadcastChannel[] = [];
     for (const name of ['catalog_handles_changed', 'catalog_ranges_changed', 'catalog_doors_changed']) {
@@ -565,7 +592,7 @@ export function DesignVisitWizard({ handler, ctx, existingVisit, onClose, onCata
   function hasUnsavedDraftData(): boolean {
     const step1Touched =
       step1.visitDate !== initialStep1Ref.current.visitDate ||
-      step1.designerName.trim() !== '' ||
+      step1.designerName.trim() !== (initialStep1Ref.current.designerName ?? '').trim() ||
       JSON.stringify(step1.structuredAddress) !== JSON.stringify(initialStep1Ref.current.structuredAddress) ||
       step1.handleId !== '' ||
       step1.furnitureRangeId !== '';
