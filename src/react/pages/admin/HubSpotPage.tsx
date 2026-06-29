@@ -49,6 +49,15 @@ function showToast(msg: string, err?: boolean) {
   if (typeof W.toast === 'function') (W.toast as (m: string, e?: boolean) => void)(msg, err);
 }
 
+// HubSpot's Webhooks v3 management API (used by the Register / Unregister buttons)
+// only authenticates public-app / developer requests. This integration uses a
+// private-app token (`pat-…`), which HubSpot rejects with "Authentication
+// credentials not found" — so private-app webhook subscriptions must be set up
+// directly in HubSpot (Settings → Integrations → Private Apps → Webhooks) instead.
+// Flip this to true only if the integration migrates to a public app, which the
+// Webhooks v3 API does support.
+const WEBHOOK_API_REGISTRATION_SUPPORTED = false;
+
 // ── Pipeline Stages card ────────────────────────────────────────────────────
 
 const WORKFLOW_KEY_TO_LS_STAGE: Record<string, string> = {
@@ -467,13 +476,22 @@ export function HubSpotPage() {
 
               {/* Action buttons */}
               <Divider />
+              {!WEBHOOK_API_REGISTRATION_SUPPORTED && (
+                <Alert severity="info">
+                  This integration uses a HubSpot <strong>private app</strong>, so webhook
+                  subscriptions are configured directly in HubSpot
+                  (<em>Settings → Integrations → Private Apps → Webhooks</em>) rather than from
+                  here. API-based registration is only available for public apps, so the buttons
+                  below are disabled.
+                </Alert>
+              )}
               <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
                 <Button
                   variant="contained"
                   onClick={registerWebhook}
-                  disabled={webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret}
+                  disabled={!WEBHOOK_API_REGISTRATION_SUPPORTED || webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret}
                   startIcon={webhookActing ? <CircularProgress size={14} color="inherit" /> : undefined}
-                  title={!webhookStatus.appIdConfigured ? 'HUBSPOT_APP_ID must be configured' : !webhookStatus.hasSecret ? 'HUBSPOT_CLIENT_SECRET must be configured' : undefined}
+                  title={!WEBHOOK_API_REGISTRATION_SUPPORTED ? 'Private-app webhooks are configured directly in HubSpot — see the note above.' : !webhookStatus.appIdConfigured ? 'HUBSPOT_APP_ID must be configured' : !webhookStatus.hasSecret ? 'HUBSPOT_CLIENT_SECRET must be configured' : undefined}
                 >
                   {webhookActing ? 'Working…' : 'Register / refresh'}
                 </Button>
@@ -481,8 +499,9 @@ export function HubSpotPage() {
                   variant="outlined"
                   color="error"
                   onClick={unregisterWebhook}
-                  disabled={webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret || webhookStatus.subscriptions.length === 0}
+                  disabled={!WEBHOOK_API_REGISTRATION_SUPPORTED || webhookActing || !webhookStatus.appIdConfigured || !webhookStatus.hasSecret || webhookStatus.subscriptions.length === 0}
                   startIcon={webhookActing ? <CircularProgress size={14} color="inherit" /> : undefined}
+                  title={!WEBHOOK_API_REGISTRATION_SUPPORTED ? 'Private-app webhooks are configured directly in HubSpot — see the note above.' : undefined}
                 >
                   Unregister
                 </Button>
