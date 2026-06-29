@@ -266,6 +266,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             disabled={saving}
             idPrefix="contact-edit-address"
             surface="contactEdit"
+            postcodeFirst
           />
         </Stack>
     </FullScreenModal>

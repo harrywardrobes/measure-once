@@ -821,6 +821,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   disabled={submitting}
                   idPrefix="av-booked-address"
                   surface="arrangeVisit"
+                  postcodeFirst
                 />
                 <TextField
                   id="av-booked-notes"
