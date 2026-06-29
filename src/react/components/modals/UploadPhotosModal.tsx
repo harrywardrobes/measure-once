@@ -147,6 +147,10 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
   const [advanceError, setAdvanceError] = useState('');
   const [confirmMessage, setConfirmMessage] = useState('');
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Phase to return to when the user cancels the No Response confirmation —
+  // the No Response button is reachable from the 'ready', 'confirming', and
+  // 'revoked-elsewhere' screens, so Cancel must restore whichever they left.
+  const noResponseReturnPhaseRef = useRef<Phase>('ready');
 
   // Email preview state
   const [emailSubject, setEmailSubject] = useState('');
@@ -752,6 +756,25 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
+  // Shared "No Response" button — available from the main send view and from
+  // the active-link / revoked-elsewhere screens. Remembers the phase it was
+  // launched from so Cancel returns there.
+  function noResponseButton(fromPhase: Phase) {
+    return (
+      <DemoActionTooltip demo={demo}>
+        <Button
+          onClick={() => { setAdvanceError(''); noResponseReturnPhaseRef.current = fromPhase; setPhase('no_response_confirm'); }}
+          variant="outlined"
+          color="warning"
+          disabled={demo}
+          data-testid="cah-no-response"
+        >
+          No Response
+        </Button>
+      </DemoActionTooltip>
+    );
+  }
+
   function renderActions() {
     if (phase === 'checking') {
       return <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>;
@@ -784,6 +807,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
         return (
           <>
             <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
+            {noResponseButton('confirming')}
             <DemoActionTooltip demo={demo}>
               <Button
                 color="error"
@@ -829,6 +853,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       return (
         <>
           <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
+          {noResponseButton('confirming')}
           <Button
             variant="contained"
             color="warning"
@@ -845,6 +870,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
       return (
         <>
           <Button onClick={handleClose} data-testid="cah-cancel">Cancel</Button>
+          {noResponseButton('revoked-elsewhere')}
           <Button
             variant="contained"
             color="warning"
@@ -913,7 +939,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     if (phase === 'no_response_confirm') {
       return (
         <>
-          <Button onClick={() => setPhase('ready')} data-testid="cah-cancel">Cancel</Button>
+          <Button onClick={() => setPhase(noResponseReturnPhaseRef.current)} data-testid="cah-cancel">Cancel</Button>
           <DemoActionTooltip demo={demo}>
             <Button
               onClick={handleConfirmNoResponse}
@@ -946,17 +972,7 @@ export function UploadPhotosModal({ handler: _handler, ctx, open, onClose, demo 
     return (
       <>
         <Button onClick={handleClose} disabled={submitting || copyAndClosing} data-testid="cah-cancel">Cancel</Button>
-        <DemoActionTooltip demo={demo}>
-          <Button
-            onClick={() => { setAdvanceError(''); setPhase('no_response_confirm'); }}
-            variant="outlined"
-            color="warning"
-            disabled={demo}
-            data-testid="cah-no-response"
-          >
-            No Response
-          </Button>
-        </DemoActionTooltip>
+        {noResponseButton('ready')}
         {generatedLink?.formLink && !linkError && (
           <>
             <Button
