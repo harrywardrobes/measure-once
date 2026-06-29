@@ -18,6 +18,7 @@ import {
 import SyncIcon from '@mui/icons-material/Sync';
 import { GET, POST, PATCH, DELETE } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 import { STAGE_COLORS } from '../../theme';
 
 // ── Stage option constants ──────────────────────────────────────────────────
@@ -226,6 +227,8 @@ export function StagesPage() {
   const [newLabel, setNewLabel] = useState('');
   const [addErr, setAddErr] = useState('');
   const [healthData,   setHealthData]   = useState<LeadStatusHealth | null>(null);
+  // True when the table has pending (unsaved) label / stage / exclusion edits.
+  const [tableDirty, setTableDirty] = useState(false);
 
   interface HsOption { value: string; label: string; displayOrder: number; hidden: boolean; }
   type ImportTag = 'NEW' | 'REORDERED' | 'OK';
@@ -259,6 +262,7 @@ export function StagesPage() {
       statusesRef.current = list;
       setLoading(false);
       setReloadKey(k => k + 1);
+      setTableDirty(false); // re-render resets uncontrolled inputs to the new baseline
     } catch {
       setLoading(false);
     }
@@ -374,6 +378,47 @@ export function StagesPage() {
     notifyLsChanged();
   }, []);
 
+  // ── Unsaved-changes guard ──
+  // The table rows are uncontrolled inputs scraped on save, so dirtiness is
+  // derived by comparing the live DOM against the loaded baseline.
+
+  const recomputeDirty = useCallback(() => {
+    const wrap = document.getElementById('lead-statuses-table-wrap');
+    if (!wrap) { setTableDirty(false); return; }
+    let dirty = false;
+    wrap.querySelectorAll<HTMLTableRowElement>('tr[data-ls-key]').forEach(row => {
+      if (dirty) return;
+      const orig = statusesRef.current.find(s => s.key === row.dataset.lsKey);
+      if (!orig) return;
+      const lbl  = row.querySelector<HTMLInputElement>('.ls-label-input');
+      const stg  = row.querySelector<HTMLSelectElement>('.ls-stage-select');
+      const excl = row.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      const newLbl  = lbl ? lbl.value.trim() : orig.label;
+      const newStg  = stg ? (stg.value || null) : (orig.stage || null);
+      const newExcl = excl ? excl.checked : orig.excluded_from_sales;
+      if (!newLbl) return; // an empty label is ignored by saveAll, so don't flag it
+      if (newLbl !== orig.label || newStg !== (orig.stage || null) || newExcl !== orig.excluded_from_sales) {
+        dirty = true;
+      }
+    });
+    setTableDirty(dirty);
+  }, []);
+
+  const discardTable = useCallback(() => {
+    // Re-key the rows so the uncontrolled inputs reset to the loaded baseline.
+    setReloadKey(k => k + 1);
+    setTableDirty(false);
+  }, []);
+
+  const saveTable = useCallback(async () => {
+    await saveAll();
+    // saveAll either persists a row (baseline updated) or reverts the input on
+    // failure, so nothing unsaved remains afterwards.
+    recomputeDirty();
+  }, [saveAll, recomputeDirty]);
+
+  useAdminUnsavedChanges({ id: 'stages', isDirty: tableDirty, onSave: saveTable, onDiscard: discardTable });
+
   // ── Move status ──
 
   const moveStatus = useCallback(async (key: string, dir: 'up' | 'down', peers?: LeadStatus[]) => {
@@ -398,6 +443,7 @@ export function StagesPage() {
       if (bi !== -1) next[bi] = { ...next[bi], sort_order: a.sort_order };
       setStatuses(next); statusesRef.current = next;
       setReloadKey(k => k + 1);
+      setTableDirty(false); // re-keyed rows reset uncontrolled inputs to baseline
       notifyLsChanged();
     } catch (e) { showToast(`Failed to reorder: ${(e as Error).message}`, true); }
   }, []);
@@ -417,6 +463,7 @@ export function StagesPage() {
       setStatuses(next); statusesRef.current = next;
       setNewKey(''); setNewStage(''); setNewLabel('');
       setReloadKey(rk => rk + 1);
+      setTableDirty(false);
       notifyLsChanged();
       fetchHealthData();
     } catch (e) { setAddErr((e as Error).message || 'Failed to add status.'); }
@@ -450,6 +497,7 @@ export function StagesPage() {
       const next = statusesRef.current.filter(s => s.key !== key);
       setStatuses(next); statusesRef.current = next;
       setReloadKey(rk => rk + 1);
+      setTableDirty(false);
       setDeleteDialog(null);
       showToast(`Status "${key}" deleted.`);
       notifyLsChanged();
@@ -545,7 +593,7 @@ export function StagesPage() {
               >
                 Import from HubSpot
               </Button>
-              <Button variant="contained" onClick={saveAll}>Save</Button>
+              <Button variant="contained" onClick={saveTable}>Save</Button>
             </Box>
           </Box>
 
@@ -579,7 +627,7 @@ export function StagesPage() {
             </Alert>
           )}
 
-          <div id="lead-statuses-table-wrap">
+          <div id="lead-statuses-table-wrap" onInput={recomputeDirty} onChange={recomputeDirty}>
             {loading ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
                 <CircularProgress size={16} />

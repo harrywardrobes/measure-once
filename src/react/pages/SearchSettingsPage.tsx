@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SUCCESS_BANNER_HIDE_MS } from '../constants/timings';
 import { STATUS_COLORS } from '../theme';
 import { SearchActionList, type SearchAction } from '../components/SearchActionList';
 import { usePageTitle } from '../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../hooks/useAdminUnsavedChanges';
 
 /**
  * <SearchSettingsPage/> — React port of the legacy `loadSearchSettings()` /
@@ -94,6 +95,44 @@ export function SearchSettingsPage() {
     return [...mapped, ...extras];
   }, [order]);
 
+  // ── Unsaved-changes guard ──
+  // Snapshot the loaded values once so edits can be detected and discarded.
+  interface Snapshot { placeholder: string; disabled: string; order: string }
+  const snapshot = (): Snapshot => ({
+    placeholder: placeholder.trim(),
+    disabled: Array.from(disabled).sort().join(','),
+    order: ordered.map(a => a.id).join(','),
+  });
+  const baselineRef = useRef<Snapshot | null>(null);
+  const [, forceTick] = useState(0);
+
+  useEffect(() => {
+    if (loading || loadError || baselineRef.current) return;
+    baselineRef.current = snapshot();
+    forceTick(t => t + 1); // re-render so isDirty reflects the captured baseline
+  }, [loading, loadError]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const baseline = baselineRef.current;
+  const current = snapshot();
+  const isDirty = !!baseline && (
+    baseline.placeholder !== current.placeholder ||
+    baseline.disabled !== current.disabled ||
+    baseline.order !== current.order
+  );
+
+  useAdminUnsavedChanges({
+    id: 'search',
+    isDirty,
+    onSave: () => handleSave(),
+    onDiscard: () => {
+      const b = baselineRef.current;
+      if (!b) return;
+      setPlaceholder(b.placeholder);
+      setDisabled(new Set(b.disabled ? b.disabled.split(',') : []));
+      setOrder(b.order ? b.order.split(',') : SEARCH_ACTIONS_META.map(a => a.id));
+    },
+  });
+
   function handleToggle(id: string, on: boolean) {
     setDisabled(prev => {
       const next = new Set(prev);
@@ -115,6 +154,7 @@ export function SearchSettingsPage() {
         hint_placeholder: placeholder.trim(),
         action_order: ordered.map(a => a.id),
       });
+      baselineRef.current = snapshot(); // the saved values are the new baseline
       setStatus({ text: 'Saved ✓', ok: true });
       window.setTimeout(() => setStatus(null), SUCCESS_BANNER_HIDE_MS);
     } catch (e: unknown) {

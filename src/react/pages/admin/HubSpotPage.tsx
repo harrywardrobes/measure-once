@@ -19,6 +19,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, DELETE } from '../../utils/api';
 import { STATUS_COLORS } from '../../theme';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 import { DEFAULT_WORKFLOW } from '../../lib/workflowConfig';
 import { useWorkflow } from '../../hooks/useWorkflow';
 
@@ -190,10 +191,18 @@ function PriorityActiveDaysCard() {
       showToast(`Active window updated to ${data.value} days.`);
     } catch (e) {
       setError((e as Error).message || 'Could not save setting.');
+      throw e; // let the unsaved-changes guard keep the user on this tab
     } finally {
       setSaving(false);
     }
   }
+
+  useAdminUnsavedChanges({
+    id: 'hubspot-priority-active-days',
+    isDirty,
+    onSave: handleSave,
+    onDiscard: () => { if (current !== null) setDraft(String(current)); },
+  });
 
   return (
     <Card variant="outlined">
@@ -229,7 +238,7 @@ function PriorityActiveDaysCard() {
             />
             <Button
               variant="contained"
-              onClick={handleSave}
+              onClick={() => { void handleSave().catch(() => {}); }}
               disabled={!isDirty || saving}
               startIcon={saving ? <CircularProgress size={14} color="inherit" /> : undefined}
               sx={{ mt: 0.25 }}

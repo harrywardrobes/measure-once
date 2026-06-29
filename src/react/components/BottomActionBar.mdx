@@ -7,7 +7,13 @@ import { Meta } from '@storybook/blocks';
 
 A globally mounted fixed bottom bar triggered by the `window` API. Supports three
 modes: **Undo** (auto-dismisses after 5 s), **Confirm** (shows Cancel + Confirm),
-and **Unsaved changes** (shows Discard + Save & leave).
+and **Unsaved changes** (shows Discard changes + Save changes).
+
+The **Unsaved changes** bar does *not* close itself when its buttons are pressed —
+closing is driven by the change actually being resolved, so a failed save leaves
+the bar in place. The admin unsaved-changes guard
+(`src/react/lib/adminUnsavedGuard.ts`) drives it automatically; prefer the
+`useAdminUnsavedChanges` hook over calling `showUnsavedChangesBar` directly.
 
 Mount this component once globally; trigger it from anywhere in the app using:
 

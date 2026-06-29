@@ -34,6 +34,7 @@ import MapIcon from '@mui/icons-material/Map';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { GET, PUT, POST } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 import { COUNTRIES } from '../../../../shared/address';
 import {
   invalidateGoogleMapsConfig,
@@ -274,6 +275,7 @@ export function GoogleMapsPage() {
       showToast('Google Maps settings saved.');
     } catch (e) {
       showToast((e as Error).message || 'Failed to save settings.', true);
+      throw e; // let the unsaved-changes guard keep the user on this tab
     } finally {
       setSaving(false);
     }
@@ -305,6 +307,13 @@ export function GoogleMapsPage() {
   }, [keyPresent, fetchDiagnostics]);
 
   const isDirty = !!draft && !!settings && JSON.stringify(draft) !== JSON.stringify(settings);
+
+  useAdminUnsavedChanges({
+    id: 'maps',
+    isDirty,
+    onSave: handleSave,
+    onDiscard: () => { if (settings) setDraft(settings); },
+  });
 
   if (loading || !draft) {
     return (
@@ -968,7 +977,7 @@ export function GoogleMapsPage() {
       <Divider />
 
       <Stack direction="row" spacing={2} sx={{ justifyContent: 'flex-end' }}>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !isDirty}>
+        <Button variant="contained" onClick={() => { void handleSave().catch(() => {}); }} disabled={saving || !isDirty}>
           {saving ? 'Saving…' : 'Save settings'}
         </Button>
       </Stack>

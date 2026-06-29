@@ -31,6 +31,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { GET, PATCH, POST } from '../../utils/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import {
@@ -454,7 +455,7 @@ function EditTemplateDialog({ template, trigger, onClose, onSaved }: EditDialogP
     if (!fields.subject.trim()) {
       showToast('Subject is required.', true);
       setConfirmUnknownOpen(false);
-      return;
+      throw new Error('validation'); // keep the unsaved-changes guard from leaving
     }
     setConfirmUnknownOpen(false);
     setSaving(true);
@@ -473,6 +474,7 @@ function EditTemplateDialog({ template, trigger, onClose, onSaved }: EditDialogP
       onSaved(updated);
     } catch (e) {
       showToast('Save failed: ' + (e as Error).message, true);
+      throw e; // let the unsaved-changes guard keep the user on this tab
     } finally {
       setSaving(false);
     }
@@ -487,8 +489,18 @@ function EditTemplateDialog({ template, trigger, onClose, onSaved }: EditDialogP
       setConfirmUnknownOpen(true);
       return;
     }
-    handleConfirmedSave();
+    void handleConfirmedSave().catch(() => {});
   }, [fields.subject, unknownTokens, malformedTokens, showToast, handleConfirmedSave]);
+
+  // Block tab-switch / page-close while the editor has unsaved edits. The modal
+  // already shows its own Save / Cancel, so it doesn't drive the bottom bar.
+  useAdminUnsavedChanges({
+    id: 'emailtemplates',
+    isDirty: hasUnsavedChanges,
+    onSave: handleConfirmedSave,
+    onDiscard: handleCancel,
+    showBar: false,
+  });
 
   const audience = template.audience ?? null;
   const audienceMeta = audience ? AUDIENCE_META[audience] : null;
@@ -738,7 +750,7 @@ function EditTemplateDialog({ template, trigger, onClose, onSaved }: EditDialogP
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmUnknownOpen(false)} disabled={saving}>Go back</Button>
-          <Button onClick={handleConfirmedSave} variant="contained" color="warning" disabled={saving}>
+          <Button onClick={() => { void handleConfirmedSave().catch(() => {}); }} variant="contained" color="warning" disabled={saving}>
             Save anyway
           </Button>
         </DialogActions>

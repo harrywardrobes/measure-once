@@ -248,25 +248,27 @@ export function BottomActionBar() {
                 variant="outlined"
                 size="small"
                 onClick={async () => {
+                  // The bar is not closed here: closing is driven by the change
+                  // actually being resolved (the admin guard's controller hides
+                  // the bar once nothing is dirty). A failed save therefore
+                  // leaves the bar in place.
                   const fn = barRef.current.onDiscard;
-                  window.closeBottomBar();
-                  if (fn) await fn();
+                  if (fn) { try { await fn(); } catch { /* handled by caller */ } }
                 }}
                 sx={outlinedSx}
               >
-                Discard
+                Discard changes
               </Button>
               <Button
                 variant="contained"
                 size="small"
                 onClick={async () => {
                   const fn = barRef.current.onSave;
-                  window.closeBottomBar();
-                  if (fn) await fn();
+                  if (fn) { try { await fn(); } catch { /* handled by caller */ } }
                 }}
                 sx={filledSx}
               >
-                Save &amp; leave
+                Save changes
               </Button>
             </Box>
           )}

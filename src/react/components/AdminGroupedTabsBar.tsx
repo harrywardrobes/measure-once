@@ -1,8 +1,16 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { ADMIN_ACTIVE_GROUP_PREFIX } from '../constants/localStorageKeys';
 import { useAuth } from '../contexts/AuthContext';
 import { TabBar } from './TabBar';
 import type { TabBarTab } from './TabBar';
+import { DiscardConfirmDialog } from './modals/DiscardConfirmDialog';
+import {
+  guardLeave,
+  setLeavePrompter,
+  subscribeDirty,
+  getBarDirtySource,
+  type LeaveChoice,
+} from '../lib/adminUnsavedGuard';
 
 // ── Group / tab mapping ────────────────────────────────────────────────────────
 
@@ -242,7 +250,9 @@ export function AdminGroupedTabsBar() {
   }, [userId]);
 
   const handleGroupSelect = useCallback(
-    (groupId: GroupId) => {
+    async (groupId: GroupId) => {
+      // Block the switch if the current tab has unsaved edits.
+      if (!(await guardLeave())) return;
       setActiveGroupId(groupId);
       try { if (userId) localStorage.setItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`, groupId); } catch (_) {} // ls-key-ok: user-scoped key built from imported prefix constant
 
@@ -256,7 +266,9 @@ export function AdminGroupedTabsBar() {
     [tabs, userId],
   );
 
-  const handleTabSelect = useCallback((tabId: string) => {
+  const handleTabSelect = useCallback(async (tabId: string) => {
+    // Block the switch if the current tab has unsaved edits.
+    if (!(await guardLeave())) return;
     activateLegacyTab(tabId);
     setActiveTabId(tabId);
     // Keep group in sync in case an external caller changes the active tab
@@ -335,15 +347,88 @@ export function AdminGroupedTabsBar() {
     try { if (userId) localStorage.setItem(`${ADMIN_ACTIVE_GROUP_PREFIX}${userId}`, gid); } catch (_) {} // ls-key-ok: user-scoped key built from imported prefix constant
   }, [activeTabId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return (
-    <AdminGroupedTabsBarInner
-      tabs={tabs}
-      activeTabId={activeTabId}
-      activeGroupId={activeGroupId}
-      onGroupSelect={handleGroupSelect}
-      onTabSelect={handleTabSelect}
-    />
+  // ── Unsaved-changes block dialog ────────────────────────────────────────────
+  // `guardLeave()` calls this prompter when the active tab is dirty; it renders
+  // the Save / Discard / Keep editing dialog and resolves the user's choice.
+  const [leavePrompt, setLeavePrompt] = useState<{ resolve: (c: LeaveChoice) => void } | null>(null);
+
+  const promptLeave = useCallback(
+    (): Promise<LeaveChoice> =>
+      new Promise<LeaveChoice>((resolve) => {
+        setLeavePrompt({
+          resolve: (choice) => {
+            setLeavePrompt(null);
+            resolve(choice);
+          },
+        });
+      }),
+    [],
   );
+
+  useEffect(() => {
+    setLeavePrompter(promptLeave);
+    return () => setLeavePrompter(null);
+  }, [promptLeave]);
+
+  return (
+    <>
+      <AdminGroupedTabsBarInner
+        tabs={tabs}
+        activeTabId={activeTabId}
+        activeGroupId={activeGroupId}
+        onGroupSelect={handleGroupSelect}
+        onTabSelect={handleTabSelect}
+      />
+      <UnsavedChangesBarController />
+      <DiscardConfirmDialog
+        open={!!leavePrompt}
+        onKeepEditing={() => leavePrompt?.resolve('cancel')}
+        onDiscard={() => leavePrompt?.resolve('discard')}
+        onSave={() => leavePrompt?.resolve('save')}
+      />
+    </>
+  );
+}
+
+// ── Persistent "unsaved changes" bar controller ───────────────────────────────
+
+/**
+ * Reflects the shared unsaved-changes registry into the global BottomActionBar:
+ * shows the persistent bar while any admin tab is dirty and hides it once the
+ * change is resolved. Rendered once by `AdminGroupedTabsBar`. The bar's Save /
+ * Discard buttons always act on the currently-dirty source.
+ */
+function UnsavedChangesBarController() {
+  const shownRef = useRef(false);
+  useEffect(() => {
+    const sync = () => {
+      // Only sources that opted into the bar (not `silent` modal editors) drive it.
+      const barDirty = getBarDirtySource() !== null;
+      if (barDirty && !shownRef.current) {
+        // Skip (and retry on the next notify) if the global bar isn't mounted yet.
+        if (window.showUnsavedChangesBar) {
+          window.showUnsavedChangesBar(
+            () => getBarDirtySource()?.save(),
+            () => getBarDirtySource()?.discard(),
+          );
+          shownRef.current = true;
+        }
+      } else if (!barDirty && shownRef.current) {
+        window.closeBottomBar?.();
+        shownRef.current = false;
+      }
+    };
+    const unsub = subscribeDirty(sync);
+    sync();
+    return () => {
+      unsub();
+      if (shownRef.current) {
+        window.closeBottomBar?.();
+        shownRef.current = false;
+      }
+    };
+  }, []);
+  return null;
 }
 
 // ── Legacy tab activation helper ──────────────────────────────────────────────

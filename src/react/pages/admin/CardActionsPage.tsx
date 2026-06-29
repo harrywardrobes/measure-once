@@ -11,6 +11,7 @@ import { GLOBAL_NULL_STAGE_KEY, GLOBAL_NULL_STATUS_KEY, GLOBAL_NULL_SLOT_KEY } f
 import { STATUS_COLORS, STAGE_COLORS } from '../../theme';
 import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 import { HANDLER_MODAL_SUMMARY, HANDLER_TYPE_LABELS } from '../../utils/handlerMeta';
 import type { HandlerType } from '../../components/CardActionModalsHost';
 import { DEFAULT_WORKFLOW, WorkflowStage } from '../../lib/workflowConfig';
@@ -181,6 +182,8 @@ export function CardActionsPage() {
   }, [workflow]);
   const [reloadKey,     setReloadKey]     = useState(0);
   const [resolvedSlots, setResolvedSlots] = useState<Set<string>>(new Set());
+  // True when any card-action label input differs from its saved value.
+  const [tableDirty,    setTableDirty]    = useState(false);
 
   const statusesRef    = useRef<LeadStatus[]>([]);
   type ClearSlot = { stageKey: string; statusKey: string; label: string; boundHandlers: Handler[] };
@@ -208,6 +211,7 @@ export function CardActionsPage() {
       setHandlers(safeArr(hdl));
       statusesRef.current = safeArr(sta);
       setReloadKey(k => k + 1);
+      setTableDirty(false); // re-render resets uncontrolled inputs to the new baseline
     } catch { /* ignore */ } finally {
       setLoading(false);
     }
@@ -309,6 +313,39 @@ export function CardActionsPage() {
     fetchAll();
   }, [fetchAll, showToast, handlers, confirmClear]);
 
+  // ── Unsaved-changes guard ──
+  // Label inputs are uncontrolled (scraped on save), so dirtiness is derived
+  // by comparing each input against its saved value held in `dataset.original`.
+
+  const recomputeCardDirty = useCallback(() => {
+    const wrap = document.getElementById('card-actions-table-wrap');
+    if (!wrap) { setTableDirty(false); return; }
+    let dirty = false;
+    wrap.querySelectorAll<HTMLInputElement>('.ca-default-input').forEach(input => {
+      if (dirty) return;
+      if (input.value.trim() !== (input.dataset.original || '')) dirty = true;
+    });
+    setTableDirty(dirty);
+  }, []);
+
+  const discardCardLabels = useCallback(() => {
+    document.querySelectorAll<HTMLInputElement>('#card-actions-table-wrap .ca-default-input')
+      .forEach(input => { input.value = input.dataset.original || ''; });
+    setTableDirty(false);
+  }, []);
+
+  const saveCardLabels = useCallback(async () => {
+    await saveAllCardActionLabels();
+    recomputeCardDirty();
+  }, [saveAllCardActionLabels, recomputeCardDirty]);
+
+  useAdminUnsavedChanges({
+    id: 'cardactions',
+    isDirty: tableDirty,
+    onSave: saveCardLabels,
+    onDiscard: discardCardLabels,
+  });
+
   useEffect(() => {
     W.loadCardActionsAdmin    = fetchAll;
     W.saveAllCardActionLabels = saveAllCardActionLabels;
@@ -345,10 +382,10 @@ export function CardActionsPage() {
                 automatically when renamed.
               </Typography>
             </Box>
-            <Button variant="contained" onClick={saveAllCardActionLabels} sx={{ flexShrink: 0 }}>Save</Button>
+            <Button variant="contained" onClick={saveCardLabels} sx={{ flexShrink: 0 }}>Save</Button>
           </Box>
 
-          <div id="card-actions-table-wrap">
+          <div id="card-actions-table-wrap" onInput={recomputeCardDirty} onChange={recomputeCardDirty}>
             {loading ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
                 <CircularProgress size={16} />

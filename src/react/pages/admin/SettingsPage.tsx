@@ -20,6 +20,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import { GET, POST, PATCH } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 
 interface DigestSettings {
   lastSentAt: string | null;
@@ -52,16 +53,16 @@ export function SettingsPage() {
   const [digestSending, setDigestSending] = useState(false);
   const [digestStaleDays, setDigestStaleDays] = useState<string>('7');
   const [digestMinGapDays, setDigestMinGapDays] = useState<string>('7');
-  const [digestThresholdSaving, setDigestThresholdSaving] = useState(false);
 
   const [pageFilterConfig, setPageFilterConfig] = useState<PageFilterConfig | null>(null);
   const [pageFilterDraft, setPageFilterDraft] = useState<Record<string, string>>({});
-  const [pageFilterSaving, setPageFilterSaving] = useState(false);
 
   const [companyName, setCompanyName]       = useState('');
   const [companyDraft, setCompanyDraft]     = useState('');
   const [companyLoading, setCompanyLoading] = useState(true);
-  const [companySaving, setCompanySaving]   = useState(false);
+
+  // Single in-flight flag for the consolidated save (all sections at once).
+  const [saving, setSaving] = useState(false);
 
   const [formLinkCopied, setFormLinkCopied] = useState(false);
   const genericFormUrl = `${window.location.origin}/customer-info`;
@@ -96,48 +97,100 @@ export function SettingsPage() {
     } catch {}
   }, []);
 
-  const savePageFilterConfig = useCallback(async () => {
-    if (!pageFilterConfig) return;
-    setPageFilterSaving(true);
-    try {
-      const payload: Record<string, number | string> = {};
-      for (const [key, entry] of Object.entries(pageFilterConfig)) {
-        const raw = pageFilterDraft[key] ?? String(entry.currentValue);
-        payload[key] = entry.type === 'number' ? parseInt(raw, 10) : raw;
-      }
-      await PATCH('/api/admin/page-filter-config', payload);
-      showToast('Page defaults saved.');
-      await fetchPageFilterConfig();
-    } catch (e) {
-      showToast((e as Error).message || 'Failed to save page defaults.', true);
-    } finally {
-      setPageFilterSaving(false);
-    }
-  }, [pageFilterConfig, pageFilterDraft, fetchPageFilterConfig]);
+  // ── Dirty detection (per section + combined) ────────────────────────────────
 
-  const saveDigestThresholds = useCallback(async () => {
-    const staleDaysVal   = parseInt(digestStaleDays, 10);
-    const minGapDaysVal  = parseInt(digestMinGapDays, 10);
-    if (!Number.isFinite(staleDaysVal)  || staleDaysVal  < 1 || staleDaysVal  > 365) {
-      showToast('Stale after must be between 1 and 365 days.', true); return;
+  const digestDirty = digestSettings !== null && (
+    String(digestSettings.staleDays ?? 7) !== digestStaleDays ||
+    String(digestSettings.minGapDays ?? 7) !== digestMinGapDays
+  );
+
+  const pageFilterDirty = pageFilterConfig !== null && Object.entries(pageFilterConfig).some(
+    ([key, entry]) => (pageFilterDraft[key] ?? String(entry.currentValue)) !== String(entry.currentValue),
+  );
+
+  const companyDirty = !companyLoading && companyDraft.trim() !== companyName;
+
+  const isDirty = digestDirty || pageFilterDirty || companyDirty;
+
+  // ── Consolidated save / discard (drives the bottom bar + tab-switch guard) ──
+
+  const persist = useCallback(async () => {
+    // Validate before any network call so one bad value blocks the whole save.
+    let staleVal: number | undefined;
+    let gapVal: number | undefined;
+    if (digestDirty) {
+      staleVal = parseInt(digestStaleDays, 10);
+      gapVal   = parseInt(digestMinGapDays, 10);
+      if (!Number.isFinite(staleVal) || staleVal < 1 || staleVal > 365) {
+        showToast('Stale after must be between 1 and 365 days.', true);
+        throw new Error('validation');
+      }
+      if (!Number.isFinite(gapVal) || gapVal < 1 || gapVal > 365) {
+        showToast('Send at most every must be between 1 and 365 days.', true);
+        throw new Error('validation');
+      }
     }
-    if (!Number.isFinite(minGapDaysVal) || minGapDaysVal < 1 || minGapDaysVal > 365) {
-      showToast('Send at most every must be between 1 and 365 days.', true); return;
-    }
-    setDigestThresholdSaving(true);
+
+    setSaving(true);
     try {
-      await PATCH('/api/admin/conflict-digest-settings', {
-        staleDays: staleDaysVal,
-        minGapDays: minGapDaysVal,
-      });
-      setDigestSettings(d => d ? { ...d, staleDays: staleDaysVal, minGapDays: minGapDaysVal } : d);
-      showToast('Digest thresholds saved.');
+      if (digestDirty) {
+        await PATCH('/api/admin/conflict-digest-settings', { staleDays: staleVal, minGapDays: gapVal });
+        setDigestSettings(d => (d ? { ...d, staleDays: staleVal!, minGapDays: gapVal! } : d));
+        // Normalise the drafts so e.g. "07" doesn't read as still-dirty.
+        setDigestStaleDays(String(staleVal));
+        setDigestMinGapDays(String(gapVal));
+      }
+
+      if (pageFilterDirty && pageFilterConfig) {
+        const payload: Record<string, number | string> = {};
+        for (const [key, entry] of Object.entries(pageFilterConfig)) {
+          const raw = pageFilterDraft[key] ?? String(entry.currentValue);
+          payload[key] = entry.type === 'number' ? parseInt(raw, 10) : raw;
+        }
+        await PATCH('/api/admin/page-filter-config', payload);
+        // Refresh baselines (currentValue) so the section reads as saved.
+        await fetchPageFilterConfig();
+      }
+
+      if (companyDirty) {
+        const result = await PATCH<{ company_name: string }>(
+          '/api/admin/settings/company-name',
+          { company_name: companyDraft.trim() },
+        );
+        setCompanyName(result.company_name);
+        setCompanyDraft(result.company_name);
+      }
+
+      showToast('Settings saved.');
     } catch (e) {
-      showToast((e as Error).message || 'Failed to save.', true);
+      showToast((e as Error).message || 'Failed to save settings.', true);
+      throw e; // keep the tab-switch guard from leaving and the bar in place
     } finally {
-      setDigestThresholdSaving(false);
+      setSaving(false);
     }
-  }, [digestStaleDays, digestMinGapDays]);
+  }, [
+    digestDirty, pageFilterDirty, companyDirty,
+    digestStaleDays, digestMinGapDays,
+    pageFilterConfig, pageFilterDraft, companyDraft,
+    fetchPageFilterConfig,
+  ]);
+
+  const resetDrafts = useCallback(() => {
+    if (digestSettings) {
+      setDigestStaleDays(String(digestSettings.staleDays ?? 7));
+      setDigestMinGapDays(String(digestSettings.minGapDays ?? 7));
+    }
+    if (pageFilterConfig) {
+      const draft: Record<string, string> = {};
+      for (const [key, entry] of Object.entries(pageFilterConfig)) {
+        draft[key] = String(entry.currentValue);
+      }
+      setPageFilterDraft(draft);
+    }
+    setCompanyDraft(companyName);
+  }, [digestSettings, pageFilterConfig, companyName]);
+
+  useAdminUnsavedChanges({ id: 'settings', isDirty, onSave: persist, onDiscard: resetDrafts });
 
   const sendDigestNow = useCallback(async () => {
     setDigestSending(true);
@@ -155,23 +208,6 @@ export function SettingsPage() {
       setDigestSending(false);
     }
   }, []);
-
-  const saveCompanyName = useCallback(async () => {
-    setCompanySaving(true);
-    try {
-      const result = await PATCH<{ company_name: string }>(
-        '/api/admin/settings/company-name',
-        { company_name: companyDraft.trim() },
-      );
-      setCompanyName(result.company_name);
-      setCompanyDraft(result.company_name);
-      showToast('Company name saved.');
-    } catch (e) {
-      showToast((e as Error).message || 'Could not save company name.', true);
-    } finally {
-      setCompanySaving(false);
-    }
-  }, [companyDraft]);
 
   useEffect(() => {
     fetchDigestSettings();
@@ -214,7 +250,7 @@ export function SettingsPage() {
               onChange={e => setDigestStaleDays(e.target.value)}
               slotProps={{ htmlInput: { min: 1, max: 365, step: 1 } }}
               sx={{ width: 170 }}
-              disabled={digestSettings === null}
+              disabled={digestSettings === null || saving}
             />
             <TextField
               size="small"
@@ -224,16 +260,8 @@ export function SettingsPage() {
               onChange={e => setDigestMinGapDays(e.target.value)}
               slotProps={{ htmlInput: { min: 1, max: 365, step: 1 } }}
               sx={{ width: 210 }}
-              disabled={digestSettings === null}
+              disabled={digestSettings === null || saving}
             />
-            <Button
-              variant="outlined"
-              onClick={saveDigestThresholds}
-              disabled={digestThresholdSaving || digestSettings === null}
-              startIcon={digestThresholdSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
-            >
-              {digestThresholdSaving ? 'Saving…' : 'Save'}
-            </Button>
           </Stack>
 
           <Divider sx={{ mb: 2 }} />
@@ -318,16 +346,6 @@ export function SettingsPage() {
                   Requires SMTP to be configured.
                 </Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  variant="contained"
-                  onClick={savePageFilterConfig}
-                  disabled={pageFilterSaving}
-                  startIcon={pageFilterSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
-                >
-                  {pageFilterSaving ? 'Saving…' : 'Save'}
-                </Button>
-              </Box>
             </Stack>
           )}
         </CardContent>
@@ -335,22 +353,11 @@ export function SettingsPage() {
 
       <Card variant="outlined">
         <CardContent>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, mb: 2 }}>
-            <Box>
-              <Typography variant="h6" sx={{ mb: 0.5 }}>Page defaults</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Default settings for each page. Changes take effect on the next page load — no restart needed.
-              </Typography>
-            </Box>
-            <Button
-              variant="contained"
-              onClick={savePageFilterConfig}
-              disabled={pageFilterSaving || pageFilterConfig === null}
-              startIcon={pageFilterSaving ? <CircularProgress size={14} color="inherit" /> : undefined}
-              sx={{ flexShrink: 0 }}
-            >
-              {pageFilterSaving ? 'Saving…' : 'Save'}
-            </Button>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ mb: 0.5 }}>Page defaults</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Default settings for each page. Changes take effect on the next page load — no restart needed.
+            </Typography>
           </Box>
 
           {pageFilterConfig === null ? (
@@ -499,27 +506,16 @@ export function SettingsPage() {
           {companyLoading ? (
             <CircularProgress size={20} />
           ) : (
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
-              <TextField
-                label="Company name"
-                size="small"
-                value={companyDraft}
-                onChange={e => setCompanyDraft(e.target.value)}
-                disabled={companySaving}
-                placeholder="e.g. Gautier Design Ltd"
-                slotProps={{ htmlInput: { maxLength: 200 } }}
-                sx={{ flex: 1, maxWidth: 420 }}
-              />
-              <Button
-                variant="contained"
-                size="small"
-                onClick={() => void saveCompanyName()}
-                disabled={companySaving || companyDraft.trim() === companyName}
-                sx={{ mt: 0.25 }}
-              >
-                {companySaving ? 'Saving…' : 'Save'}
-              </Button>
-            </Stack>
+            <TextField
+              label="Company name"
+              size="small"
+              value={companyDraft}
+              onChange={e => setCompanyDraft(e.target.value)}
+              disabled={saving}
+              placeholder="e.g. Gautier Design Ltd"
+              slotProps={{ htmlInput: { maxLength: 200 } }}
+              sx={{ flex: 1, maxWidth: 420 }}
+            />
           )}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
             Each user's phone number and job role are managed on their own profile page.

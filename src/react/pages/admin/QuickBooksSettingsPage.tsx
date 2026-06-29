@@ -27,6 +27,7 @@ import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { GET, PUT } from '../../utils/api';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { useAdminUnsavedChanges } from '../../hooks/useAdminUnsavedChanges';
 
 interface QbStatus {
   connected: boolean;
@@ -113,7 +114,10 @@ export function QuickBooksSettingsPage() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleSave = useCallback(async () => {
-    if (emailError || depositError || hasStageErrors) return;
+    if (emailError || depositError || hasStageErrors) {
+      showToast('Fix the highlighted errors before saving.', true);
+      throw new Error('validation'); // keep the unsaved-changes guard from leaving
+    }
     setSaving(true);
     try {
       const updated = await PUT<QbSettings>('/api/admin/qb-settings', {
@@ -126,6 +130,7 @@ export function QuickBooksSettingsPage() {
       showToast('QuickBooks settings saved.');
     } catch (e) {
       showToast((e as Error).message || 'Failed to save settings.', true);
+      throw e; // let the unsaved-changes guard keep the user on this tab
     } finally {
       setSaving(false);
     }
@@ -153,6 +158,19 @@ export function QuickBooksSettingsPage() {
     depositPercent !== String(settings.depositPercent ?? 10) ||
     JSON.stringify(paymentStages) !== JSON.stringify(settings.paymentStages)
   );
+
+  useAdminUnsavedChanges({
+    id: 'quickbooks',
+    isDirty,
+    onSave: handleSave,
+    onDiscard: () => {
+      if (!settings) return;
+      setCopyMeEmail(settings.copyMeEmail ?? '');
+      setCopyMeMode(settings.copyMeMode === 'cc' ? 'cc' : 'bcc');
+      setDepositPercent(String(settings.depositPercent ?? 10));
+      setPaymentStages(Array.isArray(settings.paymentStages) ? settings.paymentStages : []);
+    },
+  });
 
   if (loading) {
     return (
@@ -355,7 +373,7 @@ export function QuickBooksSettingsPage() {
       <Stack direction="row" spacing={2} sx={{ justifyContent: 'flex-end' }}>
         <Button
           variant="contained"
-          onClick={handleSave}
+          onClick={() => { void handleSave().catch(() => {}); }}
           disabled={saving || !isDirty || !!emailError || !!depositError || hasStageErrors}
         >
           {saving ? 'Saving…' : 'Save settings'}
