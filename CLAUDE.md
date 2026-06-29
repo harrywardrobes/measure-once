@@ -38,8 +38,12 @@ Project management dashboard (HubSpot CRM integration).
 - **Design changes:** Before making any UI/design change, reference the
   existing design system docs (theme.ts, ICONS.md, src/react/README.md) and
   ask as many clarifying questions as needed to understand what the user wants.
-  Any new component or significant visual update must have a Storybook story
-  in `src/react/stories/` (or co-located with the component). The design
+  **Never create or update Storybook stories unless the user has explicitly
+  asked for them in the current request.** Adding a story is never automatic
+  and is not implied by introducing a new component or making a visual change.
+  If you think a story would be valuable, propose it as a follow-up and wait
+  for explicit approval before writing it. When stories *are* requested, they
+  live in `src/react/stories/` (or co-located with the component); the design
   system gallery is Storybook, accessible via the Design System card in the
   admin Settings tab or at `/storybook/`.
 
