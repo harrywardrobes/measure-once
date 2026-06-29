@@ -1954,14 +1954,15 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
           if (!aLast && bLast) return -1;
           if (aLast && !bLast) return  1;
           if (!aLast && !bLast) {
-            // Both never contacted — tie-break by createdate descending.
-            return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+            // Both never contacted ("awaiting a call") — first-come-first-serve:
+            // tie-break by createdate ascending so the longest-waiting lead is first.
+            return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
           }
           // Ascending by last-contacted (longest since contact = first).
           const cmp = aLast.localeCompare(bLast);
           if (cmp !== 0) return cmp;
-          // Tie-break by createdate descending.
-          return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+          // Tie-break first-come-first-serve: createdate ascending (longest wait first).
+          return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
         };
       } else {
         // Legacy "newest created first" mode — pin no-status contacts then newest.

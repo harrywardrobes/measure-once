@@ -65,7 +65,7 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
     expect(results.map(r => r.id)).toEqual(['2', '3', '1']);
   });
 
-  it('tie-breaks by createdate descending when notes_last_contacted are equal', () => {
+  it('tie-breaks by createdate ascending (first-come-first-serve) when notes_last_contacted are equal', () => {
     const ts = '2024-03-01T00:00:00.000Z';
     const contacts = [
       makeContact('A', { notes_last_contacted: ts, createdate: '2024-01-01T00:00:00.000Z' }),
@@ -76,10 +76,10 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
       ...baseParams,
       prioritySortMode: 'last_contacted',
     });
-    expect(results.map(r => r.id)).toEqual(['B', 'C', 'A']);
+    expect(results.map(r => r.id)).toEqual(['A', 'C', 'B']);
   });
 
-  it('tie-breaks by createdate descending for multiple never-contacted contacts', () => {
+  it('tie-breaks by createdate ascending (first-come-first-serve) for multiple never-contacted contacts', () => {
     const contacts = [
       makeContact('old', { notes_last_contacted: null, createdate: '2024-01-01T00:00:00.000Z' }),
       makeContact('new', { notes_last_contacted: null, createdate: '2024-06-01T00:00:00.000Z' }),
@@ -89,7 +89,8 @@ describe('filterSortPaginateCachedContacts — prioritySortMode: last_contacted'
       ...baseParams,
       prioritySortMode: 'last_contacted',
     });
-    expect(results.map(r => r.id)).toEqual(['new', 'mid', 'old']);
+    // Never-contacted "awaiting a call" leads are served oldest-first.
+    expect(results.map(r => r.id)).toEqual(['old', 'mid', 'new']);
   });
 
   it('does not apply last_contacted sort when a leadStatus filter is active', () => {

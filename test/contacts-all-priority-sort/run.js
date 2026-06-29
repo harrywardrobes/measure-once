@@ -5,10 +5,11 @@
 // Verifies that GET /api/contacts-all sorts correctly under "Priority first"
 // in both modes:
 //
-//   [A] last_contacted mode (default): never-contacted contacts appear first,
-//       then sorted ascending by last-contacted timestamp; tie-broken by
-//       createdate descending.  Contacts in contact_attempt_log whose
-//       attempted_at is more recent than notes_last_contacted should win.
+//   [A] last_contacted mode (default): never-contacted ("awaiting a call")
+//       contacts appear first — ordered first-come-first-serve (createdate
+//       ascending, longest wait first) — then contacted contacts sorted
+//       ascending by last-contacted timestamp. Contacts in contact_attempt_log
+//       whose attempted_at is more recent than notes_last_contacted should win.
 //
 //   [B] newest mode (legacy): contacts with no hs_lead_status are pinned to
 //       the top; the remainder are sorted newest-created-first.

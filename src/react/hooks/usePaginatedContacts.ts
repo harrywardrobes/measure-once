@@ -58,7 +58,9 @@ export type UsePaginatedContactsParams = {
   /**
    * Controls the sort order used by "Priority first".
    * - 'last_contacted' (default): sort by notes_last_contacted ascending —
-   *   never-contacted contacts first, most-recently-contacted last.
+   *   never-contacted contacts first, most-recently-contacted last. The
+   *   never-contacted ("awaiting a call") group is itself ordered
+   *   first-come-first-serve, i.e. by createdate ascending (longest wait first).
    *   Note: the offline path only has notes_last_contacted (the per-page
    *   lastAttempt data is not available at sort time); server-side sorts use
    *   the full contact_attempt_log coalesced with notes_last_contacted.
@@ -245,11 +247,14 @@ export function filterSortPaginateCachedContacts(
         if (!aLast && bLast) return -1;
         if (aLast && !bLast) return  1;
         if (!aLast && !bLast) {
-          return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+          // Both never contacted ("awaiting a call") — first-come-first-serve:
+          // tie-break by createdate ascending so the longest-waiting lead is first.
+          return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
         }
         const cmp = aLast!.localeCompare(bLast!);
         if (cmp !== 0) return cmp;
-        return (b.properties?.createdate || '').localeCompare(a.properties?.createdate || '');
+        // Tie-break first-come-first-serve: createdate ascending (longest wait first).
+        return (a.properties?.createdate || '').localeCompare(b.properties?.createdate || '');
       };
     } else {
       // Legacy "newest" mode: pin no-status contacts, then newest-created-first.
