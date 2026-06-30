@@ -159,6 +159,11 @@ export function CustomerDetailPage() {
       c = await apiFetch<Contact>(`/api/contacts/${contactId}`);
       fromNetwork = true;
     } catch (e) {
+      // A 404 means the contact was deleted (or the id is wrong) — there is
+      // nothing valid to show, so propagate the status-preserving error to the
+      // deleted-customer recovery in bootstrap rather than masking it with a
+      // stale cached copy.
+      if ((e as { status?: number } | null)?.status === 404) throw e;
       // Offline fallback: render the saved customer from IndexedDB instead of
       // an error state. Re-throw only when there's nothing cached to show.
       const cached = await readRecord<Contact>('customers', contactId);
@@ -305,6 +310,12 @@ export function CustomerDetailPage() {
     setContactFromCache(false);
     setDvFromCache(false);
     setSvFromCache(false);
+    // Clear contact-scoped state so the prior customer's data can't remain
+    // visible while the new id loads (e.g. after navigating between customers).
+    setContact(null);
+    setTasks([]);
+    setDesignVisits([]);
+    setSurveyVisits([]);
     try {
       const [, c] = await Promise.all([
         refreshLeadStatuses(),
@@ -842,7 +853,7 @@ export function CustomerDetailPage() {
 
             <TasksSection
               contactId={contactId}
-              contactName={[contact.properties.firstname, contact.properties.lastname].filter(Boolean).join(' ').trim() || contact.properties.email || ''}
+              contactName={contactName(contact)}
               contactEmail={contact.properties.email || ''}
               contactPhone={contact.properties.phone || ''}
               contactMobile={contact.properties.mobilephone || ''}
