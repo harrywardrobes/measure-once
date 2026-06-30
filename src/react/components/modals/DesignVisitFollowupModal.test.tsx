@@ -7,6 +7,7 @@ import React from 'react';
 
 vi.mock('../../contexts/ToastContext', () => ({
   useToast: vi.fn(() => vi.fn()),
+  useToastContext: vi.fn(() => ({ showToast: vi.fn(), showToastWithAction: vi.fn(), showUndoableAction: vi.fn() })),
 }));
 
 /**
@@ -25,8 +26,25 @@ vi.mock('./ScheduleVisitModal', () => ({
 
 import { DesignVisitFollowupModal } from './DesignVisitFollowupModal';
 import { ScheduleVisitModal } from './ScheduleVisitModal';
+import { useToastContext } from '../../contexts/ToastContext';
 
 const mockScheduleVisitModal = ScheduleVisitModal as ReturnType<typeof vi.fn>;
+
+/**
+ * Install a captured toast mock. The invite resend is a deferred ("Undo Send")
+ * action: handleSendResendEmail advances to Done and calls showUndoableAction,
+ * whose onCommit runs the real send only once the undo window elapses without an
+ * undo. commit:true collapses that window so the send fires immediately.
+ */
+function setToastMock({ commit = true }: { commit?: boolean } = {}) {
+  const showToast = vi.fn();
+  const showToastWithAction = vi.fn();
+  const showUndoableAction = vi.fn((_msg: string, opts: { onCommit: () => void }) => {
+    if (commit) void opts.onCommit?.();
+  });
+  vi.mocked(useToastContext).mockReturnValue({ showToast, showToastWithAction, showUndoableAction });
+  return { showToast, showToastWithAction, showUndoableAction };
+}
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -356,8 +374,10 @@ describe('DesignVisitFollowupModal — modal title', () => {
     });
   });
 
-  it('stays on "Resend design visit invite" and shows an error when the email send fails', async () => {
+  it('advances to "Done" and toasts an error when the deferred invite send fails', async () => {
     restoreFetch = mockFetch({ eventsItems: [], emailSendStatus: 500 });
+    // commit:true ⇒ the undo window elapses without an undo, so the send fires.
+    const { showToast } = setToastMock({ commit: true });
     const user = userEvent.setup();
 
     renderModal();
@@ -370,58 +390,15 @@ describe('DesignVisitFollowupModal — modal title', () => {
 
     await user.click(screen.getByTestId('dvf-send-invite'));
 
+    // Deferred send: the modal advances to Done immediately; the failed commit
+    // surfaces as an error toast, not an inline alert on the resend step.
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Done' })).toBeTruthy();
     });
-
-    expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Done' })).toBeNull();
-  });
-
-  it('clears the error alert as soon as the user edits the subject field', async () => {
-    restoreFetch = mockFetch({ eventsItems: [], emailSendStatus: 500 });
-    const user = userEvent.setup();
-
-    renderModal();
-    await waitForHub();
-
-    await user.click(screen.getByTestId('dvf-resend'));
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
+      const errorCall = showToast.mock.calls.find((c) => c[1] === true);
+      expect(errorCall).toBeTruthy();
     });
-
-    await user.click(screen.getByTestId('dvf-send-invite'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeTruthy();
-    });
-
-    await user.type(screen.getByRole('textbox', { name: 'Subject' }), 'x');
-
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('clears the error alert as soon as the user edits the body field', async () => {
-    restoreFetch = mockFetch({ eventsItems: [], emailSendStatus: 500 });
-    const user = userEvent.setup();
-
-    renderModal();
-    await waitForHub();
-
-    await user.click(screen.getByTestId('dvf-resend'));
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Resend design visit invite' })).toBeTruthy();
-    });
-
-    await user.click(screen.getByTestId('dvf-send-invite'));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeTruthy();
-    });
-
-    await user.type(screen.getByRole('textbox', { name: 'Body' }), 'x');
-
-    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
 

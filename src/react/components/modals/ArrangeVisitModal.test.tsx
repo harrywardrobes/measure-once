@@ -6,7 +6,7 @@ import React from 'react';
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('../../contexts/ToastContext', () => ({
-  useToastContext: vi.fn(() => ({ showToast: vi.fn(), showToastWithAction: vi.fn() })),
+  useToastContext: vi.fn(() => ({ showToast: vi.fn(), showToastWithAction: vi.fn(), showUndoableAction: vi.fn() })),
   useToast: vi.fn(() => vi.fn()),
 }));
 
@@ -81,6 +81,24 @@ const CTX = {
 };
 
 const HANDLER = { id: 2, type: 'arrange_visit' };
+
+/**
+ * Install a captured toast mock. The No-answer email outcome is a deferred
+ * ("Undo Send") action: handleEmailSent closes the modal and calls
+ * showUndoableAction, whose onCommit runs the real send only once the undo
+ * window elapses without an undo. In tests we collapse that window:
+ *   commit: true  → onCommit fires immediately (simulates "window elapsed").
+ *   commit: false → onCommit never fires (simulates the send still pending).
+ */
+function setToastMock({ commit = true }: { commit?: boolean } = {}) {
+  const showToast = vi.fn();
+  const showToastWithAction = vi.fn();
+  const showUndoableAction = vi.fn((_msg: string, opts: { onCommit: () => void }) => {
+    if (commit) void opts.onCommit?.();
+  });
+  vi.mocked(useToastContext).mockReturnValue({ showToast, showToastWithAction, showUndoableAction });
+  return { showToast, showToastWithAction, showUndoableAction };
+}
 
 // ── Fetch mock ────────────────────────────────────────────────────────────────
 
@@ -557,7 +575,7 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     await user.click(screen.getByTestId('av-outcome-no-answer'));
 
     // Wait for the email body field to appear (emailLoading=false after fallback resolves)
-    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    const emailBodyField = await screen.findByRole('textbox', { name: /^body$/i });
 
     // The fallback builds a non-empty body addressed to the contact's first name
     expect((emailBodyField as HTMLTextAreaElement).value).toMatch(/Hi John/);
@@ -568,10 +586,9 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
     expect((subjectField as HTMLInputElement).value).toMatch(/design visit/i);
   });
 
-  it('disables the close button and shows no dialog while a No-answer email send is in flight', async () => {
+  it('defers the No-answer email: Send closes the modal and nothing is sent while the undo window is open', async () => {
+    const sendCalls: number[] = [];
     const orig = window.fetch;
-    // Custom fetch: resolve contact-info and email-template quickly;
-    // hang /api/emails/send so submitting=true can be observed.
     window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
         typeof input === 'string'
@@ -599,13 +616,19 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
       }
 
       if (url.includes('/api/emails/send') && method === 'POST') {
-        // Never resolves — keeps submitting=true indefinitely.
-        return new Promise<Response>(() => { /* intentionally hung */ });
+        sendCalls.push(1);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       return orig(input, init);
     }) as typeof window.fetch;
     restoreFetch = () => { window.fetch = orig; };
+
+    // commit:false ⇒ the deferred send stays pending (undo window still open).
+    const { showUndoableAction } = setToastMock({ commit: false });
 
     const onClose = vi.fn();
     const user = userEvent.setup();
@@ -632,18 +655,17 @@ describe('ArrangeVisitModal — discard guard: isLocked suppresses prompt', () =
       expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
     });
 
-    // Click "Send email" — handleEmailSent() sets submitting=true then hangs on /api/emails/send
+    // Click "Send email" — handleEmailSent() closes the modal and opens an undo window.
     await user.click(screen.getByTestId('av-email-send'));
 
-    // Close button must be disabled (disableClose=submitting) — locked state
+    // The modal closes immediately and an undoable toast is shown…
     await waitFor(() => {
-      const dialog = screen.getByRole('dialog');
-      expect(within(dialog).getByRole('button', { name: /close/i })).toBeDisabled();
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(showUndoableAction).toHaveBeenCalledOnce();
     });
 
-    // No discard dialog should appear while locked
-    expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
-    expect(onClose).not.toHaveBeenCalled();
+    // …but nothing is sent while the undo window is still open.
+    expect(sendCalls.length).toBe(0);
   });
 });
 
@@ -711,8 +733,9 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     }) as typeof window.fetch;
     restoreFetch = () => { window.fetch = orig; };
 
-    const showToast = vi.fn();
-    vi.mocked(useToastContext).mockReturnValue({ showToast, showToastWithAction: vi.fn() });
+    // commit:true ⇒ the undo window elapses without an undo, so the deferred
+    // send fires (simulating the user not pressing Undo).
+    const { showToast } = setToastMock({ commit: true });
 
     const onClose = vi.fn();
     const user = userEvent.setup();
@@ -735,7 +758,7 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     await user.click(screen.getByTestId('av-outcome-no-answer'));
 
     // Wait for the email body to appear with non-empty fallback content
-    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    const emailBodyField = await screen.findByRole('textbox', { name: /^body$/i });
     await waitFor(() => {
       expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
     });
@@ -745,7 +768,8 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
       expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
     });
 
-    // Click "Send email" — should call /api/emails/send then /api/card-actions/arrange-visit/outcome
+    // Click "Send email" — closes the modal; the deferred commit then calls
+    // /api/emails/send followed by /api/card-actions/arrange-visit/outcome.
     await user.click(screen.getByTestId('av-email-send'));
 
     // /api/emails/send must have been called with a non-empty body
@@ -769,7 +793,7 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     });
   });
 
-  it('shows an inline error and keeps the modal open when /api/emails/send returns 500 after the fallback body loads', async () => {
+  it('closes the modal and surfaces an error toast when the deferred send hits a 500', async () => {
     const orig = window.fetch;
 
     window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -806,6 +830,9 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     }) as typeof window.fetch;
     restoreFetch = () => { window.fetch = orig; };
 
+    // commit:true ⇒ the deferred send fires; the 500 surfaces as an error toast.
+    const { showToast } = setToastMock({ commit: true });
+
     const onClose = vi.fn();
     const user = userEvent.setup();
 
@@ -827,7 +854,7 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     await user.click(screen.getByTestId('av-outcome-no-answer'));
 
     // Wait for the email body field to appear with non-empty fallback content
-    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    const emailBodyField = await screen.findByRole('textbox', { name: /^body$/i });
     await waitFor(() => {
       expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
     });
@@ -837,23 +864,20 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
       expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
     });
 
-    // Click "Send email" — /api/emails/send returns 500
+    // Click "Send email" — the modal closes; the deferred commit hits the 500.
     await user.click(screen.getByTestId('av-email-send'));
 
-    // An inline error alert must appear with a meaningful message
+    // The modal closes immediately and the failure surfaces as an error toast.
     await waitFor(() => {
-      const alert = screen.getByRole('alert');
-      expect(alert).toBeTruthy();
-      // Should show the server-derived error or the generic fallback — either
-      // way the text must be non-empty so the user sees actionable feedback.
-      expect(alert.textContent?.trim()).not.toBe('');
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(showToast).toHaveBeenCalled();
     });
-
-    // The modal must NOT close
-    expect(onClose).not.toHaveBeenCalled();
+    const errorCall = showToast.mock.calls.find((c) => c[1] === true);
+    expect(errorCall).toBeTruthy();
+    expect(String(errorCall![0]).trim()).not.toBe('');
   });
 
-  it('shows the inline reconnect alert (not the generic alert, and without auto-opening the connect modal) when /api/emails/send returns a 401 Google auth error', async () => {
+  it('surfaces a Reconnect error toast (without auto-opening the connect modal) when the deferred send hits a 401 Google auth error', async () => {
     const orig = window.fetch;
 
     window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -893,6 +917,9 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     const mockOpenConnectModal = openConnectModal as ReturnType<typeof vi.fn>;
     mockOpenConnectModal.mockClear();
 
+    // commit:true ⇒ the deferred send fires; the 401 surfaces a Reconnect toast.
+    const { showToastWithAction } = setToastMock({ commit: true });
+
     const onClose = vi.fn();
     const user = userEvent.setup();
 
@@ -914,7 +941,7 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     await user.click(screen.getByTestId('av-outcome-no-answer'));
 
     // Wait for the email body to appear with non-empty fallback content
-    const emailBodyField = await screen.findByRole('textbox', { name: /email body/i });
+    const emailBodyField = await screen.findByRole('textbox', { name: /^body$/i });
     await waitFor(() => {
       expect((emailBodyField as HTMLTextAreaElement).value.trim()).not.toBe('');
     });
@@ -924,25 +951,22 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
       expect(screen.getByTestId('av-email-send')).not.toBeDisabled();
     });
 
-    // Click "Send email" — /api/emails/send returns 401 GOOGLE_AUTH
+    // Click "Send email" — the modal closes; the deferred commit hits 401 GOOGLE_AUTH.
     await user.click(screen.getByTestId('av-email-send'));
 
-    // The GOOGLE_AUTH branch renders <GoogleAuthAlert /> — check for its
-    // "Reconnect Google" link text, which is absent from the generic error path.
+    // The failure surfaces as a Reconnect toast (severity error), not a generic one.
     await waitFor(() => {
-      expect(screen.getByText(/reconnect google/i)).toBeTruthy();
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(showToastWithAction).toHaveBeenCalled();
     });
+    const reconnectCall = showToastWithAction.mock.calls.find(
+      (c) => /reconnect/i.test((c[1] as { label?: string })?.label ?? ''),
+    );
+    expect(reconnectCall).toBeTruthy();
+    expect((reconnectCall![2] as { severity?: string })?.severity).toBe('error');
+    expect(String(reconnectCall![0])).toMatch(/google/i);
 
-    // The connect modal must NOT auto-open — the user reconnects via the inline
-    // alert or the header status icons (manual-only policy).
+    // The connect modal must NOT auto-open — only on Reconnect click (manual policy).
     expect(mockOpenConnectModal).not.toHaveBeenCalled();
-
-    // The generic "Could not send email" / server-error text must NOT appear;
-    // only the Google reconnect alert is shown.
-    expect(screen.queryByText(/could not send email/i)).toBeNull();
-    expect(screen.queryByText(/mail server/i)).toBeNull();
-
-    // The modal must NOT close
-    expect(onClose).not.toHaveBeenCalled();
   });
 });

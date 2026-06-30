@@ -28,6 +28,7 @@ import { ARRANGE_VISIT_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handler
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
 import { FullScreenModal } from './FullScreenModal';
+import { EmailComposer } from './EmailComposer';
 import { DEMO_CONTACT } from './demoData';
 import { AddressInput } from '../AddressInput';
 import { emptyAddress, formatAddress, type StructuredAddress } from '../../../../shared/address';
@@ -74,13 +75,6 @@ interface DraftState {
   notes: string;
   emailSubject: string;
   emailBody: string;
-  proposedEmailDateTimeIso: string | null;
-}
-
-/** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
-function buildProposedDateLine(dateTime: Dayjs | null): string {
-  if (!dateTime) return '';
-  return `We have a proposed slot available: ${dateTime.format('D MMMM YYYY')} at ${dateTime.format('h:mm A')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
 function draftKey(contactId: string): string {
@@ -137,7 +131,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const key = draftKey(ctx.contactId);
   const draft = demo ? {} : loadDraft(key);
 
-  const { showToast, showToastWithAction } = useToastContext();
+  const { showToast, showToastWithAction, showUndoableAction } = useToastContext();
   const serviceStatuses = useServiceStatuses();
   const googleDisconnected = serviceStatuses.get('google') === 'error';
 
@@ -184,9 +178,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const [cancelExistingError, setCancelExistingError] = useState('');
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
-  const [proposedEmailDateTime, setProposedEmailDateTime] = useState<Dayjs | null>(
-    draft.proposedEmailDateTimeIso ? dayjs(draft.proposedEmailDateTimeIso) : dayjs(nowDateTime()),
-  );
   const [emailLoading, setEmailLoading] = useState(false);
 
   // Pre-fetched no-answer template from the server (admin-editable). Populated
@@ -273,17 +264,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       notes,
       emailSubject,
       emailBody,
-      proposedEmailDateTimeIso: proposedEmailDateTime?.toISOString() ?? null,
     });
-  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody, proposedEmailDateTime]);
-
-  // Re-fetch the no-answer email template whenever the proposed date/time changes
-  // while the user is on the email step (same pattern as DesignVisitFollowupModal).
-  useEffect(() => {
-    if (step !== 'email') return;
-    fetchEmailTemplate(proposedEmailDateTime, contactInfo);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposedEmailDateTime]);
+  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody]);
 
   function handleClose() {
     setActionError('');
@@ -302,6 +284,27 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     submitting,
   );
   useBeforeUnloadGuard(demo ? false : _hasUnsavedChangesRef.current);
+
+  // Undo a terminal outcome's lead-status move: restore the card to the list
+  // immediately (broadcast) and write the previous status back (offline-aware).
+  // Used by the Undo action on the terminal-outcome toasts so the screen updates
+  // without a page refresh.
+  function undoLeadStatus(prevStatus: string) {
+    broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: prevStatus });
+    void (async () => {
+      try {
+        const { sendOrQueue } = await import('../../lib/offlineQueue');
+        await sendOrQueue({
+          area: 'customer',
+          label: `Lead status → ${prevStatus || 'clear'} (undo)`,
+          method: 'PATCH',
+          url: `/api/contacts/${encodeURIComponent(ctx.contactId)}`,
+          body: { hs_lead_status: prevStatus },
+          dedupeKey: `contact:${ctx.contactId}:lead-status`,
+        });
+      } catch { /* offline queue retries on reconnect */ }
+    })();
+  }
 
   async function handleOutcome(outcome: 'not_proceeding' | 'call_back_later') {
     if (outcome === 'call_back_later') {
@@ -334,14 +337,19 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         throw new Error(d?.error || 'Could not update status.');
       }
       clearDraft(key);
+      const prevStatus = contactInfo?.leadStatus ?? '';
       if (res.queued) {
         showToast('Saved offline — status will update when you reconnect', false);
       } else {
         const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
-        showToast(leadStatusConfirmationMessage(d?.setsLeadStatus) || 'Status updated to Not Suitable', false);
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
+        showToastWithAction(
+          leadStatusConfirmationMessage(d?.setsLeadStatus) || 'Status updated to Not Suitable',
+          { label: 'Undo', onClick: () => undoLeadStatus(prevStatus) },
+          { duration: 6000 },
+        );
       }
       setStep('done');
       onClose();
@@ -398,6 +406,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         );
       } else {
         const d = res.data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+        const prevStatus = contactInfo?.leadStatus ?? '';
         broadcastLeadStatusChange(ctx.contactId, {
           hs_lead_status: d?.hs_lead_status ?? '',
         });
@@ -409,8 +418,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         const start = bookedSlot!.toDate();
         const end = new Date(start.getTime() + 90 * 60000);
         let calendarCreated = false;
+        let createdEventId: string | undefined;
         try {
-          await POST('/api/events', {
+          const created = await POST('/api/events', {
             summary: `${vLabel} — ${contactInfo?.contactName || ctx.contactName}`,
             description: notes.trim() || '',
             location: formatAddress(structuredAddress),
@@ -418,9 +428,19 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
             end: { dateTime: end.toISOString() },
             moContactId: ctx.contactId ? String(ctx.contactId) : undefined,
             moVisitType: vt,
-          });
+          }) as { id?: string } | undefined;
+          createdEventId = created?.id;
           calendarCreated = true;
         } catch { /* calendar is best-effort */ }
+
+        // Undo a booking: delete the calendar event it created and revert the
+        // lead-status move so the card returns to the list immediately.
+        const undoBooking = () => {
+          if (createdEventId) {
+            void DELETE(`/api/events/${encodeURIComponent(createdEventId)}`).catch(() => { /* best-effort */ });
+          }
+          undoLeadStatus(prevStatus);
+        };
 
         const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
         const cancelledLabel = (() => {
@@ -435,11 +455,12 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           const baseMsg = cancelledLabel
             ? `${cancelledLabel} and calendar event created`
             : conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated';
-          showToast(baseMsg, false);
+          showToastWithAction(baseMsg, { label: 'Undo', onClick: undoBooking }, { duration: 6000 });
         } else {
-          showToast(
+          showToastWithAction(
             cancelledLabel ?? (conf ? `Visit booked — ${conf.toLowerCase()}` : 'Visit booked and status updated'),
-            false,
+            { label: 'Undo', onClick: undoBooking },
+            { duration: 6000 },
           );
           showToastWithAction(
             'Visit booked — calendar event could not be created (Google disconnected)',
@@ -537,11 +558,16 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
         visitType: 'design',
       }) as { hs_lead_status?: string; setsLeadStatus?: string | null };
       clearDraft(key);
+      const prevStatus = contactInfo?.leadStatus ?? '';
       const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
-      showToast(conf ? `Appointment confirmed — ${conf.toLowerCase()}` : 'Appointment confirmed', false);
       broadcastLeadStatusChange(ctx.contactId, {
         hs_lead_status: data?.hs_lead_status ?? '',
       });
+      showToastWithAction(
+        conf ? `Appointment confirmed — ${conf.toLowerCase()}` : 'Appointment confirmed',
+        { label: 'Undo', onClick: () => undoLeadStatus(prevStatus) },
+        { duration: 6000 },
+      );
       setStep('done');
       onClose();
     } catch (e) {
@@ -567,7 +593,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     return { subject, body };
   }
 
-  function fetchEmailTemplate(dateTime: Dayjs | null, info: ContactInfo | null): void {
+  function fetchEmailTemplate(info: ContactInfo | null): void {
     setEmailLoading(true);
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     const vLabel = visitLabel(info?.visitType ?? 'design');
@@ -576,9 +602,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       vars: {
         firstName,
         visitLabel: vLabel,
-        proposedDate: dateTime ? dateTime.format('D MMMM YYYY') : '',
-        proposedTime: dateTime ? dateTime.format('h:mm A') : '',
-        proposedDateLine: buildProposedDateLine(dateTime),
+        proposedDate: '',
+        proposedTime: '',
+        proposedDateLine: '',
       },
     })
       .then((t: unknown) => {
@@ -594,7 +620,11 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       .finally(() => setEmailLoading(false));
   }
 
-  async function handleEmailSent() {
+  // Deferred ("Undo Send") email outcome. Clicking Send closes the modal and
+  // opens an undo window — the email + status write only fire if the user does
+  // NOT press Undo. Nothing has happened yet when the modal closes, so an Undo
+  // sends no email and changes no status; a mis-click is fully recoverable.
+  function handleEmailSent() {
     if (demo) return;
     if (!emailBody.trim()) {
       setActionError('Email body cannot be empty.');
@@ -602,41 +632,45 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     }
 
     const visitType = contactInfo?.visitType ?? 'design';
+    const to = contactInfo?.contactEmail || ctx.contactEmail;
+    const subject = emailSubject;
+    const body = emailBody;
+    const contactId = ctx.contactId;
+    const recipient = contactInfo?.contactName || ctx.contactName || 'the customer';
 
-    setSubmitting(true);
-    setActionError('');
-    try {
-      await POST('/api/emails/send', {
-        to: contactInfo?.contactEmail || ctx.contactEmail,
-        subject: emailSubject,
-        body: emailBody,
-      });
-      const outcomeData = await POST('/api/card-actions/arrange-visit/outcome', {
-        contactId: ctx.contactId,
-        outcome: ARRANGE_VISIT_KEY.email_sent,
-        visitType,
-      }) as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
-      clearDraft(key);
-      const conf = leadStatusConfirmationMessage(outcomeData?.setsLeadStatus);
-      showToast(conf ? `Email sent — ${conf.toLowerCase()}` : 'Email sent and status updated', false);
-      broadcastLeadStatusChange(ctx.contactId, {
-        hs_lead_status: outcomeData?.hs_lead_status ?? '',
-      });
-      setStep('done');
-      onClose();
-    } catch (e) {
-      if (isGoogleAuthError(e)) {
-        // Inline GoogleAuthAlert (with its own Reconnect button) handles this —
-        // no auto-open of the connect modal.
-        setActionError('GOOGLE_AUTH');
-      } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
-        setActionError(LEAD_STATUS_REMOVED_MESSAGE);
-      } else {
-        setActionError((e as Error).message || 'Could not send email.');
-      }
-    } finally {
-      setSubmitting(false);
-    }
+    clearDraft(key);
+    setStep('done');
+    onClose();
+
+    showUndoableAction(`Sending email to ${recipient}…`, {
+      duration: 6000,
+      onUndo: () => showToast('Email cancelled — nothing was sent.', false),
+      onCommit: async () => {
+        try {
+          await POST('/api/emails/send', { to, subject, body });
+          const outcomeData = await POST('/api/card-actions/arrange-visit/outcome', {
+            contactId,
+            outcome: ARRANGE_VISIT_KEY.email_sent,
+            visitType,
+          }) as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+          const conf = leadStatusConfirmationMessage(outcomeData?.setsLeadStatus);
+          broadcastLeadStatusChange(contactId, { hs_lead_status: outcomeData?.hs_lead_status ?? '' });
+          showToast(conf ? `Email sent — ${conf.toLowerCase()}` : 'Email sent and status updated', false);
+        } catch (e) {
+          if (isGoogleAuthError(e)) {
+            showToastWithAction(
+              'Email not sent — Google is disconnected.',
+              { label: 'Reconnect', onClick: () => openConnectModal('google', 'Reconnect Google to send emails.') },
+              { severity: 'error', duration: 8000 },
+            );
+          } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
+            showToast(LEAD_STATUS_REMOVED_MESSAGE, true);
+          } else {
+            showToast((e as Error).message || 'Could not send email.', true);
+          }
+        }
+      },
+    });
   }
 
   const visitType = contactInfo?.visitType ?? 'design';
@@ -662,13 +696,12 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           disabled={submitting}
           onClick={() => {
             setActionError('');
-            setProposedEmailDateTime(dayjs(nowDateTime()));
             if (!emailSubject && !emailBody) {
               if (noAnswerTemplate) {
                 setEmailSubject(noAnswerTemplate.subject);
                 setEmailBody(noAnswerTemplate.body_text);
               } else {
-                fetchEmailTemplate(null, contactInfo);
+                fetchEmailTemplate(contactInfo);
               }
             }
             setMadeProgress(true); setStep('email');
@@ -876,43 +909,25 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   </Alert>
                 )}
                 <Typography variant="body2" color="text.secondary">
-                  We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
+                  We couldn't reach {displayName}. Review and edit the email below:
                 </Typography>
-                <Stack spacing={1.5}>
-                  <Typography variant="body2" color="text.secondary">
-                    Optionally include a proposed date and time in the email:
-                  </Typography>
-                  <DateTimeEditor
-                    value={proposedEmailDateTime}
-                    onChange={(v) => setProposedEmailDateTime(v)}
-                    disablePast
-                  />
-                </Stack>
                 {emailLoading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                     <CircularProgress size={24} />
                   </Box>
                 ) : (
-                  <>
-                    <TextField
-                      id="av-email-subject"
-                      label="Subject"
-                      value={emailSubject}
-                      onChange={e => setEmailSubject(e.target.value)}
-                      fullWidth
-                      size="small"
-                    />
-                    <TextField
-                      id="av-email-body"
-                      label="Email body"
-                      value={emailBody}
-                      onChange={e => setEmailBody(e.target.value)}
-                      fullWidth
-                      multiline
-                      minRows={8}
-                      size="small"
-                    />
-                  </>
+                  <EmailComposer
+                    subject={emailSubject}
+                    onSubjectChange={v => { setEmailSubject(v); setActionError(''); }}
+                    body={emailBody}
+                    onBodyChange={v => { setEmailBody(v); setActionError(''); }}
+                    recipientName={displayName}
+                    recipientEmail={contactInfo?.contactEmail || ctx.contactEmail}
+                    bodyMinRows={8}
+                    subjectMaxLength={300}
+                    bodyMaxLength={8000}
+                    disabled={submitting}
+                  />
                 )}
                 {actionError && (
                   actionError === 'GOOGLE_AUTH'

@@ -639,6 +639,37 @@ function substituteVars(str, vars) {
   );
 }
 
+// Title-case a single value for use in an email SUBJECT / heading.
+//
+// RULE (applies to subject lines only — see substituteSubjectVars / renderEmail):
+// every variable substituted into a subject is Title-Cased so a lower-case value
+// like 'design visit' never lands mid-heading as "Booking your design visit".
+// It becomes "Booking your Design Visit".
+//
+// Implementation capitalises the first letter of each word and leaves the rest of
+// the word untouched, so intentional casing survives: 'McDonald' stays
+// 'McDonald', an acronym like 'VAT' stays 'VAT', and a value starting with a
+// non-letter such as '£5,000' is unaffected. Body and footer text are NEVER
+// title-cased — only the subject.
+function titleCaseValue(value) {
+  return String(value ?? '').replace(
+    /(^|[^\p{L}\p{N}])(\p{L})/gu,
+    (_, sep, ch) => sep + ch.toUpperCase(),
+  );
+}
+
+// Subject-only variant of substituteVars: identical token handling (unknown
+// {{tokens}} are left intact), but every substituted value is Title-Cased via
+// titleCaseValue. Used exclusively for the subject line in renderEmail.
+function substituteSubjectVars(str, vars) {
+  if (str == null) return '';
+  return String(str).replace(/\{\{(\w+)\}\}/g, (match, name) =>
+    vars && Object.prototype.hasOwnProperty.call(vars, name)
+      ? titleCaseValue(vars[name] ?? '')
+      : match
+  );
+}
+
 // Render a loaded template into { subject, text, html }.
 //   textVars — raw values substituted into subject / body_text / footer_text.
 //   htmlVars — values substituted into body_html. Callers must pre-escape any
@@ -646,7 +677,9 @@ function substituteVars(str, vars) {
 //              photo summary are passed raw). The footer is always escaped.
 function renderEmail(template, { textVars = {}, htmlVars = {} } = {}) {
   const t = template || {};
-  const subject = substituteVars(t.subject || '', textVars);
+  // Subject/heading: Title-Case every substituted variable (see titleCaseValue).
+  // Body and footer below stay verbatim — only the heading is title-cased.
+  const subject = substituteSubjectVars(t.subject || '', textVars);
 
   let text = substituteVars(t.body_text || '', textVars);
   const footerText = substituteVars(t.footer_text || '', textVars);
@@ -758,6 +791,8 @@ module.exports = {
   getEmailTemplate,
   invalidateEmailTemplate,
   substituteVars,
+  titleCaseValue,
+  substituteSubjectVars,
   renderEmail,
   escapeHtml,
   plainTextToHtml,
