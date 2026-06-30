@@ -5,7 +5,6 @@ import React, {
   useReducer,
   useRef,
 } from 'react';
-import { CONNECT_MODAL_SHOWN_KEY } from '../constants/localStorageKeys';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -133,15 +132,10 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
     const code = (data as { code?: string }).code;
     const prev = _lastKnown.get(service);
     if (!connected && prev !== 'error' && code !== 'KEY_MISSING') {
+      // Surface the disconnect on the header status icons only — the user opens
+      // the reconnect modal themselves. (A TOKEN_UNREADABLE code used to
+      // auto-open the modal here; removed so it never pops up unbidden.)
       _fire(service, 'disconnected');
-      // If the token exists but can't be decrypted (key rotation), open the
-      // modal immediately with a targeted message so users know to reconnect.
-      if (code === 'TOKEN_UNREADABLE') {
-        const unreadableMessage = service === 'quickbooks'
-          ? 'Your QuickBooks connection needs to be refreshed — please reconnect to restore invoice access.'
-          : 'Your Google connection needs to be refreshed — please reconnect to restore Calendar and Gmail access.';
-        openConnectModal(service, unreadableMessage);
-      }
     } else if (connected && prev === 'error') {
       _fire(service, 'reconnected');
     }
@@ -156,7 +150,10 @@ async function _checkService(service: ConnectionService, url: string): Promise<v
   }
 }
 
-function _notifyApiError(service: ConnectionService, error: unknown, connectMessage?: string): void {
+// `connectMessage` is accepted for call-site compatibility but no longer used:
+// a failed action surfaces an inline error in its own UI and flips the header
+// status icon, rather than auto-opening the reconnect modal.
+function _notifyApiError(service: ConnectionService, error: unknown, _connectMessage?: string): void {
   const code = (error as { code?: string }).code;
   const status = (error as { status?: number }).status;
   const isRateLimit =
@@ -174,9 +171,6 @@ function _notifyApiError(service: ConnectionService, error: unknown, connectMess
     _fireWarning(service);
   } else if (isConnectionIssue) {
     _fire(service, 'disconnected');
-    if (connectMessage) {
-      openConnectModal(service, connectMessage);
-    }
   }
 }
 
@@ -321,56 +315,11 @@ export function ConnectionToastProvider({ children }: { children: React.ReactNod
     return undefined;
   }, []);
 
-  // Auto-open: watch for service error transitions and open the modal once per
-  // session when the device is online and the session flag hasn't been set yet.
-  useEffect(() => {
-    // Snapshot of statuses at the time we subscribe, so we can detect transitions.
-    let prevSnapshot = new Map(_lastKnown);
-
-    const cb = () => {
-      // Skip auto-open while offline — every status would fail and the modal
-      // is not actionable anyway.
-      if (!_online) {
-        prevSnapshot = new Map(_lastKnown);
-        return;
-      }
-
-      // Find any connectable service that just transitioned into 'error'.
-      // We intentionally exclude 'status-only' services (e.g. Database) because
-      // they have no row in the modal — highlighting them would open the modal
-      // with no visible highlighted service, which is confusing. The modal still
-      // opens without a highlight so the user sees the overview.
-      const CONNECTABLE: ReadonlySet<ConnectionService> = new Set(['google', 'quickbooks', 'hubspot']);
-      let firstNewError: ConnectionService | undefined;
-      for (const [svc, status] of _lastKnown) {
-        if (status === 'error' && prevSnapshot.get(svc) !== 'error') {
-          if (!firstNewError && CONNECTABLE.has(svc)) firstNewError = svc;
-        }
-      }
-      prevSnapshot = new Map(_lastKnown);
-
-      if (!firstNewError) return;
-
-      // Only auto-open once per browser session.
-      let alreadyShown = false;
-      try {
-        alreadyShown = !!sessionStorage.getItem(CONNECT_MODAL_SHOWN_KEY);
-      } catch {
-        // Private browsing / quota — treat as not shown.
-      }
-      if (alreadyShown) return;
-
-      try {
-        sessionStorage.setItem(CONNECT_MODAL_SHOWN_KEY, '1');
-      } catch {
-        // Quota / private browsing — still open the modal, just won't persist.
-      }
-      openConnectModal(firstNewError);
-    };
-
-    _updateCallbacks.add(cb);
-    return () => { _updateCallbacks.delete(cb); };
-  }, []);
+  // NOTE: the reconnect modal is never opened automatically. Connection
+  // problems surface only as the header status icons (red/amber); the user
+  // opens the modal themselves by clicking an icon (or the all-connected
+  // tick). This deliberately replaces the old per-session auto-open that
+  // popped the modal on every page where a service was down.
 
   // Bridge: listen for legacy Google auth window events emitted by core.js
   useEffect(() => {

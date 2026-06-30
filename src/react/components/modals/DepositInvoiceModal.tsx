@@ -24,7 +24,6 @@ import SendIcon from '@mui/icons-material/Send';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
 import { POST, isGoogleAuthError } from '../../utils/api';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
-import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { PaymentHistory } from '../PaymentHistory';
 import { dispatchCardActionHandler } from '../../utils/dispatchCardActionHandler';
 import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
@@ -310,7 +309,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
     } catch (err) {
       const code = (err as { code?: string })?.code;
       if (code === 'QB_AUTH' || code === 'QB_ERROR') {
-        openConnectModal('quickbooks', 'QuickBooks is disconnected — reconnect it to re-send the deposit invoice.');
+        setResendError('QuickBooks is disconnected — reconnect it from the connection icons at the top, then try re-sending.');
       } else {
         setResendError((err as Error).message || 'Could not re-send invoice.');
       }
@@ -339,7 +338,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
       setStep('done');
     } catch (err) {
       if (isGoogleAuthError(err)) {
-        openConnectModal('google', 'Google is disconnected — reconnect it to send payment reminders via Gmail.');
+        setReminderError('Google is disconnected — reconnect it from the connection icons at the top, then try again.');
       } else {
         setReminderError((err as Error).message || 'Could not send reminder.');
       }
@@ -373,7 +372,7 @@ export function DepositInvoiceModal({ handler, ctx, open, onClose, demo }: Props
     } catch (err) {
       const code = (err as { code?: string })?.code;
       if (code === 'QB_AUTH' || code === 'QB_ERROR') {
-        openConnectModal('quickbooks', 'QuickBooks is disconnected — reconnect it to void the invoice.');
+        setNotProceedingError('QuickBooks is disconnected — reconnect it from the connection icons at the top, then try again.');
         navigateTo('not_proceeding_confirm');
       } else {
         setNotProceedingError((err as Error).message || 'Something went wrong.');

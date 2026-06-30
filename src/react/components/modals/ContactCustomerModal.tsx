@@ -18,7 +18,6 @@ import { ContactTimelineRow } from '../customer-activity/ContactTimelineRow';
 import type { HubspotActivity, ActivityResponse, TimelineItem } from '../customer-activity/timeline';
 import { EmailComposer } from './EmailComposer';
 import { ApiError, GET, POST, LEAD_STATUS_REMOVED_MESSAGE, isGoogleAuthError, postFormData } from '../../utils/api';
-import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { GoogleAuthAlert } from '../GoogleAuthAlert';
 import { relativeTime } from '../../utils/formatters';
 import { buildActivityTooltipContent, type LastAttempt } from '../../utils/activityTooltip';
@@ -533,9 +532,10 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     } catch (e) {
       const err = e as ApiError;
       if (isGoogleAuthError(e)) {
+        // Surface the disconnect inline (GoogleAuthAlert) — the user reconnects
+        // from there or the header icons; we no longer auto-open the modal.
         setEmailSubmitError('GOOGLE_AUTH');
         setEmailSubmitRetry(false);
-        openConnectModal('google', 'Google is disconnected — reconnect it to send emails from your Gmail account.');
       } else if (err.status === 400) {
         setEmailSubmitError(err.message || 'Please check your input and try again.');
         setEmailSubmitRetry(false);

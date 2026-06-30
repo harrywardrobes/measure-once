@@ -626,8 +626,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       onClose();
     } catch (e) {
       if (isGoogleAuthError(e)) {
+        // Inline GoogleAuthAlert (with its own Reconnect button) handles this —
+        // no auto-open of the connect modal.
         setActionError('GOOGLE_AUTH');
-        openConnectModal('google', 'Google is disconnected — reconnect it to send emails from your Gmail account.');
       } else if ((e as ApiError).code === 'LEAD_STATUS_REMOVED') {
         setActionError(LEAD_STATUS_REMOVED_MESSAGE);
       } else {

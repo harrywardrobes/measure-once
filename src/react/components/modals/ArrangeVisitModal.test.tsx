@@ -853,7 +853,7 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('opens the reconnect modal and does not show the generic alert when /api/emails/send returns a 401 Google auth error', async () => {
+  it('shows the inline reconnect alert (not the generic alert, and without auto-opening the connect modal) when /api/emails/send returns a 401 Google auth error', async () => {
     const orig = window.fetch;
 
     window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -927,19 +927,15 @@ describe('ArrangeVisitModal — email step: full send flow after template failur
     // Click "Send email" — /api/emails/send returns 401 GOOGLE_AUTH
     await user.click(screen.getByTestId('av-email-send'));
 
-    // openConnectModal must have been called with 'google' as the first argument
-    await waitFor(() => {
-      expect(mockOpenConnectModal).toHaveBeenCalledWith(
-        'google',
-        expect.any(String),
-      );
-    });
-
     // The GOOGLE_AUTH branch renders <GoogleAuthAlert /> — check for its
     // "Reconnect Google" link text, which is absent from the generic error path.
     await waitFor(() => {
       expect(screen.getByText(/reconnect google/i)).toBeTruthy();
     });
+
+    // The connect modal must NOT auto-open — the user reconnects via the inline
+    // alert or the header status icons (manual-only policy).
+    expect(mockOpenConnectModal).not.toHaveBeenCalled();
 
     // The generic "Could not send email" / server-error text must NOT appear;
     // only the Google reconnect alert is shown.

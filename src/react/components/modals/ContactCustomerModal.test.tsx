@@ -384,7 +384,7 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     expect(screen.queryByRole('dialog', { name: /discard changes/i })).toBeNull();
   });
 
-  it('shows GoogleAuthAlert and calls openConnectModal when send-email returns 401 GOOGLE_AUTH', async () => {
+  it('shows GoogleAuthAlert but does not auto-open the connect modal when send-email returns 401 GOOGLE_AUTH', async () => {
     const orig = window.fetch;
     window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url =
@@ -436,14 +436,10 @@ describe('ContactCustomerModal — discard guard (real behavior)', () => {
     await user.click(screen.getByTestId('email-preview-send-btn'));
     await user.click(await screen.findByTestId('email-send-confirm-btn'));
 
-    await waitFor(() => {
-      expect(mockOpenConnectModal).toHaveBeenCalledWith(
-        'google',
-        expect.any(String),
-      );
-    });
-
-    expect(screen.getByText(/reconnect google/i)).toBeTruthy();
+    // The inline GoogleAuthAlert is shown so the user can reconnect manually…
+    expect(await screen.findByText(/reconnect google/i)).toBeTruthy();
+    // …but the connect modal is never auto-opened (manual-only policy).
+    expect(mockOpenConnectModal).not.toHaveBeenCalled();
 
     expect(onClose).not.toHaveBeenCalled();
   });

@@ -130,13 +130,14 @@ export function ServiceStatusBadge({ service, status, onClick }: ServiceStatusBa
 
 function AllOkIndicator() {
   return (
-    <Tooltip title="All services connected">
+    <Tooltip title="All services connected — click to manage connections">
       <StatusIconBox
-        component="span"
-        role="status"
-        aria-label="All services connected"
+        component="button"
+        onClick={() => openConnectModal()}
+        aria-label="All services connected — manage service connections"
         $iconColor="#86efac" // hex-color-ok: matches 'ok' service icon tint
         $borderColor="rgba(134,239,172,0.35)"
+        sx={{ cursor: 'pointer', border: 'none', background: 'transparent', p: 0 }}
       >
         <CheckIcon fontSize="small" />
       </StatusIconBox>

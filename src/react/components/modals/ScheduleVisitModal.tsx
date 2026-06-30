@@ -37,7 +37,7 @@ import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
-import { POST, PATCH, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
+import { POST, PATCH, calendarErrorMessage } from '../../utils/api';
 import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
@@ -312,10 +312,10 @@ export function ScheduleVisitModal({
         handleDismiss();
       }
     } catch (e) {
+      // calendarErrorMessage() already explains a Google-auth failure inline;
+      // the disconnected Google icon (and its Reconnect button) is the manual
+      // path to the connect modal — we no longer auto-open it here.
       setError(calendarErrorMessage(e));
-      if (isGoogleAuthError(e)) {
-        openConnectModal('google', 'Google Calendar is disconnected — reconnect it to schedule visits.');
-      }
     } finally {
       setSubmitting(false);
     }

@@ -13,7 +13,7 @@ import Typography from '@mui/material/Typography';
 import { DateTimeEditor } from '../DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { POST, calendarErrorMessage, isGoogleAuthError } from '../../utils/api';
+import { POST, calendarErrorMessage } from '../../utils/api';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -170,11 +170,11 @@ export function TaskModal({
       onCreated?.(task);
       onClose();
     } catch (e) {
+      // calendarErrorMessage() already explains a Google-auth failure inline,
+      // and the disconnected-Google alert below has its own Reconnect button —
+      // so we no longer auto-open the connect modal here.
       const msg = calendarErrorMessage(e);
       setError(msg);
-      if (isGoogleAuthError(e)) {
-        openConnectModal('google', 'Google Calendar is disconnected — reconnect it to add tasks.');
-      }
     } finally {
       setSubmitting(false);
     }

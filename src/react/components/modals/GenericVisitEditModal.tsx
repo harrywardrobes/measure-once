@@ -15,7 +15,6 @@ import type { Visit } from '../../pages/customer-detail/types';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, DELETE, isGoogleAuthError } from '../../utils/api';
-import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { PlacesLocationField } from '../PlacesLocationField';
@@ -161,7 +160,7 @@ export function GenericVisitEditModal(props: Props) {
           });
         } catch (gcalErr) {
           if (isGoogleAuthError(gcalErr)) {
-            openConnectModal('google', 'Google Calendar is disconnected — reconnect it to schedule visits.');
+            setError('Google Calendar is disconnected — reconnect it from the connection icons at the top, then try scheduling again.');
           } else {
             setError(gcalErr instanceof Error ? gcalErr.message : 'Could not schedule visit.');
           }
@@ -209,7 +208,7 @@ export function GenericVisitEditModal(props: Props) {
         if (!res.ok) {
           const data = res.data as { error?: string; code?: string } | undefined;
           if (data?.code === 'GOOGLE_AUTH' || data?.code === 'GOOGLE_ERROR') {
-            openConnectModal('google', 'Google Calendar is disconnected — reconnect it to update visits.');
+            setError('Google Calendar is disconnected — reconnect it from the connection icons at the top, then try again.');
             return;
           }
           throw new Error(data?.error || 'Could not save.');
