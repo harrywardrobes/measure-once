@@ -1832,30 +1832,10 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     // search bypasses this filter so users can still surface older contacts
     // when they know who to look for.
     // Keep in sync with the offline mirror in usePaginatedContacts.ts.
-    let priorityActiveDays = 60;
-    try {
-      if (_priorityActiveDaysCache && Date.now() - _priorityActiveDaysCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
-        priorityActiveDays = _priorityActiveDaysCache.value;
-      } else {
-        const { rows: padRows } = await pool.query(
-          `SELECT value FROM app_settings WHERE key = 'priority_active_days'`
-        );
-        if (padRows.length > 0) {
-          const parsed = parseInt(padRows[0].value, 10);
-          if (!isNaN(parsed) && parsed > 0) priorityActiveDays = parsed;
-        }
-        _priorityActiveDaysCache = { value: priorityActiveDays, fetchedAt: Date.now() };
-      }
-    } catch (_) { /* use default 60 on DB error */ }
+    const priorityActiveDays = await _getPriorityActiveDays();
     const priorityFirst = req.query.priorityFirst === '1';
     if (priorityFirst && !q) {
-      const cutoff = Date.now() - priorityActiveDays * 24 * 60 * 60 * 1000;
-      contacts = contacts.filter(c => {
-        const raw = c.properties?.lastmodifieddate;
-        if (!raw) return true;
-        const ms = new Date(raw).getTime();
-        return !isNaN(ms) && ms >= cutoff;
-      });
+      contacts = _filterContactsByPriorityActive(contacts, priorityActiveDays);
     }
 
     if (leadStatus) {
@@ -2047,6 +2027,42 @@ function _filterContactsByStage(contacts, stageParam, statusStageMap) {
   });
 }
 
+// Helper: resolve the admin-configured priority-sort active window (days).
+// Defaults to 60. Memoised on the shared 60 s config cache and invalidated by
+// _invalidateContactsConfigCache() when the admin saves a new value. Never
+// throws — falls back to 60 on any DB error.
+async function _getPriorityActiveDays() {
+  if (_priorityActiveDaysCache && Date.now() - _priorityActiveDaysCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+    return _priorityActiveDaysCache.value;
+  }
+  let value = 60;
+  try {
+    const { rows } = await pool.query(
+      `SELECT value FROM app_settings WHERE key = 'priority_active_days'`
+    );
+    if (rows.length > 0) {
+      const parsed = parseInt(rows[0].value, 10);
+      if (!isNaN(parsed) && parsed > 0) value = parsed;
+    }
+    _priorityActiveDaysCache = { value, fetchedAt: Date.now() };
+  } catch (_) { /* use default 60 on DB error */ }
+  return value;
+}
+
+// Helper: hide contacts not modified within the priority-active window. MUST
+// mirror the priority filter in /api/contacts-all so the stage-tab badge counts
+// match the list when "Priority first" is active. Missing/unparseable dates
+// pass through (same "keep" behaviour as the list).
+function _filterContactsByPriorityActive(contacts, priorityActiveDays) {
+  const cutoff = Date.now() - priorityActiveDays * 24 * 60 * 60 * 1000;
+  return contacts.filter(c => {
+    const raw = c.properties?.lastmodifieddate;
+    if (!raw) return true;
+    const ms = new Date(raw).getTime();
+    return !isNaN(ms) && ms >= cutoff;
+  });
+}
+
 // Compute lead-status counts from an in-memory contacts array.
 // Returns { __no_status__: N, KEY: N, ... } — every configured status key is
 // present (0 when no contacts hold it) so the filter pills can render a count.
@@ -2186,6 +2202,17 @@ app.get('/api/contacts-stage-counts', isAuthenticated, requireHubspotToken, asyn
         : contacts.filter(c => c.properties?.hw_test_user !== 'true');
     } catch (dbErr) {
       logger.warn({ err: dbErr.message }, '[contacts-stage-counts] could not read dev_mode_enabled:');
+    }
+
+    // Priority-active filter (mirror /api/contacts-all). When the Customers list
+    // is sorted "Priority first" with no search, the list hides contacts not
+    // modified within the admin-configured active window — so the stage-tab badge
+    // counts must apply the same filter to stay in sync with the list. The
+    // frontend sends priorityFirst=1 only when that sort is active and no search
+    // is present, matching the `priorityFirst && !q` gate in /api/contacts-all.
+    if (req.query.priorityFirst === '1') {
+      const priorityActiveDays = await _getPriorityActiveDays();
+      contacts = _filterContactsByPriorityActive(contacts, priorityActiveDays);
     }
 
     // excluded_from_sales filter (mirror /api/contacts-all default).

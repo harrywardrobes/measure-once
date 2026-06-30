@@ -1275,12 +1275,20 @@ export function CustomersPage(): React.ReactElement {
   // includes excluded_from_sales contacts only when includeExcluded=1, matching
   // how /api/contacts-all scopes the list.
   React.useEffect(() => {
-    const qs = showExcluded ? '?includeExcluded=1' : '';
+    // When "Priority first" is active with no search, the list hides contacts
+    // outside the admin-configured active window — so request the same filter
+    // here (priorityFirst=1) to keep the stage-tab badge counts in sync with the
+    // list. Matches the `priorityFirst && !q` gate in /api/contacts-all.
+    const applyPriorityWindow = sortBy === 'priority' && !search;
+    const params = new URLSearchParams();
+    if (showExcluded) params.set('includeExcluded', '1');
+    if (applyPriorityWindow) params.set('priorityFirst', '1');
+    const qs = params.toString() ? `?${params.toString()}` : '';
     apiGet<Record<string, number>>(`/api/contacts-stage-counts${qs}`)
       .then((counts) => { if (counts) setStageCounts(counts); })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshNonce, showExcluded]);
+  }, [refreshNonce, showExcluded, sortBy, search]);
 
   const {
     contacts,
