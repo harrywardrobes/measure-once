@@ -38,6 +38,8 @@ import {
   HOME_TASK_ASSIGNEE_FILTER_PREFIX,
   HOME_TASK_CONTACT_SEARCH_PREFIX,
 } from '../constants/localStorageKeys';
+import { TaskList, categorizeTaskItems, type TaskListItem } from '../components/tasks/TaskList';
+import { parseUpcomingEvents, eventTypeLabel, type UpcomingEvent } from '../utils/calendarEvents';
 
 // Shared task-creation modal (same one used by the Contact Customer modal's
 // "Call Later" and the customer detail page). Lazy so its picker deps stay out
@@ -57,6 +59,7 @@ type ContactTask = {
   task_assigned_user: { userId: string; name: string };
   task_deadline: string;
   task_status: 'open' | 'completed';
+  task_completed_at?: string | null;
 };
 
 type Contact = {
@@ -127,65 +130,6 @@ function formatCurrency(n: number): string {
 function contactDisplayName(c: Contact): string {
   const n = [c.properties?.firstname, c.properties?.lastname].filter(Boolean).join(' ');
   return n || '—';
-}
-
-/** A non-task upcoming calendar entry (visit or other event) for the feed. */
-type UpcomingEvent = {
-  id: string;
-  title: string;
-  /** ISO datetime, or 'YYYY-MM-DD' for all-day events; null if missing. */
-  start: string | null;
-  contactId?: string;
-  contactName?: string;
-  /** 'design' | 'survey' | … from the moVisitType extended property. */
-  visitType?: string;
-};
-
-/**
- * Parse Google Calendar `events.list` output (from GET /api/events) into the
- * feed model, dropping task events (moTask=1) — those come from /api/tasks and
- * would otherwise appear twice.
- */
-function parseUpcomingEvents(data: unknown): UpcomingEvent[] {
-  const items = (data as { items?: unknown[] })?.items;
-  if (!Array.isArray(items)) return [];
-  const out: UpcomingEvent[] = [];
-  for (const raw of items) {
-    const ev = raw as {
-      id?: string;
-      summary?: string;
-      start?: { dateTime?: string; date?: string };
-      extendedProperties?: { private?: Record<string, string> };
-    };
-    const priv = ev.extendedProperties?.private || {};
-    if (priv.moTask === '1') continue;
-    const start = ev.start?.dateTime || ev.start?.date || null;
-    out.push({
-      id: ev.id || `${start ?? ''}-${ev.summary ?? ''}`,
-      title: ev.summary || 'Untitled event',
-      start,
-      contactId: priv.moContactId || undefined,
-      contactName: priv.moContactName || undefined,
-      visitType: priv.moVisitType || undefined,
-    });
-  }
-  return out;
-}
-
-function eventTypeLabel(visitType?: string): string {
-  if (visitType === 'design') return 'Design visit';
-  if (visitType === 'survey') return 'Survey visit';
-  if (visitType) return 'Visit';
-  return 'Event';
-}
-
-/** Date (+ time for timed events) label for an upcoming entry. */
-function fmtWhen(iso: string): string {
-  const dt = new Date(iso);
-  const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  // All-day events arrive as 'YYYY-MM-DD' with no time component.
-  if (!iso.includes('T')) return datePart;
-  return `${datePart}, ${dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 /** Open a contact's detail page (SPA hook when present, else hard nav). */
@@ -288,10 +232,6 @@ const TASKS_PER_PAGE = 5;
 
 type AssigneeFilter = 'all' | 'mine';
 
-type FeedRow =
-  | { kind: 'task'; id: string; when: number; task: ContactTask }
-  | { kind: 'event'; id: string; when: number; event: UpcomingEvent };
-
 function TaskSection({
   tasks,
   events,
@@ -299,6 +239,7 @@ function TaskSection({
   todayMs,
   currentUserId,
   onAddTask,
+  onToggleTask,
 }: {
   tasks: ContactTask[];
   events: UpcomingEvent[];
@@ -307,6 +248,8 @@ function TaskSection({
   currentUserId?: string;
   /** When provided, a "+ New task" button appears in the header. */
   onAddTask?: () => void;
+  /** Persist a task's done state (optimistic update lives in the parent). */
+  onToggleTask: (item: TaskListItem, nextDone: boolean) => void;
 }) {
   const [page, setPage] = React.useState(1);
 
@@ -377,49 +320,59 @@ function TaskSection({
     } catch { /* ignore */ }
   };
 
-  const open = tasks.filter((t) => t.task_status !== 'completed');
   const q = contactSearch.trim().toLowerCase();
 
-  const taskRows: FeedRow[] = open
-    .filter((t) => {
-      if (assigneeFilter === 'mine' && currentUserId && t.task_assigned_user?.userId !== currentUserId) return false;
-      if (q && !(t.task_customer?.contactName ?? '').toLowerCase().includes(q)) return false;
-      return true;
-    })
-    .map((t) => ({
-      kind: 'task',
-      id: t.id,
-      when: t.task_deadline ? new Date(t.task_deadline).getTime() : Number.MAX_SAFE_INTEGER,
-      task: t,
-    }));
+  // Normalise tasks + calendar events into the shared feed model. The "My tasks"
+  // view shows only tasks assigned to the current user (events carry no
+  // assignee); the contact filter matches a task's contact or an event's
+  // title/contact.
+  const items: TaskListItem[] = [
+    ...tasks
+      .filter((t) => {
+        if (assigneeFilter === 'mine' && currentUserId && t.task_assigned_user?.userId !== currentUserId) return false;
+        if (q && !(t.task_customer?.contactName ?? '').toLowerCase().includes(q)) return false;
+        return true;
+      })
+      .map((t) => ({
+        id: t.id,
+        kind: 'task' as const,
+        title: t.task_name,
+        when: t.task_deadline || null,
+        pastWhen: t.task_completed_at ?? t.task_deadline ?? null,
+        status: t.task_status,
+        contactId: t.task_customer?.contactId,
+        contactName: t.task_customer?.contactName,
+        assigneeName: assigneeFilter === 'all' ? t.task_assigned_user?.name : undefined,
+      })),
+    ...(assigneeFilter === 'mine'
+      ? []
+      : events
+          .filter((e) => (!q ? true : e.title.toLowerCase().includes(q) || (e.contactName ?? '').toLowerCase().includes(q)))
+          .map((e) => ({
+            id: `ev:${e.id}`,
+            kind: 'event' as const,
+            title: e.title,
+            when: e.start,
+            contactId: e.contactId,
+            contactName: e.contactName,
+            eventTypeLabel: eventTypeLabel(e.visitType),
+          }))),
+  ];
 
-  // Upcoming visits / calendar events are excluded from the "My tasks" view
-  // (they carry no assignee). The contact filter matches their title or contact.
-  const eventRows: FeedRow[] = assigneeFilter === 'mine'
-    ? []
-    : events
-        .filter((e) => {
-          if (!q) return true;
-          return e.title.toLowerCase().includes(q) || (e.contactName ?? '').toLowerCase().includes(q);
-        })
-        .map((e) => ({
-          kind: 'event',
-          id: `ev:${e.id}`,
-          when: e.start ? new Date(e.start).getTime() : Number.MAX_SAFE_INTEGER,
-          event: e,
-        }));
+  const { open: openFeed, past: pastFeed } = categorizeTaskItems(items, Date.now());
 
-  // Calendar order: soonest first (overdue tasks, with the earliest times, lead).
-  const feed = [...taskRows, ...eventRows].sort((a, b) => a.when - b.when);
+  const overdueCount = openFeed.filter(
+    (i) => i.kind === 'task' && i.when && new Date(i.when).getTime() < todayMs,
+  ).length;
+  const openTaskCount = openFeed.filter((i) => i.kind === 'task').length;
+  const upcomingEventCount = openFeed.filter((i) => i.kind === 'event').length;
 
-  const overdue = open.filter(
-    (t) => t.task_deadline && new Date(t.task_deadline).getTime() < todayMs,
-  );
-
-  const totalPages = Math.max(1, Math.ceil(feed.length / TASKS_PER_PAGE));
+  // The open feed stays paginated to keep the home screen compact; the
+  // Done / Past list (inside TaskList) shows everything, collapsed by default.
+  const totalPages = Math.max(1, Math.ceil(openFeed.length / TASKS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * TASKS_PER_PAGE;
-  const visible = feed.slice(pageStart, pageStart + TASKS_PER_PAGE);
+  const visibleOpen = openFeed.slice(pageStart, pageStart + TASKS_PER_PAGE);
 
   const filtersActive = assigneeFilter !== 'all' || contactSearch.trim() !== '';
 
@@ -439,29 +392,29 @@ function TaskSection({
         title="Tasks / Upcoming"
         action={addTaskAction}
         badge={
-          (open.length || events.length) ? (
+          (openTaskCount || upcomingEventCount) ? (
             <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-              {open.length ? (
+              {openTaskCount ? (
                 <Chip
-                  label={`${open.length} open`}
+                  label={`${openTaskCount} open`}
                   size="small"
                   color="default"
                   variant="outlined"
                   sx={{ height: 20 }}
                 />
               ) : null}
-              {overdue.length ? (
+              {overdueCount ? (
                 <Chip
-                  label={`${overdue.length} overdue`}
+                  label={`${overdueCount} overdue`}
                   size="small"
                   color="error"
                   variant="filled"
                   sx={{ height: 20 }}
                 />
               ) : null}
-              {events.length ? (
+              {upcomingEventCount ? (
                 <Chip
-                  label={`${events.length} upcoming`}
+                  label={`${upcomingEventCount} upcoming`}
                   size="small"
                   color="default"
                   variant="outlined"
@@ -525,109 +478,43 @@ function TaskSection({
         ) : null}
       </Stack>
 
-      {feed.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-          {filtersActive
-            ? 'Nothing matches the current filter.'
-            : 'Nothing scheduled — you\'re all clear.'}
-        </Typography>
-      ) : (
-        <>
-          {visible.map((row) => {
-            if (row.kind === 'event') {
-              const ev = row.event;
-              return (
-                <HomeCard
-                  key={row.id}
-                  onClick={ev.contactId ? () => openContact(ev.contactId!) : undefined}
-                >
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography variant="body2" noWrap sx={{ fontWeight: 600, minWidth: 0 }}>
-                      {ev.title}
-                    </Typography>
-                    <Chip label={eventTypeLabel(ev.visitType)} size="small" variant="outlined" sx={{ height: 20 }} />
-                  </Stack>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.25 }}>
-                    {ev.start ? (
-                      <Typography variant="caption" color="text.secondary">
-                        {fmtWhen(ev.start)}
-                      </Typography>
-                    ) : null}
-                    {ev.contactName ? (
-                      <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
-                        · {ev.contactName}
-                      </Typography>
-                    ) : null}
-                  </Stack>
-                </HomeCard>
-              );
-            }
-            const t = row.task;
-            const isOvr =
-              !!t.task_deadline && new Date(t.task_deadline).getTime() < todayMs;
-            const contactId = t.task_customer?.contactId;
-            const contactName = t.task_customer?.contactName;
-            return (
-              <HomeCard
-                key={row.id}
-                onClick={contactId ? () => openContact(contactId) : undefined}
-              >
-                <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                  {t.task_name}
-                </Typography>
-                <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.25 }}>
-                  {t.task_deadline ? (
-                    <Typography
-                      variant="caption"
-                      sx={{ color: isOvr ? 'error.main' : 'text.secondary' }}
-                    >
-                      {isOvr ? '⚠ Overdue · ' : ''}
-                      {fmtDate(t.task_deadline)}
-                    </Typography>
-                  ) : null}
-                  {contactName ? (
-                    <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
-                      · {contactName}
-                    </Typography>
-                  ) : null}
-                </Stack>
-                {t.task_assigned_user?.name && assigneeFilter === 'all' ? (
-                  <Typography variant="caption" color="text.secondary">
-                    Assigned to {t.task_assigned_user.name}
-                  </Typography>
-                ) : null}
-              </HomeCard>
-            );
-          })}
-          {totalPages > 1 ? (
-            <Stack
-              direction="row"
-              sx={{ alignItems: 'center', justifyContent: 'center', mt: 0.5 }}
-              spacing={1}
-            >
-              <IconButton
-                size="small"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={safePage === 1}
-                aria-label="Previous page"
-              >
-                <ChevronLeftIcon fontSize="small" />
-              </IconButton>
-              <Typography variant="caption" color="text.secondary">
-                {safePage} / {totalPages}
-              </Typography>
-              <IconButton
-                size="small"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={safePage === totalPages}
-                aria-label="Next page"
-              >
-                <ChevronRightIcon fontSize="small" />
-              </IconButton>
-            </Stack>
-          ) : null}
-        </>
-      )}
+      <TaskList
+        openItems={visibleOpen}
+        pastItems={pastFeed}
+        onToggleDone={onToggleTask}
+        onItemClick={(item) => { if (item.contactId) openContact(item.contactId); }}
+        showContact
+        emptyText={filtersActive
+          ? 'Nothing matches the current filter.'
+          : 'Nothing scheduled — you\'re all clear.'}
+      />
+      {totalPages > 1 ? (
+        <Stack
+          direction="row"
+          sx={{ alignItems: 'center', justifyContent: 'center', mt: 0.5 }}
+          spacing={1}
+        >
+          <IconButton
+            size="small"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            aria-label="Previous page"
+          >
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+          <Typography variant="caption" color="text.secondary">
+            {safePage} / {totalPages}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            aria-label="Next page"
+          >
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+      ) : null}
     </Box>
   );
 }
@@ -889,10 +776,40 @@ export function HomePage(): React.ReactElement {
   // feed. Best-effort: a Google-auth/connection failure just leaves the feed
   // showing tasks only (no error surfaced here).
   const loadEvents = React.useCallback(() => {
-    jget<unknown>('/api/events')
+    // includePast=1 also returns events that have already happened, so the
+    // Tasks/Upcoming feed's collapsed "Done / Past" section can list them.
+    jget<unknown>('/api/events?includePast=1')
       .then((data) => setEvents(parseUpcomingEvents(data)))
       .catch(() => setEvents([]));
   }, []);
+
+  // Optimistically flip a task's done state, persist, and roll back on failure.
+  // TaskList shows the undo toast; this just owns the data + the network call.
+  const toggleTask = React.useCallback(async (item: TaskListItem, nextDone: boolean) => {
+    if (item.kind !== 'task') return;
+    const newStatus: 'open' | 'completed' = nextDone ? 'completed' : 'open';
+    const nowIso = new Date().toISOString();
+    setTasks((prev) => prev.map((t) => (
+      t.id === item.id
+        ? { ...t, task_status: newStatus, task_completed_at: nextDone ? nowIso : null }
+        : t
+    )));
+    try {
+      const r = await fetch(`/api/tasks/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_status: newStatus }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+    } catch {
+      setTasks((prev) => prev.map((t) => (
+        t.id === item.id
+          ? { ...t, task_status: nextDone ? 'open' : 'completed' }
+          : t
+      )));
+      showToast('Could not update task. Please try again.', true);
+    }
+  }, [showToast]);
 
   const loadProjects = React.useCallback(() => {
     setProjectsLoading(true);
@@ -987,6 +904,7 @@ export function HomePage(): React.ReactElement {
         todayMs={todayMs}
         currentUserId={user?.id}
         onAddTask={isViewer ? undefined : () => setTaskModalOpen(true)}
+        onToggleTask={toggleTask}
       />
       <InvoicesSection
         loading={qbLoading}
