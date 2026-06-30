@@ -1360,7 +1360,7 @@ app.get('/api/hubspot/webhook-events', isAuthenticated, (req, res) => {
   }
 
   // Reject if this user already holds too many connections.
-  const userId = String(req.user?.id || req.user?.claims?.sub || 'unknown');
+  const userId = String(req.user?.claims?.sub || 'unknown');
   const userConns = _hsWebhookSseByUser.get(userId);
   if (userConns && userConns.size >= HS_SSE_PER_USER_CAP) {
     return res.status(429).json({ error: 'Too many concurrent SSE connections.' });
@@ -3307,7 +3307,7 @@ app.post('/api/tasks', isAuthenticated, requirePrivilege('member'), calendarEven
 
     // Fire-and-forget notification email when task is assigned to someone else
     const assignedUserId = task_assigned_user?.userId ? String(task_assigned_user.userId) : null;
-    const creatorId = req.user?.id ? String(req.user.id) : null;
+    const creatorId = req.user?.claims?.sub ? String(req.user.claims.sub) : null;
     if (assignedUserId && creatorId && assignedUserId !== creatorId) {
       getPageFilterConfig().then(cfg => {
         if (cfg.task_assignment_emails_enabled === 'false') return;
@@ -3394,7 +3394,7 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
     res.json(calendarEventToTask(event.data));
 
     // Fire-and-forget notification emails on assignment changes
-    const creatorId = req.user?.id ? String(req.user.id) : null;
+    const creatorId = req.user?.claims?.sub ? String(req.user.claims.sub) : null;
     const assignmentChanged = previousAssignedUserId &&
       (newAssignedUserId || '') !== previousAssignedUserId;
     if (assignmentChanged || (newAssignedUserId && newAssignedUserId !== (previousAssignedUserId || null))) {
@@ -4748,7 +4748,7 @@ app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: '
 
 app.get('/api/ideas', async (req, res) => {
   try {
-    const userId = req.user?.id || null;
+    const userId = req.user?.claims?.sub || null;
     const { rows } = await pool.query(`
       SELECT i.id, i.body, i.created_at, i.edited_at,
              u.first_name, u.last_name, u.email AS author_email,
@@ -4806,7 +4806,7 @@ app.post('/api/ideas', async (req, res) => {
 app.post('/api/ideas/:id/vote', isAuthenticated, async (req, res) => {
   const ideaId = parseInt(req.params.id, 10);
   if (isNaN(ideaId)) return res.status(400).json({ error: 'Invalid idea id.' });
-  const userId = req.user.id;
+  const userId = req.user?.claims?.sub;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -7711,7 +7711,7 @@ app.post('/api/card-actions/contact-customer/:contactId/attempts',
 
     const methodColMap = { call: 'call_attempted', email: 'email_sent', whatsapp: 'whatsapp_sent' };
     const col    = methodColMap[method];
-    const userId = req.user?.id;
+    const userId = req.user?.claims?.sub;
 
     const client = await pool.connect();
     try {
@@ -8003,7 +8003,7 @@ app.post('/api/card-actions/contact-customer/:contactId/advance-status',
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
             contactId,
-            req.user?.id || null,
+            req.user?.claims?.sub || null,
             !!a.call_attempted,
             !!a.email_sent,
             !!a.whatsapp_sent,
@@ -8875,7 +8875,7 @@ app.post('/api/whatsapp/send', isAuthenticated, requireAdmin, requireWhatsAppCon
     pool.query(
       `INSERT INTO whatsapp_messages (contact_id, sender_user_id, mode, template_name, template_params, message_text)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [safeContactId, req.user.id, mode, tplName, tplParams, messageText]
+      [safeContactId, req.user?.claims?.sub, mode, tplName, tplParams, messageText]
     ).catch(e => logger.error({ err: e.message }, 'whatsapp_messages insert error:'));
 
     res.json({ ok: true });
