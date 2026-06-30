@@ -54,6 +54,7 @@ import Toggle from '../components/Toggle';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -66,6 +67,7 @@ import { BulkContactActions } from '../components/BulkContactActions';
 import { dispatchCardActionHandler } from '../utils/dispatchCardActionHandler';
 import { openCardActionModal } from '../utils/cardActionModalRegistry';
 import { HANDLER_TYPE_LABELS } from '../utils/handlerMeta';
+import { AddContactPhotosModal } from '../components/modals/AddContactPhotosModal';
 import type { ExistingVisit } from '../components/DesignVisitWizard';
 import { STAGE_COLORS, STATUS_COLORS } from '../theme';
 import { getActionStripColors } from '../utils/actionStripColors';
@@ -1355,6 +1357,7 @@ export function CustomersPage(): React.ReactElement {
   }, [patchContact, removeContact, leadStatus, stageFilter, statusStageMap, showExcluded, excludedStatusKeys]);
 
   const isViewer = useIsViewer();
+  const [addPhotosOpen, setAddPhotosOpen] = React.useState(false);
   const [newOpen, setNewOpen] = React.useState<boolean>(() => {
     const p = new URLSearchParams(location.search);
     return p.get('new') === '1';
@@ -1971,15 +1974,26 @@ export function CustomersPage(): React.ReactElement {
         {!isViewer && typeof document !== 'undefined' &&
           document.getElementById('page-heading-action') &&
           createPortal(
-            <Button
-              id="new-customer-btn"
-              variant="contained"
-              size="small"
-              startIcon={<AddIcon />}
-              onClick={() => setNewOpen(true)}
-            >
-              New customer
-            </Button>,
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button
+                id="add-photos-btn"
+                variant="outlined"
+                size="small"
+                startIcon={<AddPhotoAlternateIcon />}
+                onClick={() => setAddPhotosOpen(true)}
+              >
+                Add photos
+              </Button>
+              <Button
+                id="new-customer-btn"
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => setNewOpen(true)}
+              >
+                New customer
+              </Button>
+            </Stack>,
             document.getElementById('page-heading-action') as HTMLElement,
           )}
 
@@ -2239,6 +2253,13 @@ export function CustomersPage(): React.ReactElement {
           </Box>
         ) : null}
       </Stack>
+
+      {!isViewer && (
+        <AddContactPhotosModal
+          open={addPhotosOpen}
+          onClose={() => setAddPhotosOpen(false)}
+        />
+      )}
 
       <NewCustomerDialog
         open={newOpen && !isViewer}

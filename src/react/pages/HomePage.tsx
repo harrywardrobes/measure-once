@@ -23,6 +23,8 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
+import { AddContactPhotosModal } from '../components/modals/AddContactPhotosModal';
 import { useQBInvoices } from '../hooks/useQBInvoices';
 import { broadcastConnect } from '../lib/qbInvoicesStore';
 import { useToastContext } from '../contexts/ToastContext';
@@ -716,6 +718,7 @@ export function HomePage(): React.ReactElement {
   const [tasksLoading, setTasksLoading] = React.useState(true);
   const [events, setEvents] = React.useState<UpcomingEvent[]>([]);
   const [taskModalOpen, setTaskModalOpen] = React.useState(false);
+  const [addPhotosOpen, setAddPhotosOpen] = React.useState(false);
 
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
@@ -878,6 +881,19 @@ export function HomePage(): React.ReactElement {
       }}
     >
       <DateHeader />
+      {!isViewer && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AddPhotoAlternateIcon />}
+            onClick={() => setAddPhotosOpen(true)}
+            data-testid="home-add-photos"
+          >
+            Add photos
+          </Button>
+        </Box>
+      )}
       {isAdmin && devMode && (
         <Alert
           id="dev-mode-banner"
@@ -936,6 +952,13 @@ export function HomePage(): React.ReactElement {
             onCreated={() => { loadTasks(); }}
           />
         </React.Suspense>
+      )}
+
+      {!isViewer && (
+        <AddContactPhotosModal
+          open={addPhotosOpen}
+          onClose={() => setAddPhotosOpen(false)}
+        />
       )}
     </Box>
   );

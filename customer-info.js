@@ -1646,6 +1646,116 @@ router.post('/api/customer-info/:token/photos',
   }
 );
 
+// ── Staff direct photo upload (member+) ───────────────────────────────────────
+// POST /api/customer-info/by-contact/:contactId/photos
+//
+// Lets a team member upload photos straight onto a contact, folded into the
+// same photo set the customer token-link flow populates: each upload batch
+// becomes a customer_info_submissions row tagged source='staff'. The existing
+// GET /api/customer-info/by-contact/:contactId returns these alongside customer
+// submissions, so CustomerInfoSubmissionsRail renders them with no new route.
+//
+// Auth: session (member+). There is no per-token quota (no token); a per-IP
+// rate limit (shared with the customer upload route) guards against runaway use.
+router.post('/api/customer-info/by-contact/:contactId/photos',
+  isAuthenticated, requirePrivilege('member'),
+  async (req, res, next) => {
+    const cid = String(req.params.contactId || '').trim();
+    if (!/^\d+$/.test(cid)) return res.status(400).json({ error: 'Invalid contactId.' });
+    // IP rate limit: max 10 upload requests per IP per 10 minutes (shared store
+    // with the customer token route).
+    if (!checkUploadIpRateLimit(req.ip)) {
+      return res.status(429).json({ error: 'Too many photo uploads — please wait a few minutes before uploading more.' });
+    }
+    req._staffUploadContactId = cid;
+    next();
+  },
+  // multer writes each file to the OS temp dir on disk — no heap buffering.
+  _photoUpload.array('photos', MAX_PHOTO_FILES),
+  async (req, res) => {
+    const cid = req._staffUploadContactId;
+    const rawFiles = req.files;
+    if (rawFiles != null && !Array.isArray(rawFiles)) {
+      return res.status(400).json({ error: 'Invalid files payload.' });
+    }
+    const files = rawFiles || [];
+    const filesAreValid = files.every((f) =>
+      f &&
+      typeof f === 'object' &&
+      typeof f.path === 'string' &&
+      f.path.length > 0 &&
+      typeof f.mimetype === 'string'
+    );
+    if (!filesAreValid) {
+      return res.status(400).json({ error: 'Invalid files payload.' });
+    }
+    const tempPaths = files.map(f => f.path);
+    if (!files.length) {
+      return res.status(400).json({ error: 'No files uploaded.' });
+    }
+
+    // Upload each file from disk to object storage (streams — no heap buffering).
+    const keys = [];
+    for (const file of files) {
+      try {
+        const key = await uploadPhotoFileToStorage(file.path, file.mimetype);
+        keys.push(key);
+      } catch (err) {
+        logger.error({ err: err.message }, '[customer-info] Staff photo upload failed:');
+        await _deleteTempFiles(tempPaths);
+        const isStorageConfigErr = /bucket|object storage/i.test(err.message);
+        const userMsg = isStorageConfigErr ? FRIENDLY_UPLOAD_MSG : 'Photo upload failed: ' + err.message;
+        return res.status(500).json({ error: userMsg });
+      }
+    }
+    // Always clean up temp files before responding.
+    await _deleteTempFiles(tempPaths);
+
+    // Best-effort: resolve the contact's name/email so the rail card has a label.
+    // Photos are the point — a HubSpot hiccup must not fail the upload.
+    let contactName = null;
+    let contactEmail = null;
+    try {
+      const c = await fetchContactFromHubSpot(cid);
+      const p = c?.properties || {};
+      contactName = [p.firstname, p.lastname].filter(Boolean).join(' ').trim() || null;
+      contactEmail = p.email || null;
+    } catch (err) {
+      logger.warn({ err: err.message, contactId: cid }, '[customer-info] Could not resolve contact name for staff upload');
+    }
+
+    const userId = req.user?.claims?.sub || null;
+
+    // One row per upload batch: a submitted staff row carrying just the photos.
+    // token_hash is NOT NULL UNIQUE and exists for customer links — staff rows
+    // never use it, so store a synthetic unique value. expires_at is irrelevant
+    // (the row is already submitted).
+    const syntheticToken = 'staff:' + crypto.randomBytes(24).toString('hex');
+    let inserted;
+    try {
+      inserted = await pool.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at,
+            submitted_at, photo_keys, source, uploaded_by)
+         VALUES ($1, $2, $3, $4, NOW(), NOW(), $5::jsonb, 'staff', $6)
+         RETURNING id, created_at`,
+        [cid, contactName, contactEmail, syntheticToken, JSON.stringify(keys), userId]
+      );
+    } catch (err) {
+      // Photos are already in storage but the row failed — surface clearly.
+      logger.error({ err: err.message, contactId: cid }, '[customer-info] Staff upload DB insert failed:');
+      return res.status(500).json({ error: 'Photos uploaded but could not be saved. Please try again.' });
+    }
+
+    res.json({
+      ok: true,
+      keys,
+      submissionId: inserted.rows[0].id,
+      photoUrls: keys.map(k => signCustomerPhotoUrl(k)),
+    });
+  }
+);
+
 // Authenticated: serve a signed customer photo
 // GET /api/customer-info-photos/:key
 router.get('/api/customer-info-photos/:key', isAuthenticated, async (req, res) => {
@@ -1872,14 +1982,21 @@ router.get('/api/customer-info/by-contact/:contactId', isAuthenticated, requireP
   }
 
   const r = await pool.query(
-    `SELECT id, contact_name, contact_email, contact_phone, created_at, expires_at, submitted_at,
-            address_line1, city, postcode,
-            structured_address,
-            room_count, room_notes, photo_keys, masked_email, email_skipped_count,
-            CASE WHEN submitted_at IS NULL THEN form_link ELSE NULL END AS form_link
-     FROM customer_info_submissions
-     WHERE contact_id = $1
-     ORDER BY created_at DESC`,
+    `SELECT cis.id, cis.contact_name, cis.contact_email, cis.contact_phone,
+            cis.created_at, cis.expires_at, cis.submitted_at,
+            cis.address_line1, cis.city, cis.postcode,
+            cis.structured_address,
+            cis.room_count, cis.room_notes, cis.photo_keys, cis.masked_email,
+            cis.email_skipped_count, cis.source,
+            COALESCE(
+              NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
+              u.email
+            ) AS uploaded_by_name,
+            CASE WHEN cis.submitted_at IS NULL THEN cis.form_link ELSE NULL END AS form_link
+     FROM customer_info_submissions cis
+     LEFT JOIN users u ON u.id = cis.uploaded_by
+     WHERE cis.contact_id = $1
+     ORDER BY cis.created_at DESC`,
     [cid]
   );
   const rows = r.rows.map(row => {

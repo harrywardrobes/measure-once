@@ -121,6 +121,10 @@ const ROUTES = [
   { method: 'POST',   path: '/api/deals/0/checklist',         level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/contacts/0/workflow',       level: 'member',  body: {}, needsHubspot: true },
   { method: 'POST',   path: '/api/deals/0/workflow',          level: 'member',  body: {}, needsHubspot: true },
+  // Staff direct photo upload. Gate runs before any file/HubSpot work, so an
+  // empty JSON body 400s for members (no files) but 403s for viewers — exactly
+  // the gate decision the matrix asserts.
+  { method: 'POST',   path: '/api/customer-info/by-contact/0/photos', level: 'member', body: {} },
   { method: 'POST',   path: '/api/contacts/urgency',          level: 'auth',    body: {}, needsHubspot: true },
   { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
   { method: 'POST',   path: '/api/contacts/open-task-counts', level: 'member',  body: {}, needsGoogle: true },

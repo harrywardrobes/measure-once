@@ -21,6 +21,8 @@ import HomeIcon from '@mui/icons-material/Home';
 import HourglassBottomIcon from '@mui/icons-material/HourglassBottom';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import SendIcon from '@mui/icons-material/Send';
 import WifiOffIcon from '@mui/icons-material/WifiOff';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
@@ -32,6 +34,7 @@ import { useOfflinePhotoReviewEntries, type PendingPhotoReviewEntry } from '../.
 import { cacheRecord, readRecord } from '../../lib/offlineDb';
 import { formatAddress, isAddressEmpty, type StructuredAddress } from '../../../../shared/address';
 import { formatPhone } from '../../utils/phoneFormatters';
+import { AddContactPhotosModal } from '../../components/modals/AddContactPhotosModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,6 +56,13 @@ interface Submission {
   photoUrls: string[];
   email_skipped_count: number;
   form_link: string | null;
+  /** 'customer' (token-link submission) | 'staff' (uploaded in-app by a team
+   *  member). Absent on rows from before staff uploads existed → treat as
+   *  'customer'. */
+  source?: 'customer' | 'staff' | null;
+  /** Display name of the staff member who added a staff upload (null for
+   *  customer submissions). */
+  uploaded_by_name?: string | null;
 }
 
 /**
@@ -587,6 +597,7 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
   useEffect(() => {
     if (autoExpand) setOpen(true);
   }, [autoExpand]);
+  const isStaff   = sub.source === 'staff';
   const isPending = !sub.submitted_at;
   const isExpired = isPending && new Date(sub.expires_at) < new Date();
   const isActive  = isPending && !isExpired;
@@ -696,7 +707,9 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const statusChip = isPending ? (
+  const statusChip = isStaff ? (
+    <Chip icon={<PhotoLibraryIcon />} label="Staff upload" size="small" color="default" variant="outlined" data-testid="status-chip" />
+  ) : isPending ? (
     <Chip icon={<HourglassBottomIcon />} label="Awaiting submission" size="small" color="default" variant="outlined" data-testid="status-chip" />
   ) : (
     <Chip icon={<CheckCircleIcon />} label="Submitted" size="small" color="success" variant="outlined" data-testid="status-chip" />
@@ -743,7 +756,7 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
         >
           <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Sent {fmtDate(sub.created_at)}
+              {isStaff ? 'Photos added' : 'Sent'} {fmtDate(sub.created_at)}
             </Typography>
             {statusChip}
             {pendingReview && pendingReview.status !== 'synced' && (
@@ -758,16 +771,19 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
 
         {/* Action area */}
         {!isPending ? (
-          <Box sx={{ flexShrink: 0 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setOpen(v => !v)}
-              data-testid="review-btn"
-            >
-              Review
-            </Button>
-          </Box>
+          // Staff uploads have no review flow — the header click expands them.
+          isStaff ? null : (
+            <Box sx={{ flexShrink: 0 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setOpen(v => !v)}
+                data-testid="review-btn"
+              >
+                Review
+              </Button>
+            </Box>
+          )
         ) : isActive ? (
           isSuperseded ? (
             <Box sx={{ flexShrink: 0 }}>
@@ -904,7 +920,11 @@ function SubmissionCard({ sub, contactId, canManageLink, onResendSuccess, isSupe
             </Typography>
           ) : (
             <Stack spacing={2}>
-              {sub.submitted_at && (
+              {isStaff ? (
+                <Typography variant="caption" color="text.secondary">
+                  Added{sub.uploaded_by_name ? ` by ${sub.uploaded_by_name}` : ''} {fmtDate(sub.created_at)}
+                </Typography>
+              ) : sub.submitted_at && (
                 <Typography variant="caption" color="text.secondary">
                   Submitted {fmtDate(sub.submitted_at)}
                 </Typography>
@@ -1067,7 +1087,10 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const [fromCache, setFromCache]     = useState(false);
   const [open, setOpen]               = useState(true);
   const [deepLinkId, setDeepLinkId]   = useState<number | null>(null);
+  const [addOpen, setAddOpen]         = useState(false);
   const { isViewer, isManager, isAdmin } = usePrivilege();
+  // Members and above can add photos straight onto the contact; viewers cannot.
+  const canUpload = !isViewer;
   const pendingReviews                = useOfflinePhotoReviewEntries(contactId);
 
   const loadSubmissions = useCallback(() => {
@@ -1160,7 +1183,10 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
   const otherCards = visibleSubmissions.filter(s => !activeIds.has(s.id));
   const sortedSubmissions = [...activeCards, ...otherCards];
 
-  if (!loading && !error && visibleSubmissions.length === 0) return null;
+  // Hide the section entirely only when there is nothing to show AND the user
+  // can't add anything (viewers). For members the section always renders so the
+  // "Add photos" button is reachable even on a contact with no submissions yet.
+  if (!loading && !error && visibleSubmissions.length === 0 && !canUpload) return null;
 
   return (
     <Box
@@ -1188,11 +1214,23 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
             </Typography>
           )}
         </Typography>
-        {/* Bulk retry/discard sits in the header so it's reachable even when the
-            rail is collapsed. Stop click propagation so the buttons don't toggle
-            the section open/closed. */}
-        <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0 }}>
+        {/* Bulk retry/discard + Add photos sit in the header so they're reachable
+            even when the rail is collapsed. Stop click propagation so the buttons
+            don't toggle the section open/closed. */}
+        <Box onClick={e => e.stopPropagation()} sx={{ display: 'flex', flexShrink: 0, alignItems: 'center', gap: 0.5 }}>
           <BulkReviewActions entries={Array.from(pendingReviews.values())} />
+          {canUpload && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<AddPhotoAlternateIcon fontSize="small" />}
+              onClick={() => setAddOpen(true)}
+              sx={{ fontSize: '0.75rem', py: 0.3 }}
+              data-testid="rail-add-photos-btn"
+            >
+              Add photos
+            </Button>
+          )}
         </Box>
         {open
           ? <ExpandLessIcon fontSize="small" sx={{ color: 'text.disabled' }} />
@@ -1220,6 +1258,11 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
                   : "Couldn't reach the server — showing saved submissions from your last visit. The list may be incomplete or out of date."}
               </Alert>
             )}
+            {sortedSubmissions.length === 0 && canUpload && (
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', py: 0.5 }}>
+                No photos or submissions yet. Use “Add photos” to upload some.
+              </Typography>
+            )}
             {sortedSubmissions.map((sub, index) => (
               <SubmissionCard
                 key={sub.id}
@@ -1235,6 +1278,15 @@ export function CustomerInfoSubmissionsRail({ contactId }: Props) {
           </Stack>
         )}
       </Collapse>
+
+      {canUpload && (
+        <AddContactPhotosModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          contactId={contactId}
+          onUploaded={loadSubmissions}
+        />
+      )}
     </Box>
   );
 }
