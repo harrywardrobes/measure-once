@@ -341,6 +341,44 @@ function extractMaterialImports(src) {
 }
 
 /**
+ * Extract every local identifier imported from ANY module (not just MUI), so
+ * Pass 1 can tell a genuinely-missing @mui icon import apart from a local
+ * component that merely happens to end in "Icon" (e.g. a styled component or a
+ * project file like CheckBadgeIcon imported from './CheckBadgeIcon').
+ */
+function extractAllImportedNames(src) {
+  const names = new Set();
+  // Default imports: import Foo from '...'
+  let re = /import\s+(\w+)\s+from\s+['"][^'"]+['"]/g;
+  let m;
+  while ((m = re.exec(src)) !== null) names.add(m[1]);
+  // Named imports: import { Foo, Bar as Baz } from '...'
+  re = /import\s+(?:\w+\s*,\s*)?\{([^}]+)\}\s+from\s+['"][^'"]+['"]/g;
+  while ((m = re.exec(src)) !== null) {
+    for (const raw of m[1].split(',')) {
+      const parts = raw.trim().split(/\s+as\s+/);
+      const localName = (parts[1] || parts[0]).trim();
+      if (localName) names.add(localName);
+    }
+  }
+  return names;
+}
+
+/**
+ * Extract identifiers declared locally in the file (const/let/var/function/
+ * class/type/interface, with or without `export`). Used by Pass 1 to exclude
+ * locally-defined `…Icon` identifiers (styled components, type aliases, local
+ * icon components) from the "used but not imported" check.
+ */
+function extractLocalDeclarations(src) {
+  const names = new Set();
+  const re = /(?:^|[\n;])\s*(?:export\s+)?(?:default\s+)?(?:const|let|var|function|class|type|interface)\s+(\w+)/g;
+  let m;
+  while ((m = re.exec(src)) !== null) names.add(m[1]);
+  return names;
+}
+
+/**
  * Remove all import declarations that reference @mui/icons-material so that
  * the usage scan does not accidentally count imported names as "used" just
  * because they appear in the import statement itself.
@@ -749,6 +787,45 @@ function extractIconUsages(src) {
       "AddIcon inside a single-quoted string within a template interpolation after an apostrophe-word must be stripped",
     );
   }
+
+  // --- extractAllImportedNames / extractLocalDeclarations (Pass 1 exclusions) ---
+
+  // 21. A `…Icon` identifier imported from a LOCAL module (not @mui) must be
+  //     recognised by extractAllImportedNames so Pass 1 doesn't flag it.
+  {
+    const src = "import CheckBadgeIcon from './CheckBadgeIcon';";
+    assert(
+      extractAllImportedNames(src).has('CheckBadgeIcon'),
+      'extractAllImportedNames must include a default import from a local module',
+    );
+  }
+
+  // 22. A locally-declared `…Icon` (styled component / type alias) must be
+  //     recognised by extractLocalDeclarations so Pass 1 doesn't flag it.
+  {
+    const src = [
+      'export const SkeletonIcon = styled(Box)({});',
+      'type MuiIcon = React.ComponentType<unknown>;',
+    ].join('\n');
+    const decls = extractLocalDeclarations(src);
+    assert(decls.has('SkeletonIcon'), 'extractLocalDeclarations must find an exported const declaration');
+    assert(decls.has('MuiIcon'), 'extractLocalDeclarations must find a type alias declaration');
+  }
+
+  // 23. A value-usage of an icon whose name does NOT end in "Icon" (e.g.
+  //     EmailOutlined used as a map value) must be seen as "used" by the
+  //     import-stripped bare-word fallback that Pass 2 relies on.
+  {
+    const src = [
+      "import { EmailOutlined } from '@mui/icons-material';",
+      'const TYPE_ICON = { email: EmailOutlined };',
+    ].join('\n');
+    const importStripped = stripIconImportLines(src);
+    assert(
+      /\bEmailOutlined\b/.test(importStripped),
+      'EmailOutlined used as a map value must remain visible in the import-stripped source for Pass 2',
+    );
+  }
 })();
 
 // ── scan ─────────────────────────────────────────────────────────────────────
@@ -781,12 +858,15 @@ for (const file of files.sort()) {
 
   const imports         = extractIconImports(src);
   const materialImports = extractMaterialImports(src);
+  const allImported     = extractAllImportedNames(src);
+  const localDecls      = extractLocalDeclarations(src);
 
   // Strip icon import lines before scanning usages so that the imported
   // identifiers themselves don't appear as "used" just from the import line.
   // Also strip comments and string literals so that an identifier appearing
   // only inside `// a comment` or `'a string'` is not counted as a real usage.
-  const bodySrc = stripCommentsAndStrings(stripIconImportLines(src));
+  const importStripped = stripIconImportLines(src);
+  const bodySrc = stripCommentsAndStrings(importStripped);
   const usages  = extractIconUsages(bodySrc);
   const usedSet = new Set(usages.map((u) => u.identifier));
 
@@ -794,16 +874,37 @@ for (const file of files.sort()) {
   // non-icon files to keep the report tidy.
   if (imports.size === 0 && usages.length === 0) continue;
 
-  // Pass 1: used but not imported from @mui/icons-material.
-  // Identifiers that are legitimately imported from @mui/material (e.g.
-  // ListItemIcon) are excluded — they are valid MUI components that happen
-  // to end in "Icon" but are not icon-material icon components.
+  // Pass 1: used but neither imported nor defined anywhere.
+  // Excludes identifiers imported from @mui/material (e.g. ListItemIcon),
+  // imported from any other module (e.g. a local CheckBadgeIcon component), or
+  // declared locally (styled components, `type MuiIcon`, etc.) — those are
+  // valid identifiers that merely end in "Icon" and are not missing @mui icon
+  // imports. A genuinely missing icon import is still caught (not defined or
+  // imported anywhere).
   const failures = usages.filter(
-    (u) => !imports.has(u.identifier) && !materialImports.has(u.identifier),
+    (u) =>
+      !imports.has(u.identifier) &&
+      !materialImports.has(u.identifier) &&
+      !allImported.has(u.identifier) &&
+      !localDecls.has(u.identifier),
   );
 
   // Pass 2: imported but never used.
-  const unusedImports = [...imports].filter((name) => !usedSet.has(name));
+  // A name counts as used when extractIconUsages found it (a JSX element, or a
+  // value whose identifier ends in "Icon") OR it appears as a bare-word
+  // reference anywhere in the import-stripped source. The bare-word fallback
+  // covers two cases the *Icon-suffix JSX/value scan misses:
+  //   1. icons whose imported name does NOT end in "Icon" (e.g. EmailOutlined)
+  //      used as map/registry values like `TYPE_ICON.email = EmailOutlined`;
+  //   2. usages the string/comment stripper would over-eagerly blank in some
+  //      files (a real `<AttachFileIcon />` near tricky JSX/quoting).
+  // It checks the import-stripped (but otherwise raw) source so a genuine code
+  // reference is never missed; the only cost is that an icon mentioned solely in
+  // a comment counts as used, which is a safe, rare trade-off vs. false dead-code
+  // failures that block CI.
+  const unusedImports = [...imports].filter(
+    (name) => !usedSet.has(name) && !new RegExp(`\\b${name}\\b`).test(importStripped),
+  );
 
   const rel = path.relative(path.resolve(__dirname, '../..'), file);
 

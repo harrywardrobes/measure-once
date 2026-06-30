@@ -13,7 +13,6 @@ import {
   Typography,
 } from '@mui/material';
 import HubIcon from '@mui/icons-material/Hub';
-import SyncIcon from '@mui/icons-material/Sync';
 import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 import ErrorOutlinedIcon from '@mui/icons-material/ErrorOutlined';
 import { GET, POST, DELETE } from '../../utils/api';
