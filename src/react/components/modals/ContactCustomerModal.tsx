@@ -14,6 +14,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { ContactTimelineRow } from '../customer-activity/ContactTimelineRow';
 import type { HubspotActivity, ActivityResponse, TimelineItem } from '../customer-activity/timeline';
 import { EmailComposer } from './EmailComposer';
@@ -119,6 +120,55 @@ const CALL_PRESETS = [
   'Wrong number',
 ];
 
+// Human phrase for when a contact's form was submitted, used in the WhatsApp
+// "form follow-up" template ("…the form you filled out <phrase>."). Returns
+// null when there's no form on record or it's too old to phrase naturally — the
+// template then drops the clause entirely.
+function formSubmittedPhrase(iso: string | null, now: dayjs.Dayjs): string | null {
+  if (!iso) return null;
+  const d = dayjs(iso);
+  if (!d.isValid()) return null;
+  const diffDays = now.startOf('day').diff(d.startOf('day'), 'day');
+  if (diffDays < 0) return null;
+  if (diffDays === 0) return 'earlier today';
+  if (diffDays === 1) return 'yesterday';
+  // Monday-based week index so "this/last week" align with how people think.
+  const mondayIdx = (x: dayjs.Dayjs) => x.startOf('day').subtract((x.day() + 6) % 7, 'day');
+  const weeksAgo = mondayIdx(now).diff(mondayIdx(d), 'week');
+  const isWeekend = d.day() === 0 || d.day() === 6;
+  if (weeksAgo === 0) return 'earlier this week';
+  if (weeksAgo === 1) return isWeekend ? 'over the weekend' : 'last week';
+  return null;
+}
+
+interface WhatsAppTemplate { key: string; label: string; message: string }
+
+// The two canned WhatsApp follow-ups, personalised with the contact's first
+// name and (for the form follow-up) when their form came in.
+function buildWhatsAppTemplates(firstName: string, formPhrase: string | null): WhatsAppTemplate[] {
+  const name = firstName || 'there';
+  const formClause = formPhrase ? ` ${formPhrase}` : '';
+  return [
+    {
+      key: 'form-followup',
+      label: 'Form follow-up',
+      message:
+        `Hi ${name}, just following up from the form you filled out${formClause}. ` +
+        `Would love to find out a bit more. If you're able to send over some photos of the space, ` +
+        `I can then get back to you with a rough estimate before arranging a design visit. ` +
+        `Kind regards - Harry Wardrobes.`,
+    },
+    {
+      key: 'post-call',
+      label: 'Post-call',
+      message:
+        `Hi ${name}, thanks for the call. Feel free to send over some photos of the space. ` +
+        `I can then get back to you with a rough estimate before arranging a design visit. ` +
+        `Kind regards - Harry Wardrobes`,
+    },
+  ];
+}
+
 const METHOD_LABEL: Record<Method, string> = {
   call:     'Called',
   email:    'Emailed',
@@ -222,6 +272,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [submitting,         setSubmitting]         = useState(false);
   const [submitError,        setSubmitError]        = useState('');
   const [submitErrorRetry,   setSubmitErrorRetry]   = useState(false);
+  // Transient "copied to clipboard" hint shown under the WhatsApp templates.
+  const [waCopied,           setWaCopied]           = useState(false);
 
   // Email flow state
   const [emailFlow,            setEmailFlow]            = useState<'idle' | 'preview' | 'sending'>('idle');
@@ -241,6 +293,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const autoCloseTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logConfirmTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const waCopyTimerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPostCloseActionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -292,6 +345,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
       if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
       if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
+      if (waCopyTimerRef.current) clearTimeout(waCopyTimerRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
@@ -328,6 +382,29 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }, [phase]);
 
   const anyTicked = callAttempted || emailSent || whatsappSent;
+
+  // Personalised WhatsApp follow-up templates for the Log WhatsApp panel. The
+  // form-submitted phrase is derived from the contact's most recent
+  // form-submission activity (omitted when none is loaded / on record).
+  const whatsappTemplates = useMemo(() => {
+    const full = (contactData?.contactName || contactName || '').trim();
+    const firstName = full ? full.split(/\s+/)[0] : '';
+    const latestForm = activities
+      .filter((a) => a.type === 'form_submission' && a.timestamp)
+      .map((a) => a.timestamp as string)
+      .sort((x, y) => Date.parse(y) - Date.parse(x))[0];
+    return buildWhatsAppTemplates(firstName, formSubmittedPhrase(latestForm ?? null, dayjs()));
+  }, [contactData?.contactName, contactName, activities]);
+
+  function handleCopyWhatsAppTemplate(message: string) {
+    // Drop the message into the note box for the user to confirm/submit, and
+    // copy it to the clipboard so they can paste it straight into WhatsApp.
+    setNoteText(message);
+    try { void navigator.clipboard?.writeText(message); } catch { /* clipboard unavailable */ }
+    setWaCopied(true);
+    if (waCopyTimerRef.current) clearTimeout(waCopyTimerRef.current);
+    waCopyTimerRef.current = setTimeout(() => setWaCopied(false), 3000);
+  }
 
   // ── Unified timeline: HubSpot activities + internal attempt log ─────────────
   const timeline: TimelineItem[] = useMemo(() => {
@@ -400,6 +477,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     setNoteText('');
     setSubmitError('');
     setSubmitErrorRetry(false);
+    setWaCopied(false);
   }
 
   function closeNotePanel() {
@@ -407,6 +485,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     setNoteText('');
     setSubmitError('');
     setSubmitErrorRetry(false);
+    setWaCopied(false);
   }
 
   function closeEmailFlow() {
@@ -1138,6 +1217,33 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                               borderColor: 'primary.main',
                             }}
                           >
+                            {method === 'whatsapp' && (
+                              <Box sx={{ mb: 1.25 }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                                  Copy a WhatsApp message:
+                                </Typography>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                                  {whatsappTemplates.map((t) => (
+                                    <Chip
+                                      key={t.key}
+                                      label={t.label}
+                                      size="small"
+                                      color="success"
+                                      variant="outlined"
+                                      icon={<ContentCopyIcon sx={{ fontSize: 14 }} />}
+                                      disabled={submitting}
+                                      onClick={() => handleCopyWhatsAppTemplate(t.message)}
+                                      data-testid={`wa-template-${t.key}`}
+                                    />
+                                  ))}
+                                </Box>
+                                {waCopied && (
+                                  <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>
+                                    Copied — paste it into WhatsApp, then confirm the note below.
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1 }}>
                               {CALL_PRESETS.map((preset) => (
                                 <Chip
