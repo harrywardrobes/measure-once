@@ -2,7 +2,7 @@ import React, { useCallback, useState, useRef, useEffect } from 'react';
 import { CP_RECENT_CUSTOMERS_PREFIX, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
 import { COPY_DONE_RESET_MS, SEARCH_INPUT_DEBOUNCE_MS, EMAIL_DUPE_CHECK_DEBOUNCE_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
-import { formatCurrency, relativeTime } from '../utils/formatters';
+import { formatCurrency, relativeTime, samePhoneNumber } from '../utils/formatters';
 import { subscribeDesignVisitDraftChanged } from '../utils/broadcastDesignVisitDraft';
 import { subscribeContactAttemptLogged } from '../utils/broadcastContactAttempt';
 import { subscribeTaskChanged, TASK_CHANGED_DEBOUNCE_MS } from '../utils/broadcastTaskChanged';
@@ -1207,7 +1207,7 @@ export function CustomersPage(): React.ReactElement {
       })
       .catch(() => {});
   }, []);
-  const { showToast } = useToastContext();
+  const { showToast, showToastWithAction } = useToastContext();
   React.useEffect(() => {
     if (!bgRefreshFailed) return;
     showToast(
@@ -2237,11 +2237,32 @@ export function CustomersPage(): React.ReactElement {
       <NewCustomerDialog
         open={newOpen && !isViewer}
         onClose={() => setNewOpen(false)}
-        onCreated={() => {
+        onCreated={(contact) => {
           setNewOpen(false);
           // Trigger a refetch so the newly created contact appears and the
           // list returns to the canonical server-side order.
           setRefreshNonce((n) => n + 1);
+          // Step 2: offer to open the Contact Customer modal on the new customer
+          // (log a prior call/WhatsApp/email, add notes, send a photo-upload
+          // link) via a toast action, so the create dialog closes cleanly first.
+          const cp = contact?.properties || {};
+          const nm = [cp.firstname, cp.lastname].filter(Boolean).join(' ').trim() || cp.email || 'New customer';
+          if (contact?.id) {
+            showToastWithAction(
+              `${nm} created`,
+              {
+                label: 'Add call / notes',
+                onClick: () => openDirectContactModal({
+                  contactId: contact.id,
+                  contactName: nm,
+                  contactEmail: cp.email || '',
+                  contactPhone: cp.phone || '',
+                  contactMobile: cp.mobilephone || '',
+                }),
+              },
+              { duration: 8000 },
+            );
+          }
         }}
       />
 
@@ -2264,6 +2285,9 @@ type NewContactBody = {
   lastname: string;
   email: string;
   phone: string;
+  mobilephone: string;
+  /** Optional lead status key; the server defaults to OPEN_DEAL when omitted. */
+  leadStatus?: string;
   // Postcode is carried inside the canonical structured-address shape (the same
   // shape every other contact surface posts). Omitted when no postcode is given.
   structuredAddress?: StructuredAddress;
@@ -2276,13 +2300,15 @@ function NewCustomerDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (contact: Contact) => void;
 }): React.ReactElement {
   const [firstname, setFirstname] = React.useState('');
   const [lastname, setLastname] = React.useState('');
   const [email, setEmail] = React.useState('');
+  const [mobilephone, setMobilephone] = React.useState('');
   const [phone, setPhone] = React.useState('');
   const [postcode, setPostcode] = React.useState('');
+  const [leadStatus, setLeadStatus] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
   const [duplicate, setDuplicate] = React.useState<Contact | null>(null);
@@ -2293,8 +2319,10 @@ function NewCustomerDialog({
       setFirstname('');
       setLastname('');
       setEmail('');
+      setMobilephone('');
       setPhone('');
       setPostcode('');
+      setLeadStatus('');
       setErr(null);
       setSubmitting(false);
       setDuplicate(null);
@@ -2345,14 +2373,21 @@ function NewCustomerDialog({
     const fn = firstname.trim();
     const ln = lastname.trim();
     const em = email.trim();
+    const mob = mobilephone.trim();
     const ph = phone.trim();
     const pc = postcode.trim();
     if (!fn) {
       setErr('First name is required.');
       return;
     }
-    if (!em) {
-      setErr('Email is required.');
+    // Email is optional now (WhatsApp/phone leads), but a contact needs at least
+    // one way to be reached.
+    if (!em && !mob && !ph) {
+      setErr('Add at least one contact method (email, mobile, or phone).');
+      return;
+    }
+    if (mob && ph && samePhoneNumber(mob, ph)) {
+      setErr('Mobile and home phone are the same number — clear the home phone.');
       return;
     }
     setErr(null);
@@ -2363,12 +2398,17 @@ function NewCustomerDialog({
         lastname: ln,
         email: em,
         phone: ph,
+        mobilephone: mob,
       };
+      if (leadStatus) body.leadStatus = leadStatus;
       // Postcode is optional; when supplied, send it in the canonical structured
       // address shape that POST /api/contacts reads (no flat `postcode` field).
       if (pc) body.structuredAddress = { ...emptyAddress(), postalCode: pc };
-      await apiPost<Contact>('/api/contacts', body);
-      onCreated();
+      const created = await apiPost<Contact>('/api/contacts', body);
+      // Hand the new contact to the parent, which refreshes the list and offers
+      // "step 2" — logging a prior call/WhatsApp/email, notes, or a photo-upload
+      // link — via the Contact Customer modal.
+      onCreated(created);
     } catch (e) {
       const er = e as Error & { code?: string };
       if (er.code === 'HUBSPOT_AUTH') {
@@ -2430,11 +2470,10 @@ function NewCustomerDialog({
             </Stack>
             <TextField
               id="nc-email"
-              label="Email"
+              label="Email (optional)"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               fullWidth
               size="small"
               disabled={submitting}
@@ -2469,24 +2508,52 @@ function NewCustomerDialog({
             ) : null}
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
+                id="nc-mobile"
+                label="Mobile"
+                value={mobilephone}
+                onChange={(e) => setMobilephone(e.target.value)}
+                fullWidth
+                size="small"
+                disabled={submitting}
+              />
+              <TextField
                 id="nc-phone"
-                label="Phone"
+                label="Home phone (optional)"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 fullWidth
                 size="small"
                 disabled={submitting}
               />
+            </Stack>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 id="nc-postcode"
-                label="Postcode"
+                label="Postcode (optional)"
                 value={postcode}
                 onChange={(e) => setPostcode(e.target.value)}
                 fullWidth
                 size="small"
                 disabled={submitting}
               />
+              <FormControl size="small" fullWidth sx={{ visibility: store.loaded ? 'visible' : 'hidden' }}>
+                <Select
+                  native
+                  value={leadStatus}
+                  onChange={(e) => setLeadStatus((e.target as HTMLSelectElement).value)}
+                  disabled={submitting}
+                  slotProps={{ input: { id: 'nc-lead-status', name: 'nc-lead-status', 'aria-label': 'Lead status' } }}
+                >
+                  <option value="">Lead status: Open deal (default)</option>
+                  {store.statuses.filter((s) => !s.is_null_row).map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </Select>
+              </FormControl>
             </Stack>
+            <Typography variant="caption" color="text.secondary">
+              After creating, you can log a prior call/WhatsApp/email, add notes, and send a photo-upload link.
+            </Typography>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -2499,7 +2566,7 @@ function NewCustomerDialog({
             id="nc-submit"
             disabled={submitting || !!duplicate}
           >
-            {submitting ? 'Creating…' : 'Create customer'}
+            {submitting ? 'Creating…' : 'Create & add details'}
           </Button>
         </DialogActions>
       </Box>

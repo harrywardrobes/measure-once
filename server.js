@@ -2463,10 +2463,16 @@ app.get('/api/project-contacts', async (req, res) => {
 
 // Create a new contact in HubSpot and generate a customer number
 app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
-  const { firstname, lastname, email, phone, structuredAddress } = req.body || {};
+  const { firstname, lastname, email, phone, mobilephone, structuredAddress, leadStatus } = req.body || {};
 
-  if (!firstname || !email) {
-    return res.status(400).json({ error: 'First name and email are required.' });
+  // First name is always required. Email is optional — customers often arrive
+  // via WhatsApp/phone with no email yet — but we need at least one way to reach
+  // them, so require an email, mobile, or phone.
+  if (!firstname || !String(firstname).trim()) {
+    return res.status(400).json({ error: 'First name is required.' });
+  }
+  if (!email && !phone && !mobilephone) {
+    return res.status(400).json({ error: 'Add at least one contact method (email, mobile, or phone).' });
   }
 
   // Address fields come from the canonical structured address (the same shape
@@ -2484,21 +2490,26 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
   const areaMatch = (hsAddr.zip || '').match(/^([A-Za-z]+)/);
   const areaPrefix = areaMatch ? areaMatch[1].toUpperCase() : 'XX';
 
+  // Lead status defaults to OPEN_DEAL but the caller may assign any configured
+  // status (e.g. a customer who arrives part-way through the pipeline).
+  const leadStatusKey = (leadStatus && String(leadStatus).trim()) || 'OPEN_DEAL';
+
   try {
-    await assertLeadStatusKey('OPEN_DEAL');
+    await assertLeadStatusKey(leadStatusKey);
     // Create the contact in HubSpot
     const createBody = {
       properties: {
         firstname,
         lastname:       lastname  || '',
-        email,
+        email:          email     || '',
         phone:          phone     || '',
+        mobilephone:    mobilephone || '',
         address:        hsAddr.address || '',
         city:           hsAddr.city    || '',
         state:          hsAddr.state   || '',
         zip:            hsAddr.zip,
         country:        hsAddr.country || '',
-        hs_lead_status: 'OPEN_DEAL',
+        hs_lead_status: leadStatusKey,
       }
     };
     const createRes = await axios.post(
