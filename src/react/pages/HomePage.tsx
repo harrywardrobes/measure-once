@@ -129,6 +129,72 @@ function contactDisplayName(c: Contact): string {
   return n || '—';
 }
 
+/** A non-task upcoming calendar entry (visit or other event) for the feed. */
+type UpcomingEvent = {
+  id: string;
+  title: string;
+  /** ISO datetime, or 'YYYY-MM-DD' for all-day events; null if missing. */
+  start: string | null;
+  contactId?: string;
+  contactName?: string;
+  /** 'design' | 'survey' | … from the moVisitType extended property. */
+  visitType?: string;
+};
+
+/**
+ * Parse Google Calendar `events.list` output (from GET /api/events) into the
+ * feed model, dropping task events (moTask=1) — those come from /api/tasks and
+ * would otherwise appear twice.
+ */
+function parseUpcomingEvents(data: unknown): UpcomingEvent[] {
+  const items = (data as { items?: unknown[] })?.items;
+  if (!Array.isArray(items)) return [];
+  const out: UpcomingEvent[] = [];
+  for (const raw of items) {
+    const ev = raw as {
+      id?: string;
+      summary?: string;
+      start?: { dateTime?: string; date?: string };
+      extendedProperties?: { private?: Record<string, string> };
+    };
+    const priv = ev.extendedProperties?.private || {};
+    if (priv.moTask === '1') continue;
+    const start = ev.start?.dateTime || ev.start?.date || null;
+    out.push({
+      id: ev.id || `${start ?? ''}-${ev.summary ?? ''}`,
+      title: ev.summary || 'Untitled event',
+      start,
+      contactId: priv.moContactId || undefined,
+      contactName: priv.moContactName || undefined,
+      visitType: priv.moVisitType || undefined,
+    });
+  }
+  return out;
+}
+
+function eventTypeLabel(visitType?: string): string {
+  if (visitType === 'design') return 'Design visit';
+  if (visitType === 'survey') return 'Survey visit';
+  if (visitType) return 'Visit';
+  return 'Event';
+}
+
+/** Date (+ time for timed events) label for an upcoming entry. */
+function fmtWhen(iso: string): string {
+  const dt = new Date(iso);
+  const datePart = dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  // All-day events arrive as 'YYYY-MM-DD' with no time component.
+  if (!iso.includes('T')) return datePart;
+  return `${datePart}, ${dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/** Open a contact's detail page (SPA hook when present, else hard nav). */
+function openContact(contactId: string): void {
+  const open = (window as unknown as { openProject?: (id: string, idx: number) => void }).openProject;
+  if (typeof open === 'function') open(contactId, 0);
+  else location.href = `/customers/${encodeURIComponent(contactId)}`;
+}
+
 function SectionHeader({
   title,
   badge,
@@ -222,14 +288,20 @@ const TASKS_PER_PAGE = 5;
 
 type AssigneeFilter = 'all' | 'mine';
 
+type FeedRow =
+  | { kind: 'task'; id: string; when: number; task: ContactTask }
+  | { kind: 'event'; id: string; when: number; event: UpcomingEvent };
+
 function TaskSection({
   tasks,
+  events,
   loading,
   todayMs,
   currentUserId,
   onAddTask,
 }: {
   tasks: ContactTask[];
+  events: UpcomingEvent[];
   loading: boolean;
   todayMs: number;
   currentUserId?: string;
@@ -306,34 +378,55 @@ function TaskSection({
   };
 
   const open = tasks.filter((t) => t.task_status !== 'completed');
+  const q = contactSearch.trim().toLowerCase();
 
-  const filtered = open.filter((t) => {
-    if (assigneeFilter === 'mine' && currentUserId) {
-      if (t.task_assigned_user?.userId !== currentUserId) return false;
-    }
-    if (contactSearch.trim()) {
-      const q = contactSearch.trim().toLowerCase();
-      const name = (t.task_customer?.contactName ?? '').toLowerCase();
-      if (!name.includes(q)) return false;
-    }
-    return true;
-  });
+  const taskRows: FeedRow[] = open
+    .filter((t) => {
+      if (assigneeFilter === 'mine' && currentUserId && t.task_assigned_user?.userId !== currentUserId) return false;
+      if (q && !(t.task_customer?.contactName ?? '').toLowerCase().includes(q)) return false;
+      return true;
+    })
+    .map((t) => ({
+      kind: 'task',
+      id: t.id,
+      when: t.task_deadline ? new Date(t.task_deadline).getTime() : Number.MAX_SAFE_INTEGER,
+      task: t,
+    }));
+
+  // Upcoming visits / calendar events are excluded from the "My tasks" view
+  // (they carry no assignee). The contact filter matches their title or contact.
+  const eventRows: FeedRow[] = assigneeFilter === 'mine'
+    ? []
+    : events
+        .filter((e) => {
+          if (!q) return true;
+          return e.title.toLowerCase().includes(q) || (e.contactName ?? '').toLowerCase().includes(q);
+        })
+        .map((e) => ({
+          kind: 'event',
+          id: `ev:${e.id}`,
+          when: e.start ? new Date(e.start).getTime() : Number.MAX_SAFE_INTEGER,
+          event: e,
+        }));
+
+  // Calendar order: soonest first (overdue tasks, with the earliest times, lead).
+  const feed = [...taskRows, ...eventRows].sort((a, b) => a.when - b.when);
 
   const overdue = open.filter(
     (t) => t.task_deadline && new Date(t.task_deadline).getTime() < todayMs,
   );
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / TASKS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(feed.length / TASKS_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * TASKS_PER_PAGE;
-  const visible = filtered.slice(pageStart, pageStart + TASKS_PER_PAGE);
+  const visible = feed.slice(pageStart, pageStart + TASKS_PER_PAGE);
 
   const filtersActive = assigneeFilter !== 'all' || contactSearch.trim() !== '';
 
   if (loading) {
     return (
       <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Tasks" action={addTaskAction} />
+        <SectionHeader title="Tasks / Upcoming" action={addTaskAction} />
         <SkeletonCard titleW="48%" />
         <SkeletonCard titleW="54%" />
       </Box>
@@ -343,24 +436,35 @@ function TaskSection({
   return (
     <Box sx={{ mb: 3 }}>
       <SectionHeader
-        title="Tasks"
+        title="Tasks / Upcoming"
         action={addTaskAction}
         badge={
-          open.length ? (
+          (open.length || events.length) ? (
             <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-              <Chip
-                label={`${open.length} open`}
-                size="small"
-                color="default"
-                variant="outlined"
-                sx={{ height: 20 }}
-              />
+              {open.length ? (
+                <Chip
+                  label={`${open.length} open`}
+                  size="small"
+                  color="default"
+                  variant="outlined"
+                  sx={{ height: 20 }}
+                />
+              ) : null}
               {overdue.length ? (
                 <Chip
                   label={`${overdue.length} overdue`}
                   size="small"
                   color="error"
                   variant="filled"
+                  sx={{ height: 20 }}
+                />
+              ) : null}
+              {events.length ? (
+                <Chip
+                  label={`${events.length} upcoming`}
+                  size="small"
+                  color="default"
+                  variant="outlined"
                   sx={{ height: 20 }}
                 />
               ) : null}
@@ -421,33 +525,52 @@ function TaskSection({
         ) : null}
       </Stack>
 
-      {filtered.length === 0 ? (
+      {feed.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
           {filtersActive
-            ? 'No tasks match the current filter.'
-            : 'No open tasks — you\'re all clear.'}
+            ? 'Nothing matches the current filter.'
+            : 'Nothing scheduled — you\'re all clear.'}
         </Typography>
       ) : (
         <>
-          {visible.map((t) => {
+          {visible.map((row) => {
+            if (row.kind === 'event') {
+              const ev = row.event;
+              return (
+                <HomeCard
+                  key={row.id}
+                  onClick={ev.contactId ? () => openContact(ev.contactId!) : undefined}
+                >
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 600, minWidth: 0 }}>
+                      {ev.title}
+                    </Typography>
+                    <Chip label={eventTypeLabel(ev.visitType)} size="small" variant="outlined" sx={{ height: 20 }} />
+                  </Stack>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 0.25 }}>
+                    {ev.start ? (
+                      <Typography variant="caption" color="text.secondary">
+                        {fmtWhen(ev.start)}
+                      </Typography>
+                    ) : null}
+                    {ev.contactName ? (
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
+                        · {ev.contactName}
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                </HomeCard>
+              );
+            }
+            const t = row.task;
             const isOvr =
               !!t.task_deadline && new Date(t.task_deadline).getTime() < todayMs;
             const contactId = t.task_customer?.contactId;
             const contactName = t.task_customer?.contactName;
             return (
               <HomeCard
-                key={t.id}
-                onClick={
-                  contactId
-                    ? () => {
-                        const openProject = (
-                          window as unknown as { openProject?: (id: string, idx: number) => void }
-                        ).openProject;
-                        if (typeof openProject === 'function') openProject(contactId, 0);
-                        else location.href = `/customers/${encodeURIComponent(contactId)}`;
-                      }
-                    : undefined
-                }
+                key={row.id}
+                onClick={contactId ? () => openContact(contactId) : undefined}
               >
                 <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
                   {t.task_name}
@@ -704,6 +827,7 @@ export function HomePage(): React.ReactElement {
 
   const [tasks, setTasks] = React.useState<ContactTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
+  const [events, setEvents] = React.useState<UpcomingEvent[]>([]);
   const [taskModalOpen, setTaskModalOpen] = React.useState(false);
 
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
@@ -761,6 +885,15 @@ export function HomePage(): React.ReactElement {
       .finally(() => setTasksLoading(false));
   }, []);
 
+  // Upcoming visits + other calendar events, merged into the Tasks/Upcoming
+  // feed. Best-effort: a Google-auth/connection failure just leaves the feed
+  // showing tasks only (no error surfaced here).
+  const loadEvents = React.useCallback(() => {
+    jget<unknown>('/api/events')
+      .then((data) => setEvents(parseUpcomingEvents(data)))
+      .catch(() => setEvents([]));
+  }, []);
+
   const loadProjects = React.useCallback(() => {
     setProjectsLoading(true);
     setProjectsError(false);
@@ -812,8 +945,9 @@ export function HomePage(): React.ReactElement {
 
   React.useEffect(() => {
     loadTasks();
+    loadEvents();
     loadProjects();
-  }, [loadTasks, loadProjects]);
+  }, [loadTasks, loadEvents, loadProjects]);
 
   return (
     <Box
@@ -848,6 +982,7 @@ export function HomePage(): React.ReactElement {
       )}
       <TaskSection
         tasks={tasks}
+        events={events}
         loading={tasksLoading}
         todayMs={todayMs}
         currentUserId={user?.id}
