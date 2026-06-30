@@ -67,7 +67,11 @@ function normaliseRooms(raw: unknown[]): Room[] {
 
 async function apiFetch<T>(url: string): Promise<T> {
   const r = await fetch(url, { cache: 'no-store' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    const err = new Error(`HTTP ${r.status}`) as Error & { status?: number };
+    err.status = r.status;
+    throw err;
+  }
   return r.json() as Promise<T>;
 }
 
@@ -111,6 +115,10 @@ export function CustomerDetailPage() {
 
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
+  // Distinguishes a missing/wrong contact (send the user back to the list) from
+  // a connection failure (let them retry). Drives which recovery the error
+  // panel offers below.
+  const [errorKind,    setErrorKind]    = useState<'notfound' | 'connection' | null>(null);
   // True when the contact section is rendered from the offline IndexedDB cache.
   const [contactFromCache, setContactFromCache] = useState(false);
 
@@ -287,11 +295,13 @@ export function CustomerDetailPage() {
   const bootstrap = useCallback(async () => {
     if (!contactId || !/^\d+$/.test(contactId)) {
       setError('Invalid customer ID.');
+      setErrorKind('notfound');
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
+    setErrorKind(null);
     setContactFromCache(false);
     setDvFromCache(false);
     setSvFromCache(false);
@@ -300,7 +310,7 @@ export function CustomerDetailPage() {
         refreshLeadStatuses(),
         fetchContact().catch(e => { throw e; }),
       ]);
-      if (!c) { setError('Customer not found.'); setLoading(false); return; }
+      if (!c) { setError('Customer not found.'); setErrorKind('notfound'); setLoading(false); return; }
       setContact(c);
 
       const [localData, tasksData] = await Promise.all([
@@ -343,8 +353,18 @@ export function CustomerDetailPage() {
       fetchLastAttempt();
     } catch (e: unknown) {
       notifyApiError('hubspot', e);
-      const msg = e instanceof Error ? e.message : 'unknown error';
-      setError(`Failed to load customer: ${msg}`);
+      const status = (e as { status?: number } | null)?.status;
+      if (status === 404) {
+        // The contact genuinely doesn't exist (deleted, or a manually-typed
+        // wrong id) — there's nothing to retry, so point the user back to the
+        // list rather than offering a refresh.
+        setError('Customer not found.');
+        setErrorKind('notfound');
+      } else {
+        const msg = e instanceof Error ? e.message : 'unknown error';
+        setError(`Failed to load customer: ${msg}`);
+        setErrorKind('connection');
+      }
     } finally {
       setLoading(false);
     }
@@ -692,13 +712,31 @@ export function CustomerDetailPage() {
 
       {!loading && error && !contact && (
         <div className="px-4 sm:px-6 py-4 shadow-sm" style={{ background: 'var(--paper)', borderBottom: '1px solid var(--stone)' }}>
-          <p className="text-sm text-red-500">{error}</p>
-          <button
-            onClick={() => void bootstrap()}
-            style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid var(--neutral-500)', borderRadius: '0.375rem', background: 'var(--neutral-50)', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--neutral-700)' }}
-          >
-            Retry
-          </button>
+          {errorKind === 'notfound' ? (
+            <>
+              <p className="text-sm" style={{ color: 'var(--neutral-700)' }}>
+                We couldn&apos;t find this customer. It may have been deleted, or the link is incorrect.
+              </p>
+              <button
+                onClick={() => { location.href = '/customers'; }}
+                style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid var(--neutral-500)', borderRadius: '0.375rem', background: 'var(--neutral-50)', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--neutral-700)' }}
+              >
+                Back to customers
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-red-500">
+                We couldn&apos;t load this customer — this looks like a connection problem. Check your connection and try again.
+              </p>
+              <button
+                onClick={() => void bootstrap()}
+                style={{ marginTop: '0.5rem', padding: '0.35rem 0.9rem', border: '1px solid var(--neutral-500)', borderRadius: '0.375rem', background: 'var(--neutral-50)', cursor: 'pointer', fontSize: '0.875rem', color: 'var(--neutral-700)' }}
+              >
+                Retry
+              </button>
+            </>
+          )}
         </div>
       )}
 
