@@ -422,7 +422,13 @@ function getTerminalStatusMap(handlerType) {
   const map = {};
   for (const o of outcomes) {
     if (o.kind === 'terminal') {
-      map[o.key] = o.setsLeadStatus || null;
+      // Variant outcomes (arrange_visit, schedule_visit) carry their status
+      // under design/survey rather than a top-level setsLeadStatus. Collapse to
+      // the 'design' variant — matching getOutcomeMeta's visitType fallback — so
+      // the map reflects a real status rather than null.
+      map[o.key] = o.variants
+        ? ((o.variants.design && o.variants.design.setsLeadStatus) || o.setsLeadStatus || null)
+        : (o.setsLeadStatus || null);
     }
   }
   return map;
@@ -449,9 +455,11 @@ function getTerminalKeys(handlerType) {
  * modal UI can show "Lead status set to X" and debugging is easier. All values
  * are derived from the registry — no hardcoding in the routes.
  *
- * For arrange_visit the resolved status depends on visitType (design / survey),
- * so pass `{ visitType }` in opts; getArrangeVisitStatus handles the fallback.
- * Unknown outcome keys return `{ outcome, setsLeadStatus: null, terminal: false }`.
+ * For variant outcomes (arrange_visit booked/email_sent, schedule_visit
+ * scheduled) the resolved status depends on visitType (design / survey), so
+ * pass `{ visitType }` in opts; an unknown/absent visitType falls back to the
+ * `design` variant. Unknown outcome keys return
+ * `{ outcome, setsLeadStatus: null, terminal: false }`.
  *
  * @param {string} handlerType
  * @param {string} outcomeKey
@@ -467,9 +475,14 @@ function getOutcomeMeta(handlerType, outcomeKey, opts = {}) {
   const terminal = outcome.kind === 'terminal';
   let setsLeadStatus = null;
   if (terminal) {
-    setsLeadStatus = (handlerType === 'arrange_visit' && outcome.variants)
-      ? getArrangeVisitStatus(outcomeKey, opts.visitType)
-      : (outcome.setsLeadStatus || null);
+    if (outcome.variants) {
+      // visitType-dependent status (arrange_visit, schedule_visit). Fall back
+      // to the 'design' variant when visitType is unknown/absent.
+      const v = outcome.variants[opts.visitType] || outcome.variants.design;
+      setsLeadStatus = (v && v.setsLeadStatus) || null;
+    } else {
+      setsLeadStatus = outcome.setsLeadStatus || null;
+    }
   }
   return { outcome: outcomeKey, setsLeadStatus, terminal };
 }
