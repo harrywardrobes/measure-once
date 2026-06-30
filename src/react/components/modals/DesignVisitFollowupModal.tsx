@@ -304,14 +304,16 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
     setShowRescheduleModal(true);
   }
 
-  // Called by ScheduleVisitModal on successful calendar event creation
-  function handleScheduleSuccess() {
+  // Called by ScheduleVisitModal on successful calendar event creation. Receives
+  // the created event so Undo can delete it (its id is surfaced via onSuccess).
+  function handleScheduleSuccess(event?: CalendarEventStub) {
     setScheduleOpen(false);
     if (demo) {
       showToast('Demo mode — no changes saved', false);
       goToStep('done');
       return;
     }
+    const createdEventId = event?.id;
     goToStep('outcome_in_progress');
     setOutcomeError('');
     POST('/api/card-actions/design-visit-followup/outcome', {
@@ -323,12 +325,17 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
         const prevStatus = contactInfo?.leadStatus ?? '';
         broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: d?.hs_lead_status ?? '' });
         const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
-        // Undo reverts the lead-status move so the card returns to the list. The
-        // calendar event booked via ScheduleVisitModal is left in place (deleting
-        // it on undo is a follow-up — its id isn't surfaced here).
+        // Undo deletes the calendar event booked via ScheduleVisitModal and
+        // reverts the lead-status move so the card returns to the list.
+        const undoConfirmed = () => {
+          if (createdEventId) {
+            void DELETE(`/api/events/${encodeURIComponent(createdEventId)}`).catch(() => { /* best-effort */ });
+          }
+          undoLeadStatus(prevStatus);
+        };
         showToastWithAction(
           conf ? `Visit confirmed — ${conf.toLowerCase()}` : 'Visit confirmed and scheduled',
-          { label: 'Undo', onClick: () => undoLeadStatus(prevStatus) },
+          { label: 'Undo', onClick: undoConfirmed },
           { duration: 6000 },
         );
         goToStep('done');
