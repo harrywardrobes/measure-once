@@ -7,7 +7,7 @@ import Alert from '@mui/material/Alert';
 import { Contact } from './types';
 import { AddressInput } from '../../components/AddressInput';
 import { emptyAddress, type StructuredAddress } from '../../../../shared/address';
-import { updateRecentCustomer } from '../../utils/formatters';
+import { updateRecentCustomer, samePhoneNumber } from '../../utils/formatters';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { DiscardConfirmDialog } from '../../components/modals/DiscardConfirmDialog';
@@ -58,8 +58,9 @@ function toPersistedDraft(values: FormValues): Omit<FormValues, 'phone' | 'mobil
 }
 
 function activePhoneField(values: FormValues): ActivePhoneField {
-  if (values.phone)       return 'phone';
+  // Mobile is the primary number, so it wins the "shown in header" badge.
   if (values.mobilephone) return 'mobilephone';
+  if (values.phone)       return 'phone';
   return null;
 }
 
@@ -153,6 +154,15 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   }
 
   async function handleSave() {
+    // Don't let the same number sit in both fields — mobile is the primary,
+    // so the landline must be blank or a genuinely different number.
+    if (
+      values.mobilephone.trim() && values.phone.trim() &&
+      samePhoneNumber(values.mobilephone, values.phone)
+    ) {
+      setError('Mobile and home phone are the same number — clear the home phone (mobile is the primary number).');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -196,6 +206,9 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
   }
 
   const activePh = activePhoneField(values);
+  const phonesDuplicate =
+    !!values.mobilephone.trim() && !!values.phone.trim() &&
+    samePhoneNumber(values.mobilephone, values.phone);
 
   return (
     <>
@@ -246,18 +259,7 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
           />
 
           <TextField
-            label="Direct phone"
-            type="tel"
-            value={values.phone}
-            onChange={handleChange('phone')}
-            fullWidth
-            size="small"
-            autoComplete="off"
-            helperText={activePh === 'phone' ? <HeaderBadge /> : undefined}
-          />
-
-          <TextField
-            label="Mobile phone"
+            label="Mobile"
             type="tel"
             value={values.mobilephone}
             onChange={handleChange('mobilephone')}
@@ -265,6 +267,22 @@ export function ContactEditModal({ contact, open, onClose, onSaved }: ContactEdi
             size="small"
             autoComplete="off"
             helperText={activePh === 'mobilephone' ? <HeaderBadge /> : undefined}
+          />
+
+          <TextField
+            label="Home phone"
+            type="tel"
+            value={values.phone}
+            onChange={handleChange('phone')}
+            fullWidth
+            size="small"
+            autoComplete="off"
+            error={phonesDuplicate}
+            helperText={
+              phonesDuplicate
+                ? 'Same as the mobile number — leave blank or enter a different landline.'
+                : (activePh === 'phone' ? <HeaderBadge /> : undefined)
+            }
           />
 
           <AddressInput

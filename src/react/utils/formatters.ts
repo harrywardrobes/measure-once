@@ -11,6 +11,23 @@ import { CP_RECENT_CUSTOMERS_PREFIX } from '../constants/localStorageKeys';
  */
 
 /**
+ * True when two phone-number strings refer to the same number, ignoring
+ * formatting (spaces, dashes, parentheses) and folding the UK trunk prefix so
+ * "+447700900123" and "07700900123" compare equal. Empty inputs never match.
+ *
+ * Intentionally dependency-free (no libphonenumber) so it can be used in the
+ * always-loaded header components without bloating the bundle.
+ */
+export function samePhoneNumber(a: string | null | undefined, b: string | null | undefined): boolean {
+  const digits = (s: string | null | undefined) => (s || '').replace(/\D/g, '');
+  // Fold a leading UK country code (44) to the national trunk "0" form.
+  const fold = (d: string) => (d.startsWith('44') ? '0' + d.slice(2) : d);
+  const da = fold(digits(a));
+  const db = fold(digits(b));
+  return da !== '' && da === db;
+}
+
+/**
  * Formats an ISO timestamp as "D Mon YYYY HH:MM" in en-GB locale.
  * Returns '' for falsy input.
  */

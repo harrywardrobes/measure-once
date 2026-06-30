@@ -91,10 +91,11 @@ export function CustomerDetailHeader({
   const props      = contact.properties;
   const name       = contactName(contact);
   const email      = props.email || '';
-  const bestPhone  = props.phone || props.mobilephone || '';
+  // Mobile is the primary number, falling back to the landline.
+  const bestPhone  = props.mobilephone || props.phone || '';
   const phoneSource: 'phone' | 'mobile' | null =
-    props.phone         ? 'phone'
-    : props.mobilephone ? 'mobile'
+    props.mobilephone ? 'mobile'
+    : props.phone     ? 'phone'
     : null;
   const addressText = formatAddress(props.structuredAddress || emptyAddress());
   const customerNum = props.customer_number || '';

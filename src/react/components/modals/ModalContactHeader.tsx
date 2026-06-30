@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import EmailIcon from '@mui/icons-material/Email';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { AddressMapPreview } from '../AddressMapPreview';
+import { samePhoneNumber } from '../../utils/formatters';
 import { usePrivilege } from '../../hooks/usePrivilege';
 import type { Contact } from '../../pages/customer-detail/types';
 import type { ContactHeaderDisplay } from './ContactHeaderEdit';
@@ -143,8 +144,13 @@ export function ModalContactHeader({ name, phone, mobile, email, address, loadin
                 </Typography>
               </Box>
             )}
-            {dPhone    && <PhoneLine label="Phone"     number={dPhone} />}
-            {dMobile   && <PhoneLine label="Mobile"    number={dMobile} />}
+            {/* Mobile is the primary number. The landline is shown beneath it
+                only when it's a genuinely different number — if the same number
+                was entered in both fields we show it once. */}
+            {dMobile && <PhoneLine label="Mobile" number={dMobile} />}
+            {dPhone && !(dMobile && samePhoneNumber(dPhone, dMobile)) && (
+              <PhoneLine label={dMobile ? 'Phone (home)' : 'Phone'} number={dPhone} />
+            )}
             {dAddress && (
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
