@@ -21,6 +21,18 @@ vi.mock('../../hooks/usePrivilege', () => ({
 
 vi.mock('../../contexts/ConnectionToastContext', () => ({
   useConnectionToast: vi.fn(),
+  // Used by the shared TaskModal that "+ Add task" now opens.
+  useServiceStatuses: () => new Map(),
+  openConnectModal: vi.fn(),
+}));
+
+// The shared TaskModal (opened by "+ Add task") pulls these contexts.
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 'u1', first_name: 'Test', last_name: 'User' } }),
+}));
+
+vi.mock('../../contexts/ToastContext', () => ({
+  useToast: () => vi.fn(),
 }));
 
 vi.mock('../../utils/broadcastUrgencyChanged', () => ({
@@ -79,6 +91,7 @@ function Wrapper({ initialTasks }: { initialTasks: CalendarTask[] }) {
 
       <TasksSection
         contactId={CONTACT_ID}
+        contactName="Test Contact"
         tasks={tasks}
         onTasksChange={setTasks}
       />
@@ -209,10 +222,10 @@ describe('Task badge sync — adding a task', () => {
     // No badge when no tasks
     expect(screen.queryByTestId('task-badge')).toBeNull();
 
-    // Open the add-task form and submit
+    // Open the shared TaskModal and submit a new task.
     await user.click(screen.getByText('+ Add task'));
-    await user.type(screen.getByPlaceholderText('Task description...'), 'A new task');
-    await user.click(screen.getByText('Save task'));
+    await user.type(await screen.findByLabelText(/task name/i), 'A new task');
+    await user.click(await screen.findByTestId('task-modal-submit'));
 
     await waitFor(() => {
       expect(screen.getByTestId('task-badge')).toHaveTextContent('1 open task');
@@ -240,8 +253,8 @@ describe('Task badge sync — adding a task', () => {
     expect(screen.getByTestId('task-badge')).toHaveTextContent('1 open task');
 
     await user.click(screen.getByText('+ Add task'));
-    await user.type(screen.getByPlaceholderText('Task description...'), 'Another task');
-    await user.click(screen.getByText('Save task'));
+    await user.type(await screen.findByLabelText(/task name/i), 'Another task');
+    await user.click(await screen.findByTestId('task-modal-submit'));
 
     await waitFor(() => {
       expect(screen.getByTestId('task-badge')).toHaveTextContent('2 open tasks');

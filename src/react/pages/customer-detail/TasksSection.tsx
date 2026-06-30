@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
@@ -15,8 +15,19 @@ import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 import { DOM_FLUSH_DELAY_MS } from '../../constants/timings';
 
+// The shared task-creation modal (same one used by the Contact Customer modal's
+// "Call Later"). Lazy so its date-picker deps stay out of the detail bundle
+// until the user actually adds a task.
+const TaskModal = lazy(() =>
+  import('../../components/modals/TaskModal').then((m) => ({ default: m.TaskModal })),
+);
+
 interface Props {
   contactId: string;
+  contactName: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  contactMobile?: string;
   tasks: CalendarTask[];
   onTasksChange: (tasks: CalendarTask[]) => void;
 }
@@ -36,7 +47,7 @@ function getTaskUrgency(tasks: CalendarTask[]): string | null {
   return urgency;
 }
 
-export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
+export function TasksSection({ contactId, contactName, contactEmail, contactPhone, contactMobile, tasks, onTasksChange }: Props) {
   const { notifyApiError } = useConnectionToast();
   const { isViewer } = usePrivilege();
 
@@ -91,13 +102,7 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
     setTimeout(tryScroll, DOM_FLUSH_DELAY_MS);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [showAddTask, setShowAddTask] = useState(false);
-  const [subject,    setSubject]      = useState('');
-  const [dueDate,    setDueDate]      = useState<Dayjs | null>(
-    dayjs().add(1, 'day').startOf('hour'),
-  );
-  const [saving, setSaving]   = useState(false);
-  const [error,  setError]    = useState<string | null>(null);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const [editingTaskId, setEditingTaskId]   = useState<string | null>(null);
   const [editDueDate,   setEditDueDate]     = useState<Dayjs | null>(null);
@@ -116,36 +121,11 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
     return aTime - bTime;
   });
 
-  const saveNewTask = useCallback(async () => {
-    if (!subject.trim()) return;
-    setSaving(true);
-    try {
-      const r = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task_name: subject.trim(),
-          task_customer: { contactId, contactName: '' },
-          task_assigned_user: { userId: '', name: '' },
-          task_deadline: dueDate?.toISOString() ?? new Date().toISOString(),
-        }),
-      });
-      if (!r.ok) throw new Error(`${r.status}`);
-      const task: CalendarTask = await r.json();
-      onTasksChange([...tasks, task]);
-      broadcastUrgencyChanged(contactId);
-      broadcastTaskChanged(contactId);
-      setSubject('');
-      setDueDate(dayjs().add(1, 'day').startOf('hour'));
-      setShowAddTask(false);
-    } catch (e: unknown) {
-      notifyApiError('google', e);
-      const msg = e instanceof Error ? e.message : 'error';
-      setError(`Failed to create task: ${msg}`);
-    } finally {
-      setSaving(false);
-    }
-  }, [contactId, dueDate, subject, tasks, onTasksChange, notifyApiError]);
+  const handleTaskCreated = useCallback((task: CalendarTask) => {
+    onTasksChange([...tasks, task]);
+    broadcastUrgencyChanged(contactId);
+    // TaskModal already fires broadcastTaskChanged(contactId) on success.
+  }, [contactId, tasks, onTasksChange]);
 
   const toggleTaskDone = useCallback(async (taskId: string, currentlyDone: boolean) => {
     const newStatus: 'open' | 'completed' = currentlyDone ? 'open' : 'completed';
@@ -268,52 +248,14 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
           {!isViewer && (
             <button
               id="add-task-btn"
-              onClick={() => setShowAddTask(v => !v)}
+              onClick={() => setTaskModalOpen(true)}
               className="text-xs font-semibold px-2.5 py-1 rounded-lg transition"
               style={{ color: 'var(--orchid)' }}
             >
-              {showAddTask ? 'Cancel' : '+ Add task'}
+              + Add task
             </button>
           )}
         </div>
-
-        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
-
-        {showAddTask && (
-          <Box sx={{
-            background: 'var(--paper-deep)',
-            border: '1px solid var(--stone)',
-            borderRadius: 'var(--radius-lg)',
-            p: '12px',
-            mb: '12px',
-          }}>
-            <input
-              id="task-subject"
-              type="text"
-              placeholder="Task description..."
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && void saveNewTask()}
-              className="w-full border rounded-xl px-4 py-2.5 text-sm mb-2 focus:outline-none"
-              style={{ fontSize: 16 }}
-            />
-            <Box sx={{ mb: '8px' }}>
-              <DateTimeEditor
-                label="Due date & time"
-                value={dueDate}
-                onChange={(v) => setDueDate(v)}
-              />
-            </Box>
-            <button
-              onClick={() => void saveNewTask()}
-              disabled={saving}
-              className="w-full text-white text-sm font-medium py-2.5 rounded-xl transition task-save-btn"
-              style={{ minHeight: 44, background: 'var(--orchid)' }}
-            >
-              {saving ? 'Saving…' : 'Save task'}
-            </button>
-          </Box>
-        )}
 
         {sorted.length > 0 ? (
           <div className="space-y-1.5">
@@ -561,6 +503,22 @@ export function TasksSection({ contactId, tasks, onTasksChange }: Props) {
           </div>
         ) : (
           <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
+        )}
+
+        {taskModalOpen && (
+          <Suspense fallback={null}>
+            <TaskModal
+              open
+              onClose={() => setTaskModalOpen(false)}
+              contactId={contactId}
+              contactName={contactName}
+              contactEmail={contactEmail}
+              contactPhone={contactPhone}
+              contactMobile={contactMobile}
+              title="New task"
+              onCreated={handleTaskCreated}
+            />
+          </Suspense>
         )}
       </div>
   );

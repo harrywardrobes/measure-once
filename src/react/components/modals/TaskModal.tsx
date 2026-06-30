@@ -36,6 +36,9 @@ export interface TaskModalProps {
   prefillDescription?: string;
   /** Pre-filled deadline as an ISO string (used only when no saved draft exists). */
   prefillDeadlineIso?: string;
+  /** Override the modal title. Defaults to the "Schedule call-back…" wording
+   *  used by the Call Later flow; pass e.g. "New task" for generic creation. */
+  title?: string;
   onCreated?: (task: CalendarTask) => void;
   demo?: boolean;
 }
@@ -81,6 +84,7 @@ export function TaskModal({
   prefillTaskName,
   prefillDescription,
   prefillDeadlineIso,
+  title,
   onCreated,
   demo,
 }: TaskModalProps) {
@@ -190,7 +194,7 @@ export function TaskModal({
         open={open}
         onClose={handleClose}
         disableClose={submitting}
-        title={`Schedule call-back${contactName ? ` for ${contactName}` : ''}`}
+        title={title ?? `Schedule call-back${contactName ? ` for ${contactName}` : ''}`}
         footer={
           <>
             <Button onClick={handleClose} disabled={submitting}>Cancel</Button>
@@ -206,13 +210,15 @@ export function TaskModal({
         }
       >
         <Stack spacing={2} sx={{ mt: 0.5 }}>
-          <ModalContactHeader
-            name={contactName}
-            phone={contactPhone}
-            mobile={contactMobile}
-            email={contactEmail}
-            contactId={demo ? undefined : contactId}
-          />
+          {contactId && (
+            <ModalContactHeader
+              name={contactName}
+              phone={contactPhone}
+              mobile={contactMobile}
+              email={contactEmail}
+              contactId={demo ? undefined : contactId}
+            />
+          )}
 
           {googleDisconnected && !demo && (
             <Alert

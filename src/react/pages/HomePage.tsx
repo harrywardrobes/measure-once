@@ -39,6 +39,13 @@ import {
   HOME_TASK_CONTACT_SEARCH_PREFIX,
 } from '../constants/localStorageKeys';
 
+// Shared task-creation modal (same one used by the Contact Customer modal's
+// "Call Later" and the customer detail page). Lazy so its picker deps stay out
+// of the home chunk until the user adds a task.
+const TaskModal = React.lazy(() =>
+  import('../components/modals/TaskModal').then((m) => ({ default: m.TaskModal })),
+);
+
 // Ensure icon-lint scanner can detect these imports before apostrophe text below.
 type _Icons = typeof RefreshIcon | typeof WarningAmberIcon | typeof ChevronLeftIcon | typeof ChevronRightIcon | typeof SearchIcon | typeof ClearIcon;
 
@@ -127,11 +134,14 @@ function SectionHeader({
   badge,
   linkLabel,
   linkHref,
+  action,
 }: {
   title: string;
   badge?: React.ReactNode;
   linkLabel?: string;
   linkHref?: string;
+  /** Custom right-aligned node (e.g. an "Add" button). Takes precedence over the link. */
+  action?: React.ReactNode;
 }) {
   return (
     <Stack direction="row" sx={{   mb: 1, alignItems: 'center', justifyContent: 'space-between' }}>
@@ -141,11 +151,11 @@ function SectionHeader({
         </Typography>
         {badge}
       </Stack>
-      {linkLabel && linkHref ? (
+      {action ?? (linkLabel && linkHref ? (
         <Button size="small" onClick={() => (location.href = linkHref)}>
           {linkLabel}
         </Button>
-      ) : null}
+      ) : null)}
     </Stack>
   );
 }
@@ -217,13 +227,22 @@ function TaskSection({
   loading,
   todayMs,
   currentUserId,
+  onAddTask,
 }: {
   tasks: ContactTask[];
   loading: boolean;
   todayMs: number;
   currentUserId?: string;
+  /** When provided, a "+ New task" button appears in the header. */
+  onAddTask?: () => void;
 }) {
   const [page, setPage] = React.useState(1);
+
+  const addTaskAction = onAddTask ? (
+    <Button size="small" onClick={onAddTask} data-testid="home-add-task">
+      + New task
+    </Button>
+  ) : undefined;
 
   const filterKey    = currentUserId ? `${HOME_TASK_ASSIGNEE_FILTER_PREFIX}${currentUserId}` : null;
   const searchKey    = currentUserId ? `${HOME_TASK_CONTACT_SEARCH_PREFIX}${currentUserId}`  : null;
@@ -314,7 +333,7 @@ function TaskSection({
   if (loading) {
     return (
       <Box sx={{ mb: 3 }}>
-        <SectionHeader title="Tasks" />
+        <SectionHeader title="Tasks" action={addTaskAction} />
         <SkeletonCard titleW="48%" />
         <SkeletonCard titleW="54%" />
       </Box>
@@ -325,6 +344,7 @@ function TaskSection({
     <Box sx={{ mb: 3 }}>
       <SectionHeader
         title="Tasks"
+        action={addTaskAction}
         badge={
           open.length ? (
             <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
@@ -678,12 +698,13 @@ export function HomePage(): React.ReactElement {
   usePageTitle('Home · Harry Wardrobes');
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const { isAdmin } = usePrivilege();
+  const { isAdmin, isViewer } = usePrivilege();
   const { user } = useAuth();
   const { devMode } = useDevMode({ enabled: isAdmin });
 
   const [tasks, setTasks] = React.useState<ContactTask[]>([]);
   const [tasksLoading, setTasksLoading] = React.useState(true);
+  const [taskModalOpen, setTaskModalOpen] = React.useState(false);
 
   const { loading: qbLoading, loadError: qbError, error: qbErrorMsg, invoices: qbInvoices, company: qbCompany, connected: qbConnected, statusKnown: qbStatusKnown, refresh: loadInvoices, triggerLoad: triggerQBLoad } = useQBInvoices();
   React.useEffect(() => { triggerQBLoad(); }, [triggerQBLoad]);
@@ -825,7 +846,13 @@ export function HomePage(): React.ReactElement {
           Dev mode is ON — only test contacts are shown
         </Alert>
       )}
-      <TaskSection tasks={tasks} loading={tasksLoading} todayMs={todayMs} currentUserId={user?.id} />
+      <TaskSection
+        tasks={tasks}
+        loading={tasksLoading}
+        todayMs={todayMs}
+        currentUserId={user?.id}
+        onAddTask={isViewer ? undefined : () => setTaskModalOpen(true)}
+      />
       <InvoicesSection
         loading={qbLoading}
         error={qbError}
@@ -845,6 +872,18 @@ export function HomePage(): React.ReactElement {
         onRetry={loadProjects}
       />
 
+      {taskModalOpen && (
+        <React.Suspense fallback={null}>
+          <TaskModal
+            open
+            onClose={() => setTaskModalOpen(false)}
+            contactId=""
+            contactName=""
+            title="New task"
+            onCreated={() => { loadTasks(); }}
+          />
+        </React.Suspense>
+      )}
     </Box>
   );
 }

@@ -842,6 +842,10 @@ export function CustomerDetailPage() {
 
             <TasksSection
               contactId={contactId}
+              contactName={[contact.properties.firstname, contact.properties.lastname].filter(Boolean).join(' ').trim() || contact.properties.email || ''}
+              contactEmail={contact.properties.email || ''}
+              contactPhone={contact.properties.phone || ''}
+              contactMobile={contact.properties.mobilephone || ''}
               tasks={tasks}
               onTasksChange={setTasks}
             />
