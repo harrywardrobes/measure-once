@@ -1187,13 +1187,12 @@ export function CustomersPage(): React.ReactElement {
   const [refreshNonce, setRefreshNonce] = React.useState<number>(0);
 
   // ── Stage tab bar totals ─────────────────────────────────────────────────────
-  // Keyed by stage ({ __all__, sales, designvisit, … }). Fetched from
-  // /api/contacts-stage-counts, which mirrors the stage-filtering logic in
-  // /api/contacts-all exactly so each tab badge matches the list under that
-  // tab. (The earlier approach — re-bucketing raw per-status HubSpot Search
-  // totals from /api/contacts-lead-status-counts — over-counted stages because
-  // those totals span the whole HubSpot DB, not the crawled customer set.)
-  const [stageCounts, setStageCounts] = React.useState<Record<string, number>>({});
+  // Keyed by stage ({ __all__, sales, designvisit, … }). These now come back
+  // from /api/contacts-all itself (via usePaginatedContacts below) computed from
+  // the exact same filtered set as the list — so each badge always matches the
+  // list total under that tab. (Previously a separate /api/contacts-stage-counts
+  // call could drift or go stale relative to the list, leaving a badge showing a
+  // higher number than the list after a hard reload.)
   const [bgRefreshFailed, setBgRefreshFailed] = React.useState(false);
   const [customersPageSize, setCustomersPageSize] = React.useState<number>(PAGINATED_CONTACTS_PAGE_LIMIT);
 
@@ -1270,30 +1269,11 @@ export function CustomersPage(): React.ReactElement {
     return m;
   }, [store.statuses]);
 
-  // Stage tab badge totals. Refetched when the contact set may have changed
-  // (refreshNonce) and when the "Show excluded" toggle flips — the endpoint
-  // includes excluded_from_sales contacts only when includeExcluded=1, matching
-  // how /api/contacts-all scopes the list.
-  React.useEffect(() => {
-    // When "Priority first" is active with no search, the list hides contacts
-    // outside the admin-configured active window — so request the same filter
-    // here (priorityFirst=1) to keep the stage-tab badge counts in sync with the
-    // list. Matches the `priorityFirst && !q` gate in /api/contacts-all.
-    const applyPriorityWindow = sortBy === 'priority' && !search;
-    const params = new URLSearchParams();
-    if (showExcluded) params.set('includeExcluded', '1');
-    if (applyPriorityWindow) params.set('priorityFirst', '1');
-    const qs = params.toString() ? `?${params.toString()}` : '';
-    apiGet<Record<string, number>>(`/api/contacts-stage-counts${qs}`)
-      .then((counts) => { if (counts) setStageCounts(counts); })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshNonce, showExcluded, sortBy, search]);
-
   const {
     contacts,
     total,
     totalPages,
+    stageCounts,
     loading,
     error,
     contactsStale,

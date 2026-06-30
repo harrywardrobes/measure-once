@@ -32,6 +32,8 @@ type ContactsResponse = {
   total?: number;
   /** Admin-configured priority-sort active window in days (default 60). */
   priorityActiveDays?: number;
+  /** Per-stage badge counts from the same filtered set as the list. */
+  stageCounts?: Record<string, number>;
 };
 
 export type UsePaginatedContactsParams = {
@@ -69,6 +71,10 @@ export type UsePaginatedContactsResult = {
   contacts: PaginatedContact[];
   total: number;
   totalPages: number;
+  /** Per-stage badge counts derived from the same filtered set as the list,
+   *  so the stage-tab badges always agree with the list total. Keyed by stage
+   *  (plus `__all__`); empty when served from the offline cache. */
+  stageCounts: Record<string, number>;
   loading: boolean;
   error: string | null;
   contactsStale: boolean;
@@ -323,6 +329,7 @@ export function usePaginatedContacts(
 
   const [contacts, setContacts] = React.useState<PaginatedContact[]>([]);
   const [total, setTotal] = React.useState<number>(0);
+  const [stageCounts, setStageCounts] = React.useState<Record<string, number>>({});
   const [priorityActiveDays, setPriorityActiveDays] = React.useState<number>(PRIORITY_ACTIVE_DAYS);
   const [totalPages, setTotalPages] = React.useState<number>(1);
 
@@ -426,6 +433,7 @@ export function usePaginatedContacts(
         void setMeta(CONTACTS_LAST_SYNC_META_KEY, syncedAt);
         setLastSyncAt(syncedAt);
         setTotal(data.total != null ? data.total : list.length);
+        setStageCounts(data.stageCounts || {});
         setTotalPages(data.totalPages || 1);
         setLoading(false);
         onFetchSuccessRef.current?.();
@@ -538,5 +546,5 @@ export function usePaginatedContacts(
     setTotal(prev => Math.max(0, prev - 1));
   }, []);
 
-  return { contacts, total, totalPages, loading, error, contactsStale, fromCache, lastSyncAt, priorityActiveDays, page: effectivePage, setPage, patchContact, removeContact };
+  return { contacts, total, totalPages, stageCounts, loading, error, contactsStale, fromCache, lastSyncAt, priorityActiveDays, page: effectivePage, setPage, patchContact, removeContact };
 }

@@ -1838,6 +1838,33 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
       contacts = _filterContactsByPriorityActive(contacts, priorityActiveDays);
     }
 
+    // Per-stage badge counts, computed from the same filtered set the list is
+    // built from (after dev-mode / excluded / priority filters, before the
+    // lead-status, stage, and search filters + pagination). Returned with the
+    // list so the stage-tab badges stay in lock-step with the list total — a
+    // separate /api/contacts-stage-counts call could drift or go stale.
+    let _stageMapForCounts;
+    try {
+      if (_stageConfigCache && Date.now() - _stageConfigCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
+        _stageMapForCounts = _stageConfigCache.map;
+      } else {
+        const { rows: stageRows } = await pool.query(
+          'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
+        );
+        _stageMapForCounts = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
+        _stageConfigCache = { map: _stageMapForCounts, fetchedAt: Date.now() };
+      }
+    } catch (dbErr) {
+      logger.warn({ err: dbErr.message }, '[contacts-all] could not load stage config for badge counts:');
+      _stageMapForCounts = new Map();
+    }
+    const stageCounts = { __all__: contacts.length };
+    for (const c of contacts) {
+      const ls = c.properties?.hs_lead_status || '';
+      const stg = ls ? (_stageMapForCounts.get(ls) || '') : 'sales';
+      if (stg) stageCounts[stg] = (stageCounts[stg] || 0) + 1;
+    }
+
     if (leadStatus) {
       if (leadStatus === '__no_status__') {
         contacts = contacts.filter(c => !c.properties?.hs_lead_status);
@@ -1848,28 +1875,13 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
 
     const stageParam = (req.query.stage || '').trim().toLowerCase().replace(/_/g, '');
     if (stageParam) {
-      try {
-        let statusStageMap;
-        if (_stageConfigCache && Date.now() - _stageConfigCache.fetchedAt < CONTACTS_CONFIG_CACHE_TTL_MS) {
-          statusStageMap = _stageConfigCache.map;
-          if (_timings) _timings.push('stage_map=hit');
-        } else {
-          const { rows: stageRows } = await pool.query(
-            'SELECT key, stage FROM lead_status_config WHERE stage IS NOT NULL'
-          );
-          statusStageMap = new Map(stageRows.map(r => [r.key, r.stage.toLowerCase().replace(/_/g, '')]));
-          _stageConfigCache = { map: statusStageMap, fetchedAt: Date.now() };
-          if (_timings) _timings.push('stage_map=miss');
-        }
-        contacts = contacts.filter(c => {
-          const ls = c.properties?.hs_lead_status || '';
-          if (!ls && stageParam === 'sales') return true; // No status → include in sales
-          const contactStage = statusStageMap.get(ls) || '';
-          return contactStage === stageParam;
-        });
-      } catch (dbErr) {
-        logger.warn({ err: dbErr.message }, '[contacts-all] could not load stage config:');
-      }
+      // Reuse the stage map already loaded for the badge counts above.
+      contacts = contacts.filter(c => {
+        const ls = c.properties?.hs_lead_status || '';
+        if (!ls && stageParam === 'sales') return true; // No status → include in sales
+        const contactStage = _stageMapForCounts.get(ls) || '';
+        return contactStage === stageParam;
+      });
     }
 
     if (_timings) {
@@ -1952,7 +1964,7 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     const offset     = (page - 1) * limit;
     const results    = contacts.slice(offset, offset + limit);
 
-    res.json({ results, total, page, totalPages, priorityActiveDays });
+    res.json({ results, total, page, totalPages, priorityActiveDays, stageCounts });
   } catch (e) {
     const status = e.response?.status;
     if (status === 401 || status === 403) {
