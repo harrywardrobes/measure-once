@@ -46,6 +46,8 @@ const ROUTES = [
   { method: 'GET',    path: '/api/users/me/prefs',            level: 'auth' },
   { method: 'PATCH',  path: '/api/users/me/prefs',            level: 'auth',    body: {} },
   { method: 'POST',   path: '/api/users/me/photo',            level: 'auth',    body: {} },
+  { method: 'GET',    path: '/api/users/me/email-signature',  level: 'auth' },
+  { method: 'PATCH',  path: '/api/users/me/phone',            level: 'auth',    body: {} },
   { method: 'GET',    path: '/api/google/status',             level: 'auth' },
   { method: 'GET',    path: '/auth/google',                   level: 'auth' },
   { method: 'GET',    path: '/auth/google/callback?code=x&state=y', level: 'auth' },
@@ -125,6 +127,9 @@ const ROUTES = [
   // empty JSON body 400s for members (no files) but 403s for viewers — exactly
   // the gate decision the matrix asserts.
   { method: 'POST',   path: '/api/customer-info/by-contact/0/photos', level: 'member', body: {} },
+  // Contact activity feeds (member + requireHubspotToken).
+  { method: 'GET',    path: '/api/contacts/0/activity',                       level: 'member', needsHubspot: true },
+  { method: 'GET',    path: '/api/card-actions/contact-customer/0/activity',  level: 'member', needsHubspot: true },
   { method: 'POST',   path: '/api/contacts/urgency',          level: 'auth',    body: {}, needsHubspot: true },
   { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
   { method: 'POST',   path: '/api/contacts/open-task-counts', level: 'member',  body: {}, needsGoogle: true },
@@ -232,6 +237,14 @@ const ROUTES = [
   { method: 'GET',    path: '/api/admin/allowed',                              level: 'admin' },
   { method: 'POST',   path: '/api/admin/allowed',                              level: 'admin', body: {} },
   { method: 'DELETE', path: '/api/admin/allowed/test-noop@privtest.local',     level: 'admin' },
+  // Allowed-list archive/restore + lead-status reorder + company-name settings
+  // (all requireAdmin). Backfilled to close the route-audit coverage gap.
+  { method: 'GET',    path: '/api/admin/allowed/archived',                     level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/allowed/test-noop@privtest.local/archive', level: 'admin', body: {} },
+  { method: 'PATCH',  path: '/api/admin/allowed/test-noop@privtest.local/restore', level: 'admin', body: {} },
+  { method: 'POST',   path: '/api/admin/lead-statuses/reorder',                level: 'admin', body: {} },
+  { method: 'GET',    path: '/api/admin/settings/company-name',                level: 'admin' },
+  { method: 'PATCH',  path: '/api/admin/settings/company-name',                level: 'admin', body: {} },
   { method: 'GET',    path: '/api/admin/users',                                level: 'admin' },
   { method: 'GET',    path: '/api/admin/conflict-summary',                     level: 'admin' },
   { method: 'GET',    path: '/api/admin/conflict-digest-settings',             level: 'admin' },

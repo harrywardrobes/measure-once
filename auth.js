@@ -1650,7 +1650,9 @@ async function setupAuth(app) {
 
   // ── Self-service phone update ─────────────────────────────────────────────────
   app.patch('/api/users/me/phone', isAuthenticated, async (req, res) => {
-    const userId = req.user?.id;
+    // req.user has no top-level `id`; the canonical user id is claims.sub.
+    // Reading req.user?.id always returned undefined, 401-ing every caller.
+    const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
     const phone = (req.body?.phone || '').trim().slice(0, 30) || null;
     try {

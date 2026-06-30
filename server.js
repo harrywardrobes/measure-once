@@ -5629,7 +5629,10 @@ app.patch('/api/admin/settings/company-name', isAuthenticated, requireAdmin, asy
 
 // GET /api/users/me/email-signature — returns the current user's signature { text, html }.
 app.get('/api/users/me/email-signature', isAuthenticated, async (req, res) => {
-  const userId = req.user?.id;
+  // req.user has no top-level `id` — the canonical user id is claims.sub
+  // (see isAuthenticated in auth.js). Reading req.user?.id always returned
+  // undefined here, 401-ing every authenticated caller.
+  const userId = req.user?.claims?.sub;
   if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
   try {
     const sig = await _buildSenderSignature(userId);

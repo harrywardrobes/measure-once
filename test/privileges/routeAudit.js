@@ -62,6 +62,16 @@ const PUBLIC_PATH_ALLOWLIST = [
   // HubSpot webhook receiver — must be public so HubSpot can POST to it
   // without a session. Gated instead by HMAC-SHA256 signature verification.
   '/api/hubspot/webhook',
+  // Identity Platform session establishment (auth.js): no session gate — the
+  // Firebase ID token in the body IS the credential (like /api/login). Mutates
+  // login state, so it is allowlisted rather than actively probed by the matrix.
+  '/api/session',
+  // Public client config (auth.js) — exposes the Identity Platform web config;
+  // read-only, no gate by design.
+  '/api/identity-config',
+  // Dev-only password-less login (auth.js, NODE_ENV !== 'production'). Used by
+  // the test harness; mutates login state, so allowlisted (never production).
+  '/api/test-login',
 ];
 
 function isPublicPath(pattern) {
