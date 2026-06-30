@@ -60,8 +60,7 @@ type Phase =
   | 'loading'
   | 'contact'
   | 'no_response_confirm'
-  | 'advancing'
-  | 'done';
+  | 'advancing';
 
 type Method = 'call' | 'email' | 'whatsapp';
 
@@ -218,7 +217,7 @@ const DEMO_CONTACT_DATA: ContactData = {
 export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo, openEmail }: Props) {
   const { user: currentUser } = useAuth();
   const { isManager, isAdmin } = usePrivilege();
-  const { showToastWithAction } = useToastContext();
+  const { showToast, showToastWithAction } = useToastContext();
   // Lead-status editing (the inline picker on the board) is manager/admin only,
   // so the "Not Suitable" action — which writes hs_lead_status and offers an
   // arbitrary-status Undo via PATCH — is gated the same way.
@@ -238,7 +237,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [contactData, setContactData] = useState<ContactData | null>(demo ? DEMO_CONTACT_DATA : null);
   const [loadError, setLoadError] = useState('');
   const [advanceError, setAdvanceError] = useState('');
-  const [confirmMessage, setConfirmMessage] = useState('');
 
   const [callAttempted, setCallAttempted] = useState(false);
   const [emailSent, setEmailSent]         = useState(false);
@@ -290,7 +288,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   const [emailConfirmOpen,     setEmailConfirmOpen]     = useState(false);
   const openEmailTriggeredRef = useRef(false);
 
-  const autoCloseTimerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailConfirmTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   const logConfirmTimerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waCopyTimerRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -342,7 +339,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       });
 
     return () => {
-      if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
       if (emailConfirmTimerRef.current) clearTimeout(emailConfirmTimerRef.current);
       if (logConfirmTimerRef.current) clearTimeout(logConfirmTimerRef.current);
       if (waCopyTimerRef.current) clearTimeout(waCopyTimerRef.current);
@@ -563,11 +559,18 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     if (!isNullStatus) return;
     statusAdvancedRef.current = true; // optimistic guard against duplicate fires
     try {
-      await POST(
+      const res = await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
         { currentLeadStatus: cur || null, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
-      );
-      currentLeadStatusRef.current = 'ATTEMPTED_TO_CONTACT';
+      ) as { advancedTo?: string; setsLeadStatus?: string | null } | undefined;
+      const newStatus = res?.advancedTo || 'ATTEMPTED_TO_CONTACT';
+      currentLeadStatusRef.current = newStatus;
+      // Reflect the new status on the board and the detail page immediately
+      // (both subscribe to this channel) — without this the auto-advance only
+      // showed after a full reload. Mirrors the broadcast + toast that every
+      // other lead-status action in the app already fires.
+      broadcastLeadStatusChange(contactId, { hs_lead_status: newStatus });
+      showToast(leadStatusConfirmationMessage(res?.setsLeadStatus ?? newStatus) || 'Lead status updated', false);
     } catch {
       // Leave the status un-advanced so Done (or the next attempt) can retry.
       statusAdvancedRef.current = false;
@@ -697,19 +700,24 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
 
     if (statusAdvancedRef.current) {
       // Already advanced to ATTEMPTED_TO_CONTACT when the first attempt was
-      // logged — just confirm and close, no second write.
-      setConfirmMessage(leadStatusConfirmationMessage('ATTEMPTED_TO_CONTACT'));
-    } else if (isNullStatus && anyTicked) {
+      // logged — the auto-advance already broadcast the change and showed the
+      // confirmation toast, so just close (no second write or toast).
+      onClose();
+      return;
+    }
+    if (isNullStatus && anyTicked) {
       setPhase('advancing');
       setAdvanceError('');
       try {
         const res = await POST(
           `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
           { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.attempted_to_contact },
-        ) as { setsLeadStatus?: string | null } | undefined;
+        ) as { advancedTo?: string; setsLeadStatus?: string | null } | undefined;
         statusAdvancedRef.current = true;
-        currentLeadStatusRef.current = 'ATTEMPTED_TO_CONTACT';
-        setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
+        const newStatus = res?.advancedTo || 'ATTEMPTED_TO_CONTACT';
+        currentLeadStatusRef.current = newStatus;
+        broadcastLeadStatusChange(contactId, { hs_lead_status: newStatus });
+        showToast(leadStatusConfirmationMessage(res?.setsLeadStatus ?? newStatus) || 'Lead status updated', false);
       } catch (e) {
         const err = e as Error & { code?: string };
         if (err.code === 'LEAD_STATUS_REMOVED') {
@@ -721,8 +729,8 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
         return;
       }
     }
-    setPhase('done');
-    autoCloseTimerRef.current = setTimeout(() => onClose(), 1500);
+    // Nothing to advance (status already set, or no attempts logged) — close.
+    onClose();
   }
 
   async function handleConfirmNoResponse() {
@@ -734,10 +742,12 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
       const res = await POST(
         `/api/card-actions/contact-customer/${encodeURIComponent(contactId)}/advance-status`,
         { currentLeadStatus, target: CONTACT_CUSTOMER_KEY.no_response },
-      ) as { setsLeadStatus?: string | null } | undefined;
-      setConfirmMessage(leadStatusConfirmationMessage(res?.setsLeadStatus));
-      setPhase('done');
-      autoCloseTimerRef.current = setTimeout(() => onClose(), 1500);
+      ) as { advancedTo?: string; setsLeadStatus?: string | null } | undefined;
+      const newStatus = res?.advancedTo || 'NO_RESPONSE';
+      currentLeadStatusRef.current = newStatus;
+      broadcastLeadStatusChange(contactId, { hs_lead_status: newStatus });
+      showToast(leadStatusConfirmationMessage(res?.setsLeadStatus ?? newStatus) || 'Lead status updated', false);
+      onClose();
     } catch (e) {
       const err = e as Error & { code?: string };
       if (err.code === 'LEAD_STATUS_REMOVED') {
@@ -931,8 +941,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
     phase === 'loading' ? 'Contact Customer'
     : phase === 'contact' ? `Contact ${displayName}`
     : phase === 'no_response_confirm' ? 'Mark as No Response?'
-    : phase === 'advancing' ? 'Updating status…'
-    : 'Done';
+    : 'Updating status…';
 
   let footerNode: React.ReactNode = null;
   if (phase === 'loading') {
@@ -1485,12 +1494,6 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress size={36} />
         </Box>
-      )}
-
-      {phase === 'done' && (
-        <Typography variant="body2" color="text.secondary">
-          {confirmMessage || 'Contact record updated.'}
-        </Typography>
       )}
     </FullScreenModal>
     <DiscardConfirmDialog
