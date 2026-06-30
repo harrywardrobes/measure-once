@@ -38,7 +38,10 @@ import { DiscardConfirmDialog } from './DiscardConfirmDialog';
 import { FullScreenModal } from './FullScreenModal';
 import { DEMO_CONTACT } from './demoData';
 import { broadcastContactAttemptLogged } from '../../utils/broadcastContactAttempt';
-import type { Contact } from '../../pages/customer-detail/types';
+import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
+import { TaskList, categorizeTaskItems, type TaskListItem } from '../tasks/TaskList';
+import { parseUpcomingEvents, eventTypeLabel, type UpcomingEvent } from '../../utils/calendarEvents';
+import type { Contact, CalendarTask } from '../../pages/customer-detail/types';
 
 const TaskModal = lazy(() =>
   import('./TaskModal').then(m => ({ default: m.TaskModal }))
@@ -216,7 +219,7 @@ const DEMO_CONTACT_DATA: ContactData = {
 
 export function ContactCustomerModal({ contactId, contactName, contactEmail, contactPhone, contactMobile, onClose, demo, openEmail }: Props) {
   const { user: currentUser } = useAuth();
-  const { isManager, isAdmin } = usePrivilege();
+  const { isManager, isAdmin, isViewer } = usePrivilege();
   const { showToast, showToastWithAction } = useToastContext();
   // Lead-status editing (the inline picker on the board) is manager/admin only,
   // so the "Not Suitable" action — which writes hs_lead_status and offers an
@@ -248,6 +251,13 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [lastAttemptBy, setLastAttemptBy] = useState<string | null>(null);
+
+  // This contact's tasks + calendar events, shown via the shared TaskList (the
+  // same component the home screen and customer detail page use). Fetched once
+  // per contact after the modal's main load resolves.
+  const [tasks, setTasks]           = useState<CalendarTask[]>([]);
+  const [taskEvents, setTaskEvents] = useState<UpcomingEvent[]>([]);
+  const tasksFetchedForRef = useRef<string | null>(null);
 
   const [historySessionCount,   setHistorySessionCount]   = useState(0);
   const [historyTotalAttempts,  setHistoryTotalAttempts]  = useState(0);
@@ -367,6 +377,24 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, contactId]);
 
+  // Load this contact's tasks + (past + upcoming) calendar events once the modal
+  // has opened. Best-effort: a Google auth/connection failure leaves the Tasks
+  // section empty rather than blocking the modal.
+  useEffect(() => {
+    if (demo || phase === 'loading') return;
+    if (tasksFetchedForRef.current === contactId) return;
+    tasksFetchedForRef.current = contactId;
+    setTasks([]);
+    setTaskEvents([]);
+    GET<{ results?: CalendarTask[] }>(`/api/tasks?contactId=${encodeURIComponent(contactId)}`)
+      .then((d) => setTasks(Array.isArray(d.results) ? d.results : []))
+      .catch(() => setTasks([]));
+    GET<unknown>(`/api/events?contactId=${encodeURIComponent(contactId)}&includePast=1`)
+      .then((d) => setTaskEvents(parseUpcomingEvents(d)))
+      .catch(() => setTaskEvents([]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, contactId, demo]);
+
   // Auto-open email composer when the modal is launched via clicking an email chip.
   useEffect(() => {
     if (openEmail && phase === 'contact' && !openEmailTriggeredRef.current) {
@@ -378,6 +406,55 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }, [phase]);
 
   const anyTicked = callAttempted || emailSent || whatsappSent;
+
+  // Normalise this contact's tasks + calendar events into the shared feed model.
+  const taskItems: TaskListItem[] = useMemo(() => [
+    ...tasks.map((t) => ({
+      id: t.id,
+      kind: 'task' as const,
+      title: t.task_name || 'Untitled',
+      when: t.task_deadline || null,
+      pastWhen: t.task_completed_at ?? t.task_deadline ?? null,
+      status: t.task_status,
+      contactId,
+    })),
+    ...taskEvents.map((e) => ({
+      id: `ev:${e.id}`,
+      kind: 'event' as const,
+      title: e.title,
+      when: e.start,
+      contactId: e.contactId || contactId,
+      eventTypeLabel: eventTypeLabel(e.visitType),
+    })),
+  ], [tasks, taskEvents, contactId]);
+  const { open: openTasks, past: pastTasks } = useMemo(
+    () => categorizeTaskItems(taskItems, Date.now()),
+    [taskItems],
+  );
+
+  async function handleToggleTask(item: TaskListItem, nextDone: boolean) {
+    if (item.kind !== 'task') return;
+    const taskId = item.id;
+    const newStatus: 'open' | 'completed' = nextDone ? 'completed' : 'open';
+    const nowIso = new Date().toISOString();
+    setTasks((prev) => prev.map((t) => (
+      t.id === taskId ? { ...t, task_status: newStatus, task_completed_at: nextDone ? nowIso : null } : t
+    )));
+    try {
+      const r = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_status: newStatus }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      broadcastTaskChanged(contactId);
+    } catch {
+      setTasks((prev) => prev.map((t) => (
+        t.id === taskId ? { ...t, task_status: nextDone ? 'open' : 'completed' } : t
+      )));
+      showToast('Could not update task. Please try again.', true);
+    }
+  }
 
   // Personalised WhatsApp follow-up templates for the Log WhatsApp panel. The
   // form-submitted phrase is derived from the contact's most recent
@@ -1339,6 +1416,19 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
                 </Stack>
               </Box>
 
+              <Box>
+                <Divider sx={{ mb: 1 }} />
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Tasks
+                </Typography>
+                <TaskList
+                  openItems={openTasks}
+                  pastItems={pastTasks}
+                  onToggleDone={isViewer || demo ? undefined : handleToggleTask}
+                  emptyText="No tasks yet."
+                />
+              </Box>
+
               {showHistorySection && (
                 <Box>
                   <Divider sx={{ mb: 1 }} />
@@ -1554,6 +1644,7 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
           prefillTaskName={callLaterPrefill.taskName}
           prefillDescription={callLaterPrefill.description}
           prefillDeadlineIso={callLaterPrefill.deadlineIso}
+          onCreated={(task) => setTasks((prev) => [...prev, task])}
           demo={demo}
         />
       </Suspense>
