@@ -397,13 +397,19 @@ export function ContactCustomerModal({ contactId, contactName, contactEmail, con
   }, [contactData?.contactName, contactName, activities]);
 
   function handleCopyWhatsAppTemplate(message: string) {
-    // Drop the message into the note box for the user to confirm/submit, and
-    // copy it to the clipboard so they can paste it straight into WhatsApp.
+    // Drop the message into the note box immediately for the user to
+    // confirm/submit — this happens regardless of clipboard availability.
     setNoteText(message);
-    try { void navigator.clipboard?.writeText(message); } catch { /* clipboard unavailable */ }
-    setWaCopied(true);
-    if (waCopyTimerRef.current) clearTimeout(waCopyTimerRef.current);
-    waCopyTimerRef.current = setTimeout(() => setWaCopied(false), 3000);
+    // Only flag "copied" once the clipboard write actually succeeds.
+    // writeText rejects asynchronously, so a sync try/catch can't observe a
+    // failed copy; await the promise via .then/.catch instead.
+    Promise.resolve(navigator.clipboard?.writeText(message))
+      .then(() => {
+        setWaCopied(true);
+        if (waCopyTimerRef.current) clearTimeout(waCopyTimerRef.current);
+        waCopyTimerRef.current = setTimeout(() => setWaCopied(false), 3000);
+      })
+      .catch(() => { /* clipboard unavailable / write denied — leave flag unset */ });
   }
 
   // ── Unified timeline: HubSpot activities + internal attempt log ─────────────
