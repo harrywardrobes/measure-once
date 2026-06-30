@@ -112,7 +112,7 @@ for (const type of REQUIRED_TYPES) {
 {
   assert(getArrangeVisitStatus('booked', 'design')         === 'DESIGN_SCHEDULED',  'arrange_visit: booked+design → DESIGN_SCHEDULED');
   assert(getArrangeVisitStatus('booked', 'survey')         === 'SURVEY_SCHEDULED',  'arrange_visit: booked+survey → SURVEY_SCHEDULED');
-  assert(getArrangeVisitStatus('email_sent', 'design')     === 'DESIGN_INVITED',    'arrange_visit: email_sent+design → DESIGN_INVITED');
+  assert(getArrangeVisitStatus('email_sent', 'design')     === 'GHOSTED',          'arrange_visit: email_sent+design → GHOSTED');
   assert(getArrangeVisitStatus('email_sent', 'survey')     === 'SURVEY_SCHEDULED',  'arrange_visit: email_sent+survey → SURVEY_SCHEDULED');
   assert(getArrangeVisitStatus('not_proceeding', 'design') === 'NOT_SUITABLE',      'arrange_visit: not_proceeding → NOT_SUITABLE');
   assert(getArrangeVisitStatus('not_proceeding', 'survey') === 'NOT_SUITABLE',      'arrange_visit: not_proceeding(survey) → NOT_SUITABLE');
@@ -133,7 +133,7 @@ for (const type of REQUIRED_TYPES) {
 
   assert(booked?.variants?.design?.label === 'Design visit scheduled', 'arrange_visit: booked+design variant label = "Design visit scheduled"');
   assert(booked?.variants?.survey?.label === 'Survey scheduled',       'arrange_visit: booked+survey variant label = "Survey scheduled"');
-  assert(emailSent?.variants?.design?.label === 'Design invite sent',  'arrange_visit: email_sent+design variant label = "Design invite sent"');
+  assert(emailSent?.variants?.design?.label === 'Ghosted',             'arrange_visit: email_sent+design variant label = "Ghosted"');
   assert(emailSent?.variants?.survey?.label === 'Survey scheduled',    'arrange_visit: email_sent+survey variant label = "Survey scheduled"');
   // Outcomes without variants carry no per-type label (chip falls back to base).
   assert(np && !np.variants, 'arrange_visit: not_proceeding has no variants (chip uses base label)');

@@ -472,7 +472,7 @@ async function main() {
     { outcome: 'booked',         visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED' },
     { outcome: 'booked',         visitType: 'design', expectedLeadStatus: 'DESIGN_SCHEDULED' },
     { outcome: 'email_sent',     visitType: 'survey', expectedLeadStatus: 'SURVEY_SCHEDULED' },
-    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'DESIGN_INVITED'   },
+    { outcome: 'email_sent',     visitType: 'design', expectedLeadStatus: 'GHOSTED'          },
     { outcome: 'not_proceeding', visitType: 'survey', expectedLeadStatus: 'NOT_SUITABLE'      },
     { outcome: 'not_proceeding', visitType: 'design', expectedLeadStatus: 'NOT_SUITABLE'      },
   ];

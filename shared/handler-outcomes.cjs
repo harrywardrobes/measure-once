@@ -42,7 +42,9 @@ const HANDLER_OUTCOMES = {
       label: 'No answer — email sent',
       kind: 'terminal',
       variants: {
-        design: { setsLeadStatus: 'DESIGN_INVITED', label: 'Design invite sent' },
+        // Design no-answer means the customer ghosted us — the card moves to the
+        // excluded-from-sales GHOSTED status (survey keeps SURVEY_SCHEDULED).
+        design: { setsLeadStatus: 'GHOSTED', label: 'Ghosted' },
         survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
       },
       description: 'No-answer email sent — status depends on visit type',

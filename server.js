@@ -5041,7 +5041,7 @@ const LEAD_STATUS_STAGE_KEYS = [
 const LEAD_STATUS_STAGE_SET = new Set(LEAD_STATUS_STAGE_KEYS);
 
 const LEAD_STATUS_STAGE_SEEDS = {
-  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE', 'DECLINED_DEAL'],
+  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE', 'GHOSTED', 'DECLINED_DEAL'],
   DESIGN_VISIT: ['DESIGN_SCHEDULED', 'DESIGN_IN_PROGRESS', 'DESIGN_SENT', 'DESIGN_ACCEPTED'],
   SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT', 'READY_FOR_PRODUCTION'],
 };
@@ -5108,6 +5108,7 @@ async function ensureLeadStatusTable() {
     { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 6,  excluded_from_sales: false },
     { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 7,  excluded_from_sales: true  },
     { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 8,  excluded_from_sales: false },
+    { key: 'GHOSTED',              label: 'Ghosted',              sort_order: 9,  excluded_from_sales: true  },
     { key: 'DECLINED_DEAL',        label: 'Declined Deal',        sort_order: 100, excluded_from_sales: true  },
   ];
   for (const s of DEFAULT_LEAD_STATUSES) {
@@ -5132,7 +5133,8 @@ const HARDCODED_LEAD_STATUS_KEYS = [
   { key: 'OPEN_DEAL',           source: 'server.js — contact create',                                                   featureLabel: 'Creating new contacts' },
   { key: 'SURVEY_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP',                                        featureLabel: 'Booking survey visits' },
   { key: 'DESIGN_SCHEDULED',    source: 'server.js — arrange-visit OUTCOME_MAP (booked), design-visit-followup outcome', featureLabel: 'Booking / confirming design visits' },
-  { key: 'DESIGN_INVITED',      source: 'server.js — arrange-visit email_sent (design), design-visit-followup resend',   featureLabel: 'Sending design visit invite' },
+  { key: 'DESIGN_INVITED',      source: 'server.js — design-visit-followup resend (invite_resent)',                     featureLabel: 'Sending design visit invite' },
+  { key: 'GHOSTED',             source: 'server.js — arrange-visit email_sent (design, no answer)',                     featureLabel: 'No-answer (design) — customer ghosted' },
   { key: 'NOT_SUITABLE',        source: 'server.js — arrange-visit OUTCOME_MAP, photo-reviews.js, design-visit-followup not_proceeding', featureLabel: 'Marking visits as not suitable & photo review outcomes' },
   { key: 'AWAITING_PHOTOS',     source: 'customer-info.js — photo submission',                                          featureLabel: 'Customer photo submission' },
   { key: 'ROUGH_ESTIMATE',      source: 'photo-reviews.js — review outcome',                                            featureLabel: 'Photo review outcomes' },

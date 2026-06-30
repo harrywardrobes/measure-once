@@ -74,13 +74,6 @@ interface DraftState {
   notes: string;
   emailSubject: string;
   emailBody: string;
-  proposedEmailDateTimeIso: string | null;
-}
-
-/** Format a date + time pair as a human-readable proposed slot sentence, or '' if neither is set. */
-function buildProposedDateLine(dateTime: Dayjs | null): string {
-  if (!dateTime) return '';
-  return `We have a proposed slot available: ${dateTime.format('D MMMM YYYY')} at ${dateTime.format('h:mm A')}. Please let us know if this works for you, or suggest an alternative time.\n\n`;
 }
 
 function draftKey(contactId: string): string {
@@ -184,9 +177,6 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
   const [cancelExistingError, setCancelExistingError] = useState('');
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
-  const [proposedEmailDateTime, setProposedEmailDateTime] = useState<Dayjs | null>(
-    draft.proposedEmailDateTimeIso ? dayjs(draft.proposedEmailDateTimeIso) : dayjs(nowDateTime()),
-  );
   const [emailLoading, setEmailLoading] = useState(false);
 
   // Pre-fetched no-answer template from the server (admin-editable). Populated
@@ -273,17 +263,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       notes,
       emailSubject,
       emailBody,
-      proposedEmailDateTimeIso: proposedEmailDateTime?.toISOString() ?? null,
     });
-  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody, proposedEmailDateTime]);
-
-  // Re-fetch the no-answer email template whenever the proposed date/time changes
-  // while the user is on the email step (same pattern as DesignVisitFollowupModal).
-  useEffect(() => {
-    if (step !== 'email') return;
-    fetchEmailTemplate(proposedEmailDateTime, contactInfo);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proposedEmailDateTime]);
+  }, [key, step, structuredAddress, bookedSlot, notes, emailSubject, emailBody]);
 
   function handleClose() {
     setActionError('');
@@ -567,7 +548,7 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
     return { subject, body };
   }
 
-  function fetchEmailTemplate(dateTime: Dayjs | null, info: ContactInfo | null): void {
+  function fetchEmailTemplate(info: ContactInfo | null): void {
     setEmailLoading(true);
     const firstName = (info?.contactName || '').split(' ')[0] || 'there';
     const vLabel = visitLabel(info?.visitType ?? 'design');
@@ -576,9 +557,9 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
       vars: {
         firstName,
         visitLabel: vLabel,
-        proposedDate: dateTime ? dateTime.format('D MMMM YYYY') : '',
-        proposedTime: dateTime ? dateTime.format('h:mm A') : '',
-        proposedDateLine: buildProposedDateLine(dateTime),
+        proposedDate: '',
+        proposedTime: '',
+        proposedDateLine: '',
       },
     })
       .then((t: unknown) => {
@@ -662,13 +643,12 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
           disabled={submitting}
           onClick={() => {
             setActionError('');
-            setProposedEmailDateTime(dayjs(nowDateTime()));
             if (!emailSubject && !emailBody) {
               if (noAnswerTemplate) {
                 setEmailSubject(noAnswerTemplate.subject);
                 setEmailBody(noAnswerTemplate.body_text);
               } else {
-                fetchEmailTemplate(null, contactInfo);
+                fetchEmailTemplate(contactInfo);
               }
             }
             setMadeProgress(true); setStep('email');
@@ -876,18 +856,8 @@ export function ArrangeVisitModal({ handler, ctx, open, onClose, demo }: Props) 
                   </Alert>
                 )}
                 <Typography variant="body2" color="text.secondary">
-                  We couldn't reach {displayName}. Review and edit the email below, then send it to ask for their availability.
+                  We couldn't reach {displayName}. Review and edit the email below:
                 </Typography>
-                <Stack spacing={1.5}>
-                  <Typography variant="body2" color="text.secondary">
-                    Optionally include a proposed date and time in the email:
-                  </Typography>
-                  <DateTimeEditor
-                    value={proposedEmailDateTime}
-                    onChange={(v) => setProposedEmailDateTime(v)}
-                    disablePast
-                  />
-                </Stack>
                 {emailLoading ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                     <CircularProgress size={24} />
