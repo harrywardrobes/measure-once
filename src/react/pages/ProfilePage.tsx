@@ -24,6 +24,8 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
+import KeyIcon from '@mui/icons-material/Key';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { ChangePasswordCard } from '../components/ChangePasswordDialog';
 import { Pill } from '../components/Pill';
 import { usePrivilege } from '../hooks/usePrivilege';
@@ -84,7 +86,7 @@ export function ProfilePage(): React.ReactElement {
   // getAppUser() (reads the global header user object), listen for the
   // `mo:user` event that bootstrap fires, AND as a last-resort fall back to
   // fetching /api/auth/user directly so this page never depends on event timing.
-  const { isAdmin } = usePrivilege();
+  const { isAdmin, isViewer } = usePrivilege();
   const [appUser, setAppUser] = React.useState<AppUser | null>(() => getAppUser());
   const [profile, setProfile] = React.useState<Profile | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -232,6 +234,7 @@ export function ProfilePage(): React.ReactElement {
       <IdentityCard profile={profile} appUser={appUser} onReload={reload} approvalSuccess={approvalSuccess} rejectionFeedback={rejectionFeedback} />
       <RoleCard profile={profile} />
       <EmailSignatureCard profile={profile} onPhoneSaved={reload} />
+      {!isViewer && <UploadTokenCard />}
       <GoogleCalendarCard />
       <ChangePasswordCard profile={profile} />
       <AccountActionsCard isAdmin={isAdmin} />
@@ -706,6 +709,140 @@ function GoogleCalendarCard() {
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
             Connect your Google account to sync upcoming events on the Home page.
           </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Upload token (iOS Shortcut photo share) ────────────────────────────
+
+interface UploadTokenStatus {
+  exists: boolean;
+  created_at: string | null;
+  last_used_at: string | null;
+}
+
+function UploadTokenCard() {
+  const [status, setStatus] = React.useState<UploadTokenStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [freshToken, setFreshToken] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const copyTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+
+  const loadStatus = React.useCallback(() => {
+    setLoading(true);
+    fetch('/api/users/me/upload-token', { headers: { Accept: 'application/json' } })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as UploadTokenStatus;
+      })
+      .then(setStatus)
+      .catch(() => setError('Could not load token status.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  async function generate() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fetch('/api/users/me/upload-token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const b = (await r.json().catch(() => ({}))) as { token?: string; error?: string };
+      if (!r.ok || !b.token) throw new Error(b.error || `HTTP ${r.status}`);
+      setFreshToken(b.token);
+      loadStatus();
+    } catch (e) {
+      setError((e as Error).message || 'Could not generate token.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke() {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await fetch('/api/users/me/upload-token', { method: 'DELETE' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setFreshToken(null);
+      loadStatus();
+    } catch (e) {
+      setError((e as Error).message || 'Could not revoke token.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function copyToken() {
+    if (!freshToken) return;
+    navigator.clipboard.writeText(freshToken).then(() => {
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 2000);
+    }).catch(() => { /* clipboard blocked — user can select manually */ });
+  }
+
+  return (
+    <Card variant="outlined" sx={{ mb: 1.5 }}>
+      <CardContent>
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+          <KeyIcon sx={{ color: 'text.secondary' }} />
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>Photo upload token</Typography>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Lets the iOS “Share to Harry Wardrobes” Shortcut upload WhatsApp photos
+          into your <strong>Photo inbox</strong> without signing in. On Android the
+          installed app already appears in the share sheet — no token needed.
+        </Typography>
+
+        {error && <Alert severity="warning" sx={{ mb: 1.5 }}>{error}</Alert>}
+
+        {freshToken && (
+          <Alert severity="success" sx={{ mb: 1.5 }} data-testid="upload-token-fresh">
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              Copy this token now — it won’t be shown again.
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <TextField
+                value={freshToken}
+                size="small"
+                fullWidth
+                slotProps={{ input: { readOnly: true, sx: { fontFamily: 'monospace', fontSize: '0.8rem' } } }}
+              />
+              <Button size="small" variant="outlined" startIcon={<ContentCopyIcon fontSize="small" />} onClick={copyToken}>
+                {copied ? 'Copied' : 'Copy'}
+              </Button>
+            </Stack>
+          </Alert>
+        )}
+
+        {loading ? (
+          <CircularProgress size={20} />
+        ) : (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+            <Button variant="contained" size="small" disabled={busy} onClick={generate} data-testid="upload-token-generate">
+              {status?.exists ? 'Regenerate token' : 'Generate token'}
+            </Button>
+            {status?.exists && (
+              <Button variant="outlined" size="small" color="error" disabled={busy} onClick={revoke} data-testid="upload-token-revoke">
+                Revoke
+              </Button>
+            )}
+            {status?.exists && !freshToken && (
+              <Typography variant="caption" color="text.secondary">
+                Active{status.last_used_at ? ' · last used ' + new Date(status.last_used_at).toLocaleDateString('en-GB') : ' · not used yet'}.
+                Regenerating replaces the old token.
+              </Typography>
+            )}
+          </Stack>
         )}
       </CardContent>
     </Card>
