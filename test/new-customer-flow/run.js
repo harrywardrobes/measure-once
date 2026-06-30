@@ -340,6 +340,112 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════════════════
+  // [API] email is optional — a contact reachable only by phone/mobile
+  // ════════════════════════════════════════════════════════════════════════════
+  // Guards the endpoint's "at least one contact method" contract
+  // (server.js: !emailTrimmed && !phoneTrimmed && !mobilephoneTrimmed → 400).
+  // Customers routinely arrive via WhatsApp/phone with no email, so creating
+  // them with only a phone or mobile MUST succeed — and the whitespace-only
+  // email must be normalised to '' (not stored verbatim and not counted as a
+  // contact method). These probes assert each branch directly against HubSpot's
+  // mock so a regression in the trim/validation logic fails CI.
+  console.log('\n  [API] POST /api/contacts — email optional');
+  {
+    // (A) No email at all, phone only → 201, and the create payload forwards an
+    //     empty email string with the phone preserved.
+    const beforeA = mock.state.createPosts.length;
+    const rA = await memberClient.post('/api/contacts', {
+      firstname: 'Phoneonly',
+      lastname:  'Tester',
+      phone:     '07111222333',
+    });
+    const createdA = rA.json || {};
+    const propsA = mock.state.createPosts[beforeA]?.properties || {};
+    record(
+      '[API] POST /api/contacts with phone but no email returns 201',
+      'status=201, id present, customer_number present; create payload email="" phone="07111222333"',
+      `status=${rA.status}, id=${createdA.id}, customer_number=${createdA.properties?.customer_number}, payload=${JSON.stringify({ email: propsA.email, phone: propsA.phone })}`,
+      rA.status === 201
+        && !!createdA.id
+        && typeof createdA.properties?.customer_number === 'string'
+        && propsA.email === ''
+        && propsA.phone === '07111222333',
+    );
+
+    // (B) No email, mobile only → 201, and mobilephone is forwarded.
+    const beforeB = mock.state.createPosts.length;
+    const rB = await memberClient.post('/api/contacts', {
+      firstname:   'Mobileonly',
+      lastname:    'Tester',
+      mobilephone: '07999888777',
+    });
+    const createdB = rB.json || {};
+    const propsB = mock.state.createPosts[beforeB]?.properties || {};
+    record(
+      '[API] POST /api/contacts with mobile but no email returns 201',
+      'status=201, create payload email="" mobilephone="07999888777"',
+      `status=${rB.status}, id=${createdB.id}, payload=${JSON.stringify({ email: propsB.email, mobilephone: propsB.mobilephone })}`,
+      rB.status === 201
+        && !!createdB.id
+        && propsB.email === ''
+        && propsB.mobilephone === '07999888777',
+    );
+
+    // (C) Whitespace-only email + a real phone → 201, email normalised to ''.
+    //     A blank-ish email must not be persisted verbatim, and must not be the
+    //     thing satisfying the "at least one contact method" check.
+    const beforeC = mock.state.createPosts.length;
+    const rC = await memberClient.post('/api/contacts', {
+      firstname: 'Blankemail',
+      lastname:  'Tester',
+      email:     '   ',
+      phone:     '07000111222',
+    });
+    const createdC = rC.json || {};
+    const propsC = mock.state.createPosts[beforeC]?.properties || {};
+    record(
+      '[API] POST /api/contacts with whitespace-only email + phone returns 201 and stores email=""',
+      'status=201, create payload email="" (trimmed) phone="07000111222"',
+      `status=${rC.status}, payload=${JSON.stringify({ email: JSON.stringify(propsC.email), phone: propsC.phone })}`,
+      rC.status === 201
+        && propsC.email === ''
+        && propsC.phone === '07000111222',
+    );
+
+    // (D) No contact method whatsoever → 400 and NO HubSpot create is attempted.
+    const beforeD = mock.state.createPosts.length;
+    const rD = await memberClient.post('/api/contacts', {
+      firstname: 'Nomethod',
+      lastname:  'Tester',
+    });
+    record(
+      '[API] POST /api/contacts with no email/phone/mobile returns 400 and creates nothing',
+      'status=400, error mentions a contact method, no HubSpot create POST observed',
+      `status=${rD.status}, error=${JSON.stringify(rD.json?.error)}, newCreatePosts=${mock.state.createPosts.length - beforeD}`,
+      rD.status === 400
+        && /contact method/i.test(rD.json?.error || '')
+        && mock.state.createPosts.length === beforeD,
+    );
+
+    // (E) Missing first name (but a valid phone) → 400 and no create attempted.
+    //     Pairs with the email-optional branch to pin down the full validation
+    //     contract: first name is the one always-required field.
+    const beforeE = mock.state.createPosts.length;
+    const rE = await memberClient.post('/api/contacts', {
+      firstname: '   ',
+      phone:     '07333444555',
+    });
+    record(
+      '[API] POST /api/contacts with blank first name returns 400 and creates nothing',
+      'status=400, error mentions first name, no HubSpot create POST observed',
+      `status=${rE.status}, error=${JSON.stringify(rE.json?.error)}, newCreatePosts=${mock.state.createPosts.length - beforeE}`,
+      rE.status === 400
+        && /first name/i.test(rE.json?.error || '')
+        && mock.state.createPosts.length === beforeE,
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
   // Puppeteer probes
   // ════════════════════════════════════════════════════════════════════════════
   const UI_LABELS = [
@@ -598,6 +704,12 @@ async function writeReport(runId, findings) {
     '  HubSpot server records the request so the test can assert the exact',
     '  properties forwarded (firstname/lastname/email/phone/zip plus the',
     '  hard-coded `hs_lead_status=OPEN_DEAL`).',
+    '- **[API] email optional** — asserts the "at least one contact method"',
+    '  contract: a contact with only a `phone` (A) or only a `mobilephone` (B)',
+    '  is created (201) with `email=""` forwarded to HubSpot; a whitespace-only',
+    '  email + phone (C) is normalised to `email=""`; and a request with no',
+    '  email/phone/mobile (D) or a blank first name (E) is rejected with a 400',
+    '  and no HubSpot create POST is observed.',
     '- **[UI] member /customers** — verifies the `#new-customer-btn` is',
     '  rendered, opens the dialog, fills the form, submits it, and asserts the',
     '  mock HubSpot create endpoint received the typed values and the new',
