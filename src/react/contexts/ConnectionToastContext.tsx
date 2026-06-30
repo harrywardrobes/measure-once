@@ -238,8 +238,9 @@ interface ConnectionToastContextValue {
   /** Update service status to 'error' (red) when an API call fails with a
    *  5xx / network error. Pass the raw caught error — the function decides
    *  whether it is connection-related. Rate-limit errors (429) map to 'warning'.
-   *  Pass an optional `connectMessage` to open the "Connect your services" modal
-   *  with an explanatory message when the error is a connection-level failure. */
+   *  Errors surface inline and update the header status; no modal is opened.
+   *  `connectMessage` is accepted only for call-site compatibility and is
+   *  ignored — use `openConnectModal(service, message)` to open the modal. */
   notifyApiError: (service: ConnectionService, error: unknown, connectMessage?: string) => void;
   /** Update service status to 'warning' (amber) — for partial failures such as
    *  rate-limiting where the service is reachable but degraded. */
