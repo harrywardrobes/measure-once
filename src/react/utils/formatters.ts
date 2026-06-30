@@ -20,8 +20,19 @@ import { CP_RECENT_CUSTOMERS_PREFIX } from '../constants/localStorageKeys';
  */
 export function samePhoneNumber(a: string | null | undefined, b: string | null | undefined): boolean {
   const digits = (s: string | null | undefined) => (s || '').replace(/\D/g, '');
-  // Fold a leading UK country code (44) to the national trunk "0" form.
-  const fold = (d: string) => (d.startsWith('44') ? '0' + d.slice(2) : d);
+  // Fold a leading UK country code to the national trunk "0" form, handling an
+  // optional "00" international call prefix (0044…) and an optional trunk "0"
+  // written as "(0)" after the country code (+44(0)7…). All reduce to "07…".
+  const fold = (d: string) => {
+    let s = d;
+    if (s.startsWith('00')) s = s.slice(2); // strip intl call prefix: 0044… → 44…
+    if (s.startsWith('44')) {
+      s = s.slice(2); // drop country code
+      if (s.startsWith('0')) s = s.slice(1); // drop optional "(0)" trunk digit
+      s = '0' + s; // restore the national trunk "0"
+    }
+    return s;
+  };
   const da = fold(digits(a));
   const db = fold(digits(b));
   return da !== '' && da === db;
