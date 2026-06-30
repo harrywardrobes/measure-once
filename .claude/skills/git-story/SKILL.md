@@ -102,16 +102,54 @@ For each proposed commit, in order:
 
 ---
 
-## Step 5 — Close out
+## Step 5 — Push to main
 
-After all commits:
+Once **all** commits from the plan have landed, push to the remote. Push **once**
+at the end — not after each individual commit.
+
+First check which branch the commits are on:
+
+```powershell
+git branch --show-current
+```
+
+- **On `main`:** push it straight up.
+  ```powershell
+  git push origin main
+  ```
+
+- **On any other branch:** the commits are on `<branch>`, not `main`. Do **not**
+  silently push a feature branch's commits onto `main`. Tell the user where the
+  commits actually are and ask which they want:
+  1. Push the feature branch to its own upstream (`git push -u origin <branch>`), or
+  2. Integrate into `main` first (their call on how — merge/rebase), then push.
+
+  Only push to `main` after the user confirms.
+
+If the push is **rejected** (non-fast-forward — remote has commits you don't):
+**stop and report.** Do not force-push. Suggest the user run
+`git pull --rebase origin main` and then re-run the push — don't auto-rebase or
+overwrite remote history on their behalf.
+
+After a successful push, show the result:
+
+```powershell
+git log --oneline origin/main -3
+```
+
+---
+
+## Step 6 — Close out
+
+After the push:
 
 ```powershell
 git log --oneline -<N>
 ```
 (where N = number of commits made + a few before)
 
-Show the user the resulting log so they can see the history they've just written. Keep any follow-up commentary brief — "N commits, all clean" is enough.
+Show the user the resulting log so they can see the history they've just written.
+Keep any follow-up commentary brief — "N commits pushed to main, all clean" is enough.
 
 ---
 
@@ -121,6 +159,8 @@ Show the user the resulting log so they can see the history they've just written
 - **Never use `git add .` or `git add -A`** — always name specific files. Blanket staging can accidentally include `.env`, generated artifacts, or unrelated work.
 - **Never amend existing commits** unless the user explicitly asks.
 - **Never skip hooks** (`--no-verify`). If a pre-commit hook fails, investigate and fix the underlying issue.
+- **Push once, at the end** (Step 5) — never after each commit. Never force-push. If the push is rejected as non-fast-forward, stop and report; don't rewrite remote history.
+- **Pushing to `main` from a feature branch needs explicit confirmation** — never move a feature branch's commits onto `main` silently.
 - **Partial file staging:** if two separate logical changes live in one file (e.g. two unrelated function edits in `server.js`), flag this — don't silently lump them. Options: stage the whole file under whichever commit is more relevant, or ask the user if they want to use `git add -p` interactively.
 - **Untracked files:** treat new files (shown as `??` in `git status`) the same as modified files — include them in the relevant commit group.
 - **Large diffs:** if the total diff is very large, read the most structurally significant files first (migrations, new components, route handlers) and ask clarifying questions if grouping is unclear rather than guessing.
