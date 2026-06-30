@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { CP_RECENT_CUSTOMERS_PREFIX, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY } from '../constants/localStorageKeys';
+import { CP_RECENT_CUSTOMERS_PREFIX, CUSTOMERS_LEAD_STATUS_KEY, CUSTOMERS_SCROLL_KEY, CUSTOMERS_SEARCH_KEY, CUSTOMERS_SORT_KEY, CUSTOMERS_STAGE_KEY, CUSTOMERS_SHOW_EXCLUDED_BY_STAGE_KEY } from '../constants/localStorageKeys';
 import { COPY_DONE_RESET_MS, SEARCH_INPUT_DEBOUNCE_MS, EMAIL_DUPE_CHECK_DEBOUNCE_MS } from '../constants/timings';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency, relativeTime, samePhoneNumber } from '../utils/formatters';
@@ -1132,7 +1132,31 @@ export function CustomersPage(): React.ReactElement {
   const [search, setSearch] = React.useState<string>(initial.q);
   const [stageFilter, setStageFilter] = React.useState<string>(initial.stage);
   const [showArchived, setShowArchived] = React.useState<boolean>(initial.archived);
-  const [showExcluded, setShowExcluded] = React.useState<boolean>(initial.showExcluded);
+  // "Show all" is remembered per stage tab. Sales defaults OFF (a clean active
+  // pipeline — excluded statuses and 60-day-stale leads hidden); every other tab
+  // defaults ON (show everything). The empty stage key ('') is the "All" tab.
+  const [showExcludedByStage, setShowExcludedByStage] = React.useState<Record<string, boolean>>(() => {
+    try {
+      const raw = sessionStorage.getItem(CUSTOMERS_SHOW_EXCLUDED_BY_STAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+      // Seed the initial stage from a legacy ?showExcluded=1 deep link if present.
+      if (initial.showExcluded && parsed[initial.stage] === undefined) parsed[initial.stage] = true;
+      return parsed;
+    } catch { return {}; }
+  });
+  const stageDefaultShowExcluded = (st: string) => st !== 'sales';
+  const showExcluded = showExcludedByStage[stageFilter] ?? stageDefaultShowExcluded(stageFilter);
+  // On the Sales tab with "Show all" off, also hide in-progress customers with no
+  // activity in the priority-active window (default 60 days), keeping the sales
+  // pipeline focused on live leads.
+  const hideStale = stageFilter === 'sales' && !showExcluded;
+  const setShowExcludedForStage = (next: boolean) => {
+    setShowExcludedByStage((prev) => {
+      const m = { ...prev, [stageFilter]: next };
+      try { sessionStorage.setItem(CUSTOMERS_SHOW_EXCLUDED_BY_STAGE_KEY, JSON.stringify(m)); } catch { /* ignore */ }
+      return m;
+    });
+  };
   const { notifyApiError } = useConnectionToast();
   useConnectionCheck();
 
@@ -1285,7 +1309,7 @@ export function CustomersPage(): React.ReactElement {
     patchContact,
     removeContact,
   } = usePaginatedContacts(
-    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst: sortBy === 'priority' },
+    { initialPage: initial.page, leadStatus, stage: stageFilter, sortBy, search, showArchived, showExcluded, hideStale, excludedStatusKeys, statusStageMap, refreshNonce, pageSize: customersPageSize, priorityFirst: sortBy === 'priority' },
     { onFetchSuccess: scheduleCounts },
   );
 
@@ -2081,7 +2105,7 @@ export function CustomersPage(): React.ReactElement {
               checked={showExcluded}
               title="Show lead statuses excluded from sales"
               onChange={(next) => {
-                setShowExcluded(next);
+                setShowExcludedForStage(next);
                 setPage(1);
                 if (!next) {
                   const excluded = store.statuses.filter((s) => s.excluded_from_sales).map((s) => s.key);

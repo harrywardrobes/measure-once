@@ -1834,7 +1834,11 @@ app.get('/api/contacts-all', isAuthenticated, async (req, res) => {
     // Keep in sync with the offline mirror in usePaginatedContacts.ts.
     const priorityActiveDays = await _getPriorityActiveDays();
     const priorityFirst = req.query.priorityFirst === '1';
-    if (priorityFirst && !q) {
+    // The Sales tab with "Show all" off also hides leads with no activity in the
+    // priority-active window even when not sorting by priority — the client sends
+    // hideStale=1 for that case. A search query bypasses it (same as priority).
+    const hideStale = req.query.hideStale === '1';
+    if ((priorityFirst || hideStale) && !q) {
       contacts = _filterContactsByPriorityActive(contacts, priorityActiveDays);
     }
 

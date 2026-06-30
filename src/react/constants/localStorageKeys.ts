@@ -51,6 +51,11 @@ export const CUSTOMERS_STAGE_KEY = 'customers_stage';
 /** sessionStorage – sort-by selection on the customers list (omitted when default 'priority'). */
 export const CUSTOMERS_SORT_KEY = 'customers_sort';
 
+/** sessionStorage – per-stage "Show all" (show-excluded) preferences, JSON
+ *  `{ [stageKey]: boolean }`. Sales defaults OFF (clean pipeline); every other
+ *  tab defaults ON. */
+export const CUSTOMERS_SHOW_EXCLUDED_BY_STAGE_KEY = 'customers_show_excluded_by_stage';
+
 /** sessionStorage – viewer-privilege banner dismissed for this session. */
 export const VIEWER_BANNER_DISMISSED_KEY = 'viewerBannerDismissed';
 

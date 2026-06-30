@@ -44,6 +44,10 @@ export type UsePaginatedContactsParams = {
   search: string;
   showArchived: boolean;
   showExcluded?: boolean;
+  /** When true, hide contacts with no activity in the priority-active window
+   *  (default 60 days) even when not sorting by priority — used by the Sales
+   *  tab with "Show all" off. Ignored when a search query is present. */
+  hideStale?: boolean;
   /** Keys of statuses that are excluded_from_sales; used by the offline filter. */
   excludedStatusKeys?: Set<string>;
   /** Maps each hs_lead_status key to its normalised stage string (lowercase, no underscores); used by the offline stage filter. */
@@ -117,6 +121,7 @@ type OfflineFilterParams = {
   search: string;
   showArchived: boolean;
   showExcluded?: boolean;
+  hideStale?: boolean;
   excludedStatusKeys?: Set<string>;
   /** Maps each hs_lead_status key to its normalised stage string (lowercase, no underscores). */
   statusStageMap?: Map<string, string>;
@@ -170,7 +175,7 @@ export function filterSortPaginateCachedContacts(
   cached: PaginatedContact[],
   params: OfflineFilterParams,
 ): { results: PaginatedContact[]; total: number; totalPages: number; page: number } {
-  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, limit, priorityFirst } = params;
+  const { leadStatus, stage, sortBy, search, showArchived, showExcluded, hideStale, excludedStatusKeys, statusStageMap, limit, priorityFirst } = params;
   let list = cached;
 
   // Always exclude HubSpot test users from the customer-facing view.
@@ -224,7 +229,7 @@ export function filterSortPaginateCachedContacts(
   // Missing or unparseable dates pass through (same "keep" behaviour as the
   // server).  Search bypasses this filter (applied above) so older contacts
   // remain reachable when the user knows who to look for.
-  if (priorityFirst && !q) {
+  if ((priorityFirst || hideStale) && !q) {
     const activeDays = params.priorityActiveDays != null ? params.priorityActiveDays : PRIORITY_ACTIVE_DAYS;
     const cutoff = Date.now() - activeDays * 24 * 60 * 60 * 1000;
     list = list.filter((c) => {
@@ -287,7 +292,7 @@ export function usePaginatedContacts(
   params: UsePaginatedContactsParams,
   options?: UsePaginatedContactsOptions,
 ): UsePaginatedContactsResult {
-  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, statusStageMap, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
+  const { initialPage, leadStatus, stage, sortBy, search, showArchived, showExcluded, hideStale, excludedStatusKeys, statusStageMap, refreshNonce, staleAfterDays, pageSize, priorityFirst } = params;
 
   const onFetchSuccessRef = React.useRef(options?.onFetchSuccess);
   onFetchSuccessRef.current = options?.onFetchSuccess;
@@ -394,6 +399,7 @@ export function usePaginatedContacts(
     if (search) qs.set('q', search);
     if (showArchived) qs.set('archived', '1');
     if (showExcluded) qs.set('includeExcluded', '1');
+    if (hideStale) qs.set('hideStale', '1');
     if (staleAfterDays !== undefined) qs.set('staleAfterDays', String(staleAfterDays));
     if (priorityFirst || sortBy === 'priority') qs.set('priorityFirst', '1');
 
@@ -473,6 +479,7 @@ export function usePaginatedContacts(
               search,
               showArchived,
               showExcluded,
+              hideStale,
               excludedStatusKeys,
               statusStageMap,
               page: effectivePage,
@@ -512,7 +519,7 @@ export function usePaginatedContacts(
     return () => {
       ctrl.abort();
     };
-  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst]);
+  }, [effectivePage, leadStatus, stage, sortBy, search, showArchived, showExcluded, hideStale, excludedStatusKeys, refreshNonce, staleAfterDays, pageSize, priorityFirst]);
 
   const patchContact = React.useCallback(
     (contactId: string, props: Record<string, string | undefined>) => {
