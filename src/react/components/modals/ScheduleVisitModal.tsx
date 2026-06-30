@@ -316,15 +316,24 @@ export function ScheduleVisitModal({
         : undefined;
       if (scheduledStatus && ctx.contactId) {
         const cid = String(ctx.contactId);
-        broadcastLeadStatusChange(cid, { hs_lead_status: scheduledStatus });
-        void sendOrQueue({
-          area: 'customer',
-          label: `Lead status → ${scheduledStatus}`,
-          method: 'PATCH',
-          url: `/api/contacts/${encodeURIComponent(cid)}`,
-          body: { hs_lead_status: scheduledStatus },
-          dedupeKey: `contact:${cid}:lead-status`,
-        }).catch(() => {});
+        // Send the lead-status PATCH first; only broadcast the optimistic board
+        // move once the write is accepted (2xx) or parked offline for retry. A
+        // permanent, non-retriable failure (e.g. LEAD_STATUS_REMOVED) leaves the
+        // status untouched on the server, so broadcasting it would strand the
+        // card on a stage that was never recorded — and nothing would retry it.
+        try {
+          const res = await sendOrQueue({
+            area: 'customer',
+            label: `Lead status → ${scheduledStatus}`,
+            method: 'PATCH',
+            url: `/api/contacts/${encodeURIComponent(cid)}`,
+            body: { hs_lead_status: scheduledStatus },
+            dedupeKey: `contact:${cid}:lead-status`,
+          });
+          if (res.ok || res.queued) {
+            broadcastLeadStatusChange(cid, { hs_lead_status: scheduledStatus });
+          }
+        } catch { /* best-effort — leave the board untouched on failure */ }
       }
 
       clearDraft(key);
