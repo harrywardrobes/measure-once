@@ -44,12 +44,12 @@ describe('ServiceStatusBadge colour guards', () => {
     expect(window.getComputedStyle(icon).borderTopWidth).toBe('1px');
   });
 
-  it('checking status icon border radius is exactly 8px', () => {
+  it('checking status icon border radius is exactly 2px', () => {
     const { getByTestId } = render(
       <ServiceStatusBadge service="hubspot" status="checking" />,
     );
     const icon = getByTestId('service-status-icon');
-    expect(window.getComputedStyle(icon).borderRadius).toBe('8px');
+    expect(window.getComputedStyle(icon).borderRadius).toBe('2px');
   });
 });
 
@@ -150,10 +150,10 @@ describe('OfflinePill colour guards', () => {
     expect(window.getComputedStyle(pill).borderTopWidth).toBe('1px');
   });
 
-  it('offline pill border radius is 8px', () => {
+  it('offline pill border radius is 2px', () => {
     const { getByTestId } = render(<OfflinePill />);
     const pill = getByTestId('offline-pill');
-    expect(window.getComputedStyle(pill).borderRadius).toBe('8px');
+    expect(window.getComputedStyle(pill).borderRadius).toBe('2px');
   });
 
   it('offline pill font size is 11px', () => {
