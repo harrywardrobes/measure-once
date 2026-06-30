@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DVF_DRAFT_PREFIX } from '../../constants/localStorageKeys';
 import { DVF_OUTCOME_KEY, STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { leadStatusConfirmationMessage } from '../../utils/leadStatusConfirmation';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -32,7 +33,7 @@ import type { Dayjs } from 'dayjs';
 import type { CardActionHandlerData } from '../../hooks/useCardActionHandlers';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { GET, POST, DELETE } from '../../utils/api';
-import { useToast } from '../../contexts/ToastContext';
+import { useToastContext } from '../../contexts/ToastContext';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import dayjs from 'dayjs';
@@ -96,8 +97,27 @@ export interface DesignVisitFollowupModalProps {
 }
 
 export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: DesignVisitFollowupModalProps) {
-  const showToast = useToast();
+  const { showToast, showToastWithAction, showUndoableAction } = useToastContext();
   const key = draftKey(ctx.contactId);
+
+  // Undo a terminal outcome's lead-status move: restore the card to the list
+  // immediately (broadcast) and write the previous status back (offline-aware).
+  function undoLeadStatus(prevStatus: string) {
+    broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: prevStatus });
+    void (async () => {
+      try {
+        const { sendOrQueue } = await import('../../lib/offlineQueue');
+        await sendOrQueue({
+          area: 'customer',
+          label: `Lead status → ${prevStatus || 'clear'} (undo)`,
+          method: 'PATCH',
+          url: `/api/contacts/${encodeURIComponent(ctx.contactId)}`,
+          body: { hs_lead_status: prevStatus },
+          dedupeKey: `contact:${ctx.contactId}:lead-status`,
+        });
+      } catch { /* offline queue retries on reconnect */ }
+    })();
+  }
 
   const [step, setStep] = useState<Step>(demo ? 'hub' : 'loading');
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(demo ? DEMO_CONTACT_INFO : null);
@@ -299,8 +319,18 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       outcome: DVF_OUTCOME_KEY.confirmed,
     })
       .then((data) => {
-        const conf = leadStatusConfirmationMessage((data as { setsLeadStatus?: string | null } | undefined)?.setsLeadStatus);
-        showToast(conf ? `Visit confirmed — ${conf.toLowerCase()}` : 'Visit confirmed and scheduled', false);
+        const d = data as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+        const prevStatus = contactInfo?.leadStatus ?? '';
+        broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: d?.hs_lead_status ?? '' });
+        const conf = leadStatusConfirmationMessage(d?.setsLeadStatus);
+        // Undo reverts the lead-status move so the card returns to the list. The
+        // calendar event booked via ScheduleVisitModal is left in place (deleting
+        // it on undo is a follow-up — its id isn't surfaced here).
+        showToastWithAction(
+          conf ? `Visit confirmed — ${conf.toLowerCase()}` : 'Visit confirmed and scheduled',
+          { label: 'Undo', onClick: () => undoLeadStatus(prevStatus) },
+          { duration: 6000 },
+        );
         goToStep('done');
       })
       .catch((e: Error) => {
@@ -314,7 +344,10 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
     if (step === 'schedule') goToStep('hub');
   }
 
-  async function handleSendResendEmail() {
+  // Deferred ("Undo Send") invite resend. Closing the modal opens an undo window;
+  // the email + status write only fire if the user does NOT press Undo, so a
+  // mis-click sends nothing.
+  function handleSendResendEmail() {
     if (!demo && !contactInfo?.contactEmail) return;
     setEmailError('');
     if (demo) {
@@ -322,24 +355,33 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       goToStep('done');
       return;
     }
-    goToStep('outcome_in_progress');
-    try {
-      await POST('/api/emails/send', {
-        to: contactInfo!.contactEmail,
-        subject: emailSubject.trim(),
-        text: emailBody.trim(),
-      });
-      const data = await POST('/api/card-actions/design-visit-followup/outcome', {
-        contactId: ctx.contactId,
-        outcome: DVF_OUTCOME_KEY.invite_resent,
-      }) as { setsLeadStatus?: string | null } | undefined;
-      const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
-      showToast(conf ? `Invite email sent — ${conf.toLowerCase()}` : 'Invite email sent', false);
-      goToStep('done');
-    } catch (e) {
-      setEmailError((e as { message?: string }).message || 'Failed to send email.');
-      goToStep('resend');
-    }
+    const to = contactInfo!.contactEmail;
+    const subject = emailSubject.trim();
+    const text = emailBody.trim();
+    const contactId = ctx.contactId;
+    const recipient = contactInfo?.contactName || ctx.contactName || 'the customer';
+
+    clearDraftStep(key);
+    goToStep('done');
+
+    showUndoableAction(`Sending invite to ${recipient}…`, {
+      duration: 6000,
+      onUndo: () => showToast('Invite cancelled — nothing was sent.', false),
+      onCommit: async () => {
+        try {
+          await POST('/api/emails/send', { to, subject, text });
+          const data = await POST('/api/card-actions/design-visit-followup/outcome', {
+            contactId,
+            outcome: DVF_OUTCOME_KEY.invite_resent,
+          }) as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+          const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
+          broadcastLeadStatusChange(contactId, { hs_lead_status: data?.hs_lead_status ?? '' });
+          showToast(conf ? `Invite email sent — ${conf.toLowerCase()}` : 'Invite email sent', false);
+        } catch (e) {
+          showToast((e as { message?: string }).message || 'Failed to send email.', true);
+        }
+      },
+    });
   }
 
   async function handleNotProceeding() {
@@ -354,9 +396,15 @@ export function DesignVisitFollowupModal({ handler, ctx, open, onClose, demo }: 
       const data = await POST('/api/card-actions/design-visit-followup/outcome', {
         contactId: ctx.contactId,
         outcome: DVF_OUTCOME_KEY.not_proceeding,
-      }) as { setsLeadStatus?: string | null } | undefined;
+      }) as { hs_lead_status?: string; setsLeadStatus?: string | null } | undefined;
+      const prevStatus = contactInfo?.leadStatus ?? '';
+      broadcastLeadStatusChange(ctx.contactId, { hs_lead_status: data?.hs_lead_status ?? '' });
       const conf = leadStatusConfirmationMessage(data?.setsLeadStatus);
-      showToast(conf ? `Not proceeding — ${conf.toLowerCase()}` : 'Contact marked as not proceeding', false);
+      showToastWithAction(
+        conf ? `Not proceeding — ${conf.toLowerCase()}` : 'Contact marked as not proceeding',
+        { label: 'Undo', onClick: () => undoLeadStatus(prevStatus) },
+        { duration: 6000 },
+      );
       goToStep('done');
     } catch (e) {
       setOutcomeError((e as { message?: string }).message || 'Failed to update lead status.');

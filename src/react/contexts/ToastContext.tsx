@@ -23,11 +23,31 @@ interface ToastMessage {
   severity: ToastSeverity;
   action?: ToastAction;
   duration?: number;
+  /** Undoable toast: the action is "Undo"; `onCommit` runs if it is NOT undone. */
+  undoable?: boolean;
+  /** Deferred work, run once when an undoable toast dismisses without an undo. */
+  onCommit?: () => void;
 }
 
 interface ShowToastOptions {
   severity?: ToastSeverity;
   duration?: number;
+}
+
+/** Options for showUndoableAction — a deferred-commit ("Undo Send") toast. */
+interface UndoableActionOptions {
+  /** Run when the user clicks Undo within the window. The committed work never fires. */
+  onUndo?: () => void;
+  /**
+   * The deferred work. Runs exactly once when the toast dismisses WITHOUT an undo
+   * (auto-hide timeout, or the user closing it early). Never runs if Undo is clicked.
+   */
+  onCommit: () => void;
+  /** How long the undo window stays open. Defaults to 6000ms. */
+  duration?: number;
+  severity?: ToastSeverity;
+  /** Action button label. Defaults to "Undo". */
+  undoLabel?: string;
 }
 
 interface ToastContextValue {
@@ -45,6 +65,14 @@ interface ToastContextValue {
     action: ToastAction,
     options?: { duration?: number; severity?: ToastSeverity },
   ) => void;
+  /**
+   * Show a deferred-commit "Undo" toast (Gmail-style "Undo Send"). The work in
+   * `onCommit` does NOT run immediately — it fires only once the toast dismisses
+   * without the user pressing Undo. Pressing Undo runs `onUndo` and cancels the
+   * commit entirely. Use this for actions the user should be able to take back
+   * before they actually happen (e.g. sending an email).
+   */
+  showUndoableAction: (msg: string, options: UndoableActionOptions) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -93,14 +121,50 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const showUndoableAction = useCallback((msg: string, options: UndoableActionOptions) => {
+    const id = ++_globalIdCounter;
+    setToasts(prev => [
+      ...prev,
+      {
+        id,
+        msg,
+        severity: options.severity ?? 'info',
+        duration: options.duration ?? 6000,
+        undoable: true,
+        onCommit: options.onCommit,
+        action: { label: options.undoLabel ?? 'Undo', onClick: () => { options.onUndo?.(); } },
+      },
+    ]);
+  }, []);
+
+  // Ref-mirror of the visible toast so the commit logic can read it without
+  // recreating the close handlers on every queue change.
+  const currentRef = useRef<ToastMessage | null>(null);
+  currentRef.current = current;
+  // Tracks toast ids whose fate is already decided (committed or undone) so the
+  // deferred commit fires at most once per undoable toast.
+  const settledRef = useRef<Set<number>>(new Set());
+
+  // Fire a pending undoable toast's deferred work, unless it was already settled
+  // (e.g. the user pressed Undo). No-op for ordinary (non-undoable) toasts.
+  const commitCurrent = useCallback(() => {
+    const t = currentRef.current;
+    if (t && t.undoable && !settledRef.current.has(t.id)) {
+      settledRef.current.add(t.id);
+      try { t.onCommit?.(); } catch { /* commit failures surface via their own toasts */ }
+    }
+  }, []);
+
   const dismissCurrent = useCallback(() => {
     setToasts(prev => prev.slice(1));
   }, []);
 
   const handleClose = useCallback((_: unknown, reason?: string) => {
     if (reason === 'clickaway') return;
+    // Auto-hide timeout / escape: an undoable toast was NOT undone, so commit it.
+    commitCurrent();
     dismissCurrent();
-  }, [dismissCurrent]);
+  }, [commitCurrent, dismissCurrent]);
 
   const showToastRef = useRef(showToast);
   showToastRef.current = showToast;
@@ -142,6 +206,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <Button
       size="small"
       onClick={() => {
+        // Pressing the action on an undoable toast IS the undo — settle it first
+        // so the auto-hide/close path can never also fire the deferred commit.
+        if (current.undoable) settledRef.current.add(current.id);
         current.action!.onClick();
         dismissCurrent();
       }}
@@ -159,7 +226,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   ) : undefined;
 
   return (
-    <ToastContext.Provider value={{ showToast, showToastWithAction }}>
+    <ToastContext.Provider value={{ showToast, showToastWithAction, showUndoableAction }}>
       {children}
       {current && (
         <Snackbar
@@ -174,7 +241,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           }}
         >
           <Alert
-            onClose={dismissCurrent}
+            onClose={() => { commitCurrent(); dismissCurrent(); }}
             severity={current.severity}
             variant="filled"
             action={actionNode}
@@ -204,6 +271,11 @@ export function useToastContext(): ToastContextValue {
     showToastWithAction: (msg: string, action: ToastAction) => {
       fallbackShowToast(msg);
       console.log('[toast action available]', action.label);
+    },
+    // No provider mounted: there is no undo window, so commit immediately.
+    showUndoableAction: (msg: string, options: UndoableActionOptions) => {
+      fallbackShowToast(msg);
+      try { options.onCommit(); } catch { /* surfaced via its own toast */ }
     },
   };
 }
