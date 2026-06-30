@@ -7025,6 +7025,10 @@ function stripHtmlToText(s) {
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
     .replace(/[ \t]+/g, ' ')
+    // Trim whitespace around every line break so whitespace-only lines become
+    // truly empty — otherwise a stray space between two newlines survives the
+    // blank-line collapse below and renders as a visible gap under `pre-wrap`.
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
