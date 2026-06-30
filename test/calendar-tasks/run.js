@@ -18,7 +18,7 @@
 //   [B]    GET /api/tasks → returns mapped CalendarTask list when connected
 //   [C]    POST /api/tasks → creates event, returns CalendarTask shape
 //   [C.bad] POST /api/tasks → 400 on missing task_name / task_deadline
-//   [D]    PATCH /api/tasks/:id → update status; returns updated CalendarTask
+//   [D]    PATCH /api/tasks/:id → update status; stamps/clears moCompletedAt
 //   [D.bad] PATCH /api/tasks/:id → 400 on invalid task_status
 //   [E]    DELETE /api/tasks/:id → returns { success: true }
 //   [F]    GET /api/users → returns active-user list (id, name, email)
@@ -68,6 +68,7 @@ const PROBE_LABELS = [
   '[B.1] GET /api/tasks with Google auth → { results: [...] }',
   '[B.2] GET /api/tasks results have CalendarTask shape',
   '[B.3] GET /api/tasks?contactId filters by moContactId extended property',
+  '[B.4] GET /api/tasks results expose task_completed_at field',
   // [C] create task
   '[C.1] POST /api/tasks → 200 with CalendarTask shape',
   '[C.2] POST /api/tasks inserts event with correct extendedProperties',
@@ -76,6 +77,8 @@ const PROBE_LABELS = [
   '[C.bad.3] POST /api/tasks invalid task_deadline → 400',
   // [D] update task
   '[D.1] PATCH /api/tasks/:id task_status → 200 with updated status',
+  '[D.2] PATCH /api/tasks/:id task_status=completed stamps moCompletedAt',
+  '[D.3] PATCH /api/tasks/:id task_status=open clears moCompletedAt',
   '[D.bad.1] PATCH /api/tasks/:id invalid task_status → 400',
   '[D.bad.2] PATCH /api/tasks/:id no valid fields → 400',
   // [E] delete task
@@ -364,6 +367,15 @@ async function main() {
     probe('[B.2] GET /api/tasks results have CalendarTask shape',
       !!hasShape,
       first ? `id=${first.id}, task_name="${first.task_name}"` : 'no results');
+
+    // task_completed_at is always present on the mapped shape: a string when the
+    // task carries moCompletedAt, otherwise null. The list stub event is open,
+    // so it should map to null.
+    const completedAtPresent = first && 'task_completed_at' in first &&
+      (first.task_completed_at === null || typeof first.task_completed_at === 'string');
+    probe('[B.4] GET /api/tasks results expose task_completed_at field',
+      !!completedAtPresent,
+      first ? `task_completed_at=${JSON.stringify(first.task_completed_at)}` : 'no results');
   }
   {
     const r = await member.get('/api/tasks?contactId=99999');
@@ -428,6 +440,28 @@ async function main() {
         r.json?.task_status === 'completed' &&
         patched?.extendedProperties?.private?.moTaskStatus === 'completed',
       `status=${r.status}, task_status=${r.json?.task_status}`);
+
+    // Completing a task also stamps moCompletedAt with the completion time, which
+    // the mapped response surfaces as task_completed_at (so the "Done / Past"
+    // lists can order by when a task was actually finished, not its deadline).
+    const stamped = patched?.extendedProperties?.private?.moCompletedAt;
+    const respTs  = r.json?.task_completed_at;
+    const okStamp = typeof stamped === 'string' && stamped.length > 0 && !Number.isNaN(Date.parse(stamped));
+    probe('[D.2] PATCH /api/tasks/:id task_status=completed stamps moCompletedAt',
+      r.status === 200 && okStamp && respTs === stamped,
+      `moCompletedAt=${JSON.stringify(stamped)}, task_completed_at=${JSON.stringify(respTs)}`);
+  }
+  gcal.clearAll();
+  {
+    // Reopening clears the stamp: the calendar event gets moCompletedAt='' (an
+    // empty extended property is removed by Google) and the response maps it
+    // back to null.
+    const r = await member.patch(`/api/tasks/${TASK_ID}`, { task_status: 'open' });
+    const patched = gcal.getLastPatch();
+    const cleared = patched?.extendedProperties?.private?.moCompletedAt;
+    probe('[D.3] PATCH /api/tasks/:id task_status=open clears moCompletedAt',
+      r.status === 200 && cleared === '' && r.json?.task_completed_at === null,
+      `moCompletedAt=${JSON.stringify(cleared)}, task_completed_at=${JSON.stringify(r.json?.task_completed_at)}`);
   }
   {
     const r = await member.patch(`/api/tasks/${TASK_ID}`, { task_status: 'invalid' });
