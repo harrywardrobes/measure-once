@@ -2975,10 +2975,16 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
     const auth = getGoogleClient(googleTokens);
     const calendar = getCalendarClient(auth);
     const contactId = String(req.query.contactId || '').trim();
+    // includePast=1 widens the window back a year (no upper bound) so the
+    // "Done / Past" feeds can show events that have already happened alongside
+    // upcoming ones. Default stays future-only for existing callers.
+    const includePast = String(req.query.includePast || '') === '1';
     const listParams = {
       calendarId,
-      timeMin: new Date().toISOString(),
-      maxResults: 50,
+      timeMin: includePast
+        ? new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
+        : new Date().toISOString(),
+      maxResults: includePast ? 100 : 50,
       singleEvents: true,
       orderBy: 'startTime',
     };
@@ -2986,7 +2992,7 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
       if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
       listParams.privateExtendedProperty = `moContactId=${contactId}`;
     } else {
-      listParams.maxResults = 20;
+      listParams.maxResults = includePast ? 100 : 20;
       listParams.q = req.query.search || undefined;
     }
     const events = await calendar.events.list(listParams);
@@ -3220,6 +3226,10 @@ function calendarEventToTask(ev) {
     },
     task_deadline: (ev.start && (ev.start.dateTime || ev.start.date)) || '',
     task_status: ep.moTaskStatus === 'completed' ? 'completed' : 'open',
+    // When a task was marked complete (ISO). Older tasks completed before this
+    // field existed return null; consumers fall back to task_deadline for
+    // ordering the "Done / Past" lists.
+    task_completed_at: ep.moCompletedAt || null,
   };
 }
 
@@ -3341,6 +3351,12 @@ app.patch('/api/tasks/:id', isAuthenticated, requirePrivilege('member'), async (
         return res.status(400).json({ error: 'task_status must be "open" or "completed".' });
       }
       epUpdates.moTaskStatus = req.body.task_status;
+      // Stamp (or clear) the completion time so the "Done / Past" lists can sort
+      // by when a task was actually completed rather than its deadline. Setting
+      // an extended property to '' removes it from the calendar event.
+      epUpdates.moCompletedAt = req.body.task_status === 'completed'
+        ? new Date().toISOString()
+        : '';
     }
     if (req.body.task_deadline !== undefined) {
       const dd = new Date(req.body.task_deadline);

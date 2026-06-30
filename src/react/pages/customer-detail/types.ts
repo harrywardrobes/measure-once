@@ -80,6 +80,13 @@ export interface CalendarTask {
   };
   task_deadline: string;
   task_status: 'open' | 'completed';
+  /**
+   * ISO timestamp recorded when the task was marked complete (Google Calendar
+   * extendedProperties.private.moCompletedAt). Null for open tasks and for tasks
+   * completed before this field existed — order the "Done / Past" list by this,
+   * falling back to `task_deadline`.
+   */
+  task_completed_at?: string | null;
 }
 
 export interface StaffUser {
