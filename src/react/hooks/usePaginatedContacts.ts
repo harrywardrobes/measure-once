@@ -304,7 +304,7 @@ export function usePaginatedContacts(
 
   // Track the previous filter fingerprint (everything except page) so we know
   // when to reset page to 1.
-  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst });
+  const prevFiltersRef = React.useRef({ leadStatus, stage, sortBy, search, showArchived, showExcluded, hideStale, refreshNonce, staleAfterDays, pageSize, priorityFirst });
   const filtersChanged =
     prevFiltersRef.current.leadStatus !== leadStatus ||
     prevFiltersRef.current.stage !== stage ||
@@ -312,13 +312,14 @@ export function usePaginatedContacts(
     prevFiltersRef.current.search !== search ||
     prevFiltersRef.current.showArchived !== showArchived ||
     prevFiltersRef.current.showExcluded !== showExcluded ||
+    prevFiltersRef.current.hideStale !== hideStale ||
     prevFiltersRef.current.refreshNonce !== refreshNonce ||
     prevFiltersRef.current.staleAfterDays !== staleAfterDays ||
     prevFiltersRef.current.pageSize !== pageSize ||
     prevFiltersRef.current.priorityFirst !== priorityFirst;
 
   if (filtersChanged) {
-    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, refreshNonce, staleAfterDays, pageSize, priorityFirst };
+    prevFiltersRef.current = { leadStatus, stage, sortBy, search, showArchived, showExcluded, hideStale, refreshNonce, staleAfterDays, pageSize, priorityFirst };
     if (page !== 1) {
       // Schedule synchronous state update before render commits. This avoids a
       // stale-page fetch: by updating page in the same render pass (via the
@@ -490,6 +491,10 @@ export function usePaginatedContacts(
           setContacts(results);
           setTotal(filteredTotal);
           setTotalPages(filteredPages);
+          // Stage counts are a fresh-online-only signal (server-computed); the
+          // offline cache has no authoritative counts, so clear them rather than
+          // leave stale numbers in the tab badges.
+          setStageCounts({});
           if (clampedPage !== effectivePage) setPage(clampedPage);
           setFromCache(true);
           setError(null);
@@ -512,6 +517,7 @@ export function usePaginatedContacts(
         setContacts([]);
         setTotal(0);
         setTotalPages(1);
+        setStageCounts({});
         setLoading(false);
       }
     })();
