@@ -64,7 +64,7 @@ const { router: designVisitsRouter, setPatchContactProperties: setDvPatchContact
 const { router: surveyVisitsRouter, setPatchContactProperties: setSvPatchContactProperties, ensureStartSurveyVisitHandlerBindings } = require('./survey-visits');
 const { router: customerInfoRouter, ensureResendLogTable, backfillMaskedEmails, logNullFormLinkCount, signCustomerPhotoUrl, setSharedSseClients: setCustomerInfoSseClients, setPatchContactProperties: setCiPatchContactProperties, searchHubSpotContactByEmail, createHubSpotContact } = require('./customer-info');
 const { router: photoReviewsRouter, ensurePhotoReviewOutcomesTable, ensureContactCustomerHandlerBindings, setPatchContactProperties: setPrPatchContactProperties } = require('./photo-reviews');
-const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml, buildUserSignature, getEmailCompanyName, buildSenderSignature } = require('./email-templates');
+const { ensureEmailTemplatesTable, getEmailTemplate, invalidateEmailTemplate, TEMPLATE_DEFS, TEMPLATE_KEYS, SAMPLE_VARS, renderEmail, escapeHtml, plainTextToHtml, buildUserSignature, getEmailCompanyName, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey, invalidateLeadStatusCache } = require('./lead-status-guard');
 const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const app = express();
@@ -7016,7 +7016,12 @@ function stripHtmlToText(s) {
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+    // A closing paragraph is a paragraph break (blank line) so multi-paragraph
+    // bodies keep their spacing when rendered to text. Other block closes
+    // (div/li/tr/heading) stay a single newline — e.g. Gmail wraps each line
+    // in its own <div>, which should not become double-spaced.
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/(div|li|tr|h[1-6])>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
@@ -7737,9 +7742,10 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
       const customSubject = typeof req.body?.subject === 'string' ? req.body.subject : null;
       // Convert plain-text custom body to HTML paragraphs so that renderEmail
       // can append the template footer (branding/signature). Setting body_html
-      // to '' would strip the footer from the rendered output.
+      // to '' would strip the footer from the rendered output. Paragraph-aware
+      // so the author's blank lines (e.g. a sign-off) survive into the email.
       const customBodyHtml = customBody !== null
-        ? customBody.split('\n').map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`).join('')
+        ? plainTextToHtml(customBody)
         : null;
       const effectiveTemplate = (customBody !== null || customSubject !== null) ? {
         ...template,
@@ -7753,10 +7759,7 @@ app.post('/api/card-actions/contact-customer/:contactId/email-preview',
       );
       const rendered = renderEmail(effectiveTemplate, { textVars: vars, htmlVars });
       if (!effectiveTemplate.body_html || !effectiveTemplate.body_html.trim()) {
-        rendered.html = rendered.text
-          .split('\n')
-          .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
-          .join('');
+        rendered.html = plainTextToHtml(rendered.text);
       }
 
       // Append the sender's personal signature to the preview HTML so what
@@ -7815,10 +7818,7 @@ app.post('/api/card-actions/contact-customer/:contactId/send-email',
       const replyTo = _buildReplyTo();
       const sig = await _buildSenderSignature(req.user?.claims?.sub);
       const fullText = sig.text ? body + '\n\n' + sig.text : body;
-      const bodyHtml = body
-        .split('\n')
-        .map(l => l.trim() === '' ? '' : `<p>${escapeHtml(l)}</p>`)
-        .join('');
+      const bodyHtml = plainTextToHtml(body);
       const fullHtml = sig.html ? bodyHtml + sig.html : bodyHtml;
       const attachments = (req.files || []).map(f => ({
         filename:    f.originalname,

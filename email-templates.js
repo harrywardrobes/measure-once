@@ -32,6 +32,23 @@ function footerTextToHtml(footerText) {
   return `<p>${footerText.split('\n').map(escapeHtml).join('<br>')}</p>`;
 }
 
+// Convert a plain-text body into HTML, preserving the author's spacing.
+// Blank line(s) separate <p> paragraphs; single newlines within a paragraph
+// become <br>. This replaces the older `split('\n').map(l => <p>l</p>)` pattern
+// which wrapped *every* line in its own <p> and dropped blank lines — that
+// flattened paragraph spacing entirely once rendered back to text (e.g. a
+// sign-off "Kind regards,\n\nHarry" lost its blank line). Content is escaped.
+function plainTextToHtml(text) {
+  if (text == null) return '';
+  return String(text)
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)                                  // blank line(s) → new paragraph
+    .map((para) => para.replace(/^\n+|\n+$/g, ''))    // trim stray leading/trailing newlines
+    .filter((para) => para.trim() !== '')
+    .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
+    .join('');
+}
+
 // Build a personal email signature from user profile data + company name.
 // Returns { text, html } — both empty strings when the user has no data.
 function buildUserSignature(user, companyName) {
@@ -743,6 +760,7 @@ module.exports = {
   substituteVars,
   renderEmail,
   escapeHtml,
+  plainTextToHtml,
   buildUserSignature,
   getEmailCompanyName,
   buildSenderSignature,
