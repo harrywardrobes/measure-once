@@ -92,10 +92,13 @@ export function CustomerDetailHeader({
   const name       = contactName(contact);
   const email      = props.email || '';
   // Mobile is the primary number, falling back to the landline.
-  const bestPhone  = props.mobilephone || props.phone || '';
+  // Trim first so a whitespace-only value never wins the tel link.
+  const mobilePhone = (props.mobilephone || '').trim();
+  const landline    = (props.phone || '').trim();
+  const bestPhone  = mobilePhone || landline || '';
   const phoneSource: 'phone' | 'mobile' | null =
-    props.mobilephone ? 'mobile'
-    : props.phone     ? 'phone'
+    mobilePhone ? 'mobile'
+    : landline  ? 'phone'
     : null;
   const addressText = formatAddress(props.structuredAddress || emptyAddress());
   const customerNum = props.customer_number || '';

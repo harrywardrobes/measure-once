@@ -2481,13 +2481,21 @@ app.get('/api/project-contacts', async (req, res) => {
 app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHubspotToken, hubspotMutationLimiter, async (req, res) => {
   const { firstname, lastname, email, phone, mobilephone, structuredAddress, leadStatus } = req.body || {};
 
+  // Normalise the contact fields up front so validation and the HubSpot
+  // properties agree — a whitespace-only value must not pass the
+  // "at least one contact method" check and then be stored as an empty string.
+  const firstnameTrimmed   = (firstname   && String(firstname).trim())   || '';
+  const emailTrimmed       = (email       && String(email).trim())       || '';
+  const phoneTrimmed       = (phone       && String(phone).trim())       || '';
+  const mobilephoneTrimmed = (mobilephone && String(mobilephone).trim()) || '';
+
   // First name is always required. Email is optional — customers often arrive
   // via WhatsApp/phone with no email yet — but we need at least one way to reach
   // them, so require an email, mobile, or phone.
-  if (!firstname || !String(firstname).trim()) {
+  if (!firstnameTrimmed) {
     return res.status(400).json({ error: 'First name is required.' });
   }
-  if (!email && !phone && !mobilephone) {
+  if (!emailTrimmed && !phoneTrimmed && !mobilephoneTrimmed) {
     return res.status(400).json({ error: 'Add at least one contact method (email, mobile, or phone).' });
   }
 
@@ -2515,11 +2523,11 @@ app.post('/api/contacts', isAuthenticated, requirePrivilege('member'), requireHu
     // Create the contact in HubSpot
     const createBody = {
       properties: {
-        firstname,
+        firstname:      firstnameTrimmed,
         lastname:       lastname  || '',
-        email:          email     || '',
-        phone:          phone     || '',
-        mobilephone:    mobilephone || '',
+        email:          emailTrimmed,
+        phone:          phoneTrimmed,
+        mobilephone:    mobilephoneTrimmed,
         address:        hsAddr.address || '',
         city:           hsAddr.city    || '',
         state:          hsAddr.state   || '',
