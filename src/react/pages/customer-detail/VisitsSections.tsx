@@ -12,9 +12,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import AddIcon from '@mui/icons-material/Add';
 import EventIcon from '@mui/icons-material/Event';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { openConnectModal } from '../../contexts/ConnectionToastContext';
 import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { formatAddress, emptyAddress, type StructuredAddress } from '../../../../shared/address';
@@ -212,6 +214,11 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
   const [loading, setLoading] = useState(true);
   const [googleConnected, setGoogleConnected] = useState(true);
   const [bookOpen, setBookOpen] = useState(false);
+  // Inline "add address" editor for a visit booked without a location.
+  const [addrEditId, setAddrEditId] = useState<string | null>(null);
+  const [addrValue, setAddrValue] = useState('');
+  const [addrSaving, setAddrSaving] = useState(false);
+  const [addrError, setAddrError] = useState<string | null>(null);
 
   const name   = contactDisplayName(contact);
   const addr   = contactAddress(contact);
@@ -252,6 +259,43 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
     window.addEventListener('mo:refresh-visits', handler);
     return () => window.removeEventListener('mo:refresh-visits', handler);
   }, [fetchEvents]);
+
+  function openAddressEditor(visitId: string) {
+    setAddrEditId(visitId);
+    setAddrValue(addr || '');     // most visits are at the customer's address
+    setAddrError(null);
+  }
+
+  async function saveAddress(visitId: string) {
+    const loc = addrValue.trim();
+    if (!loc) { setAddrError('Enter an address.'); return; }
+    setAddrSaving(true);
+    setAddrError(null);
+    try {
+      // events.patch is a partial update — only the location changes; the date,
+      // time and duration of the booking are left untouched.
+      const res = await fetch(`/api/events/${encodeURIComponent(visitId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: loc }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { code?: string; error?: string };
+        if (d?.code === 'GOOGLE_AUTH') { setGoogleConnected(false); throw new Error('GOOGLE_AUTH'); }
+        throw new Error(d?.error || `HTTP ${res.status}`);
+      }
+      setAddrEditId(null);
+      await fetchEvents();
+    } catch (e) {
+      setAddrError(
+        (e as Error).message === 'GOOGLE_AUTH'
+          ? 'Google is disconnected — reconnect it from the header, then try again.'
+          : 'Could not save the address. Please try again.',
+      );
+    } finally {
+      setAddrSaving(false);
+    }
+  }
 
   return (
     <div id="upcoming-visits-section" style={{ marginBottom: 20 }}>
@@ -302,6 +346,45 @@ export function UpcomingVisitsSection({ contactId, contact }: VisitsSectionProps
                 <span style={sxDate}>{fmtVisitRange(v.start, v.end)}</span>
                 {v.location && <><span style={sxMetaSep}>·</span><span style={{ fontSize: '0.875rem' }}>{v.location}</span></>}
               </div>
+              {!v.location && canEdit && (
+                addrEditId === v.id ? (
+                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <TextField
+                      size="small"
+                      autoFocus
+                      fullWidth
+                      placeholder="Visit address"
+                      value={addrValue}
+                      onChange={(e) => setAddrValue(e.target.value)}
+                      disabled={addrSaving}
+                      slotProps={{ htmlInput: { 'aria-label': 'Visit address' } }}
+                    />
+                    {addrError && <span style={{ fontSize: '0.72rem', color: 'var(--status-error-text, #b91c1c)' }}>{addrError}</span>}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <Button size="small" variant="contained" onClick={() => void saveAddress(v.id)} disabled={addrSaving} data-testid="save-visit-address-btn" sx={{ fontSize: '0.72rem', py: 0.25, px: 1 }}>
+                        {addrSaving ? 'Saving…' : 'Save address'}
+                      </Button>
+                      <Button size="small" onClick={() => setAddrEditId(null)} disabled={addrSaving} sx={{ fontSize: '0.72rem', py: 0.25, px: 1 }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--amber, #d97706)' }}>No address set</span>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<LocationOnIcon fontSize="inherit" />}
+                      onClick={() => openAddressEditor(v.id)}
+                      data-testid="add-visit-address-btn"
+                      sx={{ fontSize: '0.72rem', py: 0, px: 0.75 }}
+                    >
+                      Add address
+                    </Button>
+                  </div>
+                )
+              )}
               {v.description && <div style={{ ...sxHelper, paddingTop: 2 }}>{v.description}</div>}
               <GCalLink eventId={v.id} />
             </div>
