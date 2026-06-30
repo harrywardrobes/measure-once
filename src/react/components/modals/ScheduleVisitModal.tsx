@@ -38,6 +38,8 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 import { useDiscardGuard } from '../../hooks/useDiscardGuard';
 import { useBeforeUnloadGuard } from '../../hooks/useBeforeUnloadGuard';
 import { POST, PATCH, calendarErrorMessage } from '../../utils/api';
+import { broadcastLeadStatusChange } from '../../utils/broadcastLeadStatus';
+import { sendOrQueue } from '../../lib/offlineQueue';
 import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionToastContext';
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
@@ -303,6 +305,26 @@ export function ScheduleVisitModal({
         }
       } else {
         showToast('Visit added to the shared calendar', false);
+      }
+
+      // A freshly-booked design/survey visit advances the contact's lead status
+      // (and moves its card) to the matching *_SCHEDULED stage, so scheduling a
+      // visit is reflected on the board. Rescheduling an existing event leaves
+      // the status untouched. Best-effort + offline-aware.
+      const scheduledStatus = !existingEventId
+        ? ({ design: 'DESIGN_SCHEDULED', survey: 'SURVEY_SCHEDULED' } as Record<string, string>)[visitType]
+        : undefined;
+      if (scheduledStatus && ctx.contactId) {
+        const cid = String(ctx.contactId);
+        broadcastLeadStatusChange(cid, { hs_lead_status: scheduledStatus });
+        void sendOrQueue({
+          area: 'customer',
+          label: `Lead status → ${scheduledStatus}`,
+          method: 'PATCH',
+          url: `/api/contacts/${encodeURIComponent(cid)}`,
+          body: { hs_lead_status: scheduledStatus },
+          dedupeKey: `contact:${cid}:lead-status`,
+        }).catch(() => {});
       }
 
       clearDraft(key);

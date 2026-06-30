@@ -318,8 +318,12 @@ export const HANDLER_OUTCOMES: Record<string, ActionOutcome[]> = {
     {
       key: 'scheduled',
       label: 'Visit scheduled',
-      kind: 'partial',
-      description: 'Creates a Google Calendar event — no lead status change',
+      kind: 'terminal',
+      variants: {
+        design: { setsLeadStatus: 'DESIGN_SCHEDULED', label: 'Design visit scheduled' },
+        survey: { setsLeadStatus: 'SURVEY_SCHEDULED', label: 'Survey scheduled' },
+      },
+      description: 'Creates a Google Calendar event; a fresh design/survey booking also advances the lead status to the matching *_SCHEDULED stage (generic visits and reschedules leave it unchanged)',
       sendsEmailTemplates: ['visit_confirmation'],
     },
   ],
