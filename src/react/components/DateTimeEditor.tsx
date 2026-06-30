@@ -5,6 +5,7 @@ import Typography from '@mui/material/Typography';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { TimePicker } from '@mui/x-date-pickers/TimePicker';
+import { renderDigitalClockTimeView } from '@mui/x-date-pickers/timeViewRenderers';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import type { Dayjs } from 'dayjs';
 
@@ -112,11 +113,24 @@ export function DateTimeEditor({
                 disabled={disabled}
                 format="HH:mm"
                 ampm={false}
+                // Google-Calendar-style time selection: a single scrollable
+                // list of times in 15-minute increments rather than the analog
+                // clock. The text field still accepts typed HH:mm for off-grid
+                // times.
+                timeSteps={{ minutes: 15 }}
+                viewRenderers={{
+                  hours: renderDigitalClockTimeView,
+                  minutes: null,
+                  seconds: null,
+                }}
                 slotProps={{
                   textField: {
                     id: id ? `${id}-time` : undefined,
                     size: 'small',
                     sx: { ...pickerSx, flex: '0 0 auto' },
+                  },
+                  digitalClockItem: {
+                    sx: { minHeight: 32, fontSize: '0.8125rem' },
                   },
                 }}
               />
