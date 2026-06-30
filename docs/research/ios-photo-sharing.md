@@ -5,11 +5,13 @@ should be able to share the photos with the application. Is this possible withou
 being an iOS app?" Plus an in-app "Add photos" button on Home and the Customers
 page, assigning the photos to a customer.
 
-**Status:** research only — no photo-upload code was shipped in this batch. This
-document records what is feasible and recommends a build order. It pairs with the
-follow-up task *"direct staff photo upload to a contact"* (no upload-to-contact
-endpoint exists yet — the app currently only sends the **customer** a link to
-upload their own photos).
+**Status:** ✅ **Built** (steps 1–4 below). The foundation (upload endpoint,
+storage, viewer), the in-app "Add photos" button, the Android `share_target`,
+and the per-user upload token + iOS Shortcut path all shipped. Staff-uploaded
+photos fold into a contact's existing photo set; contact-less shares land in a
+dedicated **Photo inbox** (Home) for assignment. iOS setup steps for staff:
+[docs/ios-photo-share-shortcut.md](../ios-photo-share-shortcut.md). This document
+remains as the original feasibility research and rationale.
 
 ---
 
