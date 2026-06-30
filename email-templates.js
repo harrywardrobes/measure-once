@@ -42,7 +42,7 @@ function plainTextToHtml(text) {
   if (text == null) return '';
   return String(text)
     .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)                                  // blank line(s) → new paragraph
+    .split(/(?:[ \t]*\n){2,}/)                        // blank/whitespace-only line(s) → new paragraph
     .map((para) => para.replace(/^\n+|\n+$/g, ''))    // trim stray leading/trailing newlines
     .filter((para) => para.trim() !== '')
     .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
