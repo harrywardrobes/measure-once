@@ -757,6 +757,18 @@ export function HomePage(): React.ReactElement {
       params.delete('error');
       changed = true;
     }
+    // Share-target redirect (Android PWA): open the photo inbox so the just-
+    // shared photos can be assigned to a customer.
+    if (params.get('photo-inbox') === '1') {
+      setPhotoInboxOpen(true);
+      const shared = parseInt(params.get('shared') || '', 10);
+      if (Number.isFinite(shared) && shared > 0) {
+        showToast(`${shared} photo${shared === 1 ? '' : 's'} added to your photo inbox`, false, { duration: 6000 });
+      }
+      params.delete('photo-inbox');
+      params.delete('shared');
+      changed = true;
+    }
     if (changed) {
       const newSearch = params.toString();
       history.replaceState(null, '', newSearch ? `?${newSearch}` : window.location.pathname);

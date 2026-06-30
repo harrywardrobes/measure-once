@@ -13,7 +13,7 @@ const path       = require('path');
 const fs         = require('fs');
 const os         = require('os');
 const storage    = require('./storage');
-const { isAuthenticated, requirePrivilege, requireAdmin, getRequestPrivilegeLevel } = require('./auth');
+const { isAuthenticated, requirePrivilege, requireAdmin, getRequestPrivilegeLevel, requirePageAuth } = require('./auth');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
@@ -2497,6 +2497,54 @@ router.delete('/api/photo-inbox/:id', isAuthenticated, requirePrivilege('member'
     res.status(500).json({ error: 'Could not discard the photos.' });
   }
 });
+
+// ── Web Share Target (Android PWA) ────────────────────────────────────────────
+// POST /share-target — declared in public/manifest.json. When the installed
+// Android PWA is chosen from another app's share sheet (e.g. WhatsApp), the OS
+// POSTs the shared images here as multipart/form-data. The request is a
+// same-origin navigation so it carries the session cookie; we drop the photos
+// into the sharer's inbox and 303-redirect to the app, which opens the inbox.
+// No service-worker handling required (sharing needs the network to upload).
+router.post('/share-target',
+  requirePageAuth,
+  _photoUpload.array('photos', MAX_PHOTO_FILES),
+  async (req, res) => {
+    const userId = req.user?.claims?.sub;
+    const files = Array.isArray(req.files) ? req.files : [];
+    const tempPaths = files.map(f => f && f.path).filter(Boolean);
+
+    // Viewers can't upload, and an empty share just opens the inbox.
+    if (!userId || getRequestPrivilegeLevel(req) === 'viewer' || files.length === 0) {
+      await _deleteTempFiles(tempPaths);
+      return res.redirect(303, '/?photo-inbox=1');
+    }
+
+    const keys = [];
+    for (const file of files) {
+      if (!file || typeof file.path !== 'string') continue;
+      try {
+        keys.push(await uploadPhotoFileToStorage(file.path, file.mimetype));
+      } catch (err) {
+        logger.error({ err: err.message }, '[share-target] upload failed (skipping file)');
+      }
+    }
+    await _deleteTempFiles(tempPaths);
+
+    if (keys.length) {
+      try {
+        await pool.query(
+          `INSERT INTO customer_info_submissions
+             (contact_id, token_hash, expires_at, submitted_at, photo_keys, source, uploaded_by, is_generic)
+           VALUES (NULL, $1, NOW(), NOW(), $2::jsonb, 'staff', $3, FALSE)`,
+          ['inbox:' + crypto.randomBytes(24).toString('hex'), JSON.stringify(keys), userId],
+        );
+      } catch (err) {
+        logger.error({ err: err.message }, '[share-target] inbox insert failed');
+      }
+    }
+    res.redirect(303, `/?photo-inbox=1&shared=${keys.length}`);
+  },
+);
 
 module.exports = {
   router,
