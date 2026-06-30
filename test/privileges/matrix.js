@@ -48,6 +48,9 @@ const ROUTES = [
   { method: 'POST',   path: '/api/users/me/photo',            level: 'auth',    body: {} },
   { method: 'GET',    path: '/api/users/me/email-signature',  level: 'auth' },
   { method: 'PATCH',  path: '/api/users/me/phone',            level: 'auth',    body: {} },
+  { method: 'GET',    path: '/api/users/me/upload-token',     level: 'auth' },
+  { method: 'POST',   path: '/api/users/me/upload-token',     level: 'member',  body: {} },
+  { method: 'DELETE', path: '/api/users/me/upload-token',     level: 'auth' },
   { method: 'GET',    path: '/api/google/status',             level: 'auth' },
   { method: 'GET',    path: '/auth/google',                   level: 'auth' },
   { method: 'GET',    path: '/auth/google/callback?code=x&state=y', level: 'auth' },
@@ -130,6 +133,11 @@ const ROUTES = [
   // Contact activity feeds (member + requireHubspotToken).
   { method: 'GET',    path: '/api/contacts/0/activity',                       level: 'member', needsHubspot: true },
   { method: 'GET',    path: '/api/card-actions/contact-customer/0/activity',  level: 'member', needsHubspot: true },
+  // Photo inbox management (member+). The upload endpoint itself is
+  // token-or-session gated and lives in PUBLIC_PATH_ALLOWLIST (routeAudit.js).
+  { method: 'GET',    path: '/api/photo-inbox',                               level: 'member' },
+  { method: 'POST',   path: '/api/photo-inbox/0/assign',                      level: 'member', body: {} },
+  { method: 'DELETE', path: '/api/photo-inbox/0',                            level: 'member' },
   { method: 'POST',   path: '/api/contacts/urgency',          level: 'auth',    body: {}, needsHubspot: true },
   { method: 'GET',    path: '/api/tasks',                     level: 'member',  needsGoogle: true },
   { method: 'POST',   path: '/api/contacts/open-task-counts', level: 'member',  body: {}, needsGoogle: true },

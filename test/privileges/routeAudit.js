@@ -72,6 +72,11 @@ const PUBLIC_PATH_ALLOWLIST = [
   // Dev-only password-less login (auth.js, NODE_ENV !== 'production'). Used by
   // the test harness; mutates login state, so allowlisted (never production).
   '/api/test-login',
+  // Photo-inbox share upload (customer-info.js): gated by a per-user upload
+  // token header (iOS Shortcut) OR session (Android PWA) inside the handler,
+  // not by a standard middleware — public at the router level, like the
+  // customer token routes.
+  '/api/photo-inbox/upload',
 ];
 
 function isPublicPath(pattern) {

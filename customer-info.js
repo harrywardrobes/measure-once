@@ -13,7 +13,7 @@ const path       = require('path');
 const fs         = require('fs');
 const os         = require('os');
 const storage    = require('./storage');
-const { isAuthenticated, requirePrivilege, requireAdmin } = require('./auth');
+const { isAuthenticated, requirePrivilege, requireAdmin, getRequestPrivilegeLevel } = require('./auth');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
@@ -2169,7 +2169,7 @@ router.patch('/api/customer-info/:id/link-contact',
       }
 
       logger.info(
-        { submissionId, contactId: contactIdStr, adminUser: req.user?.id },
+        { submissionId, contactId: contactIdStr, adminUser: req.user?.claims?.sub },
         '[customer-info] Admin manually linked unmatched submission to contact',
       );
       res.json({ ok: true });
@@ -2219,7 +2219,7 @@ router.patch('/api/customer-info/:id/unlink-contact',
       }
 
       logger.info(
-        { submissionId, adminUser: req.user?.id },
+        { submissionId, adminUser: req.user?.claims?.sub },
         '[customer-info] Admin unlinked submission from contact (undo)',
       );
       res.json({ ok: true });
@@ -2229,6 +2229,274 @@ router.patch('/api/customer-info/:id/unlink-contact',
     }
   },
 );
+
+// ── Per-user upload token (iOS Shortcut / scripted share path) ────────────────
+// The raw token is shown to the user once; only its SHA-256 hash is stored.
+// One active token per user — regenerating overwrites it, revoking nulls it.
+
+function hashUploadToken(raw) {
+  return crypto.createHash('sha256').update(String(raw)).digest('hex');
+}
+
+async function generateUploadTokenForUser(userId) {
+  const raw = 'mowp_' + crypto.randomBytes(24).toString('base64url');
+  await pool.query(
+    `UPDATE users
+        SET upload_token_hash = $1, upload_token_created_at = NOW(),
+            upload_token_last_used_at = NULL
+      WHERE id = $2`,
+    [hashUploadToken(raw), userId],
+  );
+  return raw;
+}
+
+async function revokeUploadTokenForUser(userId) {
+  await pool.query(
+    `UPDATE users
+        SET upload_token_hash = NULL, upload_token_created_at = NULL,
+            upload_token_last_used_at = NULL
+      WHERE id = $1`,
+    [userId],
+  );
+}
+
+async function getUploadTokenStatus(userId) {
+  const r = await pool.query(
+    `SELECT upload_token_hash IS NOT NULL AS exists,
+            upload_token_created_at, upload_token_last_used_at
+       FROM users WHERE id = $1`,
+    [userId],
+  );
+  const row = r.rows[0] || {};
+  return {
+    exists: !!row.exists,
+    created_at: row.upload_token_created_at || null,
+    last_used_at: row.upload_token_last_used_at || null,
+  };
+}
+
+// Resolve a raw token → { id, privilege_level } or null; stamps last_used_at.
+async function resolveUploadToken(rawToken) {
+  if (!rawToken || typeof rawToken !== 'string' || rawToken.length < 16 || rawToken.length > 200) return null;
+  const r = await pool.query(
+    `UPDATE users SET upload_token_last_used_at = NOW()
+      WHERE upload_token_hash = $1
+      RETURNING id, privilege_level`,
+    [hashUploadToken(rawToken)],
+  );
+  return r.rows[0] || null;
+}
+
+// GET status (never returns the raw token), POST (re)generate, DELETE revoke.
+router.get('/api/users/me/upload-token', isAuthenticated, async (req, res) => {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  try {
+    res.json(await getUploadTokenStatus(userId));
+  } catch (e) {
+    logger.error({ err: e.message }, '[upload-token] status error');
+    res.status(500).json({ error: 'Could not load token status.' });
+  }
+});
+
+router.post('/api/users/me/upload-token', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  try {
+    const token = await generateUploadTokenForUser(userId);
+    const status = await getUploadTokenStatus(userId);
+    res.json({ token, created_at: status.created_at });
+  } catch (e) {
+    logger.error({ err: e.message }, '[upload-token] generate error');
+    res.status(500).json({ error: 'Could not generate token.' });
+  }
+});
+
+router.delete('/api/users/me/upload-token', isAuthenticated, async (req, res) => {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated.' });
+  try {
+    await revokeUploadTokenForUser(userId);
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e.message }, '[upload-token] revoke error');
+    res.status(500).json({ error: 'Could not revoke token.' });
+  }
+});
+
+// ── Photo inbox (staff share path — Android PWA + iOS Shortcut) ────────────────
+// Photos shared into the app with no contact yet land here as staff rows with
+// contact_id NULL (is_generic stays false so they do NOT show in the admin
+// "unmatched" customer-form list — only in the dedicated per-user inbox). The
+// uploader later assigns each batch to a contact, at which point it appears in
+// that contact's CustomerInfoSubmissionsRail.
+
+// Auth for the upload endpoint: a per-user X-Upload-Token header (iOS Shortcut,
+// which carries no session cookie) OR the normal session (Android PWA / in-app).
+// Viewers may not upload via either path.
+async function inboxUploadAuth(req, res, next) {
+  const token = req.get('X-Upload-Token');
+  if (token) {
+    let u;
+    try {
+      u = await resolveUploadToken(token);
+    } catch (e) {
+      logger.error({ err: e.message }, '[photo-inbox] token resolve error');
+      return res.status(500).json({ error: 'Authentication error.' });
+    }
+    if (!u) return res.status(401).json({ error: 'Invalid or revoked upload token.' });
+    if (u.privilege_level === 'viewer') return res.status(403).json({ error: 'Insufficient privileges.' });
+    req._inboxUserId = u.id;
+    return next();
+  }
+  return isAuthenticated(req, res, () => {
+    const uid = req.user?.claims?.sub;
+    if (!uid) return res.status(401).json({ error: 'Authentication required.' });
+    if (getRequestPrivilegeLevel(req) === 'viewer') return res.status(403).json({ error: 'Insufficient privileges.' });
+    req._inboxUserId = uid;
+    next();
+  });
+}
+
+router.post('/api/photo-inbox/upload',
+  inboxUploadAuth,
+  (req, res, next) => {
+    if (!checkUploadIpRateLimit(req.ip)) {
+      return res.status(429).json({ error: 'Too many photo uploads — please wait a few minutes before uploading more.' });
+    }
+    next();
+  },
+  _photoUpload.array('photos', MAX_PHOTO_FILES),
+  async (req, res) => {
+    const rawFiles = req.files;
+    if (rawFiles != null && !Array.isArray(rawFiles)) {
+      return res.status(400).json({ error: 'Invalid files payload.' });
+    }
+    const files = rawFiles || [];
+    const filesAreValid = files.every((f) =>
+      f && typeof f === 'object' && typeof f.path === 'string' && f.path.length > 0 && typeof f.mimetype === 'string');
+    if (!filesAreValid) return res.status(400).json({ error: 'Invalid files payload.' });
+    const tempPaths = files.map(f => f.path);
+    if (!files.length) return res.status(400).json({ error: 'No files uploaded.' });
+
+    const keys = [];
+    for (const file of files) {
+      try {
+        keys.push(await uploadPhotoFileToStorage(file.path, file.mimetype));
+      } catch (err) {
+        logger.error({ err: err.message }, '[photo-inbox] upload failed');
+        await _deleteTempFiles(tempPaths);
+        const isStorageConfigErr = /bucket|object storage/i.test(err.message);
+        return res.status(500).json({ error: isStorageConfigErr ? FRIENDLY_UPLOAD_MSG : 'Photo upload failed: ' + err.message });
+      }
+    }
+    await _deleteTempFiles(tempPaths);
+
+    const syntheticToken = 'inbox:' + crypto.randomBytes(24).toString('hex');
+    let inserted;
+    try {
+      inserted = await pool.query(
+        `INSERT INTO customer_info_submissions
+           (contact_id, contact_name, contact_email, token_hash, expires_at,
+            submitted_at, photo_keys, source, uploaded_by, is_generic)
+         VALUES (NULL, NULL, NULL, $1, NOW(), NOW(), $2::jsonb, 'staff', $3, FALSE)
+         RETURNING id`,
+        [syntheticToken, JSON.stringify(keys), req._inboxUserId],
+      );
+    } catch (err) {
+      logger.error({ err: err.message }, '[photo-inbox] DB insert failed');
+      return res.status(500).json({ error: 'Photos uploaded but could not be saved. Please try again.' });
+    }
+    res.json({ ok: true, keys, inboxId: inserted.rows[0].id });
+  },
+);
+
+// List the caller's own unassigned inbox uploads (newest first).
+router.get('/api/photo-inbox', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const userId = req.user?.claims?.sub;
+  try {
+    const r = await pool.query(
+      `SELECT id, created_at, photo_keys
+         FROM customer_info_submissions
+        WHERE contact_id IS NULL AND source = 'staff' AND uploaded_by = $1
+        ORDER BY created_at DESC
+        LIMIT 200`,
+      [userId],
+    );
+    res.json(r.rows.map(row => ({
+      id: row.id,
+      created_at: row.created_at,
+      photoUrls: (row.photo_keys || []).map(k => signCustomerPhotoUrl(k)),
+    })));
+  } catch (e) {
+    logger.error({ err: e.message }, '[photo-inbox] list error');
+    res.status(500).json({ error: 'Could not load the photo inbox.' });
+  }
+});
+
+// Assign an inbox batch to a contact — it then surfaces in that contact's rail.
+router.post('/api/photo-inbox/:id/assign', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id.' });
+  const contactId = String(req.body?.contactId || '').trim();
+  if (!/^\d+$/.test(contactId)) return res.status(400).json({ error: 'Invalid contactId.' });
+  const userId = req.user?.claims?.sub;
+
+  let contactName = null, contactEmail = null;
+  try {
+    const c = await fetchContactFromHubSpot(contactId);
+    const p = c?.properties || {};
+    contactName = [p.firstname, p.lastname].filter(Boolean).join(' ').trim() || null;
+    contactEmail = p.email || null;
+  } catch (err) {
+    logger.warn({ err: err.message, contactId }, '[photo-inbox] could not resolve contact name on assign');
+  }
+
+  try {
+    const r = await pool.query(
+      `UPDATE customer_info_submissions
+          SET contact_id = $1, contact_name = $2, contact_email = $3
+        WHERE id = $4 AND contact_id IS NULL AND source = 'staff' AND uploaded_by = $5
+        RETURNING id`,
+      [contactId, contactName, contactEmail, id, userId],
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Inbox item not found or already assigned.' });
+    res.json({ ok: true, contactId });
+  } catch (e) {
+    logger.error({ err: e.message }, '[photo-inbox] assign error');
+    res.status(500).json({ error: 'Could not assign the photos.' });
+  }
+});
+
+// Discard an inbox batch (deletes the row and its storage objects).
+router.delete('/api/photo-inbox/:id', isAuthenticated, requirePrivilege('member'), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id.' });
+  const userId = req.user?.claims?.sub;
+  try {
+    const r = await pool.query(
+      `SELECT photo_keys FROM customer_info_submissions
+        WHERE id = $1 AND contact_id IS NULL AND source = 'staff' AND uploaded_by = $2`,
+      [id, userId],
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: 'Inbox item not found.' });
+    const keys = r.rows[0].photo_keys || [];
+    for (const k of keys) {
+      try {
+        if (typeof k === 'string' && k.startsWith('obj:ci_')) {
+          await storage.deleteObject('customer-info-photos/' + k.slice('obj:ci_'.length), { ignoreNotFound: true });
+        }
+      } catch (err) {
+        logger.warn({ err: err.message, key: k }, '[photo-inbox] storage delete failed (continuing)');
+      }
+    }
+    await pool.query(`DELETE FROM customer_info_submissions WHERE id = $1`, [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e.message }, '[photo-inbox] discard error');
+    res.status(500).json({ error: 'Could not discard the photos.' });
+  }
+});
 
 module.exports = {
   router,
