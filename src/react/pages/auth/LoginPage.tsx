@@ -163,9 +163,9 @@ function AuthAlert({ msg, severity, id }: { msg: string; severity: 'success' | '
 }
 
 const VIEW_TITLES: Record<View, string> = {
-  login: 'Sign In · Measure Once',
-  forgot: 'Reset Password · Measure Once',
-  request: 'Request Access · Measure Once',
+  login: 'Sign In · Harry Wardrobes',
+  forgot: 'Reset Password · Harry Wardrobes',
+  request: 'Request Access · Harry Wardrobes',
 };
 
 const IDENTITY_REST = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword';
@@ -487,7 +487,7 @@ function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
         Sign in
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3.5 }}>
-        Use your email and password to sign in to your Measure Once account.
+        Use your email and password to sign in to your Harry Wardrobes account.
       </Typography>
       {loginMsg && <AuthAlert id={loginMsg.ok ? 'login-ok' : 'login-err'} msg={loginMsg.text} severity={loginMsg.ok ? 'success' : 'error'} />}
       <Box component="form" onSubmit={handleLogin} autoComplete="on">
@@ -517,7 +517,7 @@ function LoginPageInner({ identityApiKey }: { identityApiKey: string | null }) {
             id="login-submit" type="submit" variant="contained" fullWidth size="large"
             disabled={loginBusy}
           >
-            {loginBusy ? 'Signing in…' : 'Sign in to Measure Once'}
+            {loginBusy ? 'Signing in…' : 'Sign in to Harry Wardrobes'}
           </Button>
         </Stack>
       </Box>

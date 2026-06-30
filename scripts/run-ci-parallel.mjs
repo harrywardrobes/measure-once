@@ -2,7 +2,7 @@
 /**
  * scripts/run-ci-parallel.mjs
  *
- * Parallel CI runner for Measure Once.
+ * Parallel CI runner for Harry Wardrobes.
  *
  * IMPORTANT: every test:*:ci entry in scripts/run-ci.mjs must also appear in
  * STATIC_SUITES or DB_SUITES below.  The test:ci-runner-sync step (run as part
@@ -364,7 +364,7 @@ async function runStorybookPhase() {
 
 async function main() {
   const wallStart = Date.now();
-  log('=== Measure Once CI (parallel) ===');
+  log('=== Harry Wardrobes CI (parallel) ===');
   log(`Pool size for DB suites: ${POOL_SIZE}  (override with CI_PARALLEL=N)`);
 
   // ── Phase 0: build ──────────────────────────────────────────────────────────

@@ -32,12 +32,12 @@ const SAMPLE_DATA = {
   status: 'pending',
   termsVersionNumber: 3,
   terms:
-    'These terms and conditions govern the supply of fitted furniture by Measure Once Ltd.\n\n' +
+    'These terms and conditions govern the supply of fitted furniture by Gautier Design Ltd.\n\n' +
     '1. The estimate provided is valid for 30 days from the date of issue.\n' +
     '2. A 50% deposit is required to proceed with manufacture.\n' +
     '3. The remaining balance is due upon delivery and installation.\n' +
     '4. Cancellations made within 14 days of the survey date are subject to a £250 administration fee.\n' +
-    '5. All goods remain the property of Measure Once Ltd until paid in full.',
+    '5. All goods remain the property of Gautier Design Ltd until paid in full.',
   rooms: [
     {
       roomName: 'Kitchen',

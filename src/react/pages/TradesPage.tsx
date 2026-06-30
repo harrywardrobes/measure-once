@@ -1283,7 +1283,7 @@ function DeleteConfirmDialog({
 // ── TradesPage ─────────────────────────────────────────────────────────────────
 
 export function TradesPage() {
-  usePageTitle('Trades · Measure Once');
+  usePageTitle('Trades · Harry Wardrobes');
   const { isAdmin, isManager } = usePrivilege();
   const isPriv = isAdmin || isManager;
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Measure Once is a Node.js 20 + Express dashboard that serves a static frontend from `public/` and exposes business APIs from `server.js`. The application uses local email/password authentication in `auth.js` with Passport-backed server sessions stored in PostgreSQL, HubSpot for CRM records and workflow storage, Google OAuth for per-session Gmail and Calendar access, and QuickBooks OAuth for organization-wide invoice access. Production scope is the publicly deployed Express app; mock or sandbox-only assumptions do not apply unless an area is clearly unreachable in production.
+Harry Wardrobes is a Node.js 20 + Express dashboard that serves a static frontend from `public/` and exposes business APIs from `server.js`. The application uses local email/password authentication in `auth.js` with Passport-backed server sessions stored in PostgreSQL, HubSpot for CRM records and workflow storage, Google OAuth for per-session Gmail and Calendar access, and QuickBooks OAuth for organization-wide invoice access. Production scope is the publicly deployed Express app; mock or sandbox-only assumptions do not apply unless an area is clearly unreachable in production.
 
 Platform assumptions for future scans: production traffic is TLS-protected by the platform; `NODE_ENV` is `production`; mockup sandboxes are not deployed; only production-reachable weaknesses should be reported. Deployments that are not publicly reachable would reduce internet exposure, but authenticated insider and compromised-account abuse remains in scope for production scans.
 
@@ -24,7 +24,7 @@ Platform assumptions for future scans: production traffic is TLS-protected by th
 - **Viewer/member role boundary** — low-privilege approved users must not be able to read or act on customer submissions, signed media, or bearer URLs that let them impersonate customers or influence shared workflow state unless the server explicitly grants that capability as an intentional, reviewed exception.
 - **Express server to PostgreSQL** — the app stores sessions, users, access requests, password-set tokens, customer-info submissions, design visits, sign-off tokens, and QuickBooks tokens in the database. Any broken auth or injection bug at the server boundary can expose or tamper with durable auth state.
 - **Express server to HubSpot** — the server uses a bearer token with broad CRM privileges. Server-side authorization bugs can expose or mutate CRM records for all customers.
-- **Express server to Google APIs** — Gmail and Calendar access depends on OAuth tokens stored in the acting user's session. OAuth callback integrity, session regeneration, and binding those tokens to the intended Measure Once user are security-sensitive.
+- **Express server to Google APIs** — Gmail and Calendar access depends on OAuth tokens stored in the acting user's session. OAuth callback integrity, session regeneration, and binding those tokens to the intended Harry Wardrobes user are security-sensitive.
 - **Express server to QuickBooks APIs** — QuickBooks access is organization-wide and backed by a single stored token set. OAuth callback integrity plus strict authorization and abuse controls around invoice read/write/send flows are security-critical.
 - **Shared server data to per-user UI boundary** — data labeled or presented as personal or customer-specific must be scoped server-side to the acting user and role, not just partitioned in the frontend.
 

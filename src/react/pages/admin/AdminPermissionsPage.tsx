@@ -27,7 +27,7 @@ type NavRoleConfig = { role_name: string; primary_keys: string[]; is_customized:
 type NavConfigEntry = { primary_keys: string[]; is_customized: boolean };
 
 export function AdminPermissionsPage() {
-  usePageTitle('Permissions · Measure Once');
+  usePageTitle('Permissions · Harry Wardrobes');
   const [loading, setLoading] = useState(true);
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [caps, setCaps] = useState<Capabilities>({ levels: [...PRIVILEGE_LEVELS], features: [] });

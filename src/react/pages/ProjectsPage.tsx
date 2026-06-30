@@ -1036,7 +1036,7 @@ function EmptyState({ message }: { message: string }) {
 // ── ProjectsPage ───────────────────────────────────────────────────────────────
 
 export function ProjectsPage() {
-  usePageTitle('Projects · Measure Once');
+  usePageTitle('Projects · Harry Wardrobes');
   const { isAdmin, isManager } = usePrivilege();
   const { devMode } = useDevMode({ enabled: isAdmin });
   const canAssign = isManager || isAdmin;

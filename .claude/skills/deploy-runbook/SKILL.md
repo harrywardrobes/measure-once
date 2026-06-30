@@ -1,6 +1,6 @@
 ---
 name: deploy-runbook
-description: This skill should be used when the user wants to deploy, ship, push, or promote Measure Once code to staging or production — phrases like "deploy this", "push to staging", "promote staging to prod", "ship this change", or "walk me through a deploy". Operationalizes docs/deploy.md as an interactive, checked walkthrough with explicit gates before anything touches production.
+description: This skill should be used when the user wants to deploy, ship, push, or promote Harry Wardrobes code to staging or production — phrases like "deploy this", "push to staging", "promote staging to prod", "ship this change", or "walk me through a deploy". Operationalizes docs/deploy.md as an interactive, checked walkthrough with explicit gates before anything touches production.
 version: 1.1.0
 ---
 

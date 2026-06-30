@@ -165,7 +165,7 @@ function HandlerBadges({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CardActionsPage() {
-  usePageTitle('Card Actions · Measure Once');
+  usePageTitle('Card Actions · Harry Wardrobes');
   const showToast = useToast();
   const { workflow } = useWorkflow();
   const [labels,         setLabels]         = useState<CALabel[]>([]);

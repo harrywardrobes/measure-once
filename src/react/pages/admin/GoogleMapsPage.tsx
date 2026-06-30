@@ -201,7 +201,7 @@ function showToast(msg: string, err?: boolean) {
 }
 
 export function GoogleMapsPage() {
-  usePageTitle('Google Maps · Measure Once');
+  usePageTitle('Google Maps · Harry Wardrobes');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

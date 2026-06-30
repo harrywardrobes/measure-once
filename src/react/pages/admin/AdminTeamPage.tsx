@@ -137,7 +137,7 @@ const EMPTY_INVITE = {
 };
 
 export function AdminTeamPage() {
-  usePageTitle('Team · Measure Once');
+  usePageTitle('Team · Harry Wardrobes');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [allowed, setAllowed] = useState<Allowed[]>([]);
@@ -960,7 +960,7 @@ export function AdminTeamPage() {
             const name = [m.first_name, m.last_name].filter(Boolean).join(' ') || archiveTarget.email;
             return (
               <Typography variant="body2">
-                <strong>{name}</strong> will immediately lose access to Measure Once and their
+                <strong>{name}</strong> will immediately lose access to Harry Wardrobes and their
                 sessions will be signed out. Their record will be kept under{' '}
                 <strong>Archived Users</strong> and can be restored at any time.
               </Typography>

@@ -211,13 +211,13 @@ app.use(express.json({ limit: '25mb' }));
 // Clean URLs for each page (no .html extension). Must precede express.static so the
 // extensionless paths win over any default static-index handling.
 // /trades, /admin, /projects are protected — handled below after auth middleware is set up
-app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Measure Once',      description: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.' }));
-app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Measure Once',  description: 'Browse and manage your customer accounts, contact details, and project history.' }));
-app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Measure Once',    description: 'Update your personal details, preferences, and account settings.' }));
+app.get('/',          (_req, res) => res.render('index',     { title: 'Home · Harry Wardrobes',      description: 'Your Harry Wardrobes project dashboard — track jobs, customers, and design visits in one place.' }));
+app.get('/customers', (_req, res) => res.render('customers', { title: 'Customers · Harry Wardrobes',  description: 'Browse and manage your customer accounts, contact details, and project history.' }));
+app.get('/profile',   (_req, res) => res.render('profile',   { title: 'Profile · Harry Wardrobes',    description: 'Update your personal details, preferences, and account settings.' }));
 
 // Dynamic customer detail page
 app.get('/customers/:id', (req, res) => {
-  res.render('customer-detail', { title: 'Customer · Measure Once' });
+  res.render('customer-detail', { title: 'Customer · Harry Wardrobes' });
 });
 
 // Canonicalise the admin URL: /admin.html → /admin so the protected route
@@ -233,7 +233,7 @@ app.get('/design-visit/sign-off', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let ogTitle = 'Design Visit Sign-Off · Harry Wardrobes';
   let ogDescription = 'Review and sign off on your design visit details with Harry Wardrobes.';
-  let pageTitle = 'Design Visit Sign-Off · Measure Once';
+  let pageTitle = 'Design Visit Sign-Off · Harry Wardrobes';
   const rawToken = String(req.query.token || '').trim();
   if (rawToken && rawToken.length <= 200) {
     try {
@@ -246,7 +246,7 @@ app.get('/design-visit/sign-off', async (req, res) => {
         const name = rows[0].contact_name;
         ogTitle = `Design Visit Sign-Off for ${name} · Harry Wardrobes`;
         ogDescription = `${name} has been sent a design visit sign-off request. Review and sign off on the details with Harry Wardrobes.`;
-        pageTitle = `Design Visit Sign-Off for ${name} · Measure Once`;
+        pageTitle = `Design Visit Sign-Off for ${name} · Harry Wardrobes`;
       }
     } catch (_) {
       // Fall back to generic strings if lookup fails
@@ -267,7 +267,7 @@ app.get('/survey-visit/sign-off', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let ogTitle = 'Survey Visit Sign-Off · Harry Wardrobes';
   let ogDescription = 'Review and sign off on your survey visit details with Harry Wardrobes.';
-  let pageTitle = 'Survey Visit Sign-Off · Measure Once';
+  let pageTitle = 'Survey Visit Sign-Off · Harry Wardrobes';
   const rawToken = String(req.query.token || '').trim();
   if (rawToken && rawToken.length <= 200) {
     try {
@@ -280,7 +280,7 @@ app.get('/survey-visit/sign-off', async (req, res) => {
         const name = rows[0].contact_name;
         ogTitle = `Survey Visit Sign-Off for ${name} · Harry Wardrobes`;
         ogDescription = `${name} has been sent a survey visit sign-off request. Review and sign off on the details with Harry Wardrobes.`;
-        pageTitle = `Survey Visit Sign-Off for ${name} · Measure Once`;
+        pageTitle = `Survey Visit Sign-Off for ${name} · Harry Wardrobes`;
       }
     } catch (_) {
       // Fall back to generic strings if lookup fails
@@ -300,7 +300,7 @@ app.get('/survey-visit/sign-off', async (req, res) => {
 app.get('/customer-info', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.render('customer-info', {
-    title: 'Tell us about your home · Measure Once',
+    title: 'Tell us about your home · Harry Wardrobes',
     description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
     ogTitle: 'Tell us about your home · Harry Wardrobes',
     ogDescription: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
@@ -313,7 +313,7 @@ app.get('/customer-info', (req, res) => {
 app.get('/customer-info/:token', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.render('customer-info', {
-    title: 'Tell us about your home · Measure Once',
+    title: 'Tell us about your home · Harry Wardrobes',
     description: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
     ogTitle: 'Tell us about your home · Harry Wardrobes',
     ogDescription: 'Share details about your home so we can tailor your wardrobe design to fit perfectly.',
@@ -326,16 +326,16 @@ app.get('/customer-info/:token', (req, res) => {
 app.get('/login', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   res.render('login', {
-    title: 'Sign in · Measure Once',
-    description: 'Sign in to your Measure Once project dashboard.',
-    ogTitle: 'Measure Once',
-    ogDescription: 'Your Measure Once project dashboard — track jobs, customers, and design visits in one place.',
+    title: 'Sign in · Harry Wardrobes',
+    description: 'Sign in to your Harry Wardrobes project dashboard.',
+    ogTitle: 'Harry Wardrobes',
+    ogDescription: 'Your Harry Wardrobes project dashboard — track jobs, customers, and design visits in one place.',
     ogUrl: `${baseUrl}/login`,
     ogImage: `${baseUrl}/og-image.png`,
   });
 });
-app.get('/set-password', (_req, res) => res.render('set-password', { title: 'Set password · Measure Once' }));
-app.get('/onboarding', (_req, res) => res.render('onboarding', { title: 'Complete your profile · Measure Once' }));
+app.get('/set-password', (_req, res) => res.render('set-password', { title: 'Set password · Harry Wardrobes' }));
+app.get('/onboarding', (_req, res) => res.render('onboarding', { title: 'Complete your profile · Harry Wardrobes' }));
 
 // Hashed React chunks and assets are content-addressed (Vite appends a hash
 // to every filename), so they can be cached indefinitely by the browser.
@@ -580,11 +580,11 @@ app.use('/api/localdata', requireHubspotToken);
 // Creates measure_once_rooms and measure_once_notes properties if they don't exist
 async function ensureHubSpotProperties() {
   const props = [
-    { name: 'measure_once_rooms',    label: 'Measure Once Rooms',    fieldType: 'textarea', type: 'string', description: 'JSON workflow rooms data (Measure Once CRM)' },
-    { name: 'measure_once_notes',    label: 'Measure Once Notes',    fieldType: 'textarea', type: 'string', description: 'Customer notes (Measure Once CRM)' },
-    { name: 'measure_once_stage',    label: 'Measure Once Stage',    fieldType: 'text',     type: 'string', description: 'Current workflow stage (Measure Once CRM)' },
-    { name: 'measure_once_substage', label: 'Measure Once Substage', fieldType: 'text',     type: 'string', description: 'Current workflow substage/task (Measure Once CRM)' },
-    { name: 'customer_number',       label: 'Customer Number',       fieldType: 'text',     type: 'string', description: 'Unique customer number (e.g. LL01234) — Measure Once CRM' },
+    { name: 'measure_once_rooms',    label: 'Harry Wardrobes Rooms',    fieldType: 'textarea', type: 'string', description: 'JSON workflow rooms data (Harry Wardrobes CRM)' },
+    { name: 'measure_once_notes',    label: 'Harry Wardrobes Notes',    fieldType: 'textarea', type: 'string', description: 'Customer notes (Harry Wardrobes CRM)' },
+    { name: 'measure_once_stage',    label: 'Harry Wardrobes Stage',    fieldType: 'text',     type: 'string', description: 'Current workflow stage (Harry Wardrobes CRM)' },
+    { name: 'measure_once_substage', label: 'Harry Wardrobes Substage', fieldType: 'text',     type: 'string', description: 'Current workflow substage/task (Harry Wardrobes CRM)' },
+    { name: 'customer_number',       label: 'Customer Number',       fieldType: 'text',     type: 'string', description: 'Unique customer number (e.g. LL01234) — Harry Wardrobes CRM' },
   ];
   for (const prop of props) {
     try {
@@ -3928,7 +3928,7 @@ app.get('/admin', requirePageAuth, async (req, res) => {
   if (!admin) {
     return res.status(403).send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Access denied · Measure Once</title>
+<title>Access denied · Harry Wardrobes</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -3953,7 +3953,7 @@ app.get('/admin', requirePageAuth, async (req, res) => {
   <a href="/profile">Back to your profile</a>
 </div></body></html>`);
   }
-  res.render('admin', { title: 'Admin · Measure Once', userId: req.user.claims.sub });
+  res.render('admin', { title: 'Admin · Harry Wardrobes', userId: req.user.claims.sub });
 });
 
 app.get('/trades', isAuthenticated, (_req, res) => {
@@ -3961,20 +3961,20 @@ app.get('/trades', isAuthenticated, (_req, res) => {
 });
 
 app.get('/access-restricted', isAuthenticated, (_req, res) => {
-  res.render('access-restricted', { title: 'Access Restricted · Measure Once' });
+  res.render('access-restricted', { title: 'Access Restricted · Harry Wardrobes' });
 });
 
 app.get('/projects', isAuthenticated, (_req, res) => {
-  res.render('projects', { title: 'Projects · Measure Once', description: 'Track active and completed wardrobe projects from design through to installation.' });
+  res.render('projects', { title: 'Projects · Harry Wardrobes', description: 'Track active and completed wardrobe projects from design through to installation.' });
 });
 app.get('/survey', isAuthenticated, (_req, res) => {
-  res.render('survey', { title: 'Survey · Measure Once', description: 'View and manage survey visits.' });
+  res.render('survey', { title: 'Survey · Harry Wardrobes', description: 'View and manage survey visits.' });
 });
 
 // Standalone, offline-capable design-visit field tool. Exact-path match, so it
 // never shadows the public token-gated /design-visit/sign-off route above.
 app.get('/design-visit', isAuthenticated, (_req, res) => {
-  res.render('design-visit', { title: 'Design visit · Measure Once', description: 'Start a design visit on this device — works offline and syncs when you reconnect.' });
+  res.render('design-visit', { title: 'Design visit · Harry Wardrobes', description: 'Start a design visit on this device — works offline and syncs when you reconnect.' });
 });
 
 app.get('/api/trades', isAuthenticated, requireManagerOrAdmin, async (req, res) => {
@@ -4665,7 +4665,7 @@ app.post('/api/admin/trades/migrate', isAuthenticated, requireAdmin, async (req,
 });
 
 // ── Ideas & Feedback ──────────────────────────────────────────────────────────
-app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Measure Once', description: 'Submit and explore ideas, feature requests, and feedback for your Measure Once workspace.' }));
+app.get('/ideas', isAuthenticated, (_req, res) => res.render('ideas', { title: 'Ideas · Harry Wardrobes', description: 'Submit and explore ideas, feature requests, and feedback for your Harry Wardrobes workspace.' }));
 
 
 app.get('/api/ideas', async (req, res) => {
@@ -5993,7 +5993,7 @@ async function ensureHwTestUserProperty() {
         groupName:   'contactinformation',
         type:        'bool',
         fieldType:   'booleancheckbox',
-        description: 'Marks a contact as a dev/test contact in Measure Once. When dev mode is enabled in the admin panel, only contacts with this flag are shown.',
+        description: 'Marks a contact as a dev/test contact in Harry Wardrobes. When dev mode is enabled in the admin panel, only contacts with this flag are shown.',
         options: [
           { label: 'Yes', value: 'true',  displayOrder: 0, hidden: false },
           { label: 'No',  value: 'false', displayOrder: 1, hidden: false },
@@ -8322,7 +8322,7 @@ function _depInv_buildFromHeader() {
   const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!raw) return raw;
   if (/</.test(raw)) return raw;
-  return `Measure Once <${raw}>`;
+  return `Harry Wardrobes <${raw}>`;
 }
 function _depInv_buildReplyTo() {
   return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
@@ -8386,7 +8386,7 @@ async function _sendTaskAssignmentNotification({ assignedUserId, creatorName, ta
     ...(contactName    ? [`Customer: ${contactName}`]         : []),
     `Due: ${deadlineStr}`,
     '',
-    'Log in to Measure Once to view your tasks.',
+    'Log in to Harry Wardrobes to view your tasks.',
   ];
   const text = lines.join('\n');
   const html = lines
@@ -8426,7 +8426,7 @@ async function _sendTaskUnassignmentNotification({ previousAssignedUserId, creat
     `Task: ${taskName}`,
     ...(contactName ? [`Customer: ${contactName}`] : []),
     '',
-    'Log in to Measure Once to view your current tasks.',
+    'Log in to Harry Wardrobes to view your current tasks.',
   ];
   const text = lines.join('\n');
   const html = lines
@@ -8982,7 +8982,7 @@ async function cleanupStaleHubSpotCredentialRows() {
 
   // 404 catch-all must be registered AFTER setupAuth so auth routes are matched first.
   app.use((req, res) => {
-    res.status(404).render('404', { title: 'Page Not Found · Measure Once' });
+    res.status(404).render('404', { title: 'Page Not Found · Harry Wardrobes' });
   });
 
   // Warn when the React bundle is older than any source file it was built from.
@@ -9021,7 +9021,7 @@ async function cleanupStaleHubSpotCredentialRows() {
   }
 
   app.listen(PORT, HOST, async () => {
-    logger.info(`\n  Measure Once`);
+    logger.info(`\n  Harry Wardrobes`);
     logger.info(`  Running at: http://localhost:${PORT}\n`);
     if (process.env.DEBUG_HUBSPOT) {
       logger.warn('[DEBUG] DEBUG_HUBSPOT is enabled — verbose HubSpot rate-limit and stale-cache logs are active. Unset this flag in production.');

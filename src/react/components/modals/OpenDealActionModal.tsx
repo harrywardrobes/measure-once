@@ -46,12 +46,12 @@ import type { CardActionContext } from '../../utils/dispatchCardActionHandler';
 const DEMO_DECLINE_EMAIL_PREVIEW = {
   subject: 'Thank you for your time, Jane',
   bodyText:
-    'Hi Jane,\n\nThank you so much for considering us for your project. We\'re sorry we weren\'t able to take it further on this occasion, but we\'d love to help you in the future.\n\nPlease don\'t hesitate to get in touch if anything changes.\n\nBest wishes,\nThe Measure Once Team',
+    'Hi Jane,\n\nThank you so much for considering us for your project. We\'re sorry we weren\'t able to take it further on this occasion, but we\'d love to help you in the future.\n\nPlease don\'t hesitate to get in touch if anything changes.\n\nBest wishes,\nThe Harry Wardrobes Team',
   html:
     '<p>Hi Jane,</p>' +
     '<p>Thank you so much for considering us for your project. We\'re sorry we weren\'t able to take it further on this occasion, but we\'d love to help you in the future.</p>' +
     '<p>Please don\'t hesitate to get in touch if anything changes.</p>' +
-    '<p>Best wishes,<br>The Measure Once Team</p>',
+    '<p>Best wishes,<br>The Harry Wardrobes Team</p>',
 } as const;
 
 const DEMO_DEPOSIT_EMAIL_PREVIEW = {
@@ -61,9 +61,9 @@ const DEMO_DEPOSIT_EMAIL_PREVIEW = {
     '<p>Thank you for choosing us! As discussed, please find your deposit invoice attached for <strong>10%</strong> of the total estimate value (£150.00).</p>' +
     '<p>Once your deposit is received we\'ll get everything confirmed and scheduled for you.</p>' +
     '<p>If you have any questions, please don\'t hesitate to reply to this email.</p>' +
-    '<p>Best wishes,<br>The Measure Once Team</p>',
+    '<p>Best wishes,<br>The Harry Wardrobes Team</p>',
   text:
-    'Hi Jane,\n\nThank you for choosing us! As discussed, please find your deposit invoice attached for 10% of the total estimate value (£150.00).\n\nOnce your deposit is received we\'ll get everything confirmed and scheduled for you.\n\nIf you have any questions, please don\'t hesitate to reply to this email.\n\nBest wishes,\nThe Measure Once Team',
+    'Hi Jane,\n\nThank you for choosing us! As discussed, please find your deposit invoice attached for 10% of the total estimate value (£150.00).\n\nOnce your deposit is received we\'ll get everything confirmed and scheduled for you.\n\nIf you have any questions, please don\'t hesitate to reply to this email.\n\nBest wishes,\nThe Harry Wardrobes Team',
 } as const;
 
 interface Props {

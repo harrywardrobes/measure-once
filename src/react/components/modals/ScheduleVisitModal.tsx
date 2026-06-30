@@ -482,7 +482,7 @@ export function ScheduleVisitModal({
               size="small"
             />
             <Typography variant="caption" color="text.secondary">
-              This visit is added to the shared Measure Once Google Calendar.
+              This visit is added to the shared Harry Wardrobes Google Calendar.
             </Typography>
             <FormControlLabel
               control={

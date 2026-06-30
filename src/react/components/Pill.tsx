@@ -5,7 +5,7 @@ import { useTheme } from '@mui/material/styles';
 /**
  * <Pill/> — small status pill used across the React island.
  *
- * Renders an MUI `<Chip size="small">` themed with the Measure Once stage /
+ * Renders an MUI `<Chip size="small">` themed with the Harry Wardrobes stage /
  * status colours from `theme.palette.stage`. Legacy variants
  * (`neutral` / `success` / `danger` / `warn` / `info`) still work — they map
  * onto MUI's semantic palette so existing callers (e.g. legacy renderPill

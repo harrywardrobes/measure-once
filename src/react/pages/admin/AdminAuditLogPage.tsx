@@ -39,7 +39,7 @@ const ACTION_LABELS: Record<string, string> = {
 const PAGE_SIZE = 50;
 
 export function AdminAuditLogPage() {
-  usePageTitle('Audit Log · Measure Once');
+  usePageTitle('Audit Log · Harry Wardrobes');
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);

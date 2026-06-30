@@ -494,7 +494,7 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
 }
 
 export function AdminRequestsPage() {
-  usePageTitle('Access Requests · Measure Once');
+  usePageTitle('Access Requests · Harry Wardrobes');
   const [loading, setLoading] = useState(true);
   const [reqs, setReqs] = useState<Req[]>([]);
   const [photos, setPhotos] = useState<PhotoReq[]>([]);

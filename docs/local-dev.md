@@ -1,6 +1,6 @@
 # Local development against cloud services
 
-Run and edit Measure Once on your own machine while continuing to use the
+Run and edit Harry Wardrobes on your own machine while continuing to use the
 existing **cloud** integrations (HubSpot, QuickBooks, Google, SMTP, object
 storage). This is a dev loop, not a migration — nothing here moves data off the
 cloud.

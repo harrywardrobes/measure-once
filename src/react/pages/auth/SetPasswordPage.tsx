@@ -25,7 +25,7 @@ interface InvalidInfo {
 }
 
 export function SetPasswordPage() {
-  usePageTitle('Set Password · Measure Once');
+  usePageTitle('Set Password · Harry Wardrobes');
 
   const [state, setState] = React.useState<PageState>('loading');
   const [invalid, setInvalid] = React.useState<InvalidInfo>({ msg: '', actionHref: '/login', actionLabel: 'Back to sign in' });

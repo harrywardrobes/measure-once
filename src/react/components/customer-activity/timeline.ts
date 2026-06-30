@@ -25,7 +25,7 @@ export type ActivityType =
   | 'marketing_email'
   | 'page_view';
 
-/** Internal Measure Once contact-attempt methods. */
+/** Internal Harry Wardrobes contact-attempt methods. */
 export type AttemptMethod = 'call' | 'email' | 'whatsapp';
 
 export interface HubspotActivity {

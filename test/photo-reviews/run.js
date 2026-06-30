@@ -350,7 +350,7 @@ async function main() {
         submissionId: subId2,
         outcome:      'rough_estimate_sent',
         priceRange:   '£5,000 – £8,000',
-        emailSubject: 'Your rough estimate from Measure Once',
+        emailSubject: 'Your rough estimate from Harry Wardrobes',
         emailBody:    'Hi, your rough estimate is £5,000–£8,000.',
       });
       const ok = r.status === 200 && r.json?.ok === true;

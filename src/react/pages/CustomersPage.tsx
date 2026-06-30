@@ -1124,7 +1124,7 @@ function CustomerCard({
 }
 
 export function CustomersPage(): React.ReactElement {
-  usePageTitle('Customers · Measure Once');
+  usePageTitle('Customers · Harry Wardrobes');
   const initial = React.useMemo(() => readUrlState(), []);
   const [leadStatus, setLeadStatus] = React.useState<string>(initial.leadStatus);
   const [sortBy, setSortBy] = React.useState<string>(initial.sort);

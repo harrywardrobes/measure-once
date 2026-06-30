@@ -13,7 +13,7 @@ document.
 SYSTEMS INVOLVED
 ----------------
 
-Measure Once Dashboard
+Harry Wardrobes Dashboard
   The internal web application where staff manage the customer pipeline.
   Displays a Kanban-style board driven by HubSpot lead status. Staff use it to
   send the customer-info form link, view photo submissions, manage design visit

@@ -79,7 +79,7 @@ async function jpost<T>(path: string, body: unknown): Promise<T> {
 }
 
 export function ProfilePage(): React.ReactElement {
-  usePageTitle('Profile · Measure Once');
+  usePageTitle('Profile · Harry Wardrobes');
   // The React island mounts before core.js bootstrap() finishes. Seed from
   // getAppUser() (reads the global header user object), listen for the
   // `mo:user` event that bootstrap fires, AND as a last-resort fall back to

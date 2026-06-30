@@ -1,6 +1,6 @@
 # Environments: development → staging → production
 
-Measure Once runs in three tiers. This document describes each, how they differ,
+Harry Wardrobes runs in three tiers. This document describes each, how they differ,
 and the exact steps to stand up and refresh **staging**
 (`staging.harrywardrobes.co.uk`).
 

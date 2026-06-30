@@ -1125,7 +1125,7 @@ function WorkflowDemoModalHost({
 // ── WorkflowPage ──────────────────────────────────────────────────────────────
 
 export function WorkflowPage() {
-  usePageTitle('Workflow · Measure Once');
+  usePageTitle('Workflow · Harry Wardrobes');
 
   const [labels,         setLabels]         = useState<CALabel[]>([]);
   const [statuses,       setStatuses]       = useState<LeadStatus[]>([]);

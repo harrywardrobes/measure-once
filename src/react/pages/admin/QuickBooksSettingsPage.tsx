@@ -59,7 +59,7 @@ function isValidEmail(v: string) {
 }
 
 export function QuickBooksSettingsPage() {
-  usePageTitle('QuickBooks Settings · Measure Once');
+  usePageTitle('QuickBooks Settings · Harry Wardrobes');
 
   const [status,   setStatus]   = useState<QbStatus | null>(null);
   const [settings, setSettings] = useState<QbSettings | null>(null);

@@ -1,6 +1,6 @@
 # Offline / PWA (Phases 1–2)
 
-Measure Once is an installable Progressive Web App with offline support.
+Harry Wardrobes is an installable Progressive Web App with offline support.
 
 - **Phase 1 (read):** open the app, browse customers, visits, and photo
   submissions already viewed, and install to the home screen — all without a

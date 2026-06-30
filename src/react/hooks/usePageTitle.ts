@@ -7,7 +7,7 @@ import { useEffect } from 'react';
  * in sync as the user navigates between React sub-views.
  *
  * Usage:
- *   usePageTitle('Customers · Measure Once');
+ *   usePageTitle('Customers · Harry Wardrobes');
  */
 export function usePageTitle(title: string): void {
   useEffect(() => {

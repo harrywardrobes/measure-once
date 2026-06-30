@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generate the branded PWA icons for Measure Once.
+ * Generate the branded PWA icons for Harry Wardrobes.
  *
  * Produces four PNGs under public/icons/:
  *   icon-192.png            (purpose "any")
@@ -105,9 +105,9 @@ writeFaviconPng('favicon-32.png', 32);
 /**
  * Generate the 1200x630 Open Graph / social-share preview image.
  *
- * Composites the wood-grain brand mark above the "Measure Once" wordmark on
+ * Composites the wood-grain brand mark above the "Harry Wardrobes" wordmark on
  * the plum brand field, with a thin orchid accent rule. This is the image link
- * unfurls (Slack, WhatsApp, iMessage, etc.) show when a Measure Once URL is
+ * unfurls (Slack, WhatsApp, iMessage, etc.) show when a Harry Wardrobes URL is
  * shared. Committed to public/og-image.png (NOT gitignored).
  */
 function writeOgImage() {
@@ -118,11 +118,11 @@ function writeOgImage() {
     // Wood-grain mark, centred and shifted up to leave room for the wordmark.
     '(', SOURCE_MARK, '-resize', '260x260', ')',
     '-gravity', 'center', '-geometry', '+0-110', '-compose', 'over', '-composite',
-    // "Measure Once" wordmark in paper.
+    // "Harry Wardrobes" wordmark in paper.
     '-gravity', 'center',
     '-font', 'DejaVu-Sans-Bold', '-fill', PAPER,
     '-pointsize', '108', '-kerning', '2',
-    '-annotate', '+0+95', 'Measure Once',
+    '-annotate', '+0+95', 'Harry Wardrobes',
     // Orchid accent rule + tagline beneath the wordmark.
     '-fill', ORCHID, '-pointsize', '26', '-kerning', '8',
     '-annotate', '+0+185', 'HARRY WARDROBES',

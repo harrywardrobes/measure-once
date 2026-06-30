@@ -120,7 +120,7 @@ const AREA_LABELS: Record<string, string> = {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export function OfflineSupportPage() {
-  usePageTitle('Offline support · Measure Once');
+  usePageTitle('Offline support · Harry Wardrobes');
 
   const counts = useOfflineQueue();
   const { failures, retry, discard } = useOfflineFailures();
@@ -196,7 +196,7 @@ export function OfflineSupportPage() {
             Offline support
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Measure Once is an installable app that keeps working when your connection
+            Harry Wardrobes is an installable app that keeps working when your connection
             drops. The table below shows what each area can do offline, and the panels
             track changes saved on this device that are waiting to sync — including any
             that failed, which you can retry or discard individually.

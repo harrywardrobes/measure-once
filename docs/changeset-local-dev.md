@@ -128,7 +128,7 @@ Confirm `.env` is gitignored (it is). Create `.env.example` with:
 
 ```
 # =============================================================================
-# Measure Once — example environment file
+# Harry Wardrobes — example environment file
 # =============================================================================
 # Copy this to `.env` (which is gitignored) and fill in real values:
 #     cp .env.example .env

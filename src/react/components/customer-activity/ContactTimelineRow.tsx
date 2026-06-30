@@ -11,7 +11,7 @@ interface FormField { name: string; value: string }
 
 // ── A single compact, expandable row in the unified contact timeline ──────────
 // Shared by the Contact Customer modal and the customer detail page activity
-// feed so both surfaces render the same way. Internal Measure Once attempts are
+// feed so both surfaces render the same way. Internal Harry Wardrobes attempts are
 // tinted differently from HubSpot-sourced rows.
 export function ContactTimelineRow({
   item,
@@ -99,7 +99,7 @@ export function ContactTimelineRow({
         <Collapse in={expanded} unmountOnExit>
           <Box sx={{ px: 1, pb: 0.75, pl: '30px', display: 'flex', flexDirection: 'column', gap: 0.25 }}>
             <Typography variant="caption" color="text.secondary">
-              {isInternal ? 'Logged in Measure Once' : 'HubSpot'}
+              {isInternal ? 'Logged in Harry Wardrobes' : 'HubSpot'}
               {item.actor ? ` · ${item.actor}` : ''}
             </Typography>
             {Boolean(m.from) && <Typography variant="caption" color="text.secondary">From: {String(m.from)}</Typography>}

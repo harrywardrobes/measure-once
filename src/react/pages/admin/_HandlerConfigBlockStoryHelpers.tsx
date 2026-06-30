@@ -36,7 +36,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
   schedule_visit:
     'Clicking the action on a card opens a DateTimePicker modal.\n' +
     '• Choose the visit type (Design visit, Survey, or Other) in the config.\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    '• On submit, an event is created on the shared "Harry Wardrobes" Google ' +
     'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
     'No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.',

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build the Workbox service worker for Measure Once.
+ * Build the Workbox service worker for Harry Wardrobes.
  *
  * Runs AFTER the Vite React build (it globs the freshly-built, content-hashed
  * bundle under public/react/). Produces a single self-contained public/sw.js

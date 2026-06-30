@@ -312,7 +312,7 @@ function Logo() {
         fontSize: '1.1rem',
       }}
     >
-      Measure Once
+      Harry Wardrobes
     </Typography>
   );
 }
@@ -1475,7 +1475,7 @@ export function CustomerInfoPage() {
             </Button>
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1.5 }}>
-              Your information is only shared with the Measure Once team and is used solely to prepare your quote.
+              Your information is only shared with the Harry Wardrobes team and is used solely to prepare your quote.
             </Typography>
           </>
         )}

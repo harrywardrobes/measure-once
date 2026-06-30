@@ -868,7 +868,7 @@ export function TemplateRow({ templateKey, template, shared, system, sentFrom, t
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function EmailTemplatesPage() {
-  usePageTitle('Email templates · Measure Once');
+  usePageTitle('Email templates · Harry Wardrobes');
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

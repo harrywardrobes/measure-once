@@ -55,7 +55,7 @@ const loadedQB: QBInvoicesResult = {
   loadError: false,
   error: null,
   errorCode: null,
-  company: 'Measure Once Ltd',
+  company: 'Gautier Design Ltd',
   invoices: [
     {
       id: 'inv-001',
@@ -100,7 +100,7 @@ const noInvoicesQB: QBInvoicesResult = {
   loadError: false,
   error: null,
   errorCode: null,
-  company: 'Measure Once Ltd',
+  company: 'Gautier Design Ltd',
   invoices: [],
   refresh: noop,
   triggerLoad: noop,

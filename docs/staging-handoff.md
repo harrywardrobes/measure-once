@@ -1,6 +1,6 @@
 # Staging environment — handoff plan
 
-Stand up `staging.harrywardrobes.co.uk`: a Cloud Run deployment of Measure Once
+Stand up `staging.harrywardrobes.co.uk`: a Cloud Run deployment of Harry Wardrobes
 running the **live** HubSpot / QuickBooks / SMTP integrations, but against an
 **isolated copy** of production data with the app's **dev mode ON** (so only
 HubSpot test contacts — `hw_test_user='true'` — are touched).

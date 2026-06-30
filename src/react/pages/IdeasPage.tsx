@@ -718,7 +718,7 @@ function NewIdeaDialog({
 // ── IdeasPage ──────────────────────────────────────────────────────────────────
 
 export function IdeasPage() {
-  usePageTitle('Ideas · Measure Once');
+  usePageTitle('Ideas · Harry Wardrobes');
   const { isAdmin } = usePrivilege();
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);

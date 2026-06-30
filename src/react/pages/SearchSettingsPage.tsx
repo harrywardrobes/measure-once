@@ -56,7 +56,7 @@ async function api<T = unknown>(method: string, path: string, body?: unknown): P
 }
 
 export function SearchSettingsPage() {
-  usePageTitle('Search · Measure Once');
+  usePageTitle('Search · Harry Wardrobes');
   const [loading, setLoading]     = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placeholder, setPlaceholder] = useState('');

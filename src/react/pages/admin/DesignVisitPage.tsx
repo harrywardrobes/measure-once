@@ -82,7 +82,7 @@ function TermsDisplay({ terms }: { terms: DvTerms[] }) {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export function DesignVisitPage() {
-  usePageTitle('Visits · Measure Once');
+  usePageTitle('Visits · Harry Wardrobes');
   useConnectionCheck();
   const { notifyApiError } = useConnectionToast();
   const { user } = useAuth();

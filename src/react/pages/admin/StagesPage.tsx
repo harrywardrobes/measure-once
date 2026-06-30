@@ -216,7 +216,7 @@ function StatusRow({ status, index, total, bgColor, onMove, onDelete, isRequired
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function StagesPage() {
-  usePageTitle('Stages · Measure Once');
+  usePageTitle('Stages · Harry Wardrobes');
 
   // ── Lead statuses ──
   const [statuses, setStatuses] = useState<LeadStatus[]>([]);

@@ -122,7 +122,7 @@ const BRAND_MARK = (
         color: BRAND_COLORS.ink1,
       }}
     >
-      Measure Once
+      Harry Wardrobes
     </Typography>
   </Box>
 );

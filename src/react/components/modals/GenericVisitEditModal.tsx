@@ -404,8 +404,8 @@ export function GenericVisitEditModal(props: Props) {
           />
           <Typography variant="caption" color="text.secondary">
             {isCreate
-              ? 'This visit is added to the shared Measure Once Google Calendar.'
-              : 'Changes are saved to the shared Measure Once Google Calendar.'}
+              ? 'This visit is added to the shared Harry Wardrobes Google Calendar.'
+              : 'Changes are saved to the shared Harry Wardrobes Google Calendar.'}
           </Typography>
           {error && (
             <Typography variant="caption" color="error">{error}</Typography>

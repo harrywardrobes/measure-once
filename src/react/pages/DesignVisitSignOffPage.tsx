@@ -124,7 +124,7 @@ function Logo() {
         fontSize: '1.1rem',
       }}
     >
-      Measure Once
+      Harry Wardrobes
     </Typography>
   );
 }

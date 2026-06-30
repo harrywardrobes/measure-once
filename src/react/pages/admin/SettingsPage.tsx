@@ -47,7 +47,7 @@ function showToast(msg: string, err?: boolean) {
 }
 
 export function SettingsPage() {
-  usePageTitle('Settings · Measure Once');
+  usePageTitle('Settings · Harry Wardrobes');
   const [storybookBuilt, setStorybookBuilt] = useState<boolean | null>(null);
   const [digestSettings, setDigestSettings] = useState<DigestSettings | null>(null);
   const [digestSending, setDigestSending] = useState(false);

@@ -97,9 +97,9 @@ export function CustomerDetailPage() {
     } catch { return null; }
   });
   usePageTitle(
-    contact    ? `${contactName(contact)} · Measure Once`
-    : cachedName ? `${cachedName} · Measure Once`
-    : 'Customer · Measure Once'
+    contact    ? `${contactName(contact)} · Harry Wardrobes`
+    : cachedName ? `${cachedName} · Harry Wardrobes`
+    : 'Customer · Harry Wardrobes'
   );
   const [rooms,        setRooms]        = useState<Room[]>([]);
   const [notes,        setNotes]        = useState('');

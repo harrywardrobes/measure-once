@@ -50,7 +50,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function OnboardingPage() {
-  usePageTitle('Welcome · Measure Once');
+  usePageTitle('Welcome · Harry Wardrobes');
 
   const [form, setForm] = React.useState<FormData>(() => {
     const draft = loadDraft();
@@ -152,7 +152,7 @@ export function OnboardingPage() {
               Complete your profile
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Before you can use Measure Once, please fill in your details below.
+              Before you can use Harry Wardrobes, please fill in your details below.
             </Typography>
           </Box>
           <Button variant="text" onClick={handleSignOut} sx={{ color: 'text.secondary', textDecoration: 'underline', flexShrink: 0, ml: 2 }}>

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Measure Once — production container image
+# Harry Wardrobes — production container image
 #
 # Multi-stage build that produces a slim runtime image for Cloud Run.
 #

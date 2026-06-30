@@ -3,7 +3,7 @@ import { createTheme, type Theme } from '@mui/material/styles';
 /**
  * Shared MUI theme for the React island.
  *
- * This file is the canonical definition of Measure Once's design tokens.
+ * This file is the canonical definition of Harry Wardrobes's design tokens.
  * `AppThemeProvider` (src/react/AppThemeProvider.tsx) derives a `GlobalStyles`
  * `:root` injection from the constants below so every non-React page that uses
  * `var(--orchid)`, `var(--paper)`, `var(--stage-sales-bg)`, etc. stays in sync

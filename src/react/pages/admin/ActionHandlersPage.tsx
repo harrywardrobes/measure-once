@@ -71,7 +71,7 @@ const HANDLER_TYPE_DESCRIPTIONS: Record<string, string> = {
     'Clicking the action on a card opens a MUI DateTimePicker modal asking ' +
     'for date, time, duration, title, location, and notes.\n' +
     '• Choose the visit type (Design visit, Survey, or Other) in the config below.\n' +
-    '• On submit, an event is created on the shared "Measure Once" Google ' +
+    '• On submit, an event is created on the shared "Harry Wardrobes" Google ' +
     'Calendar (POST /api/events) — the single source of truth for scheduling. ' +
     'No separate CRM visit row is created.\n' +
     '• No HubSpot record is changed by this action.',
@@ -1045,7 +1045,7 @@ interface EditorOpenState { slot: ActionSlot; existing: Handler | null; }
 interface ConflictResolverOpenState { stageKey: string | null; statusKey: string | null; }
 
 export function ActionHandlersPage() {
-  usePageTitle('Action Handlers · Measure Once');
+  usePageTitle('Action Handlers · Harry Wardrobes');
   const toast = useToast();
   const { workflow } = useWorkflow();
   // Keep the module-level cache in sync so _buildActionSlotGroups() (called

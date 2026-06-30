@@ -65,7 +65,7 @@ function buildFromHeader() {
   const raw = (process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!raw) return raw;
   if (/</.test(raw)) return raw;
-  return `Measure Once <${raw}>`;
+  return `Harry Wardrobes <${raw}>`;
 }
 function buildReplyTo() {
   return (process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();

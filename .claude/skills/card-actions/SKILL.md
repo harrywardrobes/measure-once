@@ -1,6 +1,6 @@
 ---
 name: card-actions
-description: Implement, modify, or audit card action handlers in Measure Once. Use when adding a new handler type, changing what happens when an operator clicks an action label on a card, updating the admin config form for a handler, or reviewing handler security. Triggers for phrases like "new card action", "add handler", "action handler type", "card action modal", or any work touching the handler system.
+description: Implement, modify, or audit card action handlers in Harry Wardrobes. Use when adding a new handler type, changing what happens when an operator clicks an action label on a card, updating the admin config form for a handler, or reviewing handler security. Triggers for phrases like "new card action", "add handler", "action handler type", "card action modal", or any work touching the handler system.
 ---
 
 # Card Actions

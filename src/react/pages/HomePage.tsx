@@ -675,7 +675,7 @@ function ProjectsSection({
 }
 
 export function HomePage(): React.ReactElement {
-  usePageTitle('Home · Measure Once');
+  usePageTitle('Home · Harry Wardrobes');
   const now = new Date();
   const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const { isAdmin } = usePrivilege();

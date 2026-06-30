@@ -286,7 +286,7 @@ export function TaskModal({
           </FormControl>
 
           <Typography variant="caption" color="text.secondary">
-            This task is added to the shared Measure Once Google Calendar.
+            This task is added to the shared Harry Wardrobes Google Calendar.
           </Typography>
         </Stack>
       </FullScreenModal>

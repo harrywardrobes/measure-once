@@ -262,7 +262,7 @@ function PriorityActiveDaysCard() {
 }
 
 export function HubSpotPage() {
-  usePageTitle('HubSpot · Measure Once');
+  usePageTitle('HubSpot · Harry Wardrobes');
 
   const [hubStatus, setHubStatus] = useState<HubStatus | null>(null);
 

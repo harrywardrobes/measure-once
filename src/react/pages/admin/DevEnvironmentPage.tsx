@@ -162,7 +162,7 @@ const DEV_ONLY_FEATURES: Array<{
 ];
 
 export function DevEnvironmentPage() {
-  usePageTitle('Developer · Measure Once');
+  usePageTitle('Developer · Harry Wardrobes');
   const [storybookAvailable, setStorybookAvailable] = useState<boolean>(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isDevelopment, setIsDevelopment] = useState<boolean>(false);

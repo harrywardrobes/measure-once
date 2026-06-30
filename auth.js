@@ -122,7 +122,7 @@ async function notifyAdminsOfAccessRequest(name, email, timestamp) {
       from,
       replyTo,
       to: adminEmails.join(', '),
-      subject: 'New access request — Measure Once',
+      subject: 'New access request — Harry Wardrobes',
       text: [
         'A new access request has been submitted.',
         '',
@@ -205,7 +205,7 @@ async function notifyUserOfPhotoApproval(email) {
       from,
       replyTo,
       to: email,
-      subject: 'Your profile photo has been approved — Measure Once',
+      subject: 'Your profile photo has been approved — Harry Wardrobes',
       text: [
         'Your profile photo submission has been reviewed and approved.',
         '',
@@ -240,7 +240,7 @@ async function notifyUserOfPhotoRejection(email) {
       from,
       replyTo,
       to: email,
-      subject: 'Your profile photo was not approved — Measure Once',
+      subject: 'Your profile photo was not approved — Harry Wardrobes',
       text: [
         'Your profile photo submission was reviewed and was not approved.',
         '',
@@ -2583,7 +2583,7 @@ async function sendConflictDigest() {
     return `<li><strong>${escapeHtml(name)}</strong> &lt;${escapeHtml(u.email)}&gt; — unresolved since ${escapeHtml(since)}</li>`;
   }).join('\n');
 
-  const subject = `Measure Once — ${count} unresolved onboarding conflict${count === 1 ? '' : 's'}`;
+  const subject = `Harry Wardrobes — ${count} unresolved onboarding conflict${count === 1 ? '' : 's'}`;
 
   await transport.sendMail({
     from, replyTo,

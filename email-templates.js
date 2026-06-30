@@ -117,7 +117,7 @@ const TEMPLATE_DEFS = {
       '<p>It only takes a few minutes and you can upload photos of the spaces you have in mind.</p>',
       '<p>If you have any questions, just reply to this email.</p>',
     ].join('\n'),
-    footer_text: 'Warm regards,\nThe Measure Once team',
+    footer_text: 'Warm regards,\nThe Harry Wardrobes team',
   },
 
   admin_notification: {
@@ -183,7 +183,7 @@ const TEMPLATE_DEFS = {
       '<p>Hi {{firstName}},</p>',
       '<p>Thank you for the extra info about your home, we will be in touch shortly.</p>',
     ].join('\n'),
-    footer_text: 'Warm regards,\nThe Measure Once team',
+    footer_text: 'Warm regards,\nThe Harry Wardrobes team',
   },
 
   set_password_welcome: {
@@ -194,15 +194,15 @@ const TEMPLATE_DEFS = {
     variableDescriptions: {
       link: 'The one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
     },
-    subject: 'Welcome to Measure Once — set your password',
+    subject: 'Welcome to Harry Wardrobes — set your password',
     body_text: [
-      "You've been granted access to Measure Once.",
+      "You've been granted access to Harry Wardrobes.",
       '',
       'Set your password by clicking the link below (valid for 24 hours):',
       '  {{link}}',
     ].join('\n'),
     body_html: [
-      "<p>You've been granted access to <strong>Measure Once</strong>.</p>",
+      "<p>You've been granted access to <strong>Harry Wardrobes</strong>.</p>",
       '<p>Set your password by clicking the link below (valid for 24 hours):</p>',
       '<p><a href="{{link}}">{{link}}</a></p>',
     ].join('\n'),
@@ -217,15 +217,15 @@ const TEMPLATE_DEFS = {
     variableDescriptions: {
       link: 'The new one-time URL for the recipient to set their password. Valid for 24 hours. Always present.',
     },
-    subject: 'Set your Measure Once password (new link)',
+    subject: 'Set your Harry Wardrobes password (new link)',
     body_text: [
-      'A new password setup link has been issued for your Measure Once account.',
+      'A new password setup link has been issued for your Harry Wardrobes account.',
       '',
       'Set your password by clicking the link below (valid for 24 hours):',
       '  {{link}}',
     ].join('\n'),
     body_html: [
-      '<p>A new password setup link has been issued for your Measure Once account.</p>',
+      '<p>A new password setup link has been issued for your Harry Wardrobes account.</p>',
       '<p>Set your password by clicking the link below (valid for 24 hours):</p>',
       '<p><a href="{{link}}">{{link}}</a></p>',
     ].join('\n'),
@@ -240,15 +240,15 @@ const TEMPLATE_DEFS = {
     variableDescriptions: {
       link: 'The one-time URL for the recipient to reset their password. Valid for 1 hour. Always present.',
     },
-    subject: 'Reset your Measure Once password',
+    subject: 'Reset your Harry Wardrobes password',
     body_text: [
-      'A password reset was requested for your Measure Once account.',
+      'A password reset was requested for your Harry Wardrobes account.',
       '',
       'Reset your password by clicking the link below (valid for 1 hour):',
       '  {{link}}',
     ].join('\n'),
     body_html: [
-      '<p>A password reset was requested for your <strong>Measure Once</strong> account.</p>',
+      '<p>A password reset was requested for your <strong>Harry Wardrobes</strong> account.</p>',
       '<p>Reset your password by clicking the link below (valid for 1 hour):</p>',
       '<p><a href="{{link}}">{{link}}</a></p>',
     ].join('\n'),
@@ -403,7 +403,7 @@ const TEMPLATE_DEFS = {
       'Best regards',
     ].join('\n'),
     body_html: '',
-    footer_text: 'Warm regards,\nThe Measure Once team',
+    footer_text: 'Warm regards,\nThe Harry Wardrobes team',
   },
 
   deposit_invoice_payment_reminder: {
@@ -472,7 +472,7 @@ const TEMPLATE_DEFS = {
       'We look forward to seeing you.',
     ].join('\n'),
     body_html: '',
-    footer_text: 'Warm regards,\nThe Measure Once team',
+    footer_text: 'Warm regards,\nThe Harry Wardrobes team',
   },
 
   contact_customer_followup: {

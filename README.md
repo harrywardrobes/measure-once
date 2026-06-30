@@ -1,4 +1,4 @@
-# Measure Once — Project Dashboard
+# Harry Wardrobes — Project Dashboard
 
 A bespoke CRM and project management app for Harry Wardrobes. Integrates with HubSpot (contacts and deals), QuickBooks (invoices), Google (email, calendar, auth), and WhatsApp into a single workflow.
 
