@@ -33,6 +33,9 @@ vi.mock('../../contexts/AuthContext', () => ({
 
 vi.mock('../../contexts/ToastContext', () => ({
   useToast: () => vi.fn(),
+  // The shared TaskList (now rendered by TasksSection) reads the toast context
+  // to offer an Undo after a task is ticked complete.
+  useToastContext: () => ({ showToast: vi.fn(), showToastWithAction: vi.fn() }),
 }));
 
 vi.mock('../../utils/broadcastUrgencyChanged', () => ({

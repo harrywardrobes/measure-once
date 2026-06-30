@@ -1,10 +1,12 @@
-import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import { DateTimeEditor } from '../../components/DateTimeEditor';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
@@ -14,6 +16,8 @@ import { useConnectionToast } from '../../contexts/ConnectionToastContext';
 import { broadcastUrgencyChanged } from '../../utils/broadcastUrgencyChanged';
 import { broadcastTaskChanged } from '../../utils/broadcastTaskChanged';
 import { DOM_FLUSH_DELAY_MS } from '../../constants/timings';
+import { TaskList, categorizeTaskItems, type TaskListItem } from '../../components/tasks/TaskList';
+import { parseUpcomingEvents, eventTypeLabel, type UpcomingEvent } from '../../utils/calendarEvents';
 
 // The shared task-creation modal (same one used by the Contact Customer modal's
 // "Call Later"). Lazy so its date-picker deps stay out of the detail bundle
@@ -30,21 +34,6 @@ interface Props {
   contactMobile?: string;
   tasks: CalendarTask[];
   onTasksChange: (tasks: CalendarTask[]) => void;
-}
-
-function getTaskUrgency(tasks: CalendarTask[]): string | null {
-  const now = Date.now();
-  const oneDay = now + 86400000;
-  const twoDay = now + 172800000;
-  let urgency: string | null = null;
-  for (const t of tasks) {
-    if (t.task_status === 'completed') continue;
-    const due = t.task_deadline ? new Date(t.task_deadline).getTime() : 0;
-    if (!due) continue;
-    if (due <= oneDay) { urgency = 'red'; break; }
-    else if (due <= twoDay && urgency !== 'red') urgency = 'orange';
-  }
-  return urgency;
 }
 
 export function TasksSection({ contactId, contactName, contactEmail, contactPhone, contactMobile, tasks, onTasksChange }: Props) {
@@ -102,6 +91,22 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
     setTimeout(tryScroll, DOM_FLUSH_DELAY_MS);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // This contact's calendar events (visits etc.), past + upcoming, so the
+  // feed mirrors the home screen — upcoming ones sit in the open list, past
+  // ones drop into the collapsed "Done / Past" section. Best-effort: a Google
+  // auth/connection failure just leaves the feed showing tasks only.
+  const [events, setEvents] = useState<UpcomingEvent[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/events?contactId=${encodeURIComponent(contactId)}&includePast=1`, {
+      headers: { Accept: 'application/json' },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((data) => { if (!cancelled) setEvents(parseUpcomingEvents(data)); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [contactId]);
+
   const [taskModalOpen, setTaskModalOpen] = useState(false);
 
   const [editingTaskId, setEditingTaskId]   = useState<string | null>(null);
@@ -112,14 +117,29 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
   const [editSubject,         setEditSubject]         = useState('');
   const [editSubjectSaving,   setEditSubjectSaving]   = useState(false);
 
-  const sorted = [...tasks].sort((a, b) => {
-    const aDone = a.task_status === 'completed';
-    const bDone = b.task_status === 'completed';
-    if (aDone !== bDone) return aDone ? 1 : -1;
-    const aTime = a.task_deadline ? new Date(a.task_deadline).getTime() : 0;
-    const bTime = b.task_deadline ? new Date(b.task_deadline).getTime() : 0;
-    return aTime - bTime;
-  });
+  // Normalise this contact's tasks + calendar events into the shared feed model.
+  const items: TaskListItem[] = useMemo(() => [
+    ...tasks.map((t) => ({
+      id: t.id,
+      kind: 'task' as const,
+      title: t.task_name || 'Untitled',
+      when: t.task_deadline || null,
+      pastWhen: t.task_completed_at ?? t.task_deadline ?? null,
+      status: t.task_status,
+      contactId,
+      assigneeName: t.task_assigned_user?.name || undefined,
+    })),
+    ...events.map((e) => ({
+      id: `ev:${e.id}`,
+      kind: 'event' as const,
+      title: e.title,
+      when: e.start,
+      contactId: e.contactId || contactId,
+      eventTypeLabel: eventTypeLabel(e.visitType),
+    })),
+  ], [tasks, events, contactId]);
+
+  const { open, past } = useMemo(() => categorizeTaskItems(items, Date.now()), [items]);
 
   const handleTaskCreated = useCallback((task: CalendarTask) => {
     onTasksChange([...tasks, task]);
@@ -127,10 +147,13 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
     // TaskModal already fires broadcastTaskChanged(contactId) on success.
   }, [contactId, tasks, onTasksChange]);
 
-  const toggleTaskDone = useCallback(async (taskId: string, currentlyDone: boolean) => {
-    const newStatus: 'open' | 'completed' = currentlyDone ? 'open' : 'completed';
+  const toggleTaskDone = useCallback(async (item: TaskListItem, nextDone: boolean) => {
+    if (item.kind !== 'task') return;
+    const taskId = item.id;
+    const newStatus: 'open' | 'completed' = nextDone ? 'completed' : 'open';
+    const nowIso = new Date().toISOString();
     const updatedTasks = tasks.map(t =>
-      t.id === taskId ? { ...t, task_status: newStatus } : t,
+      t.id === taskId ? { ...t, task_status: newStatus, task_completed_at: nextDone ? nowIso : null } : t,
     );
     onTasksChange(updatedTasks);
     let succeeded = false;
@@ -179,6 +202,7 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
   }, [contactId, tasks, onTasksChange, notifyApiError]);
 
   const startEditSubject = useCallback((task: CalendarTask) => {
+    setEditingTaskId(null);
     setEditSubject(task.task_name || '');
     setEditingSubjectId(task.id);
   }, []);
@@ -208,6 +232,7 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
   }, [editSubject, tasks, onTasksChange, notifyApiError]);
 
   const startEditDue = useCallback((task: CalendarTask) => {
+    setEditingSubjectId(null);
     setEditDueDate(task.task_deadline ? dayjs(task.task_deadline) : dayjs().add(1, 'day').startOf('hour'));
     setEditingTaskId(task.id);
   }, []);
@@ -239,7 +264,88 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
     if (succeeded) broadcastUrgencyChanged(contactId);
   }, [contactId, editDueDate, tasks, onTasksChange, notifyApiError]);
 
-  void getTaskUrgency;
+  // Inline editors (subject / due date) replace a row's default title+meta block
+  // while the row chrome (tick, container) stays shared with every other surface.
+  const renderItemBody = useCallback((item: TaskListItem): React.ReactNode => {
+    if (item.kind !== 'task') return null;
+
+    if (editingSubjectId === item.id) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <input
+            type="text"
+            value={editSubject}
+            onChange={e => setEditSubject(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') void saveSubject(item.id);
+              if (e.key === 'Escape') setEditingSubjectId(null);
+            }}
+            autoFocus
+            style={{
+              flex: 1, fontSize: 13, borderRadius: 6,
+              border: '1px solid var(--stone-deep)', padding: '2px 6px',
+              fontFamily: 'inherit', minWidth: 0,
+            }}
+          />
+          <IconButton size="small" onClick={() => void saveSubject(item.id)} disabled={editSubjectSaving} title="Save subject" sx={{ color: 'success.main', p: '2px' }}>
+            <CheckIcon sx={{ fontSize: '0.875rem' }} />
+          </IconButton>
+          <IconButton size="small" onClick={() => setEditingSubjectId(null)} title="Cancel" sx={{ color: 'var(--stone-deep)', p: '2px', '&:hover': { color: 'error.main' } }}>
+            <CloseIcon sx={{ fontSize: '0.875rem' }} />
+          </IconButton>
+        </Box>
+      );
+    }
+
+    if (editingTaskId === item.id) {
+      return (
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            {item.title}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <Box sx={{ width: 220 }}>
+              <DateTimeEditor value={editDueDate} onChange={(v) => setEditDueDate(v)} />
+            </Box>
+            <IconButton size="small" onClick={() => void saveDueDate(item.id)} disabled={editSaving} title="Save due date" sx={{ color: 'success.main', p: '2px' }}>
+              <CheckIcon sx={{ fontSize: '0.875rem' }} />
+            </IconButton>
+            <IconButton size="small" onClick={() => setEditingTaskId(null)} title="Cancel" sx={{ color: 'var(--stone-deep)', p: '2px', '&:hover': { color: 'error.main' } }}>
+              <CloseIcon sx={{ fontSize: '0.875rem' }} />
+            </IconButton>
+          </Box>
+        </Box>
+      );
+    }
+
+    return null; // default body
+  }, [editingSubjectId, editingTaskId, editSubject, editSubjectSaving, editDueDate, editSaving, saveSubject, saveDueDate]);
+
+  // Trailing controls per task row: edit subject / due (open tasks) + delete.
+  const renderItemActions = useCallback((item: TaskListItem): React.ReactNode => {
+    if (item.kind !== 'task' || isViewer) return null;
+    if (editingSubjectId === item.id || editingTaskId === item.id) return null;
+    const task = tasks.find(t => t.id === item.id);
+    if (!task) return null;
+    const isDone = item.status === 'completed';
+    return (
+      <>
+        {!isDone && (
+          <IconButton size="small" onClick={() => startEditSubject(task)} title="Edit subject" sx={{ color: 'var(--stone-deep)', p: '2px', '&:hover': { color: 'var(--orchid)' } }}>
+            <DriveFileRenameOutlineIcon sx={{ fontSize: '0.9rem' }} />
+          </IconButton>
+        )}
+        {!isDone && (
+          <IconButton size="small" onClick={() => startEditDue(task)} title="Edit due date" sx={{ color: 'var(--stone-deep)', p: '2px', '&:hover': { color: 'var(--orchid)' } }}>
+            <EditCalendarIcon sx={{ fontSize: '0.9rem' }} />
+          </IconButton>
+        )}
+        <IconButton size="small" onClick={() => void deleteTask(item.id)} title="Delete task" sx={{ color: 'var(--stone-deep)', p: '2px', '&:hover': { color: 'error.main' } }}>
+          <DeleteOutlineIcon sx={{ fontSize: '0.9rem' }} />
+        </IconButton>
+      </>
+    );
+  }, [isViewer, editingSubjectId, editingTaskId, tasks, startEditSubject, startEditDue, deleteTask]);
 
   return (
       <div id="tasks-section" ref={sectionRef} className="mb-6">
@@ -257,253 +363,14 @@ export function TasksSection({ contactId, contactName, contactEmail, contactPhon
           )}
         </div>
 
-        {sorted.length > 0 ? (
-          <div className="space-y-1.5">
-            {sorted.map(task => {
-              const isDone   = task.task_status === 'completed';
-              const dueMs    = task.task_deadline ? new Date(task.task_deadline).getTime() : null;
-              const overdue  = !!dueMs && dueMs < Date.now() && !isDone;
-              const dueLabel = dueMs
-                ? new Date(dueMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                : null;
-
-              return (
-                <Box
-                  key={task.id}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '10px',
-                    background: 'var(--paper)',
-                    border: '1px solid var(--stone)',
-                    borderRadius: 'var(--radius-lg)',
-                    p: '10px 12px',
-                    transition: 'background 0.1s',
-                    boxShadow: 'var(--shadow-sm)',
-                    opacity: isDone ? 0.55 : 1,
-                    '&:active': { background: 'var(--paper-deep)' },
-                  }}
-                >
-                  <Box
-                    component="button"
-                    onClick={() => void toggleTaskDone(task.id, isDone)}
-                    title={isDone ? 'Mark incomplete' : 'Mark complete'}
-                    sx={{
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      border: isDone ? 'none' : '2px solid var(--stone-deep)',
-                      background: isDone ? 'success.dark' : 'none',
-                      color: isDone ? 'common.white' : 'inherit',
-                      flexShrink: 0,
-                      mt: '1px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'border-color 0.15s, background 0.15s',
-                      WebkitTapHighlightColor: 'transparent',
-                      fontFamily: 'inherit',
-                      p: 0,
-                      '&:hover': {
-                        borderColor: isDone ? undefined : 'var(--orchid)',
-                        background: isDone ? 'success.dark' : undefined,
-                      },
-                    }}
-                  >
-                    {isDone && <CheckIcon sx={{ fontSize: 12 }} />}
-                  </Box>
-
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    {!isDone && !isViewer && editingSubjectId === task.id ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <input
-                          type="text"
-                          value={editSubject}
-                          onChange={e => setEditSubject(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') void saveSubject(task.id);
-                            if (e.key === 'Escape') setEditingSubjectId(null);
-                          }}
-                          autoFocus
-                          style={{
-                            flex: 1,
-                            fontSize: 13,
-                            borderRadius: 6,
-                            border: '1px solid var(--stone-deep)',
-                            padding: '2px 6px',
-                            fontFamily: 'inherit',
-                            minWidth: 0,
-                          }}
-                        />
-                        <Box
-                          component="button"
-                          onClick={() => void saveSubject(task.id)}
-                          disabled={editSubjectSaving}
-                          title="Save subject"
-                          sx={{
-                            background: 'none', border: 'none', cursor: editSubjectSaving ? 'default' : 'pointer',
-                            color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
-                            borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                          }}
-                        >
-                          <CheckIcon sx={{ fontSize: '0.875rem' }} />
-                        </Box>
-                        <Box
-                          component="button"
-                          onClick={() => setEditingSubjectId(null)}
-                          title="Cancel"
-                          sx={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
-                            borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                            '&:hover': { color: 'error.main' },
-                          }}
-                        >
-                          <CloseIcon sx={{ fontSize: '0.875rem' }} />
-                        </Box>
-                      </Box>
-                    ) : (
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
-                        <Typography sx={{
-                          fontSize: '0.875rem',
-                          color: isDone ? 'var(--ink-4)' : 'var(--ink-1)',
-                          lineHeight: 1.4,
-                          wordBreak: 'break-word',
-                          textDecoration: isDone ? 'line-through' : 'none',
-                          flex: 1,
-                        }}>
-                          {task.task_name || 'Untitled'}
-                        </Typography>
-                        {!isDone && !isViewer && (
-                          <Box
-                            component="button"
-                            onClick={() => startEditSubject(task)}
-                            title="Edit subject"
-                            sx={{
-                              background: 'none', border: 'none', cursor: 'pointer',
-                              color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
-                              borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', flexShrink: 0,
-                              opacity: 0.6, mt: '2px',
-                              '&:hover': { color: 'var(--orchid)', opacity: 1 },
-                            }}
-                          >
-                            <DriveFileRenameOutlineIcon sx={{ fontSize: '0.8rem' }} />
-                          </Box>
-                        )}
-                      </Box>
-                    )}
-
-                    {(task.task_assigned_user?.name || dueLabel || (!isDone && !isViewer)) && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', mt: '5px' }}>
-                        {task.task_assigned_user?.name && (
-                          <Typography component="span" sx={{ fontSize: '0.72rem', color: 'var(--ink-4)' }}>
-                            {task.task_assigned_user.name}
-                          </Typography>
-                        )}
-
-                        {!isDone && !isViewer && editingTaskId === task.id ? (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Box sx={{ width: 220 }}>
-                              <DateTimeEditor
-                                value={editDueDate}
-                                onChange={(v) => setEditDueDate(v)}
-                              />
-                            </Box>
-                            <Box
-                              component="button"
-                              onClick={() => void saveDueDate(task.id)}
-                              disabled={editSaving}
-                              title="Save due date"
-                              sx={{
-                                background: 'none', border: 'none', cursor: editSaving ? 'default' : 'pointer',
-                                color: 'success.main', p: '2px', display: 'flex', alignItems: 'center',
-                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                              }}
-                            >
-                              <CheckIcon sx={{ fontSize: '0.875rem' }} />
-                            </Box>
-                            <Box
-                              component="button"
-                              onClick={() => setEditingTaskId(null)}
-                              title="Cancel"
-                              sx={{
-                                background: 'none', border: 'none', cursor: 'pointer',
-                                color: 'var(--stone-deep)', p: '2px', display: 'flex', alignItems: 'center',
-                                borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                                '&:hover': { color: 'error.main' },
-                              }}
-                            >
-                              <CloseIcon sx={{ fontSize: '0.875rem' }} />
-                            </Box>
-                          </Box>
-                        ) : (
-                          <>
-                            {dueLabel && (
-                              <Typography
-                                component="span"
-                                sx={{
-                                  fontSize: '0.72rem',
-                                  color: overdue ? 'error.main' : 'var(--ink-3)',
-                                  fontWeight: overdue ? 700 : 500,
-                                }}
-                              >
-                                {overdue ? '⚠ ' : ''}{dueLabel}
-                              </Typography>
-                            )}
-                            {!isDone && !isViewer && (
-                              <Box
-                                component="button"
-                                onClick={() => startEditDue(task)}
-                                title="Edit due date"
-                                sx={{
-                                  background: 'none', border: 'none', cursor: 'pointer',
-                                  color: 'var(--stone-deep)', p: '1px', display: 'flex', alignItems: 'center',
-                                  borderRadius: 'var(--radius-sm)', fontFamily: 'inherit',
-                                  opacity: 0.6,
-                                  '&:hover': { color: 'var(--orchid)', opacity: 1 },
-                                }}
-                              >
-                                <EditCalendarIcon sx={{ fontSize: '0.8rem' }} />
-                              </Box>
-                            )}
-                          </>
-                        )}
-                      </Box>
-                    )}
-                  </Box>
-
-                  <Box
-                    component="button"
-                    onClick={() => void deleteTask(task.id)}
-                    title="Delete task"
-                    sx={{
-                      flexShrink: 0,
-                      color: 'var(--stone-deep)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      p: '2px',
-                      borderRadius: 'var(--radius-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      WebkitTapHighlightColor: 'transparent',
-                      fontFamily: 'inherit',
-                      transition: 'color 0.15s',
-                      mt: '2px',
-                      '&:hover': { color: 'error.main' },
-                    }}
-                  >
-                    <CloseIcon sx={{ fontSize: '0.875rem' }} />
-                  </Box>
-                </Box>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-sm italic" style={{ color: 'var(--stone-deep)' }}>No tasks yet.</p>
-        )}
+        <TaskList
+          openItems={open}
+          pastItems={past}
+          onToggleDone={isViewer ? undefined : toggleTaskDone}
+          renderItemActions={renderItemActions}
+          renderItemBody={renderItemBody}
+          emptyText="No tasks yet."
+        />
 
         {taskModalOpen && (
           <Suspense fallback={null}>
