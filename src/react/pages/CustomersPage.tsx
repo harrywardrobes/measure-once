@@ -689,7 +689,9 @@ function CustomerCard({
 }) {
   const name = contactName(contact);
   const email = contact.properties?.email || '';
-  const phone = contact.properties?.phone || '';
+  // Fall back to the mobile number when no landline is set, so mobile-only
+  // leads (created via the add-contact flow) still surface a number on the card.
+  const phone = contact.properties?.phone || contact.properties?.mobilephone || '';
   const customerNum = contact.properties?.customer_number || '';
   const rawLs = contact.properties?.hs_lead_status || '';
   const lsLabel = rawLs ? statusMap.get(rawLs)?.label || rawLs : '';
