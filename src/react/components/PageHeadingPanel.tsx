@@ -31,6 +31,7 @@ export function PageHeadingPanel() {
   }, []);
 
   const suppressed =
+    path === '/' ||                      // home renders its own date header
     path === '/admin' ||
     path.startsWith('/admin/') ||
     /^\/customers\/[^/]+/.test(path) ||

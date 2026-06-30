@@ -235,7 +235,10 @@ const css = `/* ── Brand Tokens ──────────────�
   /* ── Layout ─────────────────────────────────────────────────────────────── */
   --header-h: calc(52px + env(safe-area-inset-top));
   --banner-h: 37px;
-  --nav-h:    calc(64px + env(safe-area-inset-bottom));
+  /* Matches the bottom nav's real height (NAV_HEIGHT=56 in BottomNav.styles.ts)
+     plus the iOS home-indicator inset. Previously 64px, which left an ~8px gap
+     so the nav appeared to float above the content. */
+  --nav-h:    calc(56px + env(safe-area-inset-bottom));
 
   /* ── Brand colours ───────────────────────────────────────────────────────── */
 ${brandLines.join('\n')}
