@@ -9,6 +9,41 @@ import { TYPE_ICON, TIMELINE_TYPE_LABEL, type TimelineItem } from './timeline';
 
 interface FormField { name: string; value: string }
 
+// HubSpot form submissions carry internal field names (e.g. `firstname`,
+// `0-1/jobtitle`) with no human label in the values payload. Map the common
+// contact fields explicitly and prettify the rest (drop the object-type prefix,
+// split snake_case/camelCase, sentence-case) so each submitted field reads
+// clearly in the timeline.
+const KNOWN_FIELD_LABELS: Record<string, string> = {
+  firstname: 'First name',
+  lastname: 'Last name',
+  email: 'Email',
+  phone: 'Phone',
+  mobilephone: 'Mobile',
+  company: 'Company',
+  jobtitle: 'Job title',
+  website: 'Website',
+  address: 'Address',
+  city: 'City',
+  state: 'County',
+  zip: 'Postcode',
+  country: 'Country',
+  message: 'Message',
+};
+
+function prettyFieldName(raw: string): string {
+  const base = raw.includes('/') ? raw.slice(raw.lastIndexOf('/') + 1) : raw;
+  const known = KNOWN_FIELD_LABELS[base.toLowerCase()];
+  if (known) return known;
+  const spaced = base
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!spaced) return raw;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 // ── A single compact, expandable row in the unified contact timeline ──────────
 // Shared by the Contact Customer modal and the customer detail page activity
 // feed so both surfaces render the same way. Internal Harry Wardrobes attempts are
@@ -122,11 +157,39 @@ export function ContactTimelineRow({
                 {m.lastClickedAt ? ` · last ${relativeTime(String(m.lastClickedAt))}` : ''}
               </Typography>
             )}
-            {fields && fields.length > 0 && fields.map((f, i) => (
-              <Typography key={`${f.name}:${i}`} variant="caption" color="text.secondary">
-                {f.name}: {f.value || '—'}
-              </Typography>
-            ))}
+            {fields && fields.length > 0 && (
+              <Box
+                component="dl"
+                sx={{
+                  m: 0,
+                  mt: 0.25,
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(72px, max-content) 1fr',
+                  columnGap: 1,
+                  rowGap: 0.25,
+                }}
+              >
+                {fields.map((f, i) => (
+                  <React.Fragment key={`${f.name}:${i}`}>
+                    <Typography
+                      component="dt"
+                      variant="caption"
+                      sx={{ fontWeight: 600, color: 'text.secondary' }}
+                    >
+                      {prettyFieldName(f.name)}
+                    </Typography>
+                    <Typography
+                      component="dd"
+                      variant="caption"
+                      color="text.primary"
+                      sx={{ m: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                    >
+                      {f.value || '—'}
+                    </Typography>
+                  </React.Fragment>
+                ))}
+              </Box>
+            )}
             {item.body && (
               <Typography variant="caption" color="text.primary" sx={{ whiteSpace: 'pre-wrap', mt: 0.25 }}>
                 {item.body.length > 1200 ? `${item.body.slice(0, 1200)}…` : item.body}

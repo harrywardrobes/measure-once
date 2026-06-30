@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
 import { GET } from '../../utils/api';
+import { Skeleton } from '../../components/Skeleton';
 import { ContactTimelineRow } from '../../components/customer-activity/ContactTimelineRow';
 import type { ActivityResponse, TimelineItem } from '../../components/customer-activity/timeline';
 
@@ -11,6 +11,38 @@ interface Props {
 }
 
 const INITIAL_VISIBLE = 8;
+
+// Placeholder rows shown while the feed loads — shaped like collapsed timeline
+// rows so the layout doesn't shift when the real activity arrives. Matches the
+// skeleton-loader pattern used by the other customer-detail sections (Invoices,
+// submissions rail) rather than a spinner.
+function ActivitySkeletonRows() {
+  return (
+    <Box data-testid="contact-activity-skeleton" sx={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {[68, 54, 60, 46].map((w, i) => (
+        <Box
+          key={i}
+          sx={{
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'grey.50',
+            px: 1,
+            py: 0.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+          }}
+        >
+          <Skeleton width={16} height={16} style={{ borderRadius: 4, flexShrink: 0 }} />
+          <Skeleton width={44} height={11} style={{ flexShrink: 0 }} />
+          <Skeleton width={`${w}%`} height={11} />
+          <Skeleton width={32} height={11} style={{ flexShrink: 0, marginLeft: 'auto' }} />
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 // ── Customer detail page: full HubSpot activity feed ──────────────────────────
 // The richer sibling of the Contact Customer modal timeline. Lazy-loaded after
@@ -65,8 +97,9 @@ export function ContactActivitySection({ contactId }: Props) {
         <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--ink-2)' }}>
           Activity
         </Typography>
-        {loading && <CircularProgress size={14} thickness={5} sx={{ color: 'var(--ink-4)' }} />}
       </Box>
+
+      {loading && <ActivitySkeletonRows />}
 
       {!loading && error && (
         <p className="text-sm px-1" style={{ color: 'var(--status-danger-text)' }}>
