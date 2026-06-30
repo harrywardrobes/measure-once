@@ -44,6 +44,7 @@ import { openConnectModal, useServiceStatuses } from '../../contexts/ConnectionT
 import { STAFF_EMAIL_TEMPLATE_KEY } from '../../utils/handlerMeta';
 import { useToast } from '../../contexts/ToastContext';
 import { DiscardConfirmDialog } from './DiscardConfirmDialog';
+import { EmailComposer } from './EmailComposer';
 import { ModalContactHeader } from './ModalContactHeader';
 import { DemoActionTooltip } from './demoMode';
 import { FullScreenModal } from './FullScreenModal';
@@ -540,25 +541,16 @@ export function ScheduleVisitModal({
                   <Typography variant="caption" color="text.secondary">Loading email template…</Typography>
                 ) : (
                   <>
-                    <TextField
-                      id="cah-sv-email-subject"
-                      label="Email subject"
-                      value={emailSubject}
-                      onChange={e => setEmailSubject(e.target.value)}
-                      size="small"
-                      fullWidth
-                      slotProps={{ htmlInput: { maxLength: 300 } }}
-                    />
-                    <TextField
-                      id="cah-sv-email-body"
-                      label="Email body"
-                      value={emailBody}
-                      onChange={e => setEmailBody(e.target.value)}
-                      multiline
-                      minRows={5}
-                      size="small"
-                      fullWidth
-                      slotProps={{ htmlInput: { maxLength: 8000 } }}
+                    <EmailComposer
+                      subject={emailSubject}
+                      onSubjectChange={setEmailSubject}
+                      body={emailBody}
+                      onBodyChange={setEmailBody}
+                      recipientName={ctx.contactName}
+                      recipientEmail={ctx.contactEmail}
+                      bodyMinRows={5}
+                      subjectMaxLength={300}
+                      bodyMaxLength={8000}
                     />
                     <Typography variant="caption" color="text.secondary">
                       Sent from your connected Gmail account.
