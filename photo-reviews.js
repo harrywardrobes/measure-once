@@ -8,6 +8,8 @@ const { Pool }   = require('pg');
 const nodemailer = require('nodemailer');
 const axios      = require('axios').create({ timeout: 12000 });
 const { isAuthenticated, requirePrivilege } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const { apiBackstopOptions } = require('./rate-limiters');
 const { signCustomerPhotoUrl } = require('./customer-info');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
@@ -19,6 +21,10 @@ const _REVIEW_VALID_OUTCOMES  = new Set(Object.keys(_REVIEW_OUTCOME_STATUS));
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit.
+router.use(rateLimit(apiBackstopOptions()));
 
 // ── patchContactProperties (wired by server.js at startup) ───────────────────
 // Delegates hs_lead_status PATCHes to the shared helper so cache invalidation

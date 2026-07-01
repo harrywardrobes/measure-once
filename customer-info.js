@@ -15,6 +15,7 @@ const os         = require('os');
 const storage    = require('./storage');
 const { isAuthenticated, requirePrivilege, requireAdmin, getRequestPrivilegeLevel, requirePageAuth } = require('./auth');
 const rateLimit = require('express-rate-limit');
+const { apiBackstopOptions } = require('./rate-limiters');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
 const { getEmailTemplate, renderEmail, buildSenderSignature } = require('./email-templates');
 const { assertLeadStatusKey } = require('./lead-status-guard');
@@ -41,6 +42,10 @@ if (!INVITE_TEMPLATE_KEY || !ADMIN_NOTIFICATION_TEMPLATE_KEY || !CUSTOMER_THANK_
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit. Stricter per-route limiters still apply on top.
+router.use(rateLimit(apiBackstopOptions()));
 
 // ── Shared SSE client registry (wired by server.js at startup) ────────────────
 let _sseClients = null;

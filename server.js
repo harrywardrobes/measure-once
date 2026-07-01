@@ -32,6 +32,7 @@ const logger = require('./logger');
 const { runMigrations, ensureRateLimitMigrations } = require('./db-migrate');
 const { encrypt: encryptToken, decrypt: decryptToken, tryDecrypt: tryDecryptToken } = require('./google-token-crypto.cjs');
 const { installSession, setupAuth, isAuthenticated, requirePageAuth, requireAdmin, requireManagerOrAdmin, requirePrivilege, requireOnboardingComplete, userIdExists, isAdminEmail, pool, logAdminAction, getRequestPrivilegeLevel, scheduleConflictDigest } = require('./auth');
+const rateLimit = require('express-rate-limit');
 const {
   hubspotMutationLimiter,
   gmailSendLimiter,
@@ -41,6 +42,7 @@ const {
   prefsWriteLimiter,
   whatsappSendLimiter,
   quickbooksReadWriteLimiter,
+  apiBackstopOptions,
 } = require('./rate-limiters');
 const quickbooksRoutes = require('./quickbooks');
 const { router: googleMapsRouter, schedulePruneOldUsage } = require('./google-maps');
@@ -73,6 +75,15 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
+// ── Universal rate-limit backstop ──────────────────────────────────────────────
+// Mounted before every other middleware and route (the webhook receiver, public
+// sign-off pages, static assets, all /api routes and the feature routers) so no
+// authorization- or database-touching handler is reachable without first passing
+// a rate limit. Keyed by IP at this point in the chain — the session middleware
+// has not run yet — so the cap is set well above what a small office behind a
+// single NAT IP generates. Production-only; see apiBackstopOptions().
+app.use(rateLimit(apiBackstopOptions({ max: 1200 })));
+
 
 function validateHsObjectId(value, fieldName) {
   if (value === undefined || value === null) return null;

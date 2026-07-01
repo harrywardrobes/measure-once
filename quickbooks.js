@@ -6,7 +6,8 @@ const { Pool } = require('pg');
 const nodemailer = require('nodemailer');
 const { isAuthenticated, requireAdmin, requireManagerOrAdmin, requirePrivilege, isAdminEmail } = require('./auth');
 const { encrypt: qbEncrypt, tryDecrypt: qbTryDecrypt } = require('./qb-token-crypto.cjs');
-const { quickbooksReadWriteLimiter } = require('./rate-limiters');
+const rateLimit = require('express-rate-limit');
+const { quickbooksReadWriteLimiter, apiBackstopOptions } = require('./rate-limiters');
 const { getEmailTemplate, renderEmail, escapeHtml, buildSenderSignature } = require('./email-templates');
 const { logCustomerEmailAttempt } = require('./contact-attempt-log');
 const { HANDLER_OUTCOMES, getOutcomeMeta, getRequiredOutcomeEmailTemplate } = require('./shared/handler-outcomes.cjs');
@@ -40,6 +41,10 @@ if (process.env.NODE_ENV !== 'production' && process.env.QB_ENVIRONMENT !== 'san
 const SEND_LIMIT = 10; // max sends per user per rolling hour
 
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit. Stricter per-route limiters still apply on top.
+router.use(rateLimit(apiBackstopOptions()));
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const QB_AUTH_BASE = 'https://appcenter.intuit.com/connect/oauth2';

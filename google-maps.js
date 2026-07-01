@@ -26,8 +26,14 @@ const express = require('express');
 const { z } = require('zod');
 const { Pool } = require('pg');
 const { isAuthenticated, requireAdmin } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const { apiBackstopOptions } = require('./rate-limiters');
 
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit.
+router.use(rateLimit(apiBackstopOptions()));
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const SETTINGS_KEY = 'google_maps_settings';

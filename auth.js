@@ -4,7 +4,7 @@
 const logger = require('./logger');
 const rateLimit = require('express-rate-limit');
 const { PostgresStoreIndividualIP } = require('@acpr/rate-limit-postgresql');
-const { photoUploadLimiter } = require('./rate-limiters');
+const { photoUploadLimiter, apiBackstopOptions } = require('./rate-limiters');
 const { Pool } = require('pg');
 const { createMailTransport, appBaseUrl, buildFromHeader, buildReplyTo } = require('./email-transport');
 const zxcvbn = require('zxcvbn');
@@ -712,6 +712,13 @@ async function setupAuth(app) {
   app.post('/api/session', loginLimiter, async (req, res) => {
     const { idToken, captchaToken } = req.body || {};
     if (!idToken || typeof idToken !== 'string') {
+  // Universal backstop ahead of every auth route registered below, so each
+  // authorization check and DB lookup sits behind a rate limit regardless of
+  // where its stricter per-endpoint limiter (loginLimiter, accessRequestLimiter,
+  // photoUploadLimiter) appears in its own middleware chain. User-keyed — the
+  // session middleware has already run by this point in the chain.
+  app.use('/api', rateLimit(apiBackstopOptions()));
+
       return res.status(400).json({ error: 'ID token required.' });
     }
     const captcha = await verifyCaptchaToken(captchaToken || req.body?.['cf-turnstile-response'], req.ip);

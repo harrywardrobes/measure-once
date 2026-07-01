@@ -20,6 +20,8 @@ const nodemailer = require('nodemailer');
 const path      = require('path');
 const fs        = require('fs');
 const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const { apiBackstopOptions } = require('./rate-limiters');
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 const { loadAnswers, saveAnswers } = require('./design-visits');
@@ -55,6 +57,10 @@ function setPatchContactProperties(fn) { _patchContactProperties = fn; }
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit.
+router.use(rateLimit(apiBackstopOptions()));
 
 // ── Utility helpers (mirror design-visits.js private helpers) ─────────────────
 function appBaseUrl() {

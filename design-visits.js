@@ -13,6 +13,8 @@ const path      = require('path');
 const fs        = require('fs');
 const multer    = require('multer');
 const { isAuthenticated, requireAdmin, requirePrivilege, getRequestPrivilegeLevel } = require('./auth');
+const rateLimit = require('express-rate-limit');
+const { apiBackstopOptions } = require('./rate-limiters');
 const dvUploads = require('./design-visit-uploads');
 const { getCredential: getHubSpotCredential } = require('./hubspot-creds');
 const {
@@ -180,6 +182,10 @@ function getHubSpotHeaders() {
     'Content-Type': 'application/json',
   };
 }
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit.
+router.use(rateLimit(apiBackstopOptions()));
 async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const isTransient = err => {

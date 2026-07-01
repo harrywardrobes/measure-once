@@ -79,6 +79,42 @@ const prefsWriteLimiter = createUserRateLimiter({
   message: 'Too many preference updates. Please wait a moment and try again.',
 });
 
+// ── Universal API backstop ───────────────────────────────────────────────────
+// Shared options for the generous "backstop" limiter mounted at the *front* of
+// every middleware chain: app-level in server.js (before any route, so even
+// public pages, the webhook receiver, and authorization middleware sit behind
+// it) and router-level in each feature router. The strict per-feature limiters
+// above still guard the expensive endpoints; this one exists so that no
+// authorization- or database-touching handler is reachable without passing
+// some rate limit (CodeQL js/missing-rate-limiting).
+//
+// Design notes:
+// - Default in-memory store, not Postgres: this runs on every request, so a
+//   DB round-trip per hit would be pure overhead. Per-Cloud-Run-instance
+//   counting is acceptable for a coarse abuse backstop.
+// - Enforced in production only: the test harnesses replay hundreds of
+//   requests per minute from a single process (e.g. the privilege matrix) and
+//   cannot reset an in-memory store between suites the way
+//   resetRateLimitStore() wipes the Postgres store.
+// - Callers construct the limiter with their own in-file `rateLimit()` call
+//   (one instance per mount) — sharing a single instance across mounts would
+//   double-count any request that passes through two of them.
+const backstopEnforced = process.env.NODE_ENV === 'production';
+
+function apiBackstopOptions({ windowMs = 60 * 1000, max = 600 } = {}) {
+  return {
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => !backstopEnforced,
+    keyGenerator: getUserRateLimitKey,
+    handler: (req, res) => {
+      res.status(429).json({ error: 'Too many requests. Please slow down and try again later.' });
+    },
+  };
+}
+
 const whatsappSendLimiter = createUserRateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 30,
@@ -89,6 +125,7 @@ const whatsappSendLimiter = createUserRateLimiter({
 module.exports = {
   createUserRateLimiter,
   getUserRateLimitKey,
+  apiBackstopOptions,
   hubspotMutationLimiter,
   gmailSendLimiter,
   photoUploadLimiter,
