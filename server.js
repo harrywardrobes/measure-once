@@ -380,6 +380,17 @@ app.get('/sw.js', (_req, res) => {
   });
 });
 
+// Self-hosted fonts change very rarely and are the largest static assets on the
+// site. They are not content-hashed, so we use a month-long cache with normal
+// revalidation rather than `immutable` — long enough to eliminate repeat-visit
+// refetches, short enough that a future font swap propagates without a bust.
+app.use(
+  '/fonts',
+  express.static(path.join(__dirname, 'public', 'fonts'), {
+    maxAge: '30d',
+  })
+);
+
 app.use(express.static(path.join(__dirname, 'public')));
 installSession(app);
 

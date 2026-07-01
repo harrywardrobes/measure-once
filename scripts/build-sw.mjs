@@ -51,7 +51,11 @@ const { count, size, warnings } = await generateSW({
   globPatterns: [
     'react/main.js',
     'react/chunks/**/*.js',
-    'fonts/**/*.{ttf,woff,woff2}',
+    // Only WOFF2 is precached: every browser that can run this PWA supports it,
+    // and the @font-face lists WOFF2 first. The TTF fallbacks stay served over
+    // HTTP (see the /fonts static mount) but are kept out of the SW precache so
+    // installs/updates don't ship ~1.1 MB of fonts no supported browser fetches.
+    'fonts/**/*.woff2',
     'assets/**/*.png',
     'icons/**/*.png',
     'tokens.css',

@@ -31,6 +31,10 @@
   <% if (typeof ogTitle !== 'undefined' && ogTitle) { %>
   <meta property="og:type" content="website">
   <% } %>
+  <!-- Preload the self-hosted body font (regular weight) so it downloads in
+       parallel with the CSS instead of waiting for app-styles.css to parse.
+       crossorigin is required for font preloads even when same-origin. -->
+  <link rel="preload" href="/fonts/OpenSans-VariableFont_wdth_wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!--
