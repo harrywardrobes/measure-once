@@ -39,9 +39,26 @@ Express serves `public/sw.js` at `/sw.js` with `Cache-Control: no-cache` and
 `Service-Worker-Allowed: /` so the worker controls the whole origin and updates
 are picked up promptly.
 
-The SW uses `skipWaiting` + `clientsClaim` + `cleanupOutdatedCaches`, so a new
-deploy activates as soon as it installs and old precaches are removed. The
-client reloads once on `controllerchange` to run against the new bundle.
+The SW uses `clientsClaim` + `cleanupOutdatedCaches` but is built with
+**`skipWaiting: false`** — a new deploy installs but stays in the `waiting`
+state instead of taking over silently. This is the standard *prompt-to-update*
+pattern:
+
+- The open session keeps running on the old caches (no mid-task reload, and the
+  old precache isn't purged out from under a still-open page).
+- `registerServiceWorker.ts` detects the waiting worker (on load via
+  `registration.waiting`, and live via `updatefound`) and shows a **persistent,
+  dismissible** toast — "A new version is available — Refresh" — reusing the
+  app-wide `window.showToastWithAction` shim from `ToastContext.tsx`.
+- Tapping **Refresh** posts a `{ type: 'SKIP_WAITING' }` message to the waiting
+  worker. Workbox's inlined runtime already ships a handler for that message, so
+  no custom SW code is needed. The worker activates, fires `controllerchange`,
+  and the client reloads once — the reload is gated on the user having tapped
+  Refresh, so the first-install `controllerchange` never reloads.
+
+If dismissed, the prompt reappears on the next launch while the update is still
+pending (the worker is still `waiting`), which is the key iOS home-screen path —
+the app updates in place with no remove/re-add.
 
 ## Cache freshness & eviction policy
 

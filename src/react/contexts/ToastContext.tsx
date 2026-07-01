@@ -22,7 +22,9 @@ interface ToastMessage {
   msg: string;
   severity: ToastSeverity;
   action?: ToastAction;
-  duration?: number;
+  // A number is an auto-hide delay (ms); `null` keeps the toast open until the
+  // user acts on or dismisses it (used by the update prompt).
+  duration?: number | null;
 }
 
 interface ShowToastOptions {
@@ -43,7 +45,7 @@ interface ToastContextValue {
   showToastWithAction: (
     msg: string,
     action: ToastAction,
-    options?: { duration?: number; severity?: ToastSeverity },
+    options?: { duration?: number | null; severity?: ToastSeverity },
   ) => void;
 }
 
@@ -76,7 +78,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (
       msg: string,
       action: ToastAction,
-      options?: { duration?: number; severity?: ToastSeverity },
+      options?: { duration?: number | null; severity?: ToastSeverity },
     ) => {
       const id = ++_globalIdCounter;
       setToasts(prev => [
@@ -115,7 +117,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       showToastWithAction?: (
         msg: string,
         action: ToastAction,
-        options?: { duration?: number; severity?: ToastSeverity },
+        options?: { duration?: number | null; severity?: ToastSeverity },
       ) => void;
       __toastProvider?: boolean;
     };
@@ -131,7 +133,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       w.showToastWithAction = (
         msg: string,
         action: ToastAction,
-        options?: { duration?: number; severity?: ToastSeverity },
+        options?: { duration?: number | null; severity?: ToastSeverity },
       ) => {
         showToastWithActionRef.current(msg, action, options);
       };
@@ -165,7 +167,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <Snackbar
           key={current.id}
           open
-          autoHideDuration={current.duration ?? 3500}
+          autoHideDuration={current.duration === null ? null : (current.duration ?? 3500)}
           onClose={handleClose}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
           sx={{
