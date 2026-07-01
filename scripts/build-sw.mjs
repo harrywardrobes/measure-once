@@ -68,7 +68,15 @@ const { count, size, warnings } = await generateSW({
   mode: 'production',
   cacheId: 'measure-once',
   cleanupOutdatedCaches: true,
-  skipWaiting: true,
+  // Prompt-to-update flow: the new worker installs but WAITS instead of taking
+  // over silently. The page detects the waiting worker and shows a persistent
+  // "A new version is available — Refresh" toast; only when the user taps
+  // Refresh does src/react/lib/registerServiceWorker.ts post {type:'SKIP_WAITING'}
+  // to it. Workbox's inlined runtime already ships a handler for that message
+  // (verified in the generated sw.js), so no custom SW code is needed. This keeps
+  // the open session on the old caches until the user opts in — no mid-task
+  // reload, no purged lazy-chunk.
+  skipWaiting: false,
   clientsClaim: true,
   maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
   // App-shell HTML entry points are server-rendered (EJS) and therefore not part
