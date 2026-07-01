@@ -1,7 +1,7 @@
 ---
 name: deploy-runbook
 description: This skill should be used when the user wants to deploy, ship, push, or promote Harry Wardrobes code to staging or production — phrases like "deploy this", "push to staging", "promote staging to prod", "ship this change", or "walk me through a deploy". Operationalizes docs/deploy.md as an interactive, checked walkthrough with explicit gates before anything touches production.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Deploy Runbook (interactive)
@@ -23,26 +23,30 @@ There is no CI/CD for this app. Every command is run by Claude, authenticated as
   - Auth codes from `--no-launch-browser` login flows (browser-based, one code)
   - Visual confirmation of staging/production after deploy (browser checks)
   - The typed `DEPLOY TO PRODUCTION` confirmation before a production push
-- **Auth failures:** if `gcloud auth list` shows no active account, or any
-  gcloud command fails with a reauth error, use the browser automation tools
-  (`mcp__claude-in-chrome__*`) to complete the login flow automatically:
-  1. Run the named-pipe helper to get the auth URL (see helper script at
-     `%TEMP%\mo_gcloud_auth_helper.ps1` — launch it, poll for
-     `%TEMP%\mo_gcloud_url.txt`, then navigate Chrome to that URL).
-  2. In Chrome: click the `harry@harrywardrobes.co.uk` account in the
-     chooser. Google will show a password field for re-verification —
-     **stop here and ask the user for the password** (never store or
-     auto-fill it). Once they confirm they've entered the password in the
-     browser themselves and clicked Next, read the auth code from
-     `https://sdk.cloud.google.com/authcode.html` using `read_page`.
+- **User-credential auth failures** (`gcloud builds submit` / `gcloud run
+  deploy` / most `gcloud` commands fail with `Reauthentication failed. cannot
+  prompt during non-interactive execution.`): this is the **gcloud user
+  credential**, not ADC. Do **not** use the `mo_gcloud_auth_helper.ps1` helper
+  for this — that helper refreshes ADC, a different store. Instead ask the user
+  to re-login in-session by typing `! gcloud auth login` (see section 0). The
+  section-0 pre-check exists to catch this *before* a build is wasted.
+- **ADC failures** (Cloud SQL proxy fails to start with a credentials error):
+  this is the **Application Default Credentials** store. Refresh it with the
+  named-pipe helper (`%TEMP%\mo_gcloud_auth_helper.ps1`, which runs
+  `gcloud auth application-default login --no-launch-browser`) and the browser
+  automation tools (`mcp__claude-in-chrome__*`):
+  1. Launch the helper, poll for `%TEMP%\mo_gcloud_url.txt`, then navigate
+     Chrome to that URL.
+  2. In Chrome: click the `harry@harrywardrobes.co.uk` account in the chooser.
+     Google shows a password field for re-verification — **stop here and ask the
+     user for the password** (never store or auto-fill it). Once they confirm
+     they've entered it in the browser themselves and clicked Next, read the
+     auth code from `https://sdk.cloud.google.com/authcode.html` via `read_page`.
   3. Write the code to `%TEMP%\mo_gcloud_code.txt` and wait for
      `%TEMP%\mo_gcloud_done.txt` to contain `exit:0`.
-  The helper script (`mo_gcloud_auth_helper.ps1`) handles the named-pipe
-  stdin exchange with the gcloud process — do not re-implement it manually.
-- **ADC failures** (Cloud SQL proxy fails to start): run
-  `gcloud auth application-default login --no-launch-browser`, capture the
-  URL from the output, navigate Chrome to it, complete sign-in, paste the
-  code back — same browser-automation flow as above.
+  The helper handles the named-pipe stdin exchange with the gcloud process — do
+  not re-implement it manually. Note: launching it may need approval outside
+  auto mode (it uses `-ExecutionPolicy Bypass`).
 - **Never print secret values** (DB passwords, API keys/tokens) into the chat,
   even ones fetched for a command. Secret *names* are fine
   (`--set-secrets=DATABASE_URL=DATABASE_URL_STAGING:latest`) — never the resolved
@@ -57,6 +61,63 @@ There is no CI/CD for this app. Every command is run by Claude, authenticated as
   the user when relevant: only act on `hw_test_user=true` contacts, and never
   open/register HubSpot webhooks from staging (it repoints prod's webhook at
   staging and breaks prod).
+- **Run hands-off where pre-authorized.** The project `.claude/settings.local.json`
+  pre-approves the routine deploy commands so they run without a permission
+  prompt: the Cloud SQL proxy launch (`cloud-sql-proxy.exe … harry-wardrobes-db`),
+  `Get-CimInstance Win32_Process` (proxy checks), `gcloud builds …`,
+  `gcloud run …` incl. `gcloud run deploy measure-once-staging` **and**
+  `gcloud run deploy measure-once`, `gcloud run services logs/describe`,
+  `gcloud sql …`, `gcloud secrets …`, and the `mo_gcloud_auth_helper.ps1`
+  launch. Don't pause to ask permission for these — just run them and report
+  the result. The human touchpoints that remain are deliberate and unchanged:
+  (a) entering the Google password in the browser during an auth refresh,
+  (b) the typed `DEPLOY TO PRODUCTION` confirmation (an in-conversation gate,
+  independent of permissions — it always applies), and (c) the browser
+  verification checks after each deploy. If a command you need is *not*
+  pre-approved and gets blocked, surface it — don't try to broaden the
+  permission file yourself in auto mode (that self-modification is blocked by
+  design).
+
+## 0. gcloud auth pre-check (do this FIRST, before anything else)
+
+Before asking which flow — before re-reading the docs even — verify gcloud is
+authenticated, because a stale token wastes a whole build/deploy round-trip
+(`gcloud builds submit` and every other `gcloud` command fail with
+`Reauthentication failed. cannot prompt during non-interactive execution.`).
+
+1. Check the active account:
+   ```powershell
+   gcloud auth list --format="value(account,status)"
+   ```
+   This must show `harry@harrywardrobes.co.uk` with an active (`*`) status.
+2. **Auth is refreshed lazily**, so an account showing active can still have an
+   expired token. The `gcloud auth list` check confirms *who* is configured, not
+   that the token is live — the only reliable signal is a real `gcloud` call
+   later failing with the reauth error above. To avoid discovering that
+   mid-build, **prompt the user to re-login up front** unless you already know
+   the session is fresh (e.g. a `gcloud` command has succeeded earlier this
+   same session).
+
+   `gcloud auth login` opens a browser for the user's own account, so it's best
+   run by the user, not by Claude. Ask them to run it **in-session** by typing
+   this exact line into the prompt (the `!` prefix runs it here and drops the
+   output into the conversation):
+
+   ```
+   ! gcloud auth login
+   ```
+
+   Wait for them to confirm they're logged in before proceeding. Do **not** try
+   to auto-refresh user credentials via the `mo_gcloud_auth_helper.ps1` helper —
+   that helper runs `gcloud auth application-default login`, which refreshes
+   **ADC** (used by the Cloud SQL proxy), *not* the user credentials that
+   `gcloud builds submit` / `gcloud run deploy` need. ADC and user creds are
+   separate stores; the helper is only for the ADC-failure path in the ground
+   rules.
+3. **Do not** run `gcloud auth print-access-token` to "test" the token — it
+   materializes a live credential into the transcript and will be blocked.
+
+Once auth is confirmed (or the user has re-logged-in), continue to section 1.
 
 ## 1. Ask which flow, before doing anything else
 
