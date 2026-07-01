@@ -1,18 +1,6 @@
 'use strict';
 // test/catalog-migration/run.js
 
-const PROBE_LABELS = [
-  '(TABLES) five shared catalog_* tables exist',
-  '(DROPPED) three legacy design_visit_* catalogue tables removed',
-  '(FK-H) design_visits.handle_id FK repointed to catalog_handles',
-  '(FK-R) design_visits.furniture_range_id FK repointed to catalog_ranges',
-  '(FK-D) design_visit_rooms.door_style_id FK repointed to catalog_doors',
-  '(REJECT) bogus handle_id rejected by FK constraint (23503)',
-  '(ACCEPT) valid catalog refs accepted by INSERT',
-  '(SET-NULL) deleting a catalog_handles row nulls the referencing FK',
-];
-
-
 //
 // Schema + FK-integrity test for the shared `catalog_*` tables introduced by
 // migrations/1783100000000_catalog-tables.js (Task "Visits foundation").

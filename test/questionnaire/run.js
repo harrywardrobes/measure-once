@@ -1,20 +1,6 @@
 'use strict';
 // test/questionnaire/run.js
 
-const PROBE_LABELS = [
-  '(ADMIN-AUTH) member POST to admin question endpoint returns 403',
-  '(CREATE) admin creates visit-scope and room-scope questions',
-  '(LIST) admin GET lists all created questions',
-  '(MEMBER-FILTER) member applies_to=design filter returns only design questions',
-  '(REORDER) bulk reorder updates sort_order',
-  '(UPDATE) PATCH updates question label',
-  '(ANSWER-SAVE) member saves answers to a design visit',
-  '(ANSWER-LOAD) saved answers round-trip via GET',
-  '(ANSWER-REPLACE) re-saving answers replaces the prior set',
-  '(DELETE) admin deletes a question',
-];
-
-
 //
 // API test for the shared questionnaire engine (visit_questions / visit_answers)
 // introduced by the "Visits foundation" task. Boots a disposable server via the
