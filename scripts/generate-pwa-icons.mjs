@@ -67,6 +67,28 @@ function writeIcon(file, size, scale) {
   console.log(`[pwa-icons] wrote public/icons/${file} (${size}x${size}, scale ${scale})`);
 }
 
+/**
+ * Small header logo — the wood-grain mark on its own transparent background,
+ * downscaled for the site header (rendered at 26px CSS, so 52px = crisp at 2x).
+ * The full-resolution SOURCE_MARK (932px) is kept as the icon-generation source
+ * above; shipping it to the header meant a ~65kB PNG for a 26px slot, so the
+ * header <img> points at this ~6kB variant instead. Committed (NOT gitignored).
+ */
+function writeHeaderMark() {
+  const out = resolve(PUBLIC_DIR, 'assets', 'logo-mark-header.png');
+  execFileSync('convert', [
+    SOURCE_MARK,
+    '-resize', '52x52',
+    '-depth', '8',
+    '-define', 'png:color-type=6',
+    '-strip',
+    out,
+  ]);
+  console.log('[pwa-icons] wrote public/assets/logo-mark-header.png (52x52)');
+}
+
+writeHeaderMark();
+
 const targets = [
   // "any" — wood-grain fills the canvas edge to edge.
   { file: 'icon-192.png', size: 192, scale: 1 },

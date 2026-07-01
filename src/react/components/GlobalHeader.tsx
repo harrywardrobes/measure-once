@@ -255,9 +255,11 @@ export function GlobalHeader() {
           >
             <Box
               component="img"
-              src="/assets/logo-mark-paper.png"
+              src="/assets/logo-mark-header.png"
               alt="Harry Wardrobes"
-              sx={{ height: 26, width: 'auto', display: 'block' }}
+              width={26}
+              height={26}
+              sx={{ height: 26, width: 26, display: 'block' }}
             />
           </Box>
         </Box>
