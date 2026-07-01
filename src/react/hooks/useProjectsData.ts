@@ -326,7 +326,7 @@ export function useProjectsData(): ProjectsData {
           try {
             const payload = JSON.parse(e.data as string) as { type?: string };
             // Primary trigger: customer just submitted, cache already invalidated.
-            // Fallback: HubSpot webhook fires after the substatus is applied,
+            // Fallback: HubSpot webhook fires after the lead status is applied,
             // catching any race where the SSE fired before HubSpot propagated.
             if (
               payload.type === 'customer_info_submitted' ||

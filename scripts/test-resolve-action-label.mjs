@@ -16,8 +16,6 @@
  * Also covers:
  *   4. No lead status on contact        → returns per-stage default
  *   5. No matching row at all           → returns ''
- *   6. Substatus action_label priority  → beats per-LS label
- *   7. Substatus with no action_label   → falls through to per-LS label
  *   8. Case-insensitivity               → stage/LS keys are normalised
  *   9. Legacy per-substageId fallback   → used when lsKey is absent
  *  10. Missing per-LS key              → falls back to per-stage default
@@ -49,8 +47,6 @@ function assertEqual(description, actual, expected) {
 
 console.log('\nresolveActionLabel unit tests\n');
 
-const NO_SUBSTATUS_MAP = {};
-
 // ── 1. Per-LS row with a label → return that label ───────────────────────────
 {
   const map = {
@@ -59,7 +55,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '1. Per-LS row with label → returns the per-LS label',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'hot', undefined, undefined),
+    resolveActionLabel(map,'sales', 'hot', undefined, undefined),
     'Book appointment',
   );
 }
@@ -76,12 +72,12 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '2a. Per-LS row with null label → returns empty string',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'cold', undefined, undefined),
+    resolveActionLabel(map,'sales', 'cold', undefined, undefined),
     '',
   );
   assertEqual(
     '2b. Cleared per-LS row must NOT fall through to per-stage default',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'cold', undefined, undefined) !== 'Default action',
+    resolveActionLabel(map,'sales', 'cold', undefined, undefined) !== 'Default action',
     true,
   );
 }
@@ -98,7 +94,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '3. No per-LS row (key absent) → falls back to per-stage default',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'warm', undefined, undefined),
+    resolveActionLabel(map,'sales', 'warm', undefined, undefined),
     'Default action',
   );
 }
@@ -110,7 +106,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '4. No lead status on contact → returns per-stage default',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    resolveActionLabel(map,'sales', undefined, undefined, undefined),
     'Schedule visit',
   );
 }
@@ -123,40 +119,8 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '5. No matching row at all → returns empty string',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'cold', undefined, undefined),
+    resolveActionLabel(map,'sales', 'cold', undefined, undefined),
     '',
-  );
-}
-
-// ── 6. Substatus action label has highest priority ────────────────────────────
-{
-  const map = {
-    'sales|hot': 'Per-LS label',
-    'sales|':    'Default label',
-  };
-  const substatusMap = {
-    'HOT|URGENT': 'Rush booking',
-  };
-  assertEqual(
-    '6. Substatus action label takes priority over per-LS label',
-    resolveActionLabel(map, substatusMap, 'sales', 'hot', undefined, 'HOT__URGENT'),
-    'Rush booking',
-  );
-}
-
-// ── 7. Substatus present but no action_label → falls through to per-LS row ───
-{
-  const map = {
-    'sales|hot': 'Per-LS label',
-    'sales|':    'Default label',
-  };
-  const substatusMap = {
-    // 'HOT|STANDARD' has no entry (no action_label configured)
-  };
-  assertEqual(
-    '7. Substatus with no action_label → falls through to per-LS label',
-    resolveActionLabel(map, substatusMap, 'sales', 'hot', undefined, 'HOT__STANDARD'),
-    'Per-LS label',
   );
 }
 
@@ -168,12 +132,12 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '8a. Upper-case stageKey is normalised',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'SALES', 'hot', undefined, undefined),
+    resolveActionLabel(map,'SALES', 'hot', undefined, undefined),
     'Book appointment',
   );
   assertEqual(
     '8b. Mixed-case leadStatusKey is normalised',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'HOT', undefined, undefined),
+    resolveActionLabel(map,'sales', 'HOT', undefined, undefined),
     'Book appointment',
   );
 }
@@ -186,7 +150,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '9. Legacy substageId fallback when no lead status key',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'survey', undefined, 'substage-1', undefined),
+    resolveActionLabel(map,'survey', undefined, 'substage-1', undefined),
     'Start survey',
   );
 }
@@ -199,7 +163,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '10. Missing per-LS key falls back to per-stage default',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'installation', 'new_lead', undefined, undefined),
+    resolveActionLabel(map,'installation', 'new_lead', undefined, undefined),
     'Schedule installation',
   );
   assertEqual(
@@ -223,12 +187,12 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '11a. No per-stage default, no lead status → uses __global__ fallback',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    resolveActionLabel(map,'sales', undefined, undefined, undefined),
     'Schedule a call',
   );
   assertEqual(
     '11b. No per-stage default, unknown LS key → uses __global__ fallback',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'warm', undefined, undefined),
+    resolveActionLabel(map,'sales', 'warm', undefined, undefined),
     'Schedule a call',
   );
 }
@@ -241,12 +205,12 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '12. Per-stage default wins over __global__ when both present',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    resolveActionLabel(map,'sales', undefined, undefined, undefined),
     'Stage default',
   );
   assertEqual(
     '12b. Per-stage default wins when falling back from missing per-LS row',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', 'new_lead', undefined, undefined),
+    resolveActionLabel(map,'sales', 'new_lead', undefined, undefined),
     'Stage default',
   );
 }
@@ -259,7 +223,7 @@ const NO_SUBSTATUS_MAP = {};
   };
   assertEqual(
     '13. No per-stage default and no __global__ row → returns empty string',
-    resolveActionLabel(map, NO_SUBSTATUS_MAP, 'sales', undefined, undefined, undefined),
+    resolveActionLabel(map,'sales', undefined, undefined, undefined),
     '',
   );
 }

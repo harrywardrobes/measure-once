@@ -374,7 +374,7 @@ if (violations.length > 0) {
 
   process.stderr.write(`
 A *ConfigProps interface has a boolean \`<field>Invalid\` companion prop, which
-signals that \`<field>\` stores a lead-status or sub-status key.  The JSON
+signals that \`<field>\` stores a lead-status key.  The JSON
 fallback editor in ActionHandlersPage.tsx scans KNOWN_STATUS_KEY_FIELDS to
 detect stale status references — if the field is missing from that list, stale
 keys will go undetected when users fall back to the JSON editor.
@@ -382,7 +382,7 @@ keys will go undetected when users fall back to the JSON editor.
 To fix:
   Add an entry for each missing field to KNOWN_STATUS_KEY_FIELDS in
   src/react/pages/admin/HandlerConfigBlocks.tsx, specifying its \`field\`,
-  \`label\`, and \`type\` ('lead_status' or 'lead_status_or_substatus').
+  \`label\`, and \`type\` ('lead_status').
 
 `);
 }

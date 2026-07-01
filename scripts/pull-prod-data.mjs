@@ -35,7 +35,6 @@ const CONFIG_TABLES = [
   'nav_role_configs',
   // Lead workflow
   'lead_status_config',
-  'lead_substatuses',             // → lead_status_config
   'stage_action_labels',          // → lead_status_config
   // Card actions
   'card_action_handlers',
@@ -110,7 +109,7 @@ const OPTIONAL_GROUPS = [
 //   design_visit_pending_uploads, survey_visit_pending_uploads
 //   contact_attempt_tracking, contact_attempt_log, contact_attempt_history_log
 //   customer_info_resend_log, photo_review_outcomes
-//   google_maps_usage, substatus_clear_failures
+//   google_maps_usage
 //   bootstrap_admin_emails, trade_company_submissions, trade_audit_log
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

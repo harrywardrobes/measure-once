@@ -71,7 +71,6 @@ interface LeadStatus {
 interface HandlerBinding {
   stage_key?: string;
   status_key?: string;
-  substatus_id?: number | null;
 }
 
 

@@ -30,7 +30,7 @@ export const OFFLINE_READ_CACHES = [
     cacheName: 'mo-customers',
     maxEntries: 200,
     routes: [
-      '^/api/(contacts-all|contacts-lead-status-counts|contacts-stage-counts|contacts-substatus-counts|lead-statuses|lead-substatuses|workflow)$',
+      '^/api/(contacts-all|contacts-lead-status-counts|contacts-stage-counts|lead-statuses|workflow)$',
       '^/api/contacts/[^/]+(/(localdata|tasks))?$',
     ],
   },
