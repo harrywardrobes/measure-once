@@ -354,38 +354,35 @@ export function AddressInput({
             noOptionsText={
               inputText.trim().length < minChars ? 'Keep typing…' : 'No matches'
             }
-            renderInput={(params) => {
-              const inputProps =
-                (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-              return (
-                <TextField
-                  {...params}
-                  label="Enter your postcode or address"
-                  placeholder="e.g. SW1A 1AA"
-                  size="small"
-                  fullWidth
-                  sx={{ mb: 1 }}
-                  slotProps={{
-                    input: {
-                      ...inputProps,
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon fontSize="small" color="action" />
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <>
-                          {loadingPredictions ? (
-                            <CircularProgress color="inherit" size={16} />
-                          ) : null}
-                          {inputProps.endAdornment as React.ReactNode}
-                        </>
-                      ),
-                    },
-                  }}
-                />
-              );
-            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Enter your postcode or address"
+                placeholder="e.g. SW1A 1AA"
+                size="small"
+                fullWidth
+                sx={{ mb: 1 }}
+                slotProps={{
+                  ...params.slotProps,
+                  input: {
+                    ...params.slotProps.input,
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" color="action" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <>
+                        {loadingPredictions ? (
+                          <CircularProgress color="inherit" size={16} />
+                        ) : null}
+                        {params.slotProps.input.endAdornment}
+                      </>
+                    ),
+                  },
+                }}
+              />
+            )}
           />
           <Link
             component="button"
@@ -422,10 +419,7 @@ export function AddressInput({
           noOptionsText={
             inputText.trim().length < minChars ? 'Keep typing…' : 'No matches'
           }
-          renderInput={(params) => {
-            const inputProps =
-              (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-            return (
+          renderInput={(params) => (
               <TextField
                 {...params}
                 label="Search for an address"
@@ -434,8 +428,9 @@ export function AddressInput({
                 fullWidth
                 sx={{ mb: 1.5 }}
                 slotProps={{
+                  ...params.slotProps,
                   input: {
-                    ...inputProps,
+                    ...params.slotProps.input,
                     startAdornment: (
                       <InputAdornment position="start">
                         <SearchIcon fontSize="small" color="action" />
@@ -446,14 +441,13 @@ export function AddressInput({
                         {loadingPredictions ? (
                           <CircularProgress color="inherit" size={16} />
                         ) : null}
-                        {inputProps.endAdornment as React.ReactNode}
+                        {params.slotProps.input.endAdornment}
                       </>
                     ),
                   },
                 }}
               />
-            );
-          }}
+          )}
         />
       )}
 

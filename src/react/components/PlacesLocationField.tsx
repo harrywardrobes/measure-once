@@ -265,37 +265,34 @@ export function PlacesLocationField({
           ? 'Keep typing…'
           : 'No matches'
       }
-      renderInput={(params) => {
-        const inputProps =
-          (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-        return (
-          <TextField
-            {...params}
-            label={label}
-            required={required}
-            size={size}
-            fullWidth={fullWidth}
-            slotProps={{
-              input: {
-                ...inputProps,
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon fontSize="small" color="action" />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <>
-                    {loadingSuggestions ? (
-                      <CircularProgress color="inherit" size={16} />
-                    ) : null}
-                    {inputProps.endAdornment as React.ReactNode}
-                  </>
-                ),
-              },
-            }}
-          />
-        );
-      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          label={label}
+          required={required}
+          size={size}
+          fullWidth={fullWidth}
+          slotProps={{
+            ...params.slotProps,
+            input: {
+              ...params.slotProps.input,
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" color="action" />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <>
+                  {loadingSuggestions ? (
+                    <CircularProgress color="inherit" size={16} />
+                  ) : null}
+                  {params.slotProps.input.endAdornment}
+                </>
+              ),
+            },
+          }}
+        />
+      )}
     />
   );
 }

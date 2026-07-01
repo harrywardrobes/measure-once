@@ -443,29 +443,26 @@ export function UnmatchedSubCard({ sub, onLinked }: { sub: UnmatchedSub; onLinke
                     </Box>
                   </Box>
                 )}
-                renderInput={(params) => {
-                  const inputProps =
-                    (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-                  return (
-                    <TextField
-                      {...params}
-                      label="Search contacts"
-                      placeholder="Name or email…"
-                      autoFocus
-                      slotProps={{
-                        input: {
-                          ...inputProps,
-                          endAdornment: (
-                            <>
-                              {linkLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
-                              {inputProps.endAdornment as React.ReactNode}
-                            </>
-                          ),
-                        },
-                      }}
-                    />
-                  );
-                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Search contacts"
+                    placeholder="Name or email…"
+                    autoFocus
+                    slotProps={{
+                      ...params.slotProps,
+                      input: {
+                        ...params.slotProps.input,
+                        endAdornment: (
+                          <>
+                            {linkLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
+                            {params.slotProps.input.endAdornment}
+                          </>
+                        ),
+                      },
+                    }}
+                  />
+                )}
                 sx={{ mt: 1 }}
               />
               {linkSelected && (
