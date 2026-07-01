@@ -5059,10 +5059,20 @@ const LEAD_STATUS_STAGE_KEYS = [
 ];
 const LEAD_STATUS_STAGE_SET = new Set(LEAD_STATUS_STAGE_KEYS);
 
+// Stage groupings mirror the production lead_status_config (source of truth).
+// Used to backfill `stage` for known keys where it is still NULL (e.g. after the
+// HubSpot-seed path, which inserts without a stage). Never overwrites an admin choice.
 const LEAD_STATUS_STAGE_SEEDS = {
-  SALES: ['FORM_SUBMISSION', 'CONTACTED', 'ATTEMPTED_TO_CONTACT', 'IN_PROGRESS', 'AWAITING_PHOTOS', 'ROUGH_ESTIMATE', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE', 'DECLINED_DEAL'],
-  DESIGN_VISIT: ['DESIGN_SCHEDULED', 'DESIGN_IN_PROGRESS', 'DESIGN_SENT', 'DESIGN_ACCEPTED'],
-  SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT', 'READY_FOR_PRODUCTION'],
+  SALES: ['ATTEMPTED_TO_CONTACT', 'AWAITING_PHOTOS', 'PHOTOS_RECEIVED', 'ROUGH_ESTIMATE', 'DESIGN_INVITED', 'UNQUALIFIED', 'NOT_SUITABLE', 'BAD_TIMING', 'NO_RESPONSE', 'DECLINED_DEAL', 'IN_PROGRESS', 'GHOSTED'],
+  DESIGN_VISIT: ['DESIGN_SCHEDULED', 'DESIGN_IN_PROGRESS', 'OPEN_DEAL', 'DESIGN_ACCEPTED'],
+  SURVEY: ['DEPOSIT_INVOICE', 'SURVEY_INVITED', 'SURVEY_SCHEDULED', 'SURVEY_IN_PROGRESS', 'SURVEY_SENT'],
+  ORDER: ['PRODUCTION_READY'],
+  WORKSHOP: ['WORKSHOP_PREP'],
+  PACKING: ['PACKING_IN_PROGRESS'],
+  DELIVERY: ['DELIVERY_IN_PROGRESS'],
+  INSTALLATION: ['INSTALL_IN_PROGRESS'],
+  AFTERCARE: ['FINAL_INVOICE', 'COMPLETE'],
+  CUSTOMER_SERVICE: ['REMEDIAL'],
 };
 
 async function ensureLeadStatusTable() {
@@ -5073,7 +5083,7 @@ async function ensureLeadStatusTable() {
   // Ensure the sentinel null-status row exists (never overwrite an admin-changed label).
   await pool.query(
     `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, is_null_row)
-     VALUES ('__NULL__', 'No status', -1, FALSE, TRUE)
+     VALUES ('__NULL__', 'NEW Contact', -1, FALSE, TRUE)
      ON CONFLICT (key) DO NOTHING`
   );
 
@@ -5117,22 +5127,44 @@ async function ensureLeadStatusTable() {
   }
 
   // ── Fallback: hardcoded defaults ───────────────────────────────────────────
+  // Mirrors the production lead_status_config (keys, labels, order, stage,
+  // exclusions) so fresh dev checkouts and isolated test DBs match prod when no
+  // HubSpot token is available to seed from.
   const DEFAULT_LEAD_STATUSES = [
-    { key: 'NEW',                  label: 'New',                  sort_order: 0,  excluded_from_sales: false },
-    { key: 'OPEN',                 label: 'Open',                 sort_order: 1,  excluded_from_sales: false },
-    { key: 'IN_PROGRESS',          label: 'In Progress',          sort_order: 2,  excluded_from_sales: false },
-    { key: 'OPEN_DEAL',            label: 'Open Deal',            sort_order: 3,  excluded_from_sales: false },
-    { key: 'DEPOSIT_INVOICE',      label: 'Deposit Invoice',      sort_order: 4,  excluded_from_sales: false },
-    { key: 'VISIT_SCHEDULED',      label: 'Visit Scheduled',      sort_order: 5,  excluded_from_sales: false },
-    { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact', sort_order: 6,  excluded_from_sales: false },
-    { key: 'UNQUALIFIED',          label: 'Unqualified',          sort_order: 7,  excluded_from_sales: true  },
-    { key: 'BAD_TIMING',           label: 'Bad Timing',           sort_order: 8,  excluded_from_sales: false },
-    { key: 'DECLINED_DEAL',        label: 'Declined Deal',        sort_order: 100, excluded_from_sales: true  },
+    { key: 'ATTEMPTED_TO_CONTACT', label: 'Attempted to Contact',     sort_order: 0,  excluded_from_sales: false, stage: 'SALES' },
+    { key: 'AWAITING_PHOTOS',      label: 'Awaiting Photos',          sort_order: 1,  excluded_from_sales: false, stage: 'SALES' },
+    { key: 'PHOTOS_RECEIVED',      label: 'Photos Received',          sort_order: 2,  excluded_from_sales: false, stage: 'SALES' },
+    { key: 'ROUGH_ESTIMATE',       label: 'Rough Estimate',           sort_order: 3,  excluded_from_sales: false, stage: 'SALES' },
+    { key: 'DESIGN_INVITED',       label: 'Design Invite Sent',       sort_order: 4,  excluded_from_sales: false, stage: 'SALES' },
+    { key: 'UNQUALIFIED',          label: 'Unqualified',              sort_order: 5,  excluded_from_sales: true,  stage: 'SALES' },
+    { key: 'NOT_SUITABLE',         label: 'Not Suitable',             sort_order: 6,  excluded_from_sales: true,  stage: 'SALES' },
+    { key: 'BAD_TIMING',           label: 'Bad Timing',               sort_order: 7,  excluded_from_sales: true,  stage: 'SALES' },
+    { key: 'DESIGN_SCHEDULED',     label: 'Design Scheduled',         sort_order: 8,  excluded_from_sales: false, stage: 'DESIGN_VISIT' },
+    { key: 'DESIGN_IN_PROGRESS',   label: 'Design In Progress',       sort_order: 9,  excluded_from_sales: false, stage: 'DESIGN_VISIT' },
+    { key: 'OPEN_DEAL',            label: 'Open Deal',                sort_order: 10, excluded_from_sales: false, stage: 'DESIGN_VISIT' },
+    { key: 'DEPOSIT_INVOICE',      label: 'Deposit Invoice',          sort_order: 11, excluded_from_sales: false, stage: 'SURVEY' },
+    { key: 'SURVEY_INVITED',       label: 'Survey Invite Sent',       sort_order: 12, excluded_from_sales: false, stage: 'SURVEY' },
+    { key: 'SURVEY_SCHEDULED',     label: 'Survey Scheduled',         sort_order: 13, excluded_from_sales: false, stage: 'SURVEY' },
+    { key: 'SURVEY_IN_PROGRESS',   label: 'Survey In Progress',       sort_order: 14, excluded_from_sales: false, stage: 'SURVEY' },
+    { key: 'PRODUCTION_READY',     label: 'Ready For Production',      sort_order: 15, excluded_from_sales: false, stage: 'ORDER' },
+    { key: 'WORKSHOP_PREP',        label: 'Workshop Preperation',     sort_order: 16, excluded_from_sales: false, stage: 'WORKSHOP' },
+    { key: 'PACKING_IN_PROGRESS',  label: 'Packing In Progress',      sort_order: 17, excluded_from_sales: false, stage: 'PACKING' },
+    { key: 'DELIVERY_IN_PROGRESS', label: 'Delivery In Progress',     sort_order: 18, excluded_from_sales: false, stage: 'DELIVERY' },
+    { key: 'INSTALL_IN_PROGRESS',  label: 'Installation In Progress', sort_order: 19, excluded_from_sales: false, stage: 'INSTALLATION' },
+    { key: 'FINAL_INVOICE',        label: 'Final Invoice',            sort_order: 20, excluded_from_sales: false, stage: 'AFTERCARE' },
+    { key: 'COMPLETE',             label: 'Complete',                 sort_order: 21, excluded_from_sales: true,  stage: 'AFTERCARE' },
+    { key: 'REMEDIAL',             label: 'Remedial',                 sort_order: 22, excluded_from_sales: false, stage: 'CUSTOMER_SERVICE' },
+    { key: 'NO_RESPONSE',          label: 'No Response (3 Attempts)', sort_order: 23, excluded_from_sales: true,  stage: 'SALES' },
+    { key: 'SURVEY_SENT',          label: 'Survey Complete',          sort_order: 24, excluded_from_sales: false, stage: 'SURVEY' },
+    { key: 'DECLINED_DEAL',        label: 'Declined Deal',            sort_order: 25, excluded_from_sales: true,  stage: 'SALES' },
+    { key: 'IN_PROGRESS',          label: 'In Progress',              sort_order: 26, excluded_from_sales: false, stage: 'SALES' },
+    { key: 'DESIGN_ACCEPTED',      label: 'Design Accepted',          sort_order: 27, excluded_from_sales: false, stage: 'DESIGN_VISIT' },
+    { key: 'GHOSTED',              label: 'Ghosted',                  sort_order: 28, excluded_from_sales: true,  stage: 'SALES' },
   ];
   for (const s of DEFAULT_LEAD_STATUSES) {
     await pool.query(
-      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING',
-      [s.key, s.label, s.sort_order, s.excluded_from_sales]
+      'INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales, stage) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (key) DO NOTHING',
+      [s.key, s.label, s.sort_order, s.excluded_from_sales, s.stage]
     );
   }
   logger.info('  Lead status config seeded with defaults (no HubSpot token)');
@@ -5420,23 +5452,58 @@ app.post('/api/admin/hubspot-lead-statuses/import', isAuthenticated, requireAdmi
   if (!Array.isArray(raw)) return res.status(400).json({ error: 'options array is required.' });
   const options = raw.filter(o => !o.hidden);
   if (!options.length) return res.json({ upserted: 0, skipped: 0, syncError: false });
-  let upserted = 0, skipped = 0;
+  // Normalise + dedupe by key, preserving HubSpot's display order. Raw
+  // displayOrder values are NOT written straight into sort_order: they routinely
+  // collide with existing rows under the partial unique index
+  // `lead_status_config_sort_order_uniq`, which aborted the whole transaction
+  // (surfaced to the user as a 500 "Could not import lead statuses.").
+  const seen = new Set();
+  const clean = [];
+  for (const opt of options) {
+    const key   = String(opt.value || '').trim().toUpperCase();
+    const label = String(opt.label || '').trim();
+    if (!key || !label || seen.has(key)) continue;
+    seen.add(key);
+    clean.push({ key, label, displayOrder: typeof opt.displayOrder === 'number' ? opt.displayOrder : Number.MAX_SAFE_INTEGER });
+  }
+  clean.sort((x, y) => x.displayOrder - y.displayOrder);
+  let upserted = 0;
+  const skipped = options.length - clean.length;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const opt of options) {
-      const key        = String(opt.value || '').trim().toUpperCase();
-      const label      = String(opt.label || '').trim();
-      const sort_order = typeof opt.displayOrder === 'number' ? opt.displayOrder : 0;
-      if (!key || !label) { skipped++; continue; }
+    // Park every existing non-null row out of range first, so assigning the final
+    // contiguous 0..N-1 order below can never transiently duplicate a sort_order
+    // (the same partial-unique-index guard the reorder endpoint uses). The
+    // constant offset preserves each parked row's relative order.
+    await client.query(
+      `UPDATE lead_status_config SET sort_order = sort_order + 1000000 WHERE is_null_row IS NOT TRUE`
+    );
+    // Upsert each imported status at its final sort_order, refreshing the label.
+    for (let i = 0; i < clean.length; i++) {
       const result = await client.query(
         `INSERT INTO lead_status_config (key, label, sort_order, excluded_from_sales)
          VALUES ($1, $2, $3, FALSE)
-         ON CONFLICT (key) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
-        [key, label, sort_order]
+         ON CONFLICT (key) DO UPDATE SET label = EXCLUDED.label, sort_order = EXCLUDED.sort_order`,
+        [clean[i].key, clean[i].label, i]
       );
       if (result.rowCount > 0) upserted++;
     }
+    // Renumber any existing non-null rows absent from the import (still parked at
+    // the +offset) so they follow the imported block with unique, contiguous
+    // sort_order values, keeping their prior relative order.
+    await client.query(
+      `WITH remaining AS (
+         SELECT key, ($1::int + ROW_NUMBER() OVER (ORDER BY sort_order ASC, key ASC) - 1) AS new_order
+         FROM lead_status_config
+         WHERE is_null_row IS NOT TRUE AND sort_order >= 1000000
+       )
+       UPDATE lead_status_config lsc
+       SET sort_order = remaining.new_order
+       FROM remaining
+       WHERE lsc.key = remaining.key`,
+      [clean.length]
+    );
     await client.query('COMMIT');
     invalidateLeadStatusCache();
     _invalidateLeadStatusCountsCache();
