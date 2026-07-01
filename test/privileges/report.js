@@ -6,7 +6,7 @@ const RANK_FOR_REPORT = { unauth: -1, viewer: 0, member: 1, manager: 2, admin: 3
 
 function badge(ok, skipped) { return ok ? 'PASS' : skipped ? 'SKIP' : 'FAIL'; }
 
-function escapePipe(s) { return String(s).replace(/\|/g, '\\|').replace(/\n/g, ' '); }
+function escapePipe(s) { return String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' '); }
 
 function buildReport({ runId, startedAt, finishedAt, matrix, probes, harnessLog }) {
   const lines = [];

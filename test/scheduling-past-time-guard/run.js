@@ -108,7 +108,7 @@ function writeReport(runId) {
   const passed = findings.filter(f => f.ok).length;
   const failed = findings.filter(f => !f.ok && !f.skipped).length;
   const skipped = findings.filter(f => f.skipped).length;
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const rows = findings
     .map(f => `| ${f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`)
     .join('\n');

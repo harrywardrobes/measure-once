@@ -200,7 +200,15 @@ function isTsTypeAnnotation(line) {
   if (!/^(?:readonly\s+)?privilege_level\??:\s*\S/.test(trimmed)) return false;
   if (trimmed.includes('.privilege_level')) return false;
   const afterColon = trimmed.replace(/^(?:readonly\s+)?privilege_level\??:\s*/, '');
-  if (/[=!<>({]/.test(afterColon.replace(/<[^>]*>/g, ''))) return false;
+  // Strip TS generic brackets to a fixpoint: a single pass leaves residue on
+  // nested generics like Map<string, Set<x>> (CodeQL
+  // js/incomplete-multi-character-sanitization).
+  let stripped = afterColon;
+  for (let prev = null; prev !== stripped; ) {
+    prev = stripped;
+    stripped = stripped.replace(/<[^>]*>/g, '');
+  }
+  if (/[=!<>({]/.test(stripped)) return false;
   return true;
 }
 

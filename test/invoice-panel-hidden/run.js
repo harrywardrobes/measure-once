@@ -100,7 +100,7 @@ async function waitForReact(page, timeoutMs = 10000) {
 async function writeReport(findings) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
     '# Invoice panel hidden — CSS regression test',
     '',

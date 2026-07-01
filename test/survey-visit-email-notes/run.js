@@ -122,7 +122,7 @@ function writeReport(runId) {
 
   const pass = findings.filter(f => f.ok).length;
   const fail = findings.filter(f => !f.ok).length;
-  const esc  = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc  = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
   const lines = [
     '# Survey Visit Email Notes — integration test report',

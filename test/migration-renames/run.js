@@ -230,7 +230,7 @@ async function main() {
 
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
 
-  const esc  = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc  = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const rows = findings.map(f =>
     `| \`${esc(f.id)}\` | ${f.ok ? '✅ PASS' : '❌ FAIL'} | ${esc(f.detail)} |`
   );

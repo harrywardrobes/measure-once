@@ -103,7 +103,7 @@ async function injectSession(page, jar) {
 
 function writeReport(runId, findings) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed  = findings.filter(f => f.ok).length;
   const failed  = findings.filter(f => !f.ok && !f.skipped).length;
   const skipped = findings.filter(f => f.skipped).length;

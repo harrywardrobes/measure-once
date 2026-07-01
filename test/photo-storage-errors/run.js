@@ -211,7 +211,9 @@ async function main() {
     process.exit(2);
   }
 
-  const runId    = Math.random().toString(36).slice(2, 8);
+  // crypto-random, not Math.random(): runId seeds the fallback SESSION_SECRET
+  // below, which signs image URLs (CodeQL js/insecure-randomness).
+  const runId    = crypto.randomBytes(4).toString('hex').slice(0, 6);
   // contactId must be all-digit (the route validates /^\d+$/)
   const contactId = String(800000000 + Math.floor(Math.random() * 99999999));
 

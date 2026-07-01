@@ -101,7 +101,7 @@ function writeReport(runId, findings) {
   const passed  = findings.filter(f => f.ok).length;
   const failed  = findings.filter(f => !f.ok && !f.skipped).length;
   const skipped = findings.filter(f => f.skipped).length;
-  const esc = (s) => String(s).replace(/\|/g, '\\|');
+  const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
   const lines = [
     `# permissions-ui  run=${runId}`,
     '',

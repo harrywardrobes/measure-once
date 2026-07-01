@@ -83,8 +83,17 @@ function startStaticServer(dir) {
     if (pathname === '/' || pathname === '') pathname = '/index.html';
 
     // Resolve and guard against path traversal outside the root.
+    // Plain-prefix check first — the exact form static analysis recognises as
+    // a path-traversal barrier (CodeQL js/path-injection) — then the
+    // separator-precise check that also rejects sibling paths like
+    // `${rootDir}-other`.
     const filePath = resolve(join(rootDir, normalize(pathname)));
-    if (!filePath.startsWith(rootDir + '/') && filePath !== rootDir) {
+    if (!filePath.startsWith(rootDir)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden');
+      return;
+    }
+    if (filePath !== rootDir && !filePath.startsWith(rootDir + '/')) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });
       res.end('Forbidden');
       return;
@@ -366,7 +375,7 @@ async function writeReport(findings, fatalMessage) {
   const failed  = findings.filter(f => !f.ok).length;
   const total   = findings.length;
 
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
   const lines = [
     `# Storybook Smoke — ${now}`,

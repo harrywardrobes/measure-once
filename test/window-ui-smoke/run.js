@@ -258,7 +258,7 @@ async function main() {
 async function writeReport(findings) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
     '# Shared chrome mount points — Smoke Test',
     '',

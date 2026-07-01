@@ -113,17 +113,20 @@ const { count, size, warnings } = await generateSW({
     // Do NOT hand-add same-origin read-route caches below; add them to that
     // manifest so the matrix/docs drift guard stays effective.
     ...OFFLINE_READ_CACHES.map(({ cacheName, maxEntries, routes }) => {
-      // Build the union pattern at build time and embed it as a regex
-      // *literal* inside a self-contained function so that when Workbox
+      // Build the union pattern at build time and embed it as a JSON string
+      // literal inside a self-contained function so that when Workbox
       // serialises urlPattern via .toString() the generated sw.js has no
       // reference to any closed-over variable (the old `patterns` closure
-      // caused a ReferenceError at SW runtime).  We must test url.pathname
-      // (not url.href) because the route patterns are anchored to the /api path.
+      // caused a ReferenceError at SW runtime).  JSON.stringify escapes every
+      // character correctly — the previous slash-only escape for a regex
+      // literal left backslashes untouched (CodeQL js/incomplete-sanitization).
+      // We must test url.pathname (not url.href) because the route patterns
+      // are anchored to the /api path.
       const patternSrc = routes.map((s) => `(?:${s})`).join('|');
-      const escapedSrc = patternSrc.replace(/\//g, '\\/');
+      new RegExp(patternSrc); // build-time validation: throw here, not in the SW
       return {
         urlPattern: new Function(
-          `return ({ url, sameOrigin }) => sameOrigin && /${escapedSrc}/.test(url.pathname)`,
+          `return ({ url, sameOrigin }) => sameOrigin && new RegExp(${JSON.stringify(patternSrc)}).test(url.pathname)`,
         )(),
         handler: 'StaleWhileRevalidate',
         options: {

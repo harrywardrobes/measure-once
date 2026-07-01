@@ -214,7 +214,7 @@ async function main() {
         '',
         '| Probe | Result | Detail |',
         '| --- | --- | --- |',
-        ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : 'FAIL'} | ${String(f.detail).replace(/\|/g, '\\|')} |`),
+        ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : 'FAIL'} | ${String(f.detail).replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} |`),
         '',
       ];
       fs.writeFileSync(REPORT_PATH, lines.join('\n'));

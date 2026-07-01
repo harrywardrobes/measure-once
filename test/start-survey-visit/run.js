@@ -740,7 +740,7 @@ async function writeReport(runId, findings) {
     '| ------ | ----- | -------- | -------- |',
     ...findings.map(f => {
       const result = f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL';
-      const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const esc = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
       return `| ${result} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`;
     }),
     '',

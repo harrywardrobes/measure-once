@@ -511,7 +511,7 @@ function writeReport(findings) {
     lines.push('|---|-------|----------|----------|');
     for (const f of findings) {
       const mark = f.ok ? '✓' : '✗';
-      const esc = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
       lines.push(`| ${mark} | ${esc(f.name)} | ${esc(f.expected)} | ${esc(f.observed)} |`);
     }
     lines.push('');

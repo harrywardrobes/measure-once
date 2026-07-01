@@ -295,7 +295,7 @@ async function main() {
     '',
     '| ID | Result | Detail |',
     '|----|--------|--------|',
-    ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : 'FAIL'} | ${String(f.detail).replace(/\|/g, '\\|')} |`),
+    ...findings.map(f => `| ${f.id} | ${f.ok ? 'PASS' : 'FAIL'} | ${String(f.detail).replace(/\\/g, '\\\\').replace(/\|/g, '\\|')} |`),
   ];
   try {
     fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });

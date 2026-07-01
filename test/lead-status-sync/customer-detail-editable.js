@@ -370,7 +370,7 @@ async function main() {
 async function writeReport(runId, findings) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const lines = [
     '# Lead-Status Editable-Role Pill — Isolated E2E Test',
     '',

@@ -755,7 +755,7 @@ async function main() {
 async function writeReport(runId, findings) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
-  const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const total   = findings.filter(f => !f.skipped).length;
   const nPassed = findings.filter(f => f.ok).length;
   const nFailed = findings.filter(f => !f.ok && !f.skipped).length;

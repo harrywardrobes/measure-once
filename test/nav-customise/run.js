@@ -939,7 +939,7 @@ async function main() {
 async function writeReport(findings, runId) {
   const dir = path.resolve(__dirname, '..', '..', 'test-results');
   fs.mkdirSync(dir, { recursive: true });
-  const esc  = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc  = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const pass    = findings.filter(f => f.ok).length;
   const skipped = findings.filter(f => f.skipped).length;
   const fail    = findings.filter(f => !f.ok && !f.skipped).length;

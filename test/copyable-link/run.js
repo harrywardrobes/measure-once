@@ -355,7 +355,7 @@ async function openUploadModal(page, contactId, contactName, contactEmail) {
 
 async function writeReport(runId) {
   fs.mkdirSync(path.dirname(REPORT_PATH), { recursive: true });
-  const esc    = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  const esc    = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
   const passed = findings.filter(f => f.ok).length;
   const failed = findings.filter(f => !f.ok && !f.skipped).length;
   const skipped = findings.filter(f => f.skipped).length;
@@ -534,7 +534,13 @@ async function main() {
         // when using slotProps.input.readOnly).
         const inputs = Array.from(dialog.querySelectorAll('input'));
         for (const inp of inputs) {
-          if (inp.readOnly && inp.value && inp.value.includes('privtest.example.com')) {
+          if (!inp.readOnly || !inp.value) continue;
+          // Compare the parsed hostname rather than a substring so an
+          // unrelated URL merely containing the text can never match
+          // (CodeQL js/incomplete-url-substring-sanitization).
+          let host = '';
+          try { host = new URL(inp.value).hostname; } catch {}
+          if (host === 'privtest.example.com') {
             return inp.value;
           }
         }
@@ -606,7 +612,10 @@ async function main() {
             if (!dialog) return { confirmText: false, linkVisible: false, linkValue: null };
             const text   = dialog.textContent || '';
             const inputs = Array.from(dialog.querySelectorAll('input'));
-            const linkInp = inputs.find(i => i.readOnly && i.value && i.value.includes('privtest.example.com'));
+            const linkInp = inputs.find(i => {
+              if (!i.readOnly || !i.value) return false;
+              try { return new URL(i.value).hostname === 'privtest.example.com'; } catch { return false; }
+            });
             return {
               confirmText:          text.includes('email has been sent'),
               linkVisible:          !!linkInp,

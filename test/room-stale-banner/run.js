@@ -335,7 +335,7 @@ function writeReport(findings) {
   try {
     const dir = path.resolve(__dirname, '..', '..', 'test-results');
     fs.mkdirSync(dir, { recursive: true });
-    const esc = s => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const esc = s => String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
     const pass = findings.filter(f => f.ok).length;
     const lines = [
       '# Room stale-data banner — E2E report',

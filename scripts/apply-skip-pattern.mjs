@@ -430,10 +430,6 @@ function transform3arg(suiteName, src) {
       lines[i] = lines[i].replace("f.ok ? 'PASS' : 'FAIL'", "f.ok ? 'PASS' : f.skipped ? 'SKIP' : 'FAIL'");
       changed = true;
     }
-    // Also handle inline console.log with PASS/FAIL
-    if (lines[i].includes("ok ? 'PASS' : 'FAIL'") && !lines[i].includes('f.skipped') && !lines[i].includes('skipped')) {
-      lines[i] = lines[i].replace("ok ? 'PASS' : 'FAIL'", "ok ? 'PASS' : 'FAIL'"); // no-op for inline, handle separately
-    }
   }
 
   // 5. Update summary counts
