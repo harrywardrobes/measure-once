@@ -151,30 +151,27 @@ export function ContactSearchPicker({
             </li>
           );
         }}
-        renderInput={(params) => {
-          const inputProps =
-            (params as unknown as { InputProps: Record<string, unknown> }).InputProps || {};
-          return (
-            <TextField
-              {...params}
-              label={label}
-              placeholder="Search customers…"
-              autoFocus={autoFocus}
-              size="small"
-              slotProps={{
-                input: {
-                  ...inputProps,
-                  endAdornment: (
-                    <>
-                      {loading ? <CircularProgress color="inherit" size={18} /> : null}
-                      {inputProps.endAdornment as React.ReactNode}
-                    </>
-                  ),
-                },
-              }}
-            />
-          );
-        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            placeholder="Search customers…"
+            autoFocus={autoFocus}
+            size="small"
+            slotProps={{
+              ...params.slotProps,
+              input: {
+                ...params.slotProps.input,
+                endAdornment: (
+                  <>
+                    {loading ? <CircularProgress color="inherit" size={18} /> : null}
+                    {params.slotProps.input.endAdornment}
+                  </>
+                ),
+              },
+            }}
+          />
+        )}
       />
       {fromCache && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1, color: 'text.secondary' }}>
