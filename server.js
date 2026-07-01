@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
 const axios = require('axios').create({ timeout: 10000 });
 const { google } = require('googleapis');
 // Test-only: helper functions that override rootUrl on individual API clients
@@ -206,6 +207,13 @@ app.post('/api/hubspot/webhook',
 );
 
 // ── Middleware ────────────────────────────────────────────────────────────────
+// Gzip all compressible responses (HTML, CSS, JS bundles, JSON API payloads).
+// Cloud Run does not compress on our behalf, so without this every text asset is
+// served at full size — the always-loaded React bundle alone is ~400kB raw but
+// ~110kB gzipped. Respects the client's Accept-Encoding and skips already-binary
+// assets (images, fonts/WOFF2). `Cache-Control: no-transform` responses are left
+// untouched by the middleware automatically.
+app.use(compression());
 app.use(express.json({ limit: '25mb' }));
 
 // Clean URLs for each page (no .html extension). Must precede express.static so the
