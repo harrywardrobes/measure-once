@@ -1,0 +1,24 @@
+# Dependabot configuration
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+#
+# Strategy (matches the "security + safe" dependency policy):
+#   - Weekly npm checks against the repo root.
+#   - Minor + patch updates are grouped into a single PR to reduce noise.
+#   - Major updates are left as individual PRs so each breaking change can be
+#     reviewed on its own.
+#
+# NOTE: there are no GitHub Actions workflows in this repo — CI runs locally via
+# `npm run test:ci`. Dependabot PRs are therefore NOT auto-verified on GitHub;
+# pull each branch and run `npm run test:ci` locally before merging.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
