@@ -1586,7 +1586,10 @@ router.post('/api/customer-info/:token/photos',
     if (rawFiles != null && !Array.isArray(rawFiles)) {
       return res.status(400).json({ error: 'Invalid files payload.' });
     }
-    const files = rawFiles || [];
+    // Positive Array.isArray guard (not just the negated check above) so
+    // static analysis can prove `files` is an array from here on (CodeQL
+    // js/type-confusion-through-parameter-tampering).
+    const files = Array.isArray(rawFiles) ? rawFiles : [];
     const filesAreValid = files.every((f) =>
       f &&
       typeof f === 'object' &&
@@ -1683,7 +1686,10 @@ router.post('/api/customer-info/by-contact/:contactId/photos',
     if (rawFiles != null && !Array.isArray(rawFiles)) {
       return res.status(400).json({ error: 'Invalid files payload.' });
     }
-    const files = rawFiles || [];
+    // Positive Array.isArray guard (not just the negated check above) so
+    // static analysis can prove `files` is an array from here on (CodeQL
+    // js/type-confusion-through-parameter-tampering).
+    const files = Array.isArray(rawFiles) ? rawFiles : [];
     const filesAreValid = files.every((f) =>
       f &&
       typeof f === 'object' &&
@@ -2377,7 +2383,10 @@ router.post('/api/photo-inbox/upload',
     if (rawFiles != null && !Array.isArray(rawFiles)) {
       return res.status(400).json({ error: 'Invalid files payload.' });
     }
-    const files = rawFiles || [];
+    // Positive Array.isArray guard (not just the negated check above) so
+    // static analysis can prove `files` is an array from here on (CodeQL
+    // js/type-confusion-through-parameter-tampering).
+    const files = Array.isArray(rawFiles) ? rawFiles : [];
     const filesAreValid = files.every((f) =>
       f && typeof f === 'object' && typeof f.path === 'string' && f.path.length > 0 && typeof f.mimetype === 'string');
     if (!filesAreValid) return res.status(400).json({ error: 'Invalid files payload.' });

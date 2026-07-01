@@ -11,6 +11,19 @@ const zxcvbn = require('zxcvbn');
 const { getEmailTemplate, renderEmail } = require('./email-templates');
 const admin = require('./identity-platform');
 
+// ── Email validation ──────────────────────────────────────────────────────────
+// Single shared validator for every email-shaped input in this module. The
+// pattern is the RFC-style one long used on the public request-access form:
+// bounded domain labels mean no overlapping quantifiers, so matching is
+// linear-time — unlike the previous `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`, which
+// backtracks polynomially on long non-matching input (CodeQL
+// js/polynomial-redos). The length cap is the RFC 5321 path maximum and
+// bounds regex work regardless.
+const VALID_EMAIL_RE = /^[a-zA-Z0-9.!#$%&*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+function isValidEmail(email) {
+  return typeof email === 'string' && email.length <= 254 && VALID_EMAIL_RE.test(email);
+}
+
 // ── Cloudflare Turnstile (captcha) ───────────────────────────────────────────
 // Verifies the user-supplied token against Cloudflare's siteverify endpoint.
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
@@ -699,6 +712,13 @@ async function setupAuth(app) {
       'Set both secrets in production to enable bot and credential-stuffing protection.');
   }
 
+  // Universal backstop ahead of every auth route registered below, so each
+  // authorization check and DB lookup sits behind a rate limit regardless of
+  // where its stricter per-endpoint limiter (loginLimiter, accessRequestLimiter,
+  // photoUploadLimiter) appears in its own middleware chain. User-keyed — the
+  // session middleware has already run by this point in the chain.
+  app.use('/api', rateLimit(apiBackstopOptions()));
+
   // ── Login / logout ─────────────────────────────────────────────────────────
   // The client signs in with Identity Platform (via the REST API), receives an
   // ID token, then exchanges it here for an HttpOnly session cookie.
@@ -712,13 +732,6 @@ async function setupAuth(app) {
   app.post('/api/session', loginLimiter, async (req, res) => {
     const { idToken, captchaToken } = req.body || {};
     if (!idToken || typeof idToken !== 'string') {
-  // Universal backstop ahead of every auth route registered below, so each
-  // authorization check and DB lookup sits behind a rate limit regardless of
-  // where its stricter per-endpoint limiter (loginLimiter, accessRequestLimiter,
-  // photoUploadLimiter) appears in its own middleware chain. User-keyed — the
-  // session middleware has already run by this point in the chain.
-  app.use('/api', rateLimit(apiBackstopOptions()));
-
       return res.status(400).json({ error: 'ID token required.' });
     }
     const captcha = await verifyCaptchaToken(captchaToken || req.body?.['cf-turnstile-response'], req.ip);
@@ -842,7 +855,7 @@ async function setupAuth(app) {
 
   app.get('/api/check-email', accessRequestLimiter, async (req, res) => {
     const email = (req.query.email || '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Invalid email address.' });
     }
     res.json({ approved: false });
@@ -858,7 +871,7 @@ async function setupAuth(app) {
         ? (nameTokens[0] || '')
         : nameTokens[0] + ' ' + nameTokens[nameTokens.length - 1];
       const email = (req.body?.email || '').trim().toLowerCase();
-      if (!name || !email || !/^[a-zA-Z0-9.!#$%&*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email)) {
+      if (!name || !email || !isValidEmail(email)) {
         return res.status(400).json({ error: 'Please provide a valid name and email.' });
       }
       const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
@@ -896,7 +909,7 @@ async function setupAuth(app) {
   // direct the user to request access instead of silently doing nothing.
   app.post('/api/forgot-password', accessRequestLimiter, async (req, res) => {
     const email = (req.body?.email || '').trim().toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
     const captcha = await verifyCaptchaToken(req.body?.captchaToken || req.body?.['cf-turnstile-response'], req.ip);
@@ -1319,7 +1332,7 @@ async function setupAuth(app) {
       const body  = req.body || {};
       const email = (body.email || '').trim().toLowerCase();
       const note  = (body.note  || '').trim().slice(0, 200) || null;
-      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      if (!email || !isValidEmail(email)) {
         return res.status(400).json({ error: 'Please provide a valid email address.' });
       }
 
@@ -1495,7 +1508,7 @@ async function setupAuth(app) {
   // Admin: re-issue a set-password link for any approved team member.
   app.post('/api/admin/users/:email/resend-set-password', isAuthenticated, requireAdmin, async (req, res) => {
     const email = (req.params.email || '').toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Invalid email.' });
     }
     if (!(await isEmailApproved(email))) {
@@ -1525,7 +1538,7 @@ async function setupAuth(app) {
   // credentials.
   app.post('/api/admin/users/:email/force-password-reset', isAuthenticated, requireAdmin, async (req, res) => {
     const email = (req.params.email || '').toLowerCase();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!email || !isValidEmail(email)) {
       return res.status(400).json({ error: 'Invalid email.' });
     }
     if (!(await isEmailApproved(email))) {
@@ -1858,7 +1871,7 @@ async function setupAuth(app) {
     if (privilege_level !== undefined && !ALLOWED_PRIVILEGE_LEVELS.includes(privilege_level)) {
       return res.status(400).json({ error: 'Invalid privilege level' });
     }
-    if (newEmail !== undefined && newEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+    if (newEmail !== undefined && newEmail && !isValidEmail(newEmail)) {
       return res.status(400).json({ error: 'Invalid email address' });
     }
 

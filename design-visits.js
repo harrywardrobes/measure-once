@@ -168,8 +168,24 @@ const CATALOG_IMG = {
   ranges:   makeCatalogImageInfra('ranges'),
 };
 
+// Deletes a just-uploaded multer temp file after a failed attach. The filename
+// is server-generated, but it embeds the (sanitised) extension of the
+// user-supplied original name, so re-verify containment in the catalogue
+// upload dir before unlinking — same guard as deleteLocal — so tainted input
+// can never steer fs.unlink outside it (CodeQL js/path-injection).
+function unlinkCatalogUpload(img, file) {
+  if (!file || typeof file.path !== 'string') return;
+  const resolved = path.resolve(file.path);
+  if (path.dirname(resolved) !== path.resolve(img.uploadDir)) return;
+  fs.unlink(resolved, () => {});
+}
+
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = express.Router();
+// Universal backstop ahead of every route on this router: all of them perform
+// authorization and/or database access, so the whole router sits behind a
+// generous rate limit.
+router.use(rateLimit(apiBackstopOptions()));
 
 function hubspotApiBase() {
   // Test-only override so the integration suite can point HubSpot HTTP traffic
@@ -182,10 +198,6 @@ function getHubSpotHeaders() {
     'Content-Type': 'application/json',
   };
 }
-// Universal backstop ahead of every route on this router: all of them perform
-// authorization and/or database access, so the whole router sits behind a
-// generous rate limit.
-router.use(rateLimit(apiBackstopOptions()));
 async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, maxAttempts = 4, baseDelayMs = 300, maxDelayMs = 4000 } = {}) {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const isTransient = err => {
@@ -965,13 +977,13 @@ function mountCatalogCrud(slug, table, opts = {}) {
         const image_url = `${img.urlPrefix}${req.file.filename}`;
         try {
           const existing = await pool.query(`SELECT image_url FROM ${table} WHERE id=$1`, [id]);
-          if (!existing.rows.length) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ error: 'Not found' }); }
+          if (!existing.rows.length) { unlinkCatalogUpload(img, req.file); return res.status(404).json({ error: 'Not found' }); }
           const oldImg = existing.rows[0].image_url;
           const r = await pool.query(`UPDATE ${table} SET image_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *`, [image_url, id]);
-          if (!r.rows.length) { fs.unlink(req.file.path, () => {}); return res.status(404).json({ error: 'Not found' }); }
+          if (!r.rows.length) { unlinkCatalogUpload(img, req.file); return res.status(404).json({ error: 'Not found' }); }
           if (oldImg && oldImg !== image_url) img.deleteLocal(oldImg);
           res.json({ image_url });
-        } catch (e) { fs.unlink(req.file.path, () => {}); res.status(500).json({ error: e.message }); }
+        } catch (e) { unlinkCatalogUpload(img, req.file); res.status(500).json({ error: e.message }); }
       },
     );
   }

@@ -75,6 +75,7 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 const PORT = process.env.PORT || 5000;
 const HOST = '0.0.0.0';
+
 // ── Universal rate-limit backstop ──────────────────────────────────────────────
 // Mounted before every other middleware and route (the webhook receiver, public
 // sign-off pages, static assets, all /api routes and the feature routers) so no
@@ -83,7 +84,6 @@ const HOST = '0.0.0.0';
 // has not run yet — so the cap is set well above what a small office behind a
 // single NAT IP generates. Production-only; see apiBackstopOptions().
 app.use(rateLimit(apiBackstopOptions({ max: 1200 })));
-
 
 function validateHsObjectId(value, fieldName) {
   if (value === undefined || value === null) return null;
@@ -515,7 +515,14 @@ async function hubspotRequestWithRetry(method, url, data, { timeout = 15000, max
       await sleep(backoff);
     }
   }
-  const shortUrl = url.startsWith(HS) ? url.slice(HS.length) : url;
+  // Compare parsed origins rather than a raw prefix — `url.startsWith(HS)`
+  // would also match e.g. `https://api.hubapi.com.evil.com/...` (CodeQL
+  // js/incomplete-url-substring-sanitization). Log-shortening only.
+  let shortUrl = url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin === new URL(HS).origin) shortUrl = parsed.pathname + parsed.search;
+  } catch { /* leave shortUrl as the full string if it isn't a valid URL */ }
   logger.error('[hubspot-retry] all %d attempts exhausted endpoint=%s %s finalStatus=%s', maxAttempts, method.toUpperCase(), shortUrl, lastErr?.response?.status || 'network');
   throw lastErr;
 }
@@ -1251,9 +1258,13 @@ app.get('/auth/google', isAuthenticated, (req, res) => {
  * On error it posts { type: 'google-error', reason } to the opener then closes.
  */
 function googlePopupPage(outcome, reason) {
-  const message = outcome === 'connected'
+  // <-escape the payload so no value can ever contain a literal `</script>`
+  // and break out of the inline script block (JSON.stringify alone does not
+  // escape `<`).
+  const message = (outcome === 'connected'
     ? JSON.stringify({ type: 'google-connected' })
-    : JSON.stringify({ type: 'google-error', reason: reason || 'unknown' });
+    : JSON.stringify({ type: 'google-error', reason: reason || 'unknown' })
+  ).replace(/</g, '\\u003c');
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Google Calendar${outcome === 'connected' ? ' Connected' : ' Error'}</title></head>
@@ -1289,7 +1300,11 @@ app.get('/auth/google/callback', isAuthenticated, async (req, res) => {
     if (isPopup) return res.send(googlePopupPage('connected'));
     res.redirect('/?connected=true');
   } catch (e) {
-    if (isPopup) return res.send(googlePopupPage('error', e.message));
+    // Log the real failure server-side but hand the popup a fixed reason code —
+    // exception text can echo attacker-influenced input into the page (CodeQL
+    // js/xss-through-exception).
+    logger.error({ err: e.message }, 'Google OAuth token exchange failed:');
+    if (isPopup) return res.send(googlePopupPage('error', 'token_exchange_failed'));
     res.redirect('/?error=google_auth_failed');
   }
 });
@@ -7164,8 +7179,11 @@ async function getHubspotOwnerNames() {
 function stripHtmlToText(s) {
   if (!s) return '';
   return String(s)
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    // `[^>]*` on the closing tags catches variants like `</style >` or
+    // `</script foo>` that browsers still treat as closing (CodeQL
+    // js/bad-tag-filter); `\b` keeps `<stylex>`/`<scriptx>` out of the match.
+    .replace(/<style\b[\s\S]*?<\/style[^>]*>/gi, ' ')
+    .replace(/<script\b[\s\S]*?<\/script[^>]*>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     // A closing paragraph is a paragraph break (blank line) so multi-paragraph
     // bodies keep their spacing when rendered to text. Other block closes
@@ -7175,11 +7193,13 @@ function stripHtmlToText(s) {
     .replace(/<\/(div|li|tr|h[1-6])>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
+    // `&amp;` must decode LAST: decoding it first turns `&amp;lt;` into `&lt;`
+    // which the next pass then wrongly decodes to `<` (CodeQL js/double-escaping).
+    .replace(/&amp;/gi, '&')
     .replace(/[ \t]+/g, ' ')
     // Trim whitespace around every line break so whitespace-only lines become
     // truly empty — otherwise a stray space between two newlines survives the
